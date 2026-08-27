@@ -77,16 +77,16 @@ describe("release deployment workbench contracts", () => {
       join(repositoryRoot, "docs/operations/official-website-production-cutover-runbook.md"),
       "utf8",
     );
-    const runbookSection4Start = cutoverRunbookSource.indexOf("## 4. 部署 Web，但不切域名");
-    const runbookSection5Start = cutoverRunbookSource.indexOf("## 5.", runbookSection4Start);
-    const runbookSection4 = cutoverRunbookSource.slice(runbookSection4Start, runbookSection5Start);
-    const buildStageStart = runbookSection4.indexOf("1. `Build Docker Images`");
-    const gateStageStart = runbookSection4.indexOf("2. `Verify Production Web Deployment Gate`");
-    const deployStageStart = runbookSection4.indexOf("3. `Deploy Docker Services`");
-    const manualCutoverStart = runbookSection4.indexOf("4. `container_ready_for_manual_cutover`");
-    const buildStage = runbookSection4.slice(buildStageStart, gateStageStart);
-    const gateStage = runbookSection4.slice(gateStageStart, deployStageStart);
-    const deployStage = runbookSection4.slice(deployStageStart, manualCutoverStart);
+    const runbookDeploySectionStart = cutoverRunbookSource.indexOf("## 3. 部署 Web，但不切入口");
+    const runbookNextSectionStart = cutoverRunbookSource.indexOf("## 4.", runbookDeploySectionStart);
+    const runbookDeploySection = cutoverRunbookSource.slice(runbookDeploySectionStart, runbookNextSectionStart);
+    const buildStageStart = runbookDeploySection.indexOf("1. `Build Docker Images`");
+    const gateStageStart = runbookDeploySection.indexOf("2. `Verify Production Web Deployment Gate`");
+    const deployStageStart = runbookDeploySection.indexOf("3. `Deploy Docker Services`");
+    const manualCutoverStart = runbookDeploySection.indexOf("4. `container_ready_for_manual_cutover`");
+    const buildStage = runbookDeploySection.slice(buildStageStart, gateStageStart);
+    const gateStage = runbookDeploySection.slice(gateStageStart, deployStageStart);
+    const deployStage = runbookDeploySection.slice(deployStageStart, manualCutoverStart);
 
     expect(panelSource).toContain('value="web-release"');
     expect(panelSource).toContain("官网发布");
@@ -113,20 +113,19 @@ describe("release deployment workbench contracts", () => {
     expect(productionGateWorkflow).toContain(
       "uses: ./.github/workflows/verify-web-deployment-gate.yml",
     );
-    expect(runbookSection4Start).toBeGreaterThanOrEqual(0);
-    expect(runbookSection5Start).toBeGreaterThan(runbookSection4Start);
+    expect(runbookDeploySectionStart).toBeGreaterThanOrEqual(0);
+    expect(runbookNextSectionStart).toBeGreaterThan(runbookDeploySectionStart);
     expect(buildStageStart).toBeGreaterThanOrEqual(0);
     expect(gateStageStart).toBeGreaterThan(buildStageStart);
     expect(deployStageStart).toBeGreaterThan(gateStageStart);
     expect(manualCutoverStart).toBeGreaterThan(deployStageStart);
-    expect(buildStage).toContain("同一 release Tag");
+    expect(runbookDeploySection).toContain("以下三个 workflow 必须在同一 release Tag 上依次执行");
     expect(buildStage).toContain("target_environment=production");
     expect(buildStage).toContain("service=web");
     expect(buildStage).toContain("build_run_id");
     expect(buildStage).toContain("production pull verification");
     expect(buildStage).not.toContain("gate_run_id");
     expect(buildStage).not.toContain("web_smoke_content_path");
-    expect(gateStage).toContain("同一 release Tag");
     expect(gateStage).toContain("commit_sha");
     expect(gateStage).toContain("migration_version");
     expect(gateStage).toContain("gate_run_id");
@@ -142,9 +141,9 @@ describe("release deployment workbench contracts", () => {
     ]) {
       expect(deployStage).toContain(input);
     }
-    expect(runbookSection4.slice(manualCutoverStart)).toContain("人工 Nginx");
-    expect(runbookSection4).toContain("工作流不得访问或修改 `/etc/nginx`");
-    expect(runbookSection4).toContain("不得执行 reload");
+    expect(runbookDeploySection.slice(manualCutoverStart)).toContain("后续人工证书和入口步骤");
+    expect(runbookDeploySection).toContain("工作流不得访问或修改完整 Nginx 模板");
+    expect(runbookDeploySection).toContain("入口 reload");
     expect(panelSource).toContain('<h4 className="text-sm font-semibold">{title}</h4>');
     expect(panelSource).toContain('aria-hidden="true"');
     expect(dispatchSource).not.toContain('value="web"');

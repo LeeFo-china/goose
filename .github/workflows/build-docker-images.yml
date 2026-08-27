@@ -506,9 +506,9 @@ jobs:
           evidence_dir="${RUNNER_TEMP}/production-pull-${GITHUB_RUN_ID}"
           rm -rf "${evidence_dir}"
           mkdir -p "${evidence_dir}"
-          gh run download "${GITHUB_RUN_ID}" -n production-build-plan -D "${evidence_dir}"
+          gh run download "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n production-build-plan -D "${evidence_dir}"
           for service in ${BUILD_SERVICES}; do
-            gh run download "${GITHUB_RUN_ID}" -n "image-manifest-${service}" -D "${evidence_dir}"
+            gh run download "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n "image-manifest-${service}" -D "${evidence_dir}"
           done
           test "$(jq -r '.target_environment' "${evidence_dir}/build-plan.json")" = production
           test "$(jq -r '.commit_sha' "${evidence_dir}/build-plan.json")" = "${GITHUB_SHA}"
