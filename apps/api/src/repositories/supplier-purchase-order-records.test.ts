@@ -35,6 +35,7 @@ describe("supplier purchase order source projection", () => {
   test.each([
     "purchase_requisition_id",
     "purchase_requisition",
+    "purchase_batch_id",
   ] as const)("rejects a missing %s field with DB_ERROR", async (field) => {
     const malformed = Object.fromEntries(
       Object.entries(legacyOrder).filter(([key]) => key !== field),
@@ -62,6 +63,7 @@ const legacyOrder = {
   tax_amount: "13.00",
   total_amount: "113.00",
   purchase_requisition_id: null,
+  purchase_batch_id: null,
   version: 1,
   created_by_employee_id: "51000000-0000-4000-8000-000000000006",
   updated_by_employee_id: "51000000-0000-4000-8000-000000000006",

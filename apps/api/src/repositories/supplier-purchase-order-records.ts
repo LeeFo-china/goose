@@ -98,7 +98,7 @@ export const SupplierPurchaseOrderRecordSchema = z.object({
   tax_amount: decimal,
   total_amount: decimal,
   purchase_requisition_id: uuid.nullable(),
-  purchase_batch_id: uuid.nullable().optional(),
+  purchase_batch_id: uuid.nullable(),
   version: z.number().int().positive(),
   created_by_employee_id: uuid,
   updated_by_employee_id: uuid,

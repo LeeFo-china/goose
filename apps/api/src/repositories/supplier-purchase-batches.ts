@@ -343,7 +343,13 @@ function applyKeyword(
   keyword: string | undefined,
   columns: readonly string[],
 ): Query {
-  const safe = keyword?.trim().replace(/[%_,().]/g, "");
+  const safe = keyword
+    ?.trim()
+    .replace(/\\/g, "\\\\")
+    .replace(/[%_]/g, "\\$&")
+    .replace(/[,()]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
   return safe
     ? request.or(columns.map((column) => `${column}.ilike.%${safe}%`).join(","))
     : request;

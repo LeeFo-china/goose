@@ -48,6 +48,8 @@ const requisition = {
   tax_amount: "13.00",
   total_amount: "113.00",
   purchase_order_id: null,
+  purchase_batch_id: null,
+  split_generation: null,
   version: 2,
   created_by_employee_id: EMPLOYEE_ID,
   updated_by_employee_id: EMPLOYEE_ID,
@@ -166,6 +168,28 @@ describe("supplier purchase requisition database records", () => {
       { ...requisition, reviewed_by_employee_id: "invalid" },
       { ...requisition, version: 0 },
       { ...requisition, extra: true },
+    ]) {
+      expect(SupplierPurchaseRequisitionRecordSchema.safeParse(invalid).success)
+        .toBe(false);
+    }
+  });
+
+  test("requires a complete nullable batch ownership pair", () => {
+    for (const field of ["purchase_batch_id", "split_generation"] as const) {
+      const missing = Object.fromEntries(
+        Object.entries(requisition).filter(([key]) => key !== field),
+      );
+      expect(SupplierPurchaseRequisitionRecordSchema.safeParse(missing).success)
+        .toBe(false);
+    }
+    expect(SupplierPurchaseRequisitionRecordSchema.safeParse({
+      ...requisition,
+      purchase_batch_id: ID,
+      split_generation: 1,
+    }).success).toBe(true);
+    for (const invalid of [
+      { ...requisition, purchase_batch_id: ID },
+      { ...requisition, split_generation: 1 },
     ]) {
       expect(SupplierPurchaseRequisitionRecordSchema.safeParse(invalid).success)
         .toBe(false);

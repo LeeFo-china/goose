@@ -88,7 +88,7 @@ describe("SupplierPurchaseBatchesRepository", () => {
     expect(requests).toHaveLength(0);
   });
 
-  test("lists tenant batches with exact fields, scope, filters and stable range", async () => {
+  test("escapes filter-only keywords and applies visible scope with exact count", async () => {
     const { repository, requests } = await repositoryFor(() => ({
       body: [batch],
       count: 21,
@@ -98,8 +98,7 @@ describe("SupplierPurchaseBatchesRepository", () => {
       tenant_id: TENANT_ID,
       visible_project_ids: [PROJECT_ID],
       status: "draft",
-      project_id: PROJECT_ID,
-      keyword: " PB-1,() ",
+      keyword: " %_\\,() ",
       page: 2,
       pageSize: 20,
     });
@@ -111,14 +110,15 @@ describe("SupplierPurchaseBatchesRepository", () => {
     expect(url.searchParams.get("select")).toBe(SUPPLIER_PURCHASE_BATCH_SELECT);
     expect(url.searchParams.get("select")).not.toContain("*");
     expect(url.searchParams.get("tenant_id")).toBe(`eq.${TENANT_ID}`);
-    expect(url.searchParams.get("project_id")).toContain(PROJECT_ID);
+    expect(url.searchParams.get("project_id")).toBe(`in.(${PROJECT_ID})`);
     expect(url.searchParams.get("status")).toBe("eq.draft");
     expect(url.searchParams.get("or")).toBe(
-      "(batch_no.ilike.%PB-1%,reason.ilike.%PB-1%)",
+      "(batch_no.ilike.%\\%\\_\\\\%,reason.ilike.%\\%\\_\\\\%)",
     );
     expect(url.searchParams.get("order")).toBe("updated_at.desc,id.desc");
     expect(url.searchParams.get("offset")).toBe("20");
     expect(url.searchParams.get("limit")).toBe("20");
+    expect(requests[0]!.headers.get("prefer")).toContain("count=exact");
   });
 
   test("treats null project scope as all visible and loads one tenant batch", async () => {

@@ -385,7 +385,7 @@ const order = {
   subtotal_amount: "20.00",
   tax_amount: "2.60",
   total_amount: "22.60",
-  purchase_requisition_id: REQUISITION_ID,
+  purchase_requisition_id: REQUISITION_ID, purchase_batch_id: null,
   version: 1,
   created_by_employee_id: EMPLOYEE_ID,
   updated_by_employee_id: EMPLOYEE_ID,

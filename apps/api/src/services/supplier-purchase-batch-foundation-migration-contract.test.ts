@@ -231,6 +231,24 @@ describe("supplier purchase batch foundation migration", () => {
     ]) expect(normalized).toMatch(contract);
   });
 
+  test("indexes every leading-ILIKE purchase batch read field with trigrams", () => {
+    const normalized = compact(sql);
+    for (const [name, table, column] of [
+      ["supplier_purchase_batches_batch_no_trgm_idx", "supplier_purchase_batches", "batch_no"],
+      ["supplier_purchase_batches_reason_trgm_idx", "supplier_purchase_batches", "reason"],
+      ["projects_name_purchase_batch_trgm_idx", "projects", "name"],
+      ["finance_cost_categories_code_purchase_batch_trgm_idx", "finance_cost_categories", "code"],
+      ["finance_cost_categories_name_purchase_batch_trgm_idx", "finance_cost_categories", "name"],
+    ] as const) {
+      expect(normalized).toContain(
+        `CREATE INDEX ${name} ON public.${table} USING gin ( ${column} extensions.gin_trgm_ops )`,
+      );
+    }
+    expect(sql.slice(0, sql.indexOf("BEGIN;"))).toMatch(
+      /Rollback:[\s\S]*drop only these five trigram indexes[\s\S]*keep pg_trgm/i,
+    );
+  });
+
   test("creates a tenant-safe immutable command event ledger", () => {
     const event = sql.slice(
       sql.indexOf("CREATE TABLE public.supplier_purchase_batch_command_events"),

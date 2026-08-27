@@ -230,6 +230,9 @@ export const SupplierPurchaseBatchCatalogItemSchema =
     tenant_supplier_id: uuid,
     supplier_id: uuid,
     supplier_name: z.string().min(1),
+    base_unit_conversion: conversion,
+    unit_price: unitPrice,
+    tax_rate: taxRate,
     currency: z.literal("CNY"),
     purchasable_status: z.literal("purchasable"),
   }).strict();
@@ -242,7 +245,7 @@ export const SupplierPurchaseBatchCatalogResultSchema = z.object({
 }).strict();
 
 export const SupplierPurchaseBatchRequisitionSchema =
-  SupplierPurchaseRequisitionRecordSchema.extend({
+  SupplierPurchaseRequisitionRecordSchema.safeExtend({
     purchase_batch_id: uuid,
     split_generation: z.number().int().positive(),
   }).strict();
@@ -250,6 +253,9 @@ export const SupplierPurchaseBatchRequisitionSchema =
 export const SupplierPurchaseBatchOrderSchema =
   SupplierPurchaseOrderWithReferencesSchema.extend({
     purchase_batch_id: uuid,
+    subtotal_amount: money,
+    tax_amount: money,
+    total_amount: money,
   }).strict();
 
 export const SupplierPurchaseBatchProjectOptionSchema = z.object({

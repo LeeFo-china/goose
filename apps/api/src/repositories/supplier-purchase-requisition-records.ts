@@ -179,8 +179,8 @@ export const SupplierPurchaseRequisitionRecordSchema = z.object({
   tax_amount: money,
   total_amount: money,
   purchase_order_id: uuid.nullable(),
-  purchase_batch_id: uuid.nullable().optional(),
-  split_generation: z.number().int().positive().nullable().optional(),
+  purchase_batch_id: uuid.nullable(),
+  split_generation: z.number().int().positive().nullable(),
   version: z.number().int().positive(),
   created_by_employee_id: uuid,
   updated_by_employee_id: uuid,
@@ -194,7 +194,16 @@ export const SupplierPurchaseRequisitionRecordSchema = z.object({
   cancel_reason: z.string().max(500).nullable(),
   created_at: dateTime,
   updated_at: dateTime,
-}).strict();
+}).strict().superRefine((record, context) => {
+  if ((record.purchase_batch_id === null) === (record.split_generation === null)) {
+    return;
+  }
+  context.addIssue({
+    code: "custom",
+    path: ["purchase_batch_id"],
+    message: "采购批次归属与拆单代次必须同时存在",
+  });
+});
 
 export const SupplierPurchaseRequisitionScopeSchema = z.object({
   id: uuid,

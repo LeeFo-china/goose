@@ -54,6 +54,8 @@ function dependencies(options: {
       tax_amount: "13.00",
       total_amount: "113.00",
       purchase_order_id: null,
+      purchase_batch_id: null,
+      split_generation: null,
       version: 3,
       created_by_employee_id: options.requesterId ?? REQUESTER_ID,
       updated_by_employee_id: REVIEWER_ID,

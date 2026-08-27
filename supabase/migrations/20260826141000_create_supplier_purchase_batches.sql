@@ -2,6 +2,8 @@
 -- batch API/UI access first. Preserve batch, item, child-document and command
 -- event audit facts. Remove additive columns or tables only in a separately
 -- reviewed migration after proving that no batch-owned records exist.
+-- A forward rollback may drop only these five trigram indexes after disabling
+-- the matching search endpoints; keep pg_trgm because other features share it.
 
 BEGIN;
 
@@ -428,6 +430,36 @@ ON public.supplier_purchase_batches(
   project_id,
   updated_at DESC,
   id DESC
+);
+
+CREATE INDEX supplier_purchase_batches_batch_no_trgm_idx
+ON public.supplier_purchase_batches
+USING gin (
+  batch_no extensions.gin_trgm_ops
+);
+
+CREATE INDEX supplier_purchase_batches_reason_trgm_idx
+ON public.supplier_purchase_batches
+USING gin (
+  reason extensions.gin_trgm_ops
+);
+
+CREATE INDEX projects_name_purchase_batch_trgm_idx
+ON public.projects
+USING gin (
+  name extensions.gin_trgm_ops
+);
+
+CREATE INDEX finance_cost_categories_code_purchase_batch_trgm_idx
+ON public.finance_cost_categories
+USING gin (
+  code extensions.gin_trgm_ops
+);
+
+CREATE INDEX finance_cost_categories_name_purchase_batch_trgm_idx
+ON public.finance_cost_categories
+USING gin (
+  name extensions.gin_trgm_ops
 );
 
 CREATE INDEX supplier_purchase_batch_items_parent_line_idx
