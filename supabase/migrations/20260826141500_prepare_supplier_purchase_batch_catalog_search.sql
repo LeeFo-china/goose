@@ -1,5 +1,8 @@
 -- gooes:migration-mode=nontransactional
--- gooes:retry-invalid-indexes=public.supplier_products_product_code_batch_catalog_trgm_idx,public.supplier_products_name_batch_catalog_trgm_idx,public.supplier_skus_sku_code_batch_catalog_trgm_idx,public.supplier_skus_name_batch_catalog_trgm_idx
+-- gooes:expected-index=public.supplier_products_product_code_batch_catalog_trgm_idx|public.supplier_products|false|gin|product_code|extensions.gin_trgm_ops|null
+-- gooes:expected-index=public.supplier_products_name_batch_catalog_trgm_idx|public.supplier_products|false|gin|name|extensions.gin_trgm_ops|null
+-- gooes:expected-index=public.supplier_skus_sku_code_batch_catalog_trgm_idx|public.supplier_skus|false|gin|sku_code|extensions.gin_trgm_ops|null
+-- gooes:expected-index=public.supplier_skus_name_batch_catalog_trgm_idx|public.supplier_skus|false|gin|name|extensions.gin_trgm_ops|null
 -- Non-transactional preflight: CREATE INDEX CONCURRENTLY cannot run inside a
 -- transaction block. Supabase deploy tooling must execute this file without
 -- wrapping it in BEGIN/COMMIT before 20260826142000.

@@ -119,12 +119,15 @@ describe("supplier purchase batch command migrations", () => {
     expect(preflightSql).not.toMatch(/\bCOMMIT\s*;/i);
     expect(preflightSql).toMatch(/cannot run inside a[\s\S]*transaction/i);
     expect(preflightSql).toMatch(/invalid index[\s\S]*retry/i);
-    for (const [table, column] of [
-      ["supplier_products", "product_code"],
-      ["supplier_products", "name"],
-      ["supplier_skus", "sku_code"],
-      ["supplier_skus", "name"],
+    for (const [table, column, index] of [
+      ["supplier_products", "product_code", "supplier_products_product_code_batch_catalog_trgm_idx"],
+      ["supplier_products", "name", "supplier_products_name_batch_catalog_trgm_idx"],
+      ["supplier_skus", "sku_code", "supplier_skus_sku_code_batch_catalog_trgm_idx"],
+      ["supplier_skus", "name", "supplier_skus_name_batch_catalog_trgm_idx"],
     ]) {
+      expect(preflightSql).toContain(
+        `-- gooes:expected-index=public.${index}|public.${table}|false|gin|${column}|extensions.gin_trgm_ops|null`,
+      );
       expect(preflightSql).toMatch(new RegExp(
         `CREATE INDEX CONCURRENTLY[\\s\\S]*ON public\\.${table}[\\s\\S]*${column} extensions\\.gin_trgm_ops`,
       ));

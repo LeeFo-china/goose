@@ -73,6 +73,13 @@ const supplierBatchCatalogIndexMigration = readFileSync(
   ),
   "utf8",
 );
+const supplierBatchMigrationRunbookUrl = new URL(
+  "../docs/runbooks/supplier-purchase-batch-nontransactional-migrations.md",
+  import.meta.url,
+);
+const supplierBatchMigrationRunbook = existsSync(supplierBatchMigrationRunbookUrl)
+  ? readFileSync(supplierBatchMigrationRunbookUrl, "utf8")
+  : "";
 const registryWorkflows = [
   ["build", buildWorkflow],
   ["development deploy", deployDevWorkflow],
@@ -323,7 +330,8 @@ function runExplicitTransactionMigrationHelper(
 
 function runNontransactionalMigrationHelper(
   migrationSql: string,
-  indexState: string,
+  preDdlIndexState: string,
+  postDdlIndexState: string,
   ddlExitCode = 0,
 ): { exitCode: number; log: string; stderr: string } {
   const planAndApplyScript = extractWorkflowRunScript(
@@ -333,9 +341,17 @@ function runNontransactionalMigrationHelper(
     planAndApplyScript,
     "cleanup_invalid_nontransactional_indexes",
   );
+  const metadata = extractShellFunction(
+    planAndApplyScript,
+    "expected_nontransactional_index_metadata",
+  );
   const apply = extractShellFunction(
     planAndApplyScript,
     "apply_nontransactional_migration",
+  );
+  const validate = extractShellFunction(
+    planAndApplyScript,
+    "validate_nontransactional_indexes",
   );
   const root = mkdtempSync(join(tmpdir(), "nontransactional-migration-"));
   const migrationPath = join(root, "20260826150000_nontransactional.sql");
@@ -346,7 +362,11 @@ function runNontransactionalMigrationHelper(
   const runner = `
 psql_prod() {
   if [ "\${1:-}" = "-Atc" ]; then
-    printf '%s\\n' "\${INDEX_STATE}"
+    if [[ "\${2:-}" == *"idx.relkind"* ]]; then
+      printf '%s\\n' "\${POST_DDL_INDEX_STATE}"
+    else
+      printf '%s\\n' "\${PRE_DDL_INDEX_STATE}"
+    fi
     return 0
   fi
   if [ "\${1:-}" = "-c" ]; then
@@ -363,16 +383,17 @@ psql_prod() {
       [
         "bash",
         "-c",
-        `set -euo pipefail\n${runner}\n${cleanup}\n${apply}\napply_nontransactional_migration "\${MIGRATION_FILE}" "\${HISTORY_STATEMENT}" psql_prod`,
+        `set -euo pipefail\n${runner}\n${metadata}\n${cleanup}\n${validate}\n${apply}\napply_nontransactional_migration "\${MIGRATION_FILE}" "\${HISTORY_STATEMENT}" psql_prod`,
       ],
       {
         env: {
           ...process.env,
           DDL_EXIT_CODE: String(ddlExitCode),
           HISTORY_STATEMENT: "insert into supabase_migrations.schema_migrations values ('fixture');",
-          INDEX_STATE: indexState,
           LOG_PATH: logPath,
           MIGRATION_FILE: migrationPath,
+          POST_DDL_INDEX_STATE: postDdlIndexState,
+          PRE_DDL_INDEX_STATE: preDdlIndexState,
         },
         stderr: "pipe",
         stdout: "pipe",
@@ -1067,6 +1088,11 @@ describe("admin release service resolver", () => {
 });
 
 describe("production migration precheck workflow", () => {
+  const fixtureIndexMarker =
+    "-- gooes:expected-index=public.fixture_idx|public.fixture|false|gin|name|extensions.gin_trgm_ops|null";
+  const validFixtureIndexState =
+    "i|public|public|fixture|false|true|true|true|gin|name|extensions.gin_trgm_ops|null";
+
   test("routes marked nontransactional migrations outside transaction wrappers", () => {
     const productionScript = extractWorkflowRunScript(
       sliceWorkflowStep(migrateProductionWorkflow, "Plan and apply migrations"),
@@ -1078,9 +1104,23 @@ describe("production migration precheck workflow", () => {
     for (const script of [productionScript, developmentScript]) {
       expect(script).toContain("apply_nontransactional_migration() {");
       expect(script).toContain("cleanup_invalid_nontransactional_indexes() {");
+      expect(script).toContain("validate_nontransactional_indexes() {");
       expect(script).toContain("gooes:migration-mode=nontransactional");
       expect(script).toContain("DROP INDEX CONCURRENTLY");
       expect(script).toContain('if [ "${migration_mode}" = "nontransactional" ]; then');
+      expect(script).toContain(
+        "case when index_record.indpred is null then 'null' else 'expression:' || pg_catalog.pg_get_expr(index_record.indpred, index_record.indrelid) end",
+      );
+    }
+    for (const helper of [
+      "expected_nontransactional_index_metadata",
+      "cleanup_invalid_nontransactional_indexes",
+      "validate_nontransactional_indexes",
+      "apply_nontransactional_migration",
+    ]) {
+      expect(extractShellFunction(developmentScript, helper)).toBe(
+        extractShellFunction(productionScript, helper),
+      );
     }
   });
 
@@ -1091,9 +1131,7 @@ describe("production migration precheck workflow", () => {
     ]) {
       const lines = migration.split(/\r?\n/);
       expect(lines[0]).toBe("-- gooes:migration-mode=nontransactional");
-      expect(lines[1]).toMatch(
-        /^-- gooes:retry-invalid-indexes=public\.[a-z0-9_]+(?:,public\.[a-z0-9_]+)*$/,
-      );
+      expect(lines[1]).toMatch(/^-- gooes:expected-index=/);
       expect(migration).toContain("CREATE");
       expect(migration).toContain("INDEX CONCURRENTLY IF NOT EXISTS");
     }
@@ -1102,11 +1140,11 @@ describe("production migration precheck workflow", () => {
   test("drops a named invalid partial index before DDL and records history last", () => {
     const result = runNontransactionalMigrationHelper([
       "-- gooes:migration-mode=nontransactional",
-      "-- gooes:retry-invalid-indexes=public.fixture_idx",
+      fixtureIndexMarker,
       "CREATE INDEX CONCURRENTLY IF NOT EXISTS fixture_idx ON fixture(id);",
-    ].join("\n"), "t|f|t");
+    ].join("\n"), "true|false|true", validFixtureIndexState);
 
-    expect(result.exitCode).toBe(0);
+    expect(result.exitCode, result.stderr).toBe(0);
     expect(result.log.split(/\r?\n/).filter(Boolean)).toEqual([
       'SQL:DROP INDEX CONCURRENTLY "public"."fixture_idx";',
       "DDL",
@@ -1117,13 +1155,124 @@ describe("production migration precheck workflow", () => {
   test("does not record migration history when raw nontransactional DDL fails", () => {
     const result = runNontransactionalMigrationHelper([
       "-- gooes:migration-mode=nontransactional",
-      "-- gooes:retry-invalid-indexes=public.fixture_idx",
+      fixtureIndexMarker,
       "CREATE INDEX CONCURRENTLY IF NOT EXISTS fixture_idx ON fixture(id);",
-    ].join("\n"), "", 42);
+    ].join("\n"), "", validFixtureIndexState, 42);
 
     expect(result.exitCode).toBe(42);
     expect(result.log).toBe("DDL\n");
     expect(result.log).not.toContain("schema_migrations");
+  });
+
+  test("accepts a valid bookkeeping retry and validates before history", () => {
+    const result = runNontransactionalMigrationHelper([
+      "-- gooes:migration-mode=nontransactional",
+      fixtureIndexMarker,
+      "CREATE INDEX CONCURRENTLY IF NOT EXISTS fixture_idx ON fixture(id);",
+    ].join("\n"), "true|true|true", validFixtureIndexState);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.log.split(/\r?\n/).filter(Boolean)).toEqual([
+      "DDL",
+      "SQL:insert into supabase_migrations.schema_migrations values ('fixture');",
+    ]);
+  });
+
+  test.each([
+    ["wrong index schema", validFixtureIndexState.replace("i|public|", "i|other|")],
+    [
+      "wrong table schema",
+      validFixtureIndexState.replace("i|public|public|", "i|public|other|"),
+    ],
+    ["wrong table", validFixtureIndexState.replace("|fixture|", "|wrong_table|")],
+    ["same-name non-index", "r|public||||||||||"],
+    ["missing after DDL", ""],
+    [
+      "not ready",
+      validFixtureIndexState.replace(
+        "|fixture|false|true|true|true|gin|",
+        "|fixture|false|false|true|true|gin|",
+      ),
+    ],
+    [
+      "not valid",
+      validFixtureIndexState.replace(
+        "|fixture|false|true|true|true|gin|",
+        "|fixture|false|true|false|true|gin|",
+      ),
+    ],
+    [
+      "not live",
+      validFixtureIndexState.replace(
+        "|fixture|false|true|true|true|gin|",
+        "|fixture|false|true|true|false|gin|",
+      ),
+    ],
+    [
+      "wrong unique",
+      validFixtureIndexState.replace("|false|true|", "|true|true|"),
+    ],
+    ["wrong method", validFixtureIndexState.replace("|gin|", "|btree|")],
+    ["wrong columns", validFixtureIndexState.replace("|name|", "|id|")],
+    [
+      "wrong opclass",
+      validFixtureIndexState.replace(
+        "|extensions.gin_trgm_ops|",
+        "|pg_catalog.text_ops|",
+      ),
+    ],
+    ["wrong predicate", validFixtureIndexState.replace("|null", "|expression:status")],
+    [
+      "predicate text collides with the null sentinel",
+      validFixtureIndexState.replace("|null", "|expression:null"),
+    ],
+  ])("does not record history for post-DDL metadata mismatch: %s", (
+    _label,
+    postDdlState,
+  ) => {
+    const result = runNontransactionalMigrationHelper([
+      "-- gooes:migration-mode=nontransactional",
+      fixtureIndexMarker,
+      "CREATE INDEX CONCURRENTLY IF NOT EXISTS fixture_idx ON fixture(id);",
+    ].join("\n"), "true|true|true", postDdlState);
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.log).toBe("DDL\n");
+    expect(result.log).not.toContain("schema_migrations");
+    expect(result.stderr).toContain("nontransactional_index_metadata_invalid");
+  });
+
+  test("rejects marker shell and SQL metacharacters before any database write", () => {
+    const result = runNontransactionalMigrationHelper([
+      "-- gooes:migration-mode=nontransactional",
+      "-- gooes:expected-index=public.fixture_idx;drop|public.fixture|false|gin|name|extensions.gin_trgm_ops|none",
+      "CREATE INDEX CONCURRENTLY IF NOT EXISTS fixture_idx ON fixture(id);",
+    ].join("\n"), "", validFixtureIndexState);
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.log).toBe("");
+    expect(result.stderr).toContain(
+      "nontransactional_index_metadata_marker_invalid",
+    );
+  });
+
+  test("documents the only supported release path and recovery checks", () => {
+    expect(existsSync(supplierBatchMigrationRunbookUrl)).toBe(true);
+    for (const fragment of [
+      "20260826140500",
+      "20260826141500",
+      "migrate-dev-database.yml",
+      "migrate-production-database.yml",
+      "Supabase CLI 2.99",
+      "db push",
+      "db reset",
+      "CREATE INDEX CONCURRENTLY",
+      "migration list",
+      "indisready",
+      "indisvalid",
+      "indislive",
+    ]) expect(supplierBatchMigrationRunbook).toContain(fragment);
+    expect(supplierBatchMigrationRunbook).toContain("禁止");
   });
 
   test("publishes a structured JSON artifact for Admin migration comparison", () => {

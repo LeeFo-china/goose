@@ -1,5 +1,5 @@
 -- gooes:migration-mode=nontransactional
--- gooes:retry-invalid-indexes=public.supplier_price_list_items_batch_snapshot_uidx
+-- gooes:expected-index=public.supplier_price_list_items_batch_snapshot_uidx|public.supplier_price_list_items|true|btree|id,tenant_id,supplier_id,supplier_price_list_id,supplier_product_id,supplier_sku_id|pg_catalog.uuid_ops,pg_catalog.uuid_ops,pg_catalog.uuid_ops,pg_catalog.uuid_ops,pg_catalog.uuid_ops,pg_catalog.uuid_ops|null
 -- Rollback: forward-only. This non-transactional preflight only prepares the
 -- unique index consumed by 20260826141000. It intentionally performs no
 -- destructive cleanup. Before the next migration is applied, a separately

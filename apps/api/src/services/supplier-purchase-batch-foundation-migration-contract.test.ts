@@ -37,7 +37,7 @@ describe("supplier purchase batch foundation migration", () => {
   test("prepares the price identity index concurrently outside a transaction", () => {
     expect(existsSync(preflightMigrationUrl)).toBe(true);
     expect(preflightSql).toMatch(
-      /^-- gooes:migration-mode=nontransactional\n-- gooes:retry-invalid-indexes=public\.supplier_price_list_items_batch_snapshot_uidx\n/,
+      /^-- gooes:migration-mode=nontransactional\n-- gooes:expected-index=public\.supplier_price_list_items_batch_snapshot_uidx\|public\.supplier_price_list_items\|true\|btree\|id,tenant_id,supplier_id,supplier_price_list_id,supplier_product_id,supplier_sku_id\|(?:pg_catalog\.uuid_ops,){5}pg_catalog\.uuid_ops\|null\n/,
     );
     expect(preflightSql).toMatch(/-- Rollback: forward-only\./);
     expect(preflightSql).toMatch(/failed[\s\S]*pg_catalog\.pg_index[\s\S]*indisvalid/i);
