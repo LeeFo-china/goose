@@ -266,11 +266,14 @@ describe("supplier purchase batch foundation migration", () => {
       "result_version integer NOT NULL",
     ]) expect(event).toContain(field);
     expect(event).toMatch(/UNIQUE \(tenant_id, purchase_batch_id, command_type, idempotency_key\)/);
-    expect(event).toMatch(/FOREIGN KEY \(purchase_batch_id, tenant_id\)[\s\S]*REFERENCES public\.supplier_purchase_batches\(id, tenant_id\)/);
+    expect(event).not.toMatch(/FOREIGN KEY \(purchase_batch_id, tenant_id\)/);
+    expect(event).toMatch(
+      /command events may precede aggregate creation/i,
+    );
     expect(event).toMatch(/FOREIGN KEY \(actor_employee_id, tenant_id\)[\s\S]*REFERENCES public\.employees\(id, tenant_id\)/);
     expect(event).toMatch(/command_type IN \([\s\S]*'save_draft'[\s\S]*'submit'[\s\S]*'review'[\s\S]*'cancel'/);
     expect(event).toMatch(/char_length\(idempotency_key\) <= 120/);
-    expect(event).toMatch(/result_version > 0/);
+    expect(event).toMatch(/result_version >= 0/);
   });
 
   test("guards all direct requisition mutations without exposing bypasses", () => {

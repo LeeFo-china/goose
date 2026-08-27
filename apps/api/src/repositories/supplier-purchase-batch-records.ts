@@ -113,6 +113,13 @@ function decimalString(input: {
 }
 
 const money = decimalString({ integerDigits: 16, scale: 2 });
+const signedMoney = z.string().regex(/^-?\d+(?:\.\d{1,2})?$/).refine(
+  (value) => {
+    const [integerPart = "0"] = value.replace(/^-/, "").split(".");
+    return integerPart.replace(/^0+(?=\d)/, "").length <= 16;
+  },
+  "数值超过数据库上限",
+);
 const quantity = decimalString({
   integerDigits: 14,
   scale: 4,
@@ -128,6 +135,14 @@ const taxRate = decimalString({ integerDigits: 1, scale: 6 }).refine(
   (value) => Number(value) <= 1,
   "税率必须在 0 到 1 之间",
 );
+
+const SupplierPurchaseBatchBudgetSnapshotEntrySchema = z.object({
+  requested_amount: money,
+  budget_amount: money,
+  expense_amount: money,
+  other_commitment_amount: money,
+  available_amount: signedMoney,
+}).strict();
 
 export const SupplierPurchaseBatchRecordSchema = z.object({
   id: uuid,
@@ -145,7 +160,10 @@ export const SupplierPurchaseBatchRecordSchema = z.object({
   total_amount: money,
   budget_checked_at: nullableDateTime,
   budget_status: z.enum(["unchecked", "within_budget", "over_budget"]),
-  budget_snapshot: z.record(z.string(), z.unknown()),
+  budget_snapshot: z.record(
+    uuid,
+    SupplierPurchaseBatchBudgetSnapshotEntrySchema,
+  ),
   split_generation: z.number().int().nonnegative(),
   supplier_count: z.number().int().min(0).max(20),
   item_count: z.number().int().min(0).max(100),
@@ -272,6 +290,66 @@ export const SupplierPurchaseBatchCostCategorySchema = z.object({
   sort_order: z.number().int(),
 }).strict();
 
+export const SupplierPurchaseBatchSplitPreviewSchema = z.object({
+  tenant_supplier_id: uuid,
+  supplier_id: uuid,
+  supplier_name: z.string().min(1),
+  item_count: z.number().int().min(1).max(100),
+  subtotal_amount: money,
+  tax_amount: money,
+  total_amount: money,
+}).strict().refine(
+  (preview) => moneyToMinor(preview.subtotal_amount) +
+    moneyToMinor(preview.tax_amount) === moneyToMinor(preview.total_amount),
+  "供应商拆单预览金额不一致",
+);
+
+export const SupplierPurchaseBatchPriceChangeDetailSchema = z.object({
+  supplier_sku_id: uuid,
+  product_name: z.string().min(1),
+  sku_name: z.string().min(1),
+  frozen_unit_price: unitPrice,
+  current_unit_price: unitPrice.nullable(),
+  frozen_price_version: z.number().int().positive(),
+  current_price_version: z.number().int().positive().nullable(),
+}).strict();
+
+const ERROR_CODES_BY_STATUS: Record<string, ReadonlySet<string>> = {
+  validation_error: new Set([
+    "SUPPLIER_PURCHASE_BATCH_VALIDATION_ERROR",
+    "SUPPLIER_PURCHASE_BATCH_DUPLICATE_SKU",
+    "SUPPLIER_PURCHASE_BATCH_LIMIT_EXCEEDED",
+  ]),
+  not_found: new Set(["SUPPLIER_PURCHASE_BATCH_NOT_FOUND"]),
+  version_conflict: new Set(["SUPPLIER_PURCHASE_BATCH_VERSION_CONFLICT"]),
+  state_conflict: new Set([
+    "SUPPLIER_PURCHASE_BATCH_STATE_CONFLICT",
+    "SUPPLIER_PURCHASE_BATCH_ID_CONFLICT",
+    "SUPPLIER_PURCHASE_BATCH_BUDGET_CHANGED",
+  ]),
+  price_changed: new Set([
+    "SUPPLIER_PURCHASE_BATCH_ITEM_UNAVAILABLE",
+    "SUPPLIER_PURCHASE_BATCH_PRICE_CHANGED",
+  ]),
+  supplier_not_eligible: new Set([
+    "SUPPLIER_PURCHASE_BATCH_SUPPLIER_INELIGIBLE",
+  ]),
+  project_invalid: new Set(["SUPPLIER_PURCHASE_BATCH_PROJECT_INVALID"]),
+};
+const VERSION_ZERO_ERROR_CODES = new Set([
+  "SUPPLIER_PURCHASE_BATCH_VALIDATION_ERROR",
+  "SUPPLIER_PURCHASE_BATCH_DUPLICATE_SKU",
+  "SUPPLIER_PURCHASE_BATCH_NOT_FOUND",
+  "SUPPLIER_PURCHASE_BATCH_ID_CONFLICT",
+]);
+const POSITIVE_VERSION_ERROR_CODES = new Set([
+  "SUPPLIER_PURCHASE_BATCH_VERSION_CONFLICT",
+  "SUPPLIER_PURCHASE_BATCH_STATE_CONFLICT",
+  "SUPPLIER_PURCHASE_BATCH_BUDGET_CHANGED",
+  "SUPPLIER_PURCHASE_BATCH_PRICE_CHANGED",
+  "SUPPLIER_PURCHASE_BATCH_SUPPLIER_INELIGIBLE",
+]);
+
 export const SupplierPurchaseBatchCommandEnvelopeSchema = z.object({
   status: z.enum([
     "saved",
@@ -285,29 +363,89 @@ export const SupplierPurchaseBatchCommandEnvelopeSchema = z.object({
     "supplier_not_eligible",
     "project_invalid",
   ]),
-  idempotent: z.boolean().optional(),
+  idempotent: z.boolean(),
   batch: SupplierPurchaseBatchRecordSchema.optional(),
-  requisition_ids: z.array(uuid).max(20).optional(),
-  version: z.number().int().positive().optional(),
+  requisition_ids: z.array(uuid).min(1).max(20).refine(
+    (ids) => new Set(ids.map((id) => id.toLowerCase())).size === ids.length,
+    "采购申请 ID 不得重复",
+  ).optional(),
+  split_preview: z.array(SupplierPurchaseBatchSplitPreviewSchema)
+    .min(1).max(20).optional(),
+  details: z.array(SupplierPurchaseBatchPriceChangeDetailSchema)
+    .min(1).max(100).optional(),
+  version: z.number().int().nonnegative().optional(),
   error_code: z.string().optional(),
-  reason: z.string().optional(),
+  reason: z.string().trim().min(1).max(500).optional(),
 }).strict().superRefine((envelope, context) => {
   const success = ["saved", "submitted", "cancelled"].includes(
     envelope.status,
   );
-  if (success && (!envelope.batch || envelope.version === undefined ||
-    envelope.error_code !== undefined || envelope.reason !== undefined)) {
+  if (success && (!envelope.batch || !envelope.version ||
+    envelope.error_code !== undefined || envelope.reason !== undefined ||
+    envelope.details !== undefined)) {
     context.addIssue({ code: "custom", message: "无效的批次命令成功响应" });
   }
-  if (!success && (!envelope.error_code || envelope.batch !== undefined ||
-    envelope.requisition_ids !== undefined || envelope.idempotent !== undefined)) {
+  if (!success && (!envelope.error_code || envelope.version === undefined ||
+    envelope.batch !== undefined || envelope.requisition_ids !== undefined ||
+    envelope.split_preview !== undefined)) {
     context.addIssue({ code: "custom", message: "无效的批次命令错误响应" });
   }
   if ((envelope.status === "submitted") !==
     (envelope.requisition_ids !== undefined)) {
     context.addIssue({ code: "custom", message: "无效的批次拆单结果" });
   }
+  if ((envelope.status === "saved") !==
+    (envelope.split_preview !== undefined)) {
+    context.addIssue({ code: "custom", message: "无效的批次拆单预览" });
+  }
+  if (envelope.status === "saved" && envelope.batch &&
+    envelope.split_preview) {
+    const preview = envelope.split_preview;
+    const relationshipIds = preview.map((item) => item.tenant_supplier_id);
+    const supplierIds = preview.map((item) => item.supplier_id);
+    const isStable = relationshipIds.every((id, index) => {
+      if (index === 0) return true;
+      const previous = relationshipIds[index - 1];
+      return previous !== undefined && previous < id;
+    });
+    const totals = preview.reduce((sum, item) => ({
+      subtotal: sum.subtotal + moneyToMinor(item.subtotal_amount),
+      tax: sum.tax + moneyToMinor(item.tax_amount),
+      total: sum.total + moneyToMinor(item.total_amount),
+    }), { subtotal: BigInt(0), tax: BigInt(0), total: BigInt(0) });
+    if (preview.length !== envelope.batch.supplier_count || !isStable ||
+      new Set(supplierIds).size !== supplierIds.length ||
+      totals.subtotal !== moneyToMinor(envelope.batch.subtotal_amount) ||
+      totals.tax !== moneyToMinor(envelope.batch.tax_amount) ||
+      totals.total !== moneyToMinor(envelope.batch.total_amount)) {
+      context.addIssue({ code: "custom", message: "批次拆单预览汇总不一致" });
+    }
+  }
+  if (!success) {
+    const legalCodes = ERROR_CODES_BY_STATUS[envelope.status];
+    if (!envelope.error_code || !legalCodes?.has(envelope.error_code)) {
+      context.addIssue({ code: "custom", message: "无效的批次命令错误码" });
+    }
+    if (envelope.error_code && envelope.version !== undefined &&
+      ((VERSION_ZERO_ERROR_CODES.has(envelope.error_code) &&
+        envelope.version !== 0) ||
+        (POSITIVE_VERSION_ERROR_CODES.has(envelope.error_code) &&
+          envelope.version <= 0))) {
+      context.addIssue({ code: "custom", message: "无效的批次命令版本" });
+    }
+  }
+  const priceDetailsRequired = envelope.status === "price_changed" &&
+    envelope.error_code === "SUPPLIER_PURCHASE_BATCH_PRICE_CHANGED";
+  if (priceDetailsRequired !== (envelope.details !== undefined)) {
+    context.addIssue({ code: "custom", message: "无效的批次变价明细" });
+  }
 });
+
+function moneyToMinor(value: string): bigint {
+  const [integer = "0", fraction = ""] = value.split(".");
+  return BigInt(integer) * BigInt(100) +
+    BigInt(fraction.padEnd(2, "0"));
+}
 
 export type SupplierPurchaseBatch =
   z.infer<typeof SupplierPurchaseBatchRecordSchema>;
@@ -325,3 +463,5 @@ export type SupplierPurchaseBatchProjectOption =
   z.infer<typeof SupplierPurchaseBatchProjectOptionSchema>;
 export type SupplierPurchaseBatchCostCategory =
   z.infer<typeof SupplierPurchaseBatchCostCategorySchema>;
+export type SupplierPurchaseBatchSplitPreview =
+  z.infer<typeof SupplierPurchaseBatchSplitPreviewSchema>;

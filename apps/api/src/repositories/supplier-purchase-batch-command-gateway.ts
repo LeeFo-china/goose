@@ -3,6 +3,7 @@ import { throwSupplierCommandDatabaseError } from "@/repositories/supplier-comma
 import {
   SupplierPurchaseBatchCommandEnvelopeSchema,
   type SupplierPurchaseBatch,
+  type SupplierPurchaseBatchSplitPreview,
 } from "@/repositories/supplier-purchase-batch-records";
 
 type RpcClient = {
@@ -12,13 +13,17 @@ type RpcClient = {
   ) => PromiseLike<{ data: unknown; error: unknown }>;
 };
 
-export type SupplierPurchaseBatchCommandResult = {
-  status: "saved" | "submitted" | "cancelled";
+type BaseResult = {
   idempotent: boolean;
   batch: SupplierPurchaseBatch;
   version: number;
-  requisition_ids?: string[];
 };
+
+export type SupplierPurchaseBatchCommandResult =
+  | (BaseResult & { status: "saved";
+    split_preview: SupplierPurchaseBatchSplitPreview[] })
+  | (BaseResult & { status: "submitted"; requisition_ids: string[] })
+  | (BaseResult & { status: "cancelled" });
 
 const STATUS_BY_RESULT = {
   saved: "draft",
@@ -59,6 +64,7 @@ export async function executeSupplierPurchaseBatchCommand(input: {
       statusCode,
       envelope.reason ?? input.message,
       envelope.error_code,
+      envelope.details,
     );
   }
   const batchId = input.params.p_batch_id;
@@ -77,13 +83,18 @@ export async function executeSupplierPurchaseBatchCommand(input: {
   } else if (envelope.requisition_ids !== undefined) {
     throw Errors.dbError(input.message, envelope);
   }
-  return {
-    status: input.successStatus,
-    idempotent: envelope.idempotent ?? false,
-    batch: envelope.batch,
-    version: envelope.version,
-    ...(envelope.requisition_ids
-      ? { requisition_ids: envelope.requisition_ids }
-      : {}),
-  };
+  const base = { idempotent: envelope.idempotent, batch: envelope.batch,
+    version: envelope.version };
+  if (envelope.status === "saved") {
+    if (!envelope.split_preview) throw Errors.dbError(input.message, envelope);
+    return { ...base, status: "saved", split_preview: envelope.split_preview };
+  }
+  if (envelope.status === "submitted") {
+    if (!envelope.requisition_ids) {
+      throw Errors.dbError(input.message, envelope);
+    }
+    return { ...base, status: "submitted",
+      requisition_ids: envelope.requisition_ids };
+  }
+  return { ...base, status: "cancelled" };
 }

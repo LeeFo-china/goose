@@ -9,6 +9,10 @@ const preflightSql = readFileSync(new URL(
   "../../../../supabase/migrations/20260826141500_prepare_supplier_purchase_batch_catalog_search.sql",
   import.meta.url,
 ), "utf8");
+const design = readFileSync(new URL(
+  "../../../../docs/superpowers/specs/2026-08-26-miniprogram-supplier-procurement-batch-design.md",
+  import.meta.url,
+), "utf8");
 
 function extractFunction(name: string) {
   const start = commandSql.search(new RegExp(
@@ -17,6 +21,10 @@ function extractFunction(name: string) {
   if (start < 0) return "";
   const end = commandSql.indexOf("\n$$;", start);
   return end < 0 ? commandSql.slice(start) : commandSql.slice(start, end + 4);
+}
+
+function compact(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
 }
 
 function expectOrdered(source: string, contracts: readonly RegExp[]) {
@@ -65,12 +73,31 @@ describe("supplier purchase batch command migrations", () => {
         `GRANT EXECUTE ON FUNCTION public\\.${name}\\([^;]+\\) TO service_role;`,
       ));
     }
+    const normalized = compact(commandSql);
+    expect(normalized).toContain(
+      "resolve_supplier_purchase_batch_catalog( uuid, uuid, text, uuid, uuid, uuid, timestamptz, integer, integer )",
+    );
+    expect(normalized).toContain(
+      "save_supplier_purchase_batch_draft( uuid, uuid, uuid, integer, text, date, text, jsonb, uuid, uuid, text )",
+    );
+    expect(normalized).toContain(
+      "submit_supplier_purchase_batch( uuid, uuid, integer, uuid, uuid, text )",
+    );
+    expect(normalized).toContain(
+      "cancel_supplier_purchase_batch( uuid, uuid, integer, text, uuid, uuid, text )",
+    );
   });
 
   test("keeps catalog bounded, stable, set-based, and fail-closed", () => {
     const fn = extractFunction("resolve_supplier_purchase_batch_catalog");
     expect(fn).toMatch(/p_page_size integer DEFAULT 20/);
     expect(fn).toMatch(/p_page_size NOT BETWEEN 1 AND 100/);
+    expect(fn).toMatch(/p_page IS NULL[\s\S]*p_page_size IS NULL/);
+    expect(fn).toMatch(/v_offset bigint/);
+    expect(fn).toMatch(/\(p_page::bigint - 1\) \* p_page_size::bigint/);
+    expect(fn).toContain(String.raw`v_keyword_pattern, '\', '\\'), '%', '\%'), '_', '\_')`);
+    expect(fn).toContain(String.raw`ILIKE v_keyword_pattern ESCAPE '\'`);
+    expect(fn).not.toMatch(/ILIKE '%' \|\| btrim\(p_keyword\)/);
     expect(fn).toMatch(/price_candidates AS MATERIALIZED/);
     expect(fn).toMatch(/COUNT\(\*\) OVER \(\s*PARTITION BY[\s\S]*candidate_count/);
     expect(fn).toMatch(/candidate_count = 1/);
@@ -83,6 +110,10 @@ describe("supplier purchase batch command migrations", () => {
     expect(fn).toMatch(/p_project_id uuid[\s\S]*p_items jsonb/);
     expect(fn).toMatch(/jsonb_typeof\(p_items\) <> 'array'/);
     expect(fn).toMatch(/jsonb_array_length\(p_items\) NOT BETWEEN 1 AND 100/);
+    expectOrdered(fn, [
+      /IF p_items IS NULL OR jsonb_typeof\(p_items\) <> 'array'/,
+      /IF jsonb_array_length\(p_items\) NOT BETWEEN 1 AND 100/,
+    ]);
     expect(fn).toMatch(/jsonb_object_keys[\s\S]*supplier_sku_id[\s\S]*cost_category_id[\s\S]*quantity/);
     expect(fn).toMatch(/jsonb_typeof\(item\.value -> 'quantity'\) <> 'string'/);
     expectOrdered(fn, [
@@ -131,6 +162,10 @@ describe("supplier purchase batch command migrations", () => {
     expect(fn).toMatch(/PARTITION BY batch_item\.tenant_supplier_id/);
     expect(fn).toMatch(/INSERT INTO public\.project_cost_commitments[\s\S]*purchase_requisition_id/);
     expect(fn).toMatch(/status = 'pending_approval'/);
+    expect(fn).toMatch(/FOR v_supplier_id IN[\s\S]*ORDER BY item\.supplier_id[\s\S]*LOOP[\s\S]*pg_advisory_xact_lock/);
+    expect(fn).toMatch(/JOIN public\.tenant_suppliers AS relationship[\s\S]*relationship\.tenant_id = p_tenant_id[\s\S]*relationship\.supplier_id[\s\S]*relationship\.default_currency = 'CNY'/);
+    expect(fn).toMatch(/v_locked_relationship_count <> v_batch\.supplier_count/);
+    expect(fn).toMatch(/v_current_price_count <> v_batch\.item_count/);
   });
 
   test("cancels current children and refuses consumed financial facts", () => {
@@ -237,6 +272,13 @@ describe("supplier purchase batch command migrations", () => {
     expect(submit).toMatch(/INSERT INTO public\.supplier_purchase_requisitions/);
     expect(submit).toMatch(/INSERT INTO public\.supplier_purchase_requisition_items/);
     expect(submit).toMatch(/PARTITION BY batch_item\.tenant_supplier_id/);
+    const currentPricePass = submit.slice(
+      submit.indexOf("locked_current_candidates AS MATERIALIZED"),
+      submit.indexOf("lock_project_cost_budget_scope"),
+    );
+    expect(currentPricePass).not.toMatch(
+      /END::numeric\(18,\s*2\) AS line_(?:subtotal|tax|total)_amount/,
+    );
   });
 
   test("captures one budget snapshot and allocates commitments by child/category", () => {
@@ -273,22 +315,26 @@ describe("supplier purchase batch command migrations", () => {
     }
   });
 
-  test("persists replayable outcomes only after an existing batch is locked", () => {
+  test("persists every post-lock business outcome including version-zero misses", () => {
     for (const name of [
       "save_supplier_purchase_batch_draft",
       "submit_supplier_purchase_batch",
       "cancel_supplier_purchase_batch",
     ]) {
       const fn = extractFunction(name);
-      const batchLock = fn.indexOf("FROM public.supplier_purchase_batches");
-      const persistedOutcome = fn.indexOf(
-        "record_supplier_purchase_batch_command_result",
-      );
-      expect(batchLock).toBeGreaterThan(0);
-      expect(persistedOutcome).toBeGreaterThan(batchLock);
-      expect(fn.slice(0, batchLock)).not.toContain(
-        "record_supplier_purchase_batch_command_result",
-      );
+      expect(fn).toMatch(/'status', 'not_found'[\s\S]*'version', 0/);
+    }
+    const save = extractFunction("save_supplier_purchase_batch_draft");
+    for (const code of [
+      "SUPPLIER_PURCHASE_BATCH_ID_CONFLICT",
+      "SUPPLIER_PURCHASE_BATCH_PROJECT_INVALID",
+      "SUPPLIER_PURCHASE_BATCH_ITEM_UNAVAILABLE",
+      "SUPPLIER_PURCHASE_BATCH_LIMIT_EXCEEDED",
+    ]) {
+      expect(save).toMatch(new RegExp(
+        `${code}[\\s\\S]*record_supplier_purchase_batch_command_result|` +
+          `record_supplier_purchase_batch_command_result[\\s\\S]*${code}`,
+      ));
     }
     const recorder = extractFunction(
       "record_supplier_purchase_batch_command_result",
@@ -322,5 +368,40 @@ describe("supplier purchase batch command migrations", () => {
     expect(save).toMatch(/supplier_count, item_count/);
     expect(save).toMatch(/version = batch\.version \+ 1/);
     expect(save).toMatch(/round\(round\(candidate\.quantity \* candidate\.unit_price, 2\)/);
+  });
+
+  test("persists strict previews, price-change details, and explicit idempotency", () => {
+    const save = extractFunction("save_supplier_purchase_batch_draft");
+    expect(save).toMatch(/jsonb_agg\([\s\S]*tenant_supplier_id[\s\S]*supplier_name[\s\S]*item_count[\s\S]*subtotal_amount[\s\S]*tax_amount[\s\S]*total_amount[\s\S]*ORDER BY[\s\S]*tenant_supplier_id/);
+    expect(save).toMatch(/'split_preview', v_split_preview/);
+    const submit = extractFunction("submit_supplier_purchase_batch");
+    for (const field of [
+      "supplier_sku_id", "product_name", "sku_name", "frozen_unit_price",
+      "current_unit_price", "frozen_price_version", "current_price_version",
+    ]) expect(submit).toMatch(new RegExp(`'${field}'`));
+    expect(submit).toMatch(/'details', v_price_change_details/);
+    for (const fn of commands.slice(1).map(extractFunction)) {
+      expect(fn).toMatch(/'status', 'validation_error'[\s\S]*'idempotent', false/);
+    }
+  });
+
+  test("re-establishes idempotency and batch locks after overflow rollback", () => {
+    const save = extractFunction("save_supplier_purchase_batch_draft");
+    const handler = save.slice(save.lastIndexOf(
+      "EXCEPTION WHEN numeric_value_out_of_range",
+    ));
+    expectOrdered(handler, [
+      /supplier-purchase-batch-command:/,
+      /FROM public\.supplier_purchase_batch_command_events[\s\S]*?FOR UPDATE/,
+      /supplier-purchase-batch-id:/,
+      /FROM public\.supplier_purchase_batches[\s\S]*?FOR UPDATE/,
+      /record_supplier_purchase_batch_command_result/,
+    ]);
+  });
+
+  test("documents and implements complete first-result replay semantics", () => {
+    expect(design).toMatch(/通过结构[、/]身份校验并进入命令域后的首次业务结果/);
+    expect(design).toMatch(/version\s*0/);
+    expect(commandSql).toMatch(/result_version[\s\S]*0/);
   });
 });

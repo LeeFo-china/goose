@@ -514,6 +514,8 @@ CREATE TABLE public.supplier_purchase_batch_command_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL
     REFERENCES public.tenants(id) ON DELETE RESTRICT,
+  -- Command events may precede aggregate creation so version-zero business
+  -- outcomes remain replayable without creating a partial batch.
   purchase_batch_id uuid NOT NULL,
   command_type text NOT NULL,
   idempotency_key text NOT NULL,
@@ -524,10 +526,6 @@ CREATE TABLE public.supplier_purchase_batch_command_events (
   result jsonb NOT NULL,
   result_version integer NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT supplier_purchase_batch_events_parent_tenant_fkey
-    FOREIGN KEY (purchase_batch_id, tenant_id)
-    REFERENCES public.supplier_purchase_batches(id, tenant_id)
-    ON DELETE RESTRICT,
   CONSTRAINT supplier_purchase_batch_events_actor_tenant_fkey
     FOREIGN KEY (actor_employee_id, tenant_id)
     REFERENCES public.employees(id, tenant_id)
@@ -551,7 +549,7 @@ CREATE TABLE public.supplier_purchase_batch_command_events (
   CONSTRAINT supplier_purchase_batch_events_result_check
     CHECK (jsonb_typeof(result) = 'object'),
   CONSTRAINT supplier_purchase_batch_events_result_version_check
-    CHECK (result_version > 0),
+    CHECK (result_version >= 0),
   CONSTRAINT supplier_purchase_batch_events_idempotency_key
     UNIQUE (tenant_id, purchase_batch_id, command_type, idempotency_key)
 );

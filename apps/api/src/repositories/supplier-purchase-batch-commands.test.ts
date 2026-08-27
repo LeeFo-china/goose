@@ -12,6 +12,8 @@ const USER_ID = "a0000000-0000-4000-8000-000000000005";
 const SKU_ID = "a0000000-0000-4000-8000-000000000006";
 const CATEGORY_ID = "a0000000-0000-4000-8000-000000000007";
 const REQUISITION_ID = "a0000000-0000-4000-8000-000000000008";
+const RELATIONSHIP_ID = "a0000000-0000-4000-8000-000000000009";
+const SUPPLIER_ID = "a0000000-0000-4000-8000-000000000010";
 const AT = "2026-08-27T08:00:00.000Z";
 
 type RpcCall = { name: string; params: Record<string, unknown> };
@@ -47,8 +49,13 @@ const context = {
 
 describe("SupplierPurchaseBatchesRepository commands", () => {
   test("calls the exact save RPC with client-owned intent only", async () => {
+    const split_preview = [{ tenant_supplier_id: RELATIONSHIP_ID,
+      supplier_id: SUPPLIER_ID, supplier_name: "测试供应商", item_count: 1,
+      subtotal_amount: "100.00", tax_amount: "13.00",
+      total_amount: "113.00" }];
     const { repository, calls } = await repositoryFor([{
-      data: { status: "saved", idempotent: false, batch, version: 1 },
+      data: { status: "saved", idempotent: false, batch, version: 1,
+        split_preview },
       error: null,
     }]);
     const result = await repository.saveDraft({
@@ -65,7 +72,7 @@ describe("SupplierPurchaseBatchesRepository commands", () => {
       }],
     });
     expect(result).toEqual({
-      status: "saved", idempotent: false, batch, version: 1,
+      status: "saved", idempotent: false, batch, version: 1, split_preview,
     });
     expect(calls).toEqual([{
       name: "save_supplier_purchase_batch_draft",
@@ -92,16 +99,20 @@ describe("SupplierPurchaseBatchesRepository commands", () => {
   test("calls submit and cancel with exact signatures", async () => {
     const submittedBatch = { ...batch, status: "pending_approval", version: 2,
       budget_checked_at: AT, budget_status: "within_budget",
-      budget_snapshot: { [CATEGORY_ID]: { requested_amount: "100.00" } },
+      budget_snapshot: { [CATEGORY_ID]: { requested_amount: "100.00",
+        budget_amount: "500.00", expense_amount: "10.00",
+        other_commitment_amount: "20.00", available_amount: "470.00" } },
       split_generation: 1, submitted_by_employee_id: EMPLOYEE_ID,
       submitted_at: AT };
     const cancelledBatch = { ...submittedBatch, status: "cancelled", version: 3,
       cancelled_by_employee_id: EMPLOYEE_ID, cancelled_at: AT,
       cancel_reason: "采购计划取消" };
     const { repository, calls } = await repositoryFor([
-      { data: { status: "submitted", batch: submittedBatch, version: 2,
+      { data: { status: "submitted", idempotent: false,
+        batch: submittedBatch, version: 2,
         requisition_ids: [REQUISITION_ID] }, error: null },
-      { data: { status: "cancelled", batch: cancelledBatch, version: 3 },
+      { data: { status: "cancelled", idempotent: false,
+        batch: cancelledBatch, version: 3 },
         error: null },
     ]);
     expect(await repository.submit(context)).toMatchObject({
@@ -151,10 +162,39 @@ describe("SupplierPurchaseBatchesRepository commands", () => {
     });
     const envelope = await repositoryFor([{ data: {
       status: "version_conflict",
+      idempotent: true,
       error_code: "SUPPLIER_PURCHASE_BATCH_VERSION_CONFLICT", version: 2,
     }, error: null }]);
     await expect(envelope.repository.submit(context)).rejects.toMatchObject({
       statusCode: 409, code: "SUPPLIER_PURCHASE_BATCH_VERSION_CONFLICT",
+    });
+  });
+
+  test("rejects duplicate requisition ids as a database contract breach", async () => {
+    const submittedBatch = { ...batch, status: "pending_approval", version: 2,
+      supplier_count: 2 };
+    const { repository } = await repositoryFor([{ data: {
+      status: "submitted", idempotent: false, batch: submittedBatch,
+      version: 2, requisition_ids: [REQUISITION_ID, REQUISITION_ID],
+    }, error: null }]);
+    await expect(repository.submit(context)).rejects.toMatchObject({
+      statusCode: 500, code: "DB_ERROR",
+    });
+  });
+
+  test("keeps replayed price changes as business errors with strict details", async () => {
+    const details = [{ supplier_sku_id: SKU_ID, product_name: "测试商品",
+      sku_name: "测试规格", frozen_unit_price: "100.00",
+      current_unit_price: "101.00", frozen_price_version: 1,
+      current_price_version: 2 }];
+    const { repository } = await repositoryFor([{ data: {
+      status: "price_changed", idempotent: true,
+      error_code: "SUPPLIER_PURCHASE_BATCH_PRICE_CHANGED", version: 1,
+      details,
+    }, error: null }]);
+    await expect(repository.submit(context)).rejects.toMatchObject({
+      statusCode: 409, code: "SUPPLIER_PURCHASE_BATCH_PRICE_CHANGED",
+      details,
     });
   });
 });
