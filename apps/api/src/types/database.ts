@@ -556,6 +556,7 @@ export type Database = {
       }
       catalog_brands: {
         Row: {
+          category_id: string | null
           code: string
           created_at: string
           created_by_employee_id: string
@@ -573,6 +574,7 @@ export type Database = {
           version: number
         }
         Insert: {
+          category_id?: string | null
           code: string
           created_at?: string
           created_by_employee_id: string
@@ -590,6 +592,7 @@ export type Database = {
           version?: number
         }
         Update: {
+          category_id?: string | null
           code?: string
           created_at?: string
           created_by_employee_id?: string
@@ -24281,6 +24284,22 @@ export type Database = {
         }
         Returns: Json
       }
+      command_supplier_purchasable_product_v1: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_idempotency_key: string
+          p_price: Json
+          p_product: Json
+          p_product_id: string
+          p_sku: Json
+          p_sku_id: string
+          p_supplier_id: string
+          p_tenant_id: string
+          p_tenant_supplier_id: string
+        }
+        Returns: Json
+      }
       command_supplier_sku_v2: {
         Args: {
           p_action: string
@@ -24595,7 +24614,7 @@ export type Database = {
         Args: {
           p_actor_employee_id: string
           p_actor_user_id: string
-          p_category_id: string | null
+          p_category_id: string
           p_code: string
           p_idempotency_key: string
           p_level: number
@@ -28411,7 +28430,7 @@ export type Database = {
           p_actor_employee_id: string
           p_actor_user_id: string
           p_brand_id: string
-          p_category_id: string | null
+          p_category_id: string
           p_code: string
           p_expected_version: number
           p_idempotency_key: string
