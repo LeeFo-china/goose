@@ -11,6 +11,8 @@ const EMPLOYEE_ID = "a0000000-0000-4000-8000-000000000004";
 const CATEGORY_ID = "a0000000-0000-4000-8000-000000000005";
 const RELATIONSHIP_ID = "a0000000-0000-4000-8000-000000000006";
 const SUPPLIER_ID = "a0000000-0000-4000-8000-000000000007";
+const RELATIONSHIP_ID_2 = "b0000000-0000-4000-8000-000000000006";
+const SUPPLIER_ID_2 = "b0000000-0000-4000-8000-000000000007";
 const SKU_ID = "a0000000-0000-4000-8000-000000000008";
 const REQUISITION_ID = "a0000000-0000-4000-8000-000000000009";
 const AT = "2026-08-27T08:00:00.000Z";
@@ -70,6 +72,17 @@ describe("supplier purchase batch command records", () => {
     expect(SupplierPurchaseBatchCommandEnvelopeSchema.safeParse({
       status: "saved", idempotent: false, batch, version: 1,
       split_preview: [{ ...splitPreview[0], total_amount: "112.99" }],
+    }).success).toBe(false);
+    expect(SupplierPurchaseBatchCommandEnvelopeSchema.safeParse({
+      status: "saved", idempotent: false,
+      batch: { ...batch, supplier_count: 2 }, version: 1,
+      split_preview: [
+        { ...splitPreview[0], subtotal_amount: "40.00",
+          tax_amount: "5.00", total_amount: "45.00" },
+        { ...splitPreview[0], tenant_supplier_id: RELATIONSHIP_ID_2,
+          supplier_id: SUPPLIER_ID_2, subtotal_amount: "60.00",
+          tax_amount: "8.00", total_amount: "68.00" },
+      ],
     }).success).toBe(false);
   });
 

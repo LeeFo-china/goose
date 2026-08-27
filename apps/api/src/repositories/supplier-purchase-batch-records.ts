@@ -403,6 +403,10 @@ export const SupplierPurchaseBatchCommandEnvelopeSchema = z.object({
     const preview = envelope.split_preview;
     const relationshipIds = preview.map((item) => item.tenant_supplier_id);
     const supplierIds = preview.map((item) => item.supplier_id);
+    const itemCount = preview.reduce(
+      (sum, item) => sum + item.item_count,
+      0,
+    );
     const isStable = relationshipIds.every((id, index) => {
       if (index === 0) return true;
       const previous = relationshipIds[index - 1];
@@ -413,7 +417,8 @@ export const SupplierPurchaseBatchCommandEnvelopeSchema = z.object({
       tax: sum.tax + moneyToMinor(item.tax_amount),
       total: sum.total + moneyToMinor(item.total_amount),
     }), { subtotal: BigInt(0), tax: BigInt(0), total: BigInt(0) });
-    if (preview.length !== envelope.batch.supplier_count || !isStable ||
+    if (preview.length !== envelope.batch.supplier_count ||
+      itemCount !== envelope.batch.item_count || !isStable ||
       new Set(supplierIds).size !== supplierIds.length ||
       totals.subtotal !== moneyToMinor(envelope.batch.subtotal_amount) ||
       totals.tax !== moneyToMinor(envelope.batch.tax_amount) ||

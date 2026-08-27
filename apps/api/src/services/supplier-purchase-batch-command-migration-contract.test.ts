@@ -42,8 +42,75 @@ const commands = [
   "submit_supplier_purchase_batch",
   "cancel_supplier_purchase_batch",
 ] as const;
+const commandSignatures = {
+  resolve_supplier_purchase_batch_catalog:
+    "uuid, uuid, text, uuid, uuid, uuid, timestamptz, integer, integer",
+  save_supplier_purchase_batch_draft:
+    "uuid, uuid, uuid, integer, text, date, text, jsonb, uuid, uuid, text",
+  submit_supplier_purchase_batch:
+    "uuid, uuid, integer, uuid, uuid, text",
+  cancel_supplier_purchase_batch:
+    "uuid, uuid, integer, text, uuid, uuid, text",
+} as const;
+
+function hasExactServiceRoleAcl(
+  source: string,
+  name: string,
+  signature: string,
+): boolean {
+  const normalized = compact(source);
+  return normalized.includes(
+    `REVOKE ALL ON FUNCTION public.${name}( ${signature} ) ` +
+      "FROM PUBLIC, anon, authenticated, service_role; " +
+      `GRANT EXECUTE ON FUNCTION public.${name}( ${signature} ) ` +
+      "TO service_role;",
+  );
+}
+
+function hasLocalVersionZeroOutcome(source: string, code: string): boolean {
+  const codeAt = source.lastIndexOf(`'error_code', '${code}'`);
+  if (codeAt < 0) return false;
+  const returnAt = source.lastIndexOf(
+    "RETURN public.record_supplier_purchase_batch_command_result(",
+    codeAt,
+  );
+  if (returnAt < 0) return false;
+  const tail = source.slice(returnAt);
+  const closingLine = tail.match(/\n\s*\);/)?.index;
+  if (closingLine === undefined) return false;
+  const closeAt = tail.indexOf(");", closingLine);
+  if (closeAt < 0) return false;
+  const outcome = compact(tail.slice(0, closeAt + 2));
+  const codeInOutcome = outcome.indexOf(`'error_code', '${code}'`);
+  if (codeInOutcome < 0 || !outcome.includes(", 'save_draft',")) return false;
+  const suffix = outcome.slice(codeInOutcome);
+  return /'version', (?:0|CASE WHEN .* ELSE 0 END)\), (?:0|CASE WHEN .* ELSE 0 END) \);$/.test(
+    suffix,
+  );
+}
 
 describe("supplier purchase batch command migrations", () => {
+  test("ACL matcher rejects a wrong overload despite an exact signature elsewhere", () => {
+    const name = "submit_supplier_purchase_batch";
+    const signature = commandSignatures[name];
+    const normalized = compact(commandSql);
+    const poisoned = normalized.replace(
+      `REVOKE ALL ON FUNCTION public.${name}( ${signature} )`,
+      `REVOKE ALL ON FUNCTION public.${name}( text )`,
+    );
+    expect(hasExactServiceRoleAcl(poisoned, name, signature)).toBe(false);
+  });
+
+  test("version-zero matcher rejects an unrecorded result plus unrelated recorder", () => {
+    const poisoned = "RETURN jsonb_build_object('error_code', " +
+      "'SUPPLIER_PURCHASE_BATCH_ID_CONFLICT', 'version', 0); " +
+      "-- unrelated record_supplier_purchase_batch_command_result";
+    expect(hasLocalVersionZeroOutcome(
+      poisoned,
+      "SUPPLIER_PURCHASE_BATCH_ID_CONFLICT",
+    )).toBe(false);
+  });
+
   test("builds catalog trigram indexes concurrently outside a transaction", () => {
     expect(preflightSql).not.toMatch(/\bBEGIN\s*;/i);
     expect(preflightSql).not.toMatch(/\bCOMMIT\s*;/i);
@@ -66,26 +133,12 @@ describe("supplier purchase batch command migrations", () => {
       const fn = extractFunction(name);
       expect(fn).not.toBe("");
       expect(fn).toMatch(/SECURITY DEFINER[\s\S]*SET search_path = pg_catalog, public/);
-      expect(commandSql).toMatch(new RegExp(
-        `REVOKE ALL ON FUNCTION public\\.${name}\\([^;]+\\) FROM PUBLIC, anon, authenticated, service_role;`,
-      ));
-      expect(commandSql).toMatch(new RegExp(
-        `GRANT EXECUTE ON FUNCTION public\\.${name}\\([^;]+\\) TO service_role;`,
-      ));
+      expect(hasExactServiceRoleAcl(
+        commandSql,
+        name,
+        commandSignatures[name],
+      )).toBe(true);
     }
-    const normalized = compact(commandSql);
-    expect(normalized).toContain(
-      "resolve_supplier_purchase_batch_catalog( uuid, uuid, text, uuid, uuid, uuid, timestamptz, integer, integer )",
-    );
-    expect(normalized).toContain(
-      "save_supplier_purchase_batch_draft( uuid, uuid, uuid, integer, text, date, text, jsonb, uuid, uuid, text )",
-    );
-    expect(normalized).toContain(
-      "submit_supplier_purchase_batch( uuid, uuid, integer, uuid, uuid, text )",
-    );
-    expect(normalized).toContain(
-      "cancel_supplier_purchase_batch( uuid, uuid, integer, text, uuid, uuid, text )",
-    );
   });
 
   test("keeps catalog bounded, stable, set-based, and fail-closed", () => {
@@ -331,10 +384,7 @@ describe("supplier purchase batch command migrations", () => {
       "SUPPLIER_PURCHASE_BATCH_ITEM_UNAVAILABLE",
       "SUPPLIER_PURCHASE_BATCH_LIMIT_EXCEEDED",
     ]) {
-      expect(save).toMatch(new RegExp(
-        `${code}[\\s\\S]*record_supplier_purchase_batch_command_result|` +
-          `record_supplier_purchase_batch_command_result[\\s\\S]*${code}`,
-      ));
+      expect(hasLocalVersionZeroOutcome(save, code), code).toBe(true);
     }
     const recorder = extractFunction(
       "record_supplier_purchase_batch_command_result",
