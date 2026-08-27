@@ -108,7 +108,7 @@ describe("buildReleaseDispatchRequest", () => {
 
 describe("release workflow concurrency guard", () => {
   test("treats every incomplete GitHub workflow status as active", async () => {
-    const activeStatuses = ["queued", "in_progress", "requested", "waiting", "pending"] as const;
+    const activeStatuses = ["queued", "in_progress", "requested", "waiting", "pending"];
     const requestedPaths: string[] = [];
     const githubRequest = mock(async (path: string) => {
       requestedPaths.push(path);

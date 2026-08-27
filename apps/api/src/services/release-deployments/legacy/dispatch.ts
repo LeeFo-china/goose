@@ -107,7 +107,9 @@ export async function listActiveRuns(this: any, workflow: ReleaseWorkflow) {
   const payload = await request<{ workflow_runs?: GithubWorkflowRun[] }>(
     `/actions/workflows/${workflow.workflowId}/runs?event=workflow_dispatch&per_page=100`,
   );
-  return (payload.workflow_runs || []).filter((run) => ACTIVE_WORKFLOW_STATUSES.has(run.status));
+  return (payload.workflow_runs || []).filter(
+    (run) => run.status !== null && ACTIVE_WORKFLOW_STATUSES.has(run.status),
+  );
 }
 
 export async function assertWorkflowIdle(this: any, workflow: ReleaseWorkflow) {
