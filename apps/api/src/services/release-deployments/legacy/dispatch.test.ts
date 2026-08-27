@@ -106,6 +106,47 @@ describe("buildReleaseDispatchRequest", () => {
   });
 });
 
+describe("release workflow concurrency guard", () => {
+  test("treats every incomplete GitHub workflow status as active", async () => {
+    const activeStatuses = ["queued", "in_progress", "requested", "waiting", "pending"] as const;
+    const requestedPaths: string[] = [];
+    const githubRequest = mock(async (path: string) => {
+      requestedPaths.push(path);
+      return {
+        workflow_runs: activeStatuses.map((status, index) => run({
+          id: index + 1,
+          status,
+          conclusion: null,
+        })),
+      };
+    });
+
+    const result = await dispatchModule.listActiveRuns.call(
+      { githubRequest },
+      shared.RELEASE_WORKFLOWS.production,
+    );
+
+    expect(requestedPaths).toEqual([
+      "/actions/workflows/release-production.yml/runs?event=workflow_dispatch&per_page=100",
+    ]);
+    expect(result.map((item) => item.status)).toEqual(activeStatuses);
+  });
+
+  test("ignores completed workflow runs", async () => {
+    const githubRequest = mock(async () => ({
+      workflow_runs: [run({ status: "completed", conclusion: "success" })],
+    }));
+
+    await expect(dispatchModule.assertWorkflowIdle.call(
+      {
+        githubRequest,
+        listActiveRuns: dispatchModule.listActiveRuns,
+      },
+      shared.RELEASE_WORKFLOWS.production,
+    )).resolves.toBeUndefined();
+  });
+});
+
 describe("runtime service version contracts", () => {
   test("includes the billing reconcile worker in release and runtime scopes", () => {
     expect(shared.RELEASE_WORKFLOWS.dev.services).toContain(

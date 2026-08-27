@@ -1618,8 +1618,8 @@ describe("reusable build workflow", () => {
     '          evidence_dir="${RUNNER_TEMP}/production-pull-${GITHUB_RUN_ID}"',
     '          rm -rf "${evidence_dir}"',
     '          mkdir -p "${evidence_dir}"',
-    '          gh run download "${GITHUB_RUN_ID}" -n production-build-plan -D "${evidence_dir}"',
-    '            gh run download "${GITHUB_RUN_ID}" -n "image-manifest-${service}" -D "${evidence_dir}"',
+    '          gh run download "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n production-build-plan -D "${evidence_dir}"',
+    '            gh run download "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n "image-manifest-${service}" -D "${evidence_dir}"',
     '          test "$(jq -r \'.target_environment\' "${evidence_dir}/build-plan.json")" = production',
     '          test "$(jq -r \'.commit_sha\' "${evidence_dir}/build-plan.json")" = "${GITHUB_SHA}"',
     '          test "$(jq -r \'.build_services | join(" ")\' "${evidence_dir}/build-plan.json")" = "${BUILD_SERVICES}"',
@@ -2407,7 +2407,7 @@ describe("reusable build workflow", () => {
 
   test("keeps automatic development deployment bound to successful push evidence", () => {
     expect(autoDeployDevWorkflow).toContain(
-      "gh run download \"${UPSTREAM_RUN_ID}\" -n dev-build-plan",
+      "gh run download \"${UPSTREAM_RUN_ID}\" --repo \"${GITHUB_REPOSITORY}\" -n dev-build-plan",
     );
     expect(autoDeployDevWorkflow).toContain(
       "github.event.workflow_run.event == 'push'",
@@ -2418,6 +2418,28 @@ describe("reusable build workflow", () => {
     expect(autoDeployDevWorkflow).toContain(
       "test \"$(jq -r '.path' <<< \"${run_json}\")\" = \".github/workflows/build-docker-images.yml\"",
     );
+  });
+
+  test("binds every artifact download to the current repository explicitly", () => {
+    const workflows = [
+      ["build", buildWorkflow],
+      ["automatic development deploy", autoDeployDevWorkflow],
+      ["development deploy", deployDevWorkflow],
+      ["production release", releaseProductionWorkflow],
+      ["production deploy", deployProductionWorkflow],
+    ] as const;
+
+    for (const [label, workflow] of workflows) {
+      const downloadLines = workflow
+        .split(/\r?\n/)
+        .filter((line) => line.includes("gh run download"));
+      expect(downloadLines.length, `${label} should download at least one artifact`).toBeGreaterThan(0);
+      for (const line of downloadLines) {
+        expect(line, `${label} artifact download must not depend on a local .git directory`).toContain(
+          '--repo "${GITHUB_REPOSITORY}"',
+        );
+      }
+    }
   });
 });
 
@@ -2784,8 +2806,8 @@ describe("production orchestrator", () => {
     const candidate = sliceWorkflowJob(releaseProductionWorkflow, "candidate", "authorize-deploy");
     const authorize = sliceWorkflowJob(releaseProductionWorkflow, "authorize-deploy", "deploy");
 
-    expect(candidate).toContain('gh run download "${GITHUB_RUN_ID}" -n production-build-plan');
-    expect(candidate).toContain('gh run download "${GITHUB_RUN_ID}" -n "image-manifest-${service}"');
+    expect(candidate).toContain('gh run download "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n production-build-plan');
+    expect(candidate).toContain('gh run download "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n "image-manifest-${service}"');
     expect(candidate).toContain("verify-production-release-candidate.mjs");
     expect(candidate).toContain(allowedRegistryPairArm);
     expect(candidate).toContain('image_base="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}"');
@@ -2808,9 +2830,9 @@ describe("production orchestrator", () => {
       'test "${build_workflow_path}" = ".github/workflows/release-production.yml"',
     );
     expect(authorize).not.toContain('.path | split("@")[0]');
-    expect(authorize).toContain('gh run download "${BUILD_RUN_ID}" -n production-release-candidate');
-    expect(authorize).toContain('gh run download "${BUILD_RUN_ID}" -n production-build-plan');
-    expect(authorize).toContain('gh run download "${BUILD_RUN_ID}" -n "image-manifest-${service}"');
+    expect(authorize).toContain('gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n production-release-candidate');
+    expect(authorize).toContain('gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n production-build-plan');
+    expect(authorize).toContain('gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n "image-manifest-${service}"');
     expect(authorize).toContain("verify-production-release-candidate.mjs");
     expect(authorize).toContain(allowedRegistryPairArm);
     expect(authorize).toContain('image_base="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}"');
@@ -2902,13 +2924,13 @@ describe("production orchestrator", () => {
       "production-deployment-receipt-",
     );
     expect(deployProductionWorkflow.slice(evidenceStart, dockerStart)).toContain(
-      'gh run download "${BUILD_RUN_ID}" -n production-release-candidate',
+      'gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n production-release-candidate',
     );
     expect(deployProductionWorkflow.slice(evidenceStart, dockerStart)).toContain(
-      'gh run download "${BUILD_RUN_ID}" -n production-build-plan',
+      'gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n production-build-plan',
     );
     expect(deployProductionWorkflow.slice(evidenceStart, dockerStart)).toContain(
-      'gh run download "${BUILD_RUN_ID}" -n "image-manifest-${service}"',
+      'gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n "image-manifest-${service}"',
     );
     const productionEvidence = deployProductionWorkflow.slice(evidenceStart, dockerStart);
     expect(productionEvidence).not.toContain('if [ -z "${BUILD_RUN_ID}" ]; then');
@@ -3111,7 +3133,7 @@ describe("production orchestrator", () => {
     expect(metadata).toContain(
       'test "${current_workflow_path}" = ".github/workflows/release-production.yml"',
     );
-    expect(evidence).toContain('gh run download "${BUILD_RUN_ID}" -n production-release-candidate');
+    expect(evidence).toContain('gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n production-release-candidate');
     expect(evidence).toContain('echo "ADMIN_CANDIDATE=true" >> "${GITHUB_ENV}"');
 
     expect(webGate).toContain('test "${WEB_DIRECT_DEPLOY:-false}" = true');
@@ -3130,8 +3152,8 @@ describe("production orchestrator", () => {
     expect(webGate).toContain(
       'test "${build_workflow_path}" = ".github/workflows/build-docker-images.yml"',
     );
-    expect(webGate).toContain('gh run download "${BUILD_RUN_ID}" -n production-build-plan');
-    expect(webGate).toContain('gh run download "${BUILD_RUN_ID}" -n image-manifest-web');
+    expect(webGate).toContain('gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n production-build-plan');
+    expect(webGate).toContain('gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n image-manifest-web');
     expect(webGate).toContain('printf \'%s\\n\' "${build_run_json}" > "${evidence_dir}/build-run.json"');
     expect(webGate).toContain("verify-production-web-build-evidence.mjs");
     expect(webGate.indexOf(allowedRegistryPairArm)).toBeLessThan(

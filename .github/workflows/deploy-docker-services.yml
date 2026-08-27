@@ -253,10 +253,10 @@ jobs:
           evidence_dir="${RUNNER_TEMP}/production-deploy-${BUILD_RUN_ID}"
           rm -rf "${evidence_dir}"
           mkdir -p "${evidence_dir}"
-          gh run download "${BUILD_RUN_ID}" -n production-release-candidate -D "${evidence_dir}"
-          gh run download "${BUILD_RUN_ID}" -n production-build-plan -D "${evidence_dir}"
+          gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n production-release-candidate -D "${evidence_dir}"
+          gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n production-build-plan -D "${evidence_dir}"
           for service in ${build_services//,/ }; do
-            gh run download "${BUILD_RUN_ID}" -n "image-manifest-${service}" -D "${evidence_dir}"
+            gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n "image-manifest-${service}" -D "${evidence_dir}"
             test -s "${evidence_dir}/image-manifest-${service}.json"
           done
           test -n "${TENCENT_CCR_REGISTRY}"
@@ -360,8 +360,8 @@ jobs:
             rm -rf "${evidence_dir}"
             mkdir -p "${evidence_dir}"
             printf '%s\n' "${build_run_json}" > "${evidence_dir}/build-run.json"
-            gh run download "${BUILD_RUN_ID}" -n production-build-plan -D "${evidence_dir}"
-            gh run download "${BUILD_RUN_ID}" -n image-manifest-web -D "${evidence_dir}"
+            gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n production-build-plan -D "${evidence_dir}"
+            gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n image-manifest-web -D "${evidence_dir}"
             test -s "${evidence_dir}/build-plan.json"
             web_manifest="${evidence_dir}/image-manifest-web.json"
             test -s "${web_manifest}"
@@ -403,7 +403,7 @@ jobs:
             test "$(jq -r '.head_branch' <<< "${gate_run_json}")" = "${GITHUB_REF_NAME}"
             receipt_dir="${RUNNER_TEMP}/web-gate-${INPUT_GATE_RUN_ID}"
             rm -rf "${receipt_dir}"
-            gh run download "${INPUT_GATE_RUN_ID}" -n web-deployment-gate-receipt -D "${receipt_dir}"
+            gh run download "${INPUT_GATE_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n web-deployment-gate-receipt -D "${receipt_dir}"
             node "${SOURCE_DIR}/scripts/verify-web-gate-receipt.mjs" \
               "${receipt_dir}/web-deployment-gate-receipt.json" production "${SOURCE_SHA}" 20260711120000
             test -n "${INPUT_WEB_SMOKE_CONTENT_PATH}"

@@ -121,9 +121,9 @@ jobs:
           evidence_dir="${RUNNER_TEMP}/production-candidate-${GITHUB_RUN_ID}"
           rm -rf "${evidence_dir}"
           mkdir -p "${evidence_dir}"
-          gh run download "${GITHUB_RUN_ID}" -n production-build-plan -D "${evidence_dir}"
+          gh run download "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n production-build-plan -D "${evidence_dir}"
           for service in ${BUILD_SERVICES//,/ }; do
-            gh run download "${GITHUB_RUN_ID}" -n "image-manifest-${service}" -D "${evidence_dir}"
+            gh run download "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n "image-manifest-${service}" -D "${evidence_dir}"
             test -s "${evidence_dir}/image-manifest-${service}.json"
           done
           test -s "${evidence_dir}/build-plan.json"
@@ -241,10 +241,10 @@ jobs:
           evidence_dir="${RUNNER_TEMP}/production-deploy-${BUILD_RUN_ID}"
           rm -rf "${evidence_dir}"
           mkdir -p "${evidence_dir}"
-          gh run download "${BUILD_RUN_ID}" -n production-release-candidate -D "${evidence_dir}"
-          gh run download "${BUILD_RUN_ID}" -n production-build-plan -D "${evidence_dir}"
+          gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n production-release-candidate -D "${evidence_dir}"
+          gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n production-build-plan -D "${evidence_dir}"
           for service in ${build_services//,/ }; do
-            gh run download "${BUILD_RUN_ID}" -n "image-manifest-${service}" -D "${evidence_dir}"
+            gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n "image-manifest-${service}" -D "${evidence_dir}"
             test -s "${evidence_dir}/image-manifest-${service}.json"
           done
           test -n "${TENCENT_CCR_REGISTRY}"
