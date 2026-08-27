@@ -31,6 +31,8 @@ export * from './supplier';
 export * from './supplier-catalog';
 export * from './supplier-ownership';
 export * from './supplier-payment';
+export * from './supplier-procurement';
+export * from './supplier-purchase-batch';
 export * from './supplier-product';
 export * from './tenant';
 export * from './virtual-product';

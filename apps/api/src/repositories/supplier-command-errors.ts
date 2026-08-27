@@ -1,6 +1,7 @@
 import { Errors } from "@/errors/error-factory";
-
+import { SUPPLIER_PURCHASE_BATCH_ERRORS } from "@/repositories/supplier-purchase-batch-errors";
 const BUSINESS_ERRORS = {
+  ...SUPPLIER_PURCHASE_BATCH_ERRORS,
   SUPPLIER_NOT_FOUND: {
     statusCode: 404,
     message: "供应商不存在",
@@ -137,6 +138,9 @@ const BUSINESS_ERRORS = {
     statusCode: 409,
     message: "供应商商品当前状态不允许该操作",
   },
+  SUPPLIER_PRODUCT_VERSION_CONFLICT: {
+    statusCode: 409, message: "供应商商品版本已变化，请刷新后重试",
+  },
   PRODUCT_CATEGORY_CHANGE_REQUIRES_SKU_MIGRATION: {
     statusCode: 409,
     message: "商品已有 SKU，变更分类前必须先迁移 SKU 规格",
@@ -145,9 +149,24 @@ const BUSINESS_ERRORS = {
     statusCode: 409,
     message: "供应商 SKU 当前状态不允许该操作",
   },
+  SUPPLIER_SKU_VERSION_CONFLICT: {
+    statusCode: 409, message: "供应商 SKU 版本已变化，请刷新后重试",
+  },
   SUPPLIER_PRICE_LIST_INVALID_ACTION: {
     statusCode: 409,
     message: "供应商价格簿当前状态不允许该操作",
+  },
+  SUPPLIER_PRICE_LIST_VERSION_CONFLICT: {
+    statusCode: 409, message: "供应商价格簿版本已变化，请刷新后重试",
+  },
+  SUPPLIER_PRICE_ITEM_NOT_FOUND: {
+    statusCode: 404, message: "供应商价格条目不存在",
+  },
+  SUPPLIER_PRICE_PERIOD_CONFLICT: {
+    statusCode: 409, message: "供应商价格生效期存在重叠",
+  },
+  SUPPLIER_PURCHASABLE_PRODUCT_CREATE_FAILED: {
+    statusCode: 409, message: "创建可采购商品失败",
   },
   SUPPLIER_PURCHASE_ORDER_PROJECT_INVALID: {
     statusCode: 409,
@@ -436,6 +455,26 @@ export function mapSupplierPurchaseRequisitionEnvelopeError(
   if (typeof errorCode !== "string") return null;
   const allowedCodes = REQUISITION_ENVELOPE_CODES[status];
   if (!allowedCodes?.some((code) => code === errorCode)) return null;
+  return mapSupplierCommandDatabaseError(errorCode);
+}
+
+export function mapSupplierPurchasableProductEnvelopeError(
+  status: "validation_error" | "state_conflict",
+  errorCode: unknown,
+  reason: unknown,
+) {
+  if (errorCode === "SUPPLIER_PURCHASABLE_PRODUCT_CREATE_FAILED") {
+    const reasonError = mapSupplierCommandDatabaseError(reason);
+    if (reasonError) return reasonError;
+    return Errors.business(
+      status === "validation_error" ? 400 : 409,
+      status === "validation_error"
+        ? "可采购商品参数校验失败"
+        : "创建可采购商品失败",
+      errorCode,
+      typeof reason === "string" ? { reason } : undefined,
+    );
+  }
   return mapSupplierCommandDatabaseError(errorCode);
 }
 

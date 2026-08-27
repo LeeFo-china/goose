@@ -451,6 +451,133 @@ jobs:
             ' "${file}"
           }
 
+          psql_dev() {
+            psql "${SUPABASE_DB_URL}" -v ON_ERROR_STOP=1 "$@"
+          }
+
+          migration_mode_for_file() {
+            local file="$1"
+            local first_line
+            first_line="$(sed -n '1p' "${file}")"
+            if [ "${first_line}" = "-- gooes:migration-mode=nontransactional" ]; then
+              printf '%s\n' "nontransactional"
+              return 0
+            fi
+            if grep -q '^-- gooes:migration-mode=' "${file}"; then
+              echo "error=nontransactional_marker_invalid file=${file}" >&2
+              return 1
+            fi
+            printf '%s\n' "transactional"
+          }
+
+          expected_nontransactional_index_metadata() {
+            local file="$1"
+            local marker
+            local metadata
+            local qualified_name
+            local marker_count=0
+            local seen_indexes="|"
+            while IFS= read -r marker; do
+              if [[ "${marker}" != "-- gooes:expected-index"* ]]; then
+                continue
+              fi
+              if [[ ! "${marker}" =~ ^--\ gooes:expected-index=public\.[a-z0-9_]+\|public\.[a-z0-9_]+\|(true|false)\|(btree|gin)\|[a-z0-9_]+(,[a-z0-9_]+)*\|(pg_catalog|extensions)\.[a-z0-9_]+(,(pg_catalog|extensions)\.[a-z0-9_]+)*\|(null|expression:\(purchase_batch_id\ IS\ NOT\ NULL\))$ ]]; then
+                echo "error=nontransactional_index_metadata_marker_invalid file=${file}" >&2
+                return 1
+              fi
+              metadata="${marker#-- gooes:expected-index=}"
+              qualified_name="${metadata%%|*}"
+              if [[ "${seen_indexes}" == *"|${qualified_name}|"* ]]; then
+                echo "error=nontransactional_index_metadata_duplicate file=${file} index=${qualified_name}" >&2
+                return 1
+              fi
+              seen_indexes="${seen_indexes}${qualified_name}|"
+              marker_count=$((marker_count + 1))
+              printf '%s\n' "${metadata}"
+            done < "${file}"
+            if [ "${marker_count}" -eq 0 ]; then
+              echo "error=nontransactional_index_metadata_missing file=${file}" >&2
+              return 1
+            fi
+          }
+
+          cleanup_invalid_nontransactional_indexes() {
+            local file="$1"
+            local runner="$2"
+            local metadata
+            local qualified_name
+            local expected_table
+            local expected_unique
+            local expected_method
+            local expected_columns
+            local expected_opclasses
+            local expected_predicate
+            local schema_name
+            local index_name
+            local index_state
+            if ! metadata="$(expected_nontransactional_index_metadata "${file}")"; then
+              return 1
+            fi
+            while IFS='|' read -r qualified_name expected_table expected_unique expected_method expected_columns expected_opclasses expected_predicate; do
+              schema_name="${qualified_name%%.*}"
+              index_name="${qualified_name#*.}"
+              index_state="$("${runner}" -Atc "select i.indisready::text || '|' || i.indisvalid::text || '|' || i.indislive::text from pg_catalog.pg_index as i where i.indexrelid = to_regclass('${qualified_name}');")"
+              case "${index_state}" in
+                ""|"true|true|true")
+                  ;;
+                "true|true|false"|"true|false|true"|"true|false|false"|"false|true|true"|"false|true|false"|"false|false|true"|"false|false|false")
+                  "${runner}" -c "DROP INDEX CONCURRENTLY \"${schema_name}\".\"${index_name}\";"
+                  ;;
+                *)
+                  echo "error=nontransactional_index_state_invalid file=${file} index=${qualified_name}" >&2
+                  return 1
+                  ;;
+              esac
+            done <<< "${metadata}"
+          }
+
+          validate_nontransactional_indexes() {
+            local file="$1"
+            local runner="$2"
+            local metadata
+            local qualified_name
+            local expected_table
+            local expected_unique
+            local expected_method
+            local expected_columns
+            local expected_opclasses
+            local expected_predicate
+            local index_schema
+            local table_schema
+            local table_name
+            local expected_state
+            local actual_state
+            if ! metadata="$(expected_nontransactional_index_metadata "${file}")"; then
+              return 1
+            fi
+            while IFS='|' read -r qualified_name expected_table expected_unique expected_method expected_columns expected_opclasses expected_predicate; do
+              index_schema="${qualified_name%%.*}"
+              table_schema="${expected_table%%.*}"
+              table_name="${expected_table#*.}"
+              expected_state="i|${index_schema}|${table_schema}|${table_name}|${expected_unique}|true|true|true|${expected_method}|${expected_columns}|${expected_opclasses}|${expected_predicate}"
+              actual_state="$("${runner}" -Atc "select concat_ws('|', idx.relkind, idx_ns.nspname, coalesce(table_ns.nspname, ''), coalesce(table_record.relname, ''), coalesce(index_record.indisunique::text, ''), coalesce(index_record.indisready::text, ''), coalesce(index_record.indisvalid::text, ''), coalesce(index_record.indislive::text, ''), coalesce(access_method.amname, ''), coalesce((select string_agg(attribute_record.attname, ',' order by key_record.ordinality) from unnest(index_record.indkey::smallint[]) with ordinality as key_record(attnum, ordinality) join pg_catalog.pg_attribute as attribute_record on attribute_record.attrelid = index_record.indrelid and attribute_record.attnum = key_record.attnum where key_record.ordinality <= index_record.indnkeyatts), ''), coalesce((select string_agg(opclass_ns.nspname || '.' || opclass_record.opcname, ',' order by opclass_key.ordinality) from unnest(index_record.indclass::oid[]) with ordinality as opclass_key(opclass_oid, ordinality) join pg_catalog.pg_opclass as opclass_record on opclass_record.oid = opclass_key.opclass_oid join pg_catalog.pg_namespace as opclass_ns on opclass_ns.oid = opclass_record.opcnamespace where opclass_key.ordinality <= index_record.indnkeyatts), ''), case when index_record.indpred is null then 'null' else 'expression:' || pg_catalog.pg_get_expr(index_record.indpred, index_record.indrelid) end) from pg_catalog.pg_class as idx join pg_catalog.pg_namespace as idx_ns on idx_ns.oid = idx.relnamespace left join pg_catalog.pg_index as index_record on index_record.indexrelid = idx.oid left join pg_catalog.pg_class as table_record on table_record.oid = index_record.indrelid left join pg_catalog.pg_namespace as table_ns on table_ns.oid = table_record.relnamespace left join pg_catalog.pg_am as access_method on access_method.oid = idx.relam where idx.oid = to_regclass('${qualified_name}');")"
+              if [ "${actual_state}" != "${expected_state}" ]; then
+                echo "error=nontransactional_index_metadata_invalid file=${file} index=${qualified_name}" >&2
+                return 1
+              fi
+            done <<< "${metadata}"
+          }
+
+          apply_nontransactional_migration() {
+            local file="$1"
+            local history_statement="$2"
+            local runner="$3"
+            cleanup_invalid_nontransactional_indexes "${file}" "${runner}"
+            "${runner}" < "${file}"
+            validate_nontransactional_indexes "${file}" "${runner}"
+            "${runner}" -c "${history_statement}"
+          }
+
           before_count="$(psql "${SUPABASE_DB_URL}" -v ON_ERROR_STOP=1 -Atc "select count(*) from supabase_migrations.schema_migrations;")"
           before_latest="$(psql "${SUPABASE_DB_URL}" -v ON_ERROR_STOP=1 -Atc "select coalesce(max(version), '') from supabase_migrations.schema_migrations;")"
           db_name="$(psql "${SUPABASE_DB_URL}" -v ON_ERROR_STOP=1 -Atc "select current_database();")"
@@ -496,6 +623,19 @@ jobs:
                 exit 1
               fi
               read -r top_level_start_count top_level_end_count scanned_canonical_begin_count scanned_canonical_commit_count scanned_canonical_commit_line scanned_executable_statement_count scanned_canonical_begin_statement_index scanned_canonical_commit_statement_index <<< "${transaction_scan}"
+
+              if ! migration_mode="$(migration_mode_for_file "${file}")"; then
+                exit 1
+              fi
+              if [ "${migration_mode}" = "nontransactional" ]; then
+                if (( top_level_start_count != 0 || top_level_end_count != 0 )); then
+                  echo "error=nontransactional_migration_has_transaction_control file=${file}" >&2
+                  exit 1
+                fi
+                apply_nontransactional_migration "${file}" "${history_statement}" psql_dev
+                applied_versions+=("${version}")
+                continue
+              fi
 
               if [ "${top_level_start_count}" -ne 0 ] || [ "${top_level_end_count}" -ne 0 ]; then
                 emit_explicit_transaction_migration "${file}" "${history_statement}" | psql "${SUPABASE_DB_URL}" -v ON_ERROR_STOP=1

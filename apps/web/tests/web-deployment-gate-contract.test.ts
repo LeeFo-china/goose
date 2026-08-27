@@ -120,7 +120,7 @@ describe("web deployment hard gates", () => {
     const manifestEvidence = evidence.slice(splitEnd);
 
     expect(dev).toContain(
-      "EXPECTED_BUILD_EVENT: ${{ github.event_name == 'workflow_dispatch' && 'workflow_dispatch' || inputs.expected_build_event }}",
+      "EXPECTED_BUILD_EVENT: ${{ inputs.expected_build_event }}",
     );
     expect(dev).toContain("EVIDENCE_MODE: ${{ inputs.evidence_mode || 'completed_run' }}");
     expect(dev).toContain(
@@ -192,7 +192,12 @@ describe("web deployment hard gates", () => {
     expect(completedRun).toContain(
       'test "$(jq -r \'.head_sha\' <<< "${run_json}")" = "${SOURCE_SHA}"',
     );
-    expect(completedRun).toContain('test "${GITHUB_EVENT_NAME}" = workflow_run');
+    expect(completedRun).toContain('case "${EXPECTED_BUILD_EVENT}" in');
+    expect(completedRun).toContain(
+      'test "$(jq -r \'.head_branch\' <<< "${run_json}")" = main',
+    );
+    expect(completedRun).toContain('case "${GITHUB_EVENT_NAME}" in');
+    expect(completedRun).toContain('workflow_run)');
     expect(completedRun).toContain(
       'current_workflow_path="$(canonical_workflow_path "${current_run_json}")"',
     );
@@ -202,6 +207,7 @@ describe("web deployment hard gates", () => {
     expect(completedRun).toContain(
       'test "$(jq -r \'.event\' <<< "${current_run_json}")" = workflow_run',
     );
+    expect(completedRun).toContain('workflow_dispatch)');
     expect(completedRun).toContain(
       'test "${current_workflow_path}" = ".github/workflows/deploy-dev.yml"',
     );
@@ -209,7 +215,7 @@ describe("web deployment hard gates", () => {
       'test "$(jq -r \'.event\' <<< "${current_run_json}")" = workflow_dispatch',
     );
     expect(completedRun).toContain('test -z "${INLINE_GATE_RECEIPT_B64}"');
-    expect(evidence).toContain("*) exit 1 ;;");
+    expect(completedRun).toContain("*) exit 1 ;;");
 
     expect(manifestEvidence).toContain(
       'receipt_dir="${RUNNER_TEMP}/image-manifest-${INPUT_BUILD_RUN_ID}"',

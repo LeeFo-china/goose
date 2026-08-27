@@ -425,7 +425,6 @@ describe("SupplierPurchaseRequisitionsRepository", () => {
       .rejects.toMatchObject({ statusCode: 500, code: "DB_ERROR" });
   });
 });
-
 const requisition = {
   id: REQUISITION_ID, tenant_id: TENANT_ID,
   request_no: "PR-20260730-00000001", project_id: PROJECT_ID,
@@ -433,7 +432,8 @@ const requisition = {
   status: "pending_approval", budget_status: "over_budget", currency: "CNY",
   reason: "项目现场需要主材", expected_delivery_date: null, remark: null,
   priced_at: AT, subtotal_amount: "100.00", tax_amount: "13.00",
-  total_amount: "113.00", purchase_order_id: null, version: 2,
+  total_amount: "113.00", purchase_order_id: null,
+  purchase_batch_id: null, split_generation: null, version: 2,
   created_by_employee_id: EMPLOYEE_ID, updated_by_employee_id: EMPLOYEE_ID,
   submitted_by_employee_id: EMPLOYEE_ID, submitted_at: AT,
   reviewed_by_employee_id: null, reviewed_at: null, review_remark: null,

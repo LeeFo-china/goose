@@ -71,7 +71,7 @@ export class SupplierProductAccessService {
     return this.requireScope(
       auth,
       tenantSupplierId,
-      permission,
+      [permission],
       false,
     );
   }
@@ -83,7 +83,19 @@ export class SupplierProductAccessService {
     return this.requireScope(
       auth,
       tenantSupplierId,
-      "supplier.product.manage",
+      ["supplier.product.manage"],
+      true,
+    );
+  }
+
+  async requirePurchasableProductWrite(
+    auth: AuthContext,
+    tenantSupplierId: string,
+  ) {
+    return this.requireScope(
+      auth,
+      tenantSupplierId,
+      ["supplier.product.manage", "supplier.cost-price.manage"],
       true,
     );
   }
@@ -101,7 +113,7 @@ export class SupplierProductAccessService {
     return this.requireScope(
       auth,
       tenantSupplierId,
-      permission,
+      [permission],
       false,
     );
   }
@@ -113,7 +125,7 @@ export class SupplierProductAccessService {
     return this.requireScope(
       auth,
       tenantSupplierId,
-      "supplier.cost-price.manage",
+      ["supplier.cost-price.manage"],
       true,
     );
   }
@@ -121,11 +133,13 @@ export class SupplierProductAccessService {
   private async requireScope(
     auth: AuthContext,
     tenantSupplierId: string,
-    permission: string,
+    permissions: readonly string[],
     write: boolean,
   ): Promise<SupplierProxyScope> {
     const tenantId = this.accessPolicy.assertTenantContext(auth);
-    this.accessPolicy.assertPermission(auth, permission);
+    for (const permission of permissions) {
+      this.accessPolicy.assertPermission(auth, permission);
+    }
 
     if (!auth.employeeId || !auth.authUserId) {
       throw Errors.forbidden();

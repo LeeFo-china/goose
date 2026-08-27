@@ -556,6 +556,7 @@ export type Database = {
       }
       catalog_brands: {
         Row: {
+          category_id: string | null
           code: string
           created_at: string
           created_by_employee_id: string
@@ -573,6 +574,7 @@ export type Database = {
           version: number
         }
         Insert: {
+          category_id?: string | null
           code: string
           created_at?: string
           created_by_employee_id: string
@@ -590,6 +592,7 @@ export type Database = {
           version?: number
         }
         Update: {
+          category_id?: string | null
           code?: string
           created_at?: string
           created_by_employee_id?: string
@@ -12824,6 +12827,499 @@ export type Database = {
           },
         ]
       }
+      supplier_purchase_batch_command_events: {
+        Row: {
+          actor_employee_id: string
+          actor_user_id: string
+          command_type: string
+          created_at: string
+          id: string
+          idempotency_key: string
+          purchase_batch_id: string
+          request: Json
+          request_fingerprint: string
+          result: Json
+          result_version: number
+          tenant_id: string
+        }
+        Insert: {
+          actor_employee_id: string
+          actor_user_id: string
+          command_type: string
+          created_at?: string
+          id?: string
+          idempotency_key: string
+          purchase_batch_id: string
+          request?: Json
+          request_fingerprint: string
+          result: Json
+          result_version: number
+          tenant_id: string
+        }
+        Update: {
+          actor_employee_id?: string
+          actor_user_id?: string
+          command_type?: string
+          created_at?: string
+          id?: string
+          idempotency_key?: string
+          purchase_batch_id?: string
+          request?: Json
+          request_fingerprint?: string
+          result?: Json
+          result_version?: number
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_purchase_batch_command_events_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_batch_command_events_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_batch_events_actor_tenant_fkey"
+            columns: ["actor_employee_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id", "tenant_id"]
+          },
+        ]
+      }
+      supplier_purchase_batch_items: {
+        Row: {
+          base_unit_code_snapshot: string
+          base_unit_conversion: number
+          base_unit_id: string
+          base_unit_name_snapshot: string
+          base_unit_symbol_snapshot: string
+          brand_id: string
+          brand_name_snapshot: string
+          catalog_category_id: string
+          category_name_snapshot: string
+          cost_category_id: string
+          created_at: string
+          id: string
+          line_no: number
+          line_subtotal_amount: number
+          line_tax_amount: number
+          line_total_amount: number
+          model_snapshot: string | null
+          price_effective_from_snapshot: string
+          price_effective_until_snapshot: string | null
+          price_list_code_snapshot: string
+          price_list_version_snapshot: number
+          priced_at: string
+          product_code_snapshot: string
+          product_name_snapshot: string
+          purchase_batch_id: string
+          purchase_unit_code_snapshot: string
+          purchase_unit_id: string
+          purchase_unit_name_snapshot: string
+          purchase_unit_symbol_snapshot: string
+          quantity: number
+          sku_code_snapshot: string
+          sku_name_snapshot: string
+          specification_snapshot: string | null
+          supplier_id: string
+          supplier_name_snapshot: string
+          supplier_price_list_id: string
+          supplier_price_list_item_id: string
+          supplier_product_id: string
+          supplier_sku_id: string
+          tax_inclusive: boolean
+          tax_rate: number
+          tenant_id: string
+          tenant_supplier_id: string
+          unit_price: number
+          updated_at: string
+        }
+        Insert: {
+          base_unit_code_snapshot: string
+          base_unit_conversion: number
+          base_unit_id: string
+          base_unit_name_snapshot: string
+          base_unit_symbol_snapshot: string
+          brand_id: string
+          brand_name_snapshot: string
+          catalog_category_id: string
+          category_name_snapshot: string
+          cost_category_id: string
+          created_at?: string
+          id?: string
+          line_no: number
+          line_subtotal_amount: number
+          line_tax_amount: number
+          line_total_amount: number
+          model_snapshot?: string | null
+          price_effective_from_snapshot: string
+          price_effective_until_snapshot?: string | null
+          price_list_code_snapshot: string
+          price_list_version_snapshot: number
+          priced_at: string
+          product_code_snapshot: string
+          product_name_snapshot: string
+          purchase_batch_id: string
+          purchase_unit_code_snapshot: string
+          purchase_unit_id: string
+          purchase_unit_name_snapshot: string
+          purchase_unit_symbol_snapshot: string
+          quantity: number
+          sku_code_snapshot: string
+          sku_name_snapshot: string
+          specification_snapshot?: string | null
+          supplier_id: string
+          supplier_name_snapshot: string
+          supplier_price_list_id: string
+          supplier_price_list_item_id: string
+          supplier_product_id: string
+          supplier_sku_id: string
+          tax_inclusive: boolean
+          tax_rate: number
+          tenant_id: string
+          tenant_supplier_id: string
+          unit_price: number
+          updated_at?: string
+        }
+        Update: {
+          base_unit_code_snapshot?: string
+          base_unit_conversion?: number
+          base_unit_id?: string
+          base_unit_name_snapshot?: string
+          base_unit_symbol_snapshot?: string
+          brand_id?: string
+          brand_name_snapshot?: string
+          catalog_category_id?: string
+          category_name_snapshot?: string
+          cost_category_id?: string
+          created_at?: string
+          id?: string
+          line_no?: number
+          line_subtotal_amount?: number
+          line_tax_amount?: number
+          line_total_amount?: number
+          model_snapshot?: string | null
+          price_effective_from_snapshot?: string
+          price_effective_until_snapshot?: string | null
+          price_list_code_snapshot?: string
+          price_list_version_snapshot?: number
+          priced_at?: string
+          product_code_snapshot?: string
+          product_name_snapshot?: string
+          purchase_batch_id?: string
+          purchase_unit_code_snapshot?: string
+          purchase_unit_id?: string
+          purchase_unit_name_snapshot?: string
+          purchase_unit_symbol_snapshot?: string
+          quantity?: number
+          sku_code_snapshot?: string
+          sku_name_snapshot?: string
+          specification_snapshot?: string | null
+          supplier_id?: string
+          supplier_name_snapshot?: string
+          supplier_price_list_id?: string
+          supplier_price_list_item_id?: string
+          supplier_product_id?: string
+          supplier_sku_id?: string
+          tax_inclusive?: boolean
+          tax_rate?: number
+          tenant_id?: string
+          tenant_supplier_id?: string
+          unit_price?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_purchase_batch_items_base_unit_id_fkey"
+            columns: ["base_unit_id"]
+            isOneToOne: false
+            referencedRelation: "catalog_units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_batch_items_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "catalog_brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_batch_items_catalog_category_id_fkey"
+            columns: ["catalog_category_id"]
+            isOneToOne: false
+            referencedRelation: "catalog_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_batch_items_category_tenant_fkey"
+            columns: ["cost_category_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "finance_cost_categories"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_batch_items_parent_tenant_fkey"
+            columns: ["purchase_batch_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_purchase_batches"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_batch_items_price_item_chain_fkey"
+            columns: [
+              "supplier_price_list_item_id",
+              "tenant_id",
+              "supplier_id",
+              "supplier_price_list_id",
+              "supplier_product_id",
+              "supplier_sku_id",
+            ]
+            isOneToOne: false
+            referencedRelation: "supplier_price_list_items"
+            referencedColumns: [
+              "id",
+              "tenant_id",
+              "supplier_id",
+              "supplier_price_list_id",
+              "supplier_product_id",
+              "supplier_sku_id",
+            ]
+          },
+          {
+            foreignKeyName: "supplier_purchase_batch_items_price_list_tenant_fkey"
+            columns: ["supplier_price_list_id", "tenant_id", "supplier_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_price_lists"
+            referencedColumns: ["id", "tenant_id", "supplier_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_batch_items_product_supplier_fkey"
+            columns: ["supplier_product_id", "supplier_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_products"
+            referencedColumns: ["id", "supplier_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_batch_items_purchase_unit_id_fkey"
+            columns: ["purchase_unit_id"]
+            isOneToOne: false
+            referencedRelation: "catalog_units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_batch_items_relationship_tenant_fkey"
+            columns: ["tenant_supplier_id", "tenant_id", "supplier_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_suppliers"
+            referencedColumns: ["id", "tenant_id", "supplier_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_batch_items_sku_supplier_fkey"
+            columns: ["supplier_sku_id", "supplier_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_skus"
+            referencedColumns: ["id", "supplier_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_batch_items_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "platform_supplier_directory"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_batch_items_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_batch_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_batch_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supplier_purchase_batches: {
+        Row: {
+          batch_no: string
+          budget_checked_at: string | null
+          budget_snapshot: Json
+          budget_status: string
+          cancel_reason: string | null
+          cancelled_at: string | null
+          cancelled_by_employee_id: string | null
+          created_at: string
+          created_by_employee_id: string
+          currency: string
+          expected_delivery_date: string | null
+          id: string
+          item_count: number
+          priced_at: string
+          project_id: string
+          reason: string
+          remark: string | null
+          review_remark: string | null
+          reviewed_at: string | null
+          reviewed_by_employee_id: string | null
+          split_generation: number
+          status: string
+          submitted_at: string | null
+          submitted_by_employee_id: string | null
+          subtotal_amount: number
+          supplier_count: number
+          tax_amount: number
+          tenant_id: string
+          total_amount: number
+          updated_at: string
+          updated_by_employee_id: string
+          version: number
+        }
+        Insert: {
+          batch_no?: string
+          budget_checked_at?: string | null
+          budget_snapshot?: Json
+          budget_status?: string
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by_employee_id?: string | null
+          created_at?: string
+          created_by_employee_id: string
+          currency?: string
+          expected_delivery_date?: string | null
+          id?: string
+          item_count?: number
+          priced_at: string
+          project_id: string
+          reason: string
+          remark?: string | null
+          review_remark?: string | null
+          reviewed_at?: string | null
+          reviewed_by_employee_id?: string | null
+          split_generation?: number
+          status?: string
+          submitted_at?: string | null
+          submitted_by_employee_id?: string | null
+          subtotal_amount?: number
+          supplier_count?: number
+          tax_amount?: number
+          tenant_id: string
+          total_amount?: number
+          updated_at?: string
+          updated_by_employee_id: string
+          version?: number
+        }
+        Update: {
+          batch_no?: string
+          budget_checked_at?: string | null
+          budget_snapshot?: Json
+          budget_status?: string
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by_employee_id?: string | null
+          created_at?: string
+          created_by_employee_id?: string
+          currency?: string
+          expected_delivery_date?: string | null
+          id?: string
+          item_count?: number
+          priced_at?: string
+          project_id?: string
+          reason?: string
+          remark?: string | null
+          review_remark?: string | null
+          reviewed_at?: string | null
+          reviewed_by_employee_id?: string | null
+          split_generation?: number
+          status?: string
+          submitted_at?: string | null
+          submitted_by_employee_id?: string | null
+          subtotal_amount?: number
+          supplier_count?: number
+          tax_amount?: number
+          tenant_id?: string
+          total_amount?: number
+          updated_at?: string
+          updated_by_employee_id?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_purchase_batches_canceller_tenant_fkey"
+            columns: ["cancelled_by_employee_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_batches_creator_tenant_fkey"
+            columns: ["created_by_employee_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_batches_project_tenant_fkey"
+            columns: ["project_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_batches_reviewer_tenant_fkey"
+            columns: ["reviewed_by_employee_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_batches_submitter_tenant_fkey"
+            columns: ["submitted_by_employee_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_batches_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_batches_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_batches_updater_tenant_fkey"
+            columns: ["updated_by_employee_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id", "tenant_id"]
+          },
+        ]
+      }
       supplier_purchase_order_fulfillments: {
         Row: {
           accepted_quantity: number
@@ -13563,6 +14059,7 @@ export type Database = {
           order_no: string
           priced_at: string
           project_id: string
+          purchase_batch_id: string | null
           purchase_requisition_id: string | null
           remark: string | null
           settlement_term_days_snapshot: number
@@ -13593,6 +14090,7 @@ export type Database = {
           order_no: string
           priced_at: string
           project_id: string
+          purchase_batch_id?: string | null
           purchase_requisition_id?: string | null
           remark?: string | null
           settlement_term_days_snapshot: number
@@ -13623,6 +14121,7 @@ export type Database = {
           order_no?: string
           priced_at?: string
           project_id?: string
+          purchase_batch_id?: string | null
           purchase_requisition_id?: string | null
           remark?: string | null
           settlement_term_days_snapshot?: number
@@ -13640,6 +14139,13 @@ export type Database = {
           version?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "supplier_purchase_orders_batch_tenant_fkey"
+            columns: ["purchase_batch_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_purchase_batches"
+            referencedColumns: ["id", "tenant_id"]
+          },
           {
             foreignKeyName: "supplier_purchase_orders_cancelled_by_employee_id_fkey"
             columns: ["cancelled_by_employee_id"]
@@ -13920,6 +14426,7 @@ export type Database = {
           id: string
           priced_at: string
           project_id: string
+          purchase_batch_id: string | null
           purchase_order_id: string | null
           reason: string
           remark: string | null
@@ -13927,6 +14434,7 @@ export type Database = {
           review_remark: string | null
           reviewed_at: string | null
           reviewed_by_employee_id: string | null
+          split_generation: number | null
           status: string
           submitted_at: string | null
           submitted_by_employee_id: string | null
@@ -13952,6 +14460,7 @@ export type Database = {
           id?: string
           priced_at: string
           project_id: string
+          purchase_batch_id?: string | null
           purchase_order_id?: string | null
           reason: string
           remark?: string | null
@@ -13959,6 +14468,7 @@ export type Database = {
           review_remark?: string | null
           reviewed_at?: string | null
           reviewed_by_employee_id?: string | null
+          split_generation?: number | null
           status?: string
           submitted_at?: string | null
           submitted_by_employee_id?: string | null
@@ -13984,6 +14494,7 @@ export type Database = {
           id?: string
           priced_at?: string
           project_id?: string
+          purchase_batch_id?: string | null
           purchase_order_id?: string | null
           reason?: string
           remark?: string | null
@@ -13991,6 +14502,7 @@ export type Database = {
           review_remark?: string | null
           reviewed_at?: string | null
           reviewed_by_employee_id?: string | null
+          split_generation?: number | null
           status?: string
           submitted_at?: string | null
           submitted_by_employee_id?: string | null
@@ -14005,6 +14517,13 @@ export type Database = {
           version?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "supplier_purchase_requisitions_batch_tenant_fkey"
+            columns: ["purchase_batch_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_purchase_batches"
+            referencedColumns: ["id", "tenant_id"]
+          },
           {
             foreignKeyName: "supplier_purchase_requisitions_cancelled_by_employee_id_fkey"
             columns: ["cancelled_by_employee_id"]
@@ -23860,6 +24379,18 @@ export type Database = {
         }
         Returns: Json
       }
+      cancel_supplier_purchase_batch: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_batch_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_reason: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       cancel_supplier_purchase_order: {
         Args: {
           p_actor_employee_id: string
@@ -23885,6 +24416,18 @@ export type Database = {
         Returns: Json
       }
       cancel_supplier_purchase_requisition: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_reason: string
+          p_requisition_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      cancel_supplier_purchase_requisition_unmanaged_v1: {
         Args: {
           p_actor_employee_id: string
           p_actor_user_id: string
@@ -24281,6 +24824,22 @@ export type Database = {
         }
         Returns: Json
       }
+      command_supplier_purchasable_product_v1: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_idempotency_key: string
+          p_price: Json
+          p_product: Json
+          p_product_id: string
+          p_sku: Json
+          p_sku_id: string
+          p_supplier_id: string
+          p_tenant_id: string
+          p_tenant_supplier_id: string
+        }
+        Returns: Json
+      }
       command_supplier_sku_v2: {
         Args: {
           p_action: string
@@ -24564,6 +25123,32 @@ export type Database = {
         }
         Returns: Json
       }
+      convert_supplier_purchase_requisition_for_batch: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_batch_id: string
+          p_expected_version: number
+          p_order_id: string
+          p_requisition_id: string
+          p_reviewed_at: string
+          p_split_generation: number
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      convert_supplier_purchase_requisition_unmanaged_v1: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_purchase_order_id: string
+          p_requisition_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       copy_platform_category_specs: {
         Args: {
           p_actor_employee_id: string
@@ -24595,7 +25180,7 @@ export type Database = {
         Args: {
           p_actor_employee_id: string
           p_actor_user_id: string
-          p_category_id: string | null
+          p_category_id: string
           p_code: string
           p_idempotency_key: string
           p_level: number
@@ -27462,6 +28047,21 @@ export type Database = {
         }
         Returns: Json
       }
+      record_supplier_purchase_batch_command_result: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_batch_id: string
+          p_command_type: string
+          p_idempotency_key: string
+          p_request: Json
+          p_request_fingerprint: string
+          p_result: Json
+          p_result_version: number
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       release_phone_identity_selection: {
         Args: { p_candidate_id: string; p_now: string; p_session_id: string }
         Returns: {
@@ -27656,6 +28256,20 @@ export type Database = {
           supplier_product_id: string
         }[]
       }
+      resolve_supplier_purchase_batch_catalog: {
+        Args: {
+          p_brand_id?: string
+          p_category_id?: string
+          p_keyword?: string
+          p_page?: number
+          p_page_size?: number
+          p_priced_at?: string
+          p_project_id: string
+          p_tenant_id: string
+          p_tenant_supplier_id?: string
+        }
+        Returns: Json
+      }
       resolve_supplier_purchase_order_catalog: {
         Args: {
           p_keyword?: string
@@ -27785,7 +28399,34 @@ export type Database = {
         }
         Returns: Json
       }
+      review_supplier_purchase_batch: {
+        Args: {
+          p_action: string
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_batch_id: string
+          p_can_override_budget: boolean
+          p_expected_version: number
+          p_idempotency_key: string
+          p_remark: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       review_supplier_purchase_requisition: {
+        Args: {
+          p_action: string
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_remark: string
+          p_requisition_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      review_supplier_purchase_requisition_unmanaged_v1: {
         Args: {
           p_action: string
           p_actor_employee_id: string
@@ -27963,6 +28604,22 @@ export type Database = {
         }
         Returns: Json
       }
+      save_supplier_purchase_batch_draft: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_batch_id: string
+          p_expected_delivery_date: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_items: Json
+          p_project_id: string
+          p_reason: string
+          p_remark: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       save_supplier_purchase_order_draft: {
         Args: {
           p_actor_employee_id: string
@@ -28135,6 +28792,17 @@ export type Database = {
         }
         Returns: Json
       }
+      submit_supplier_purchase_batch: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_batch_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       submit_supplier_purchase_order: {
         Args: {
           p_actor_employee_id: string
@@ -28147,6 +28815,17 @@ export type Database = {
         Returns: Json
       }
       submit_supplier_purchase_requisition: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_requisition_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      submit_supplier_purchase_requisition_unmanaged_v1: {
         Args: {
           p_actor_employee_id: string
           p_actor_user_id: string
@@ -28239,6 +28918,12 @@ export type Database = {
       supplier_payment_to_jsonb: {
         Args: {
           p_payment: Database["public"]["Tables"]["supplier_payments"]["Row"]
+        }
+        Returns: Json
+      }
+      supplier_purchase_batch_to_jsonb: {
+        Args: {
+          p_batch: Database["public"]["Tables"]["supplier_purchase_batches"]["Row"]
         }
         Returns: Json
       }
@@ -28411,7 +29096,7 @@ export type Database = {
           p_actor_employee_id: string
           p_actor_user_id: string
           p_brand_id: string
-          p_category_id: string | null
+          p_category_id: string
           p_code: string
           p_expected_version: number
           p_idempotency_key: string
