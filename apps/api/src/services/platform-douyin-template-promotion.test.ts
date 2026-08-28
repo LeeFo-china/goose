@@ -134,6 +134,55 @@ describe("PlatformDouyinTemplatePromotionService", () => {
     expect(harness.templates.confirm).not.toHaveBeenCalled();
   });
 
+  test("confirms an exact preexisting provider template without adding the draft again", async () => {
+    const harness = createHarness();
+    const exactDraftTemplate = {
+      ...providerTemplate,
+      templateId: draft.draftId,
+      createdAt: draft.createdAt,
+    };
+    harness.gateway.listTemplates.mockResolvedValue({
+      items: [exactDraftTemplate],
+      logId: "templates-log",
+    });
+
+    await expect(harness.service.confirmLatest(authContext as never, {
+      channel: "default",
+    })).resolves.toEqual(currentTemplate);
+
+    expect(harness.gateway.addTemplate).not.toHaveBeenCalled();
+    expect(harness.templates.confirm).toHaveBeenCalledWith({
+      templateAppId: TEMPLATE_APP_ID,
+      sourceDraftId: draft.draftId,
+      templateId: draft.draftId,
+      templateVersion: draft.version,
+      description: draft.description,
+      channel: "default",
+      actorEmployeeId: OPERATOR_ID,
+    });
+  });
+
+  test("rejects conflicting metadata for the provider template with the draft identity", async () => {
+    const harness = createHarness();
+    harness.gateway.listTemplates.mockResolvedValue({
+      items: [{
+        ...providerTemplate,
+        templateId: draft.draftId,
+        description: "unexpected provider metadata",
+        createdAt: draft.createdAt,
+      }],
+      logId: "templates-log",
+    });
+
+    await expect(harness.service.confirmLatest(authContext as never, {
+      channel: "default",
+    })).rejects.toMatchObject({
+      code: "DOUYIN_TEMPLATE_IDENTITY_CONFLICT",
+    });
+    expect(harness.gateway.addTemplate).not.toHaveBeenCalled();
+    expect(harness.templates.confirm).not.toHaveBeenCalled();
+  });
+
   test("selects only the exact template added after the current draft confirmation", async () => {
     const harness = createHarness();
     const newlyAdded = { ...providerTemplate, templateId: "77597" };

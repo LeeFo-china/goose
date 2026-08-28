@@ -73,11 +73,14 @@ their existing continuation actions.
 - Publish requires `douyin_miniapp.publish` and an owned audited release.
 - Provider retries and uncertain outcomes continue through the existing release
   operation recovery model.
-- The provider template-list contract does not expose the source draft ID. The
-  confirmation service therefore compares template IDs before and after adding
-  the draft, then accepts exactly one newly appearing record with matching
-  version, description, and creation time. It fails closed if no unique new
-  record appears and never binds a pre-existing metadata match.
+- The provider template-list contract does not expose a separate source-draft
+  field. A template whose provider template ID equals the latest draft ID may be
+  reused only when its version, description, and creation time also match
+  exactly. This supports separate Gooes environments sharing one provider
+  template library without trusting metadata-only matches. Otherwise the
+  confirmation service compares template IDs before and after adding the draft,
+  accepts exactly one newly appearing metadata match, and fails closed on
+  missing or conflicting evidence.
 - Template confirmation and tenant mutations record stable actor metadata.
 
 ## Rollout

@@ -194,6 +194,14 @@ export class PlatformDouyinTemplatePromotionService {
   ): Promise<DouyinCodeTemplate> {
     const request = { componentAccessToken };
     const before = await this.dependencies.gateway.listTemplates(request);
+    const existing = this.findTemplateByDraftIdentity(
+      before.items,
+      draftId,
+      version,
+      description,
+      draftCreatedAt,
+    );
+    if (existing) return existing;
     const templateIdsBefore = new Set(
       before.items.map((template) => template.templateId),
     );
@@ -215,6 +223,14 @@ export class PlatformDouyinTemplatePromotionService {
       if (addError !== undefined) throw addError;
       throw error;
     }
+    const recovered = this.findTemplateByDraftIdentity(
+      after.items,
+      draftId,
+      version,
+      description,
+      draftCreatedAt,
+    );
+    if (recovered) return recovered;
     const promoted = this.requireUniqueExactTemplate(
       after.items.filter(
         (template) => !templateIdsBefore.has(template.templateId),
@@ -230,6 +246,33 @@ export class PlatformDouyinTemplatePromotionService {
       "抖音模板已添加但暂未出现在模板库",
       "DOUYIN_TEMPLATE_PROMOTION_NOT_VISIBLE",
     );
+  }
+
+  private findTemplateByDraftIdentity(
+    templates: readonly DouyinCodeTemplate[],
+    draftId: string,
+    version: string,
+    description: string,
+    draftCreatedAt: number,
+  ): DouyinCodeTemplate | undefined {
+    const identityMatches = templates.filter(
+      (template) => template.templateId === draftId,
+    );
+    if (identityMatches.length === 0) return undefined;
+
+    const exactMatches = identityMatches.filter(
+      (template) => template.version === version
+        && template.description === description
+        && template.createdAt === draftCreatedAt,
+    );
+    if (identityMatches.length !== 1 || exactMatches.length !== 1) {
+      throw Errors.business(
+        409,
+        "抖音模板身份与最新草稿信息冲突",
+        "DOUYIN_TEMPLATE_IDENTITY_CONFLICT",
+      );
+    }
+    return exactMatches[0];
   }
 
   private requireUniqueExactTemplate(
