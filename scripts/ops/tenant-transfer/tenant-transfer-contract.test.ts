@@ -69,6 +69,11 @@ describe("tenant production transfer safety contract", () => {
     expect(exportSql).toContain("00000000-0000-4000-8000-202606160006");
   });
 
+  test("transfers tenant-owned public profile and service areas", () => {
+    expect(exportSql).not.toContain("('tenant_service_provider_profiles',");
+    expect(exportSql).not.toContain("('tenant_service_areas',");
+  });
+
   test("checks target collisions before loading any row", () => {
     const conflictCheck = importSql.indexOf("tenant_target_conflicts");
     const firstCopy = importSql.indexOf("\\i :copy_script");
