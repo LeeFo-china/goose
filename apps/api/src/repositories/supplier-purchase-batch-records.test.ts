@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  SUPPLIER_PURCHASE_BATCH_SELECT,
   SupplierPurchaseBatchCatalogItemSchema,
   SupplierPurchaseBatchOrderSchema,
 } from "./supplier-purchase-batch-records";
@@ -59,5 +60,17 @@ describe("supplier purchase batch record numeric boundaries", () => {
         }).success).toBe(false);
       }
     }
+  });
+});
+
+describe("supplier purchase batch record selects", () => {
+  test("uses the tenant-safe batch-project foreign key for project embedding", () => {
+    expect(SUPPLIER_PURCHASE_BATCH_SELECT).toContain(
+      "project:projects!supplier_purchase_batches_project_tenant_fkey" +
+        "(id,name,status)",
+    );
+    expect(SUPPLIER_PURCHASE_BATCH_SELECT).not.toContain(
+      "project:projects!project_id(",
+    );
   });
 });

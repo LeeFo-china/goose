@@ -13,11 +13,11 @@
 ### Task 1: 固化关系 hint 回归测试
 
 **Files:**
-- Modify: `apps/api/src/repositories/supplier-purchase-batches.test.ts`
+- Modify: `apps/api/src/repositories/supplier-purchase-batch-records.test.ts`
 - Reference: `apps/api/src/repositories/supplier-purchase-batch-records.ts`
 - Reference: `supabase/migrations/20260826141000_create_supplier_purchase_batches.sql`
 
-- [ ] **Step 1: 写入失败测试**
+- [x] **Step 1: 写入失败测试**
 
 在 repository 测试中增加：
 
@@ -33,12 +33,12 @@ test("uses the tenant-safe batch-project foreign key for project embedding", () 
 });
 ```
 
-- [ ] **Step 2: 确认 RED**
+- [x] **Step 2: 确认 RED**
 
 Run:
 
 ```bash
-cd apps/api && bun test src/repositories/supplier-purchase-batches.test.ts
+cd apps/api && bun test src/repositories/supplier-purchase-batch-records.test.ts
 ```
 
 Expected: 新测试因当前 SELECT 仍使用 `!project_id` 而失败。
@@ -47,32 +47,33 @@ Expected: 新测试因当前 SELECT 仍使用 `!project_id` 而失败。
 
 **Files:**
 - Modify: `apps/api/src/repositories/supplier-purchase-batch-records.ts:43`
-- Test: `apps/api/src/repositories/supplier-purchase-batches.test.ts`
+- Test: `apps/api/src/repositories/supplier-purchase-batch-records.test.ts`
 
-- [ ] **Step 1: 替换关系 hint**
+- [x] **Step 1: 替换关系 hint**
 
 ```ts
 "project:projects!supplier_purchase_batches_project_tenant_fkey(id,name,status)",
 ```
 
-- [ ] **Step 2: 确认 GREEN**
+- [x] **Step 2: 确认 GREEN**
 
 Run:
 
 ```bash
 cd apps/api && bun test \
+  src/repositories/supplier-purchase-batch-records.test.ts \
   src/repositories/supplier-purchase-batches.test.ts \
   src/services/supplier-purchase-batch-foundation-migration-contract.test.ts
 ```
 
-Expected: `21 pass, 0 fail`。
+Expected: `23 pass, 0 fail`。
 
 ### Task 3: 验证、审查与发布
 
 **Files:**
 - Verify only: API 与 workspace 配置
 
-- [ ] **Step 1: 静态与构建验证**
+- [x] **Step 1: 静态与构建验证**
 
 ```bash
 bun run api:typecheck
@@ -82,11 +83,11 @@ bun run test
 
 Expected: 所有命令退出码为 0，默认稳定门禁无失败。
 
-- [ ] **Step 2: 提交与代码审查**
+- [x] **Step 2: 提交与代码审查**
 
 ```bash
 git add apps/api/src/repositories/supplier-purchase-batch-records.ts \
-  apps/api/src/repositories/supplier-purchase-batches.test.ts \
+  apps/api/src/repositories/supplier-purchase-batch-records.test.ts \
   docs/superpowers/specs/2026-08-28-supplier-purchase-batch-project-relationship-fix-design.md \
   docs/superpowers/plans/2026-08-28-supplier-purchase-batch-project-relationship-fix.md
 git commit -m "fix(api): 修复采购批次项目关联查询"

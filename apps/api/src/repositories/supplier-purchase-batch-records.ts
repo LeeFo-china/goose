@@ -40,7 +40,7 @@ export const SUPPLIER_PURCHASE_BATCH_SELECT = [
   "cancel_reason",
   "created_at",
   "updated_at",
-  "project:projects!project_id(id,name,status)",
+  "project:projects!supplier_purchase_batches_project_tenant_fkey(id,name,status)",
 ].join(",");
 
 export const SUPPLIER_PURCHASE_BATCH_ITEM_SELECT = [
