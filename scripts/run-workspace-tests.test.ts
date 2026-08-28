@@ -40,6 +40,11 @@ describe("buildTestSuites", () => {
         targets: ["./src"],
       },
       {
+        name: "api-route-capabilities",
+        cwd: join(repoRoot, "apps/api"),
+        targets: ["./src/services/tenant-service-capability-map.test.ts"],
+      },
+      {
         name: "web",
         cwd: join(repoRoot, "apps/web"),
         targets: ["./tests"],
@@ -180,7 +185,12 @@ describe("runCli", () => {
     };
 
     expect(await runCli(["--stable"], dependencies, repoRoot)).toBe(0);
-    expect(executionOrder).toEqual(["release-contracts", "domain", "web"]);
+    expect(executionOrder).toEqual([
+      "release-contracts",
+      "domain",
+      "api-route-capabilities",
+      "web",
+    ]);
   });
 
   it("rejects an unknown mode before discovery or execution", async () => {

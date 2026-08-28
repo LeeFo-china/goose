@@ -63,6 +63,25 @@ describe("tenant service capability map", () => {
     }
   });
 
+  test.each([
+    ["GET", "/supplier-purchase-batch-project-options", "read"],
+    ["GET", "/supplier-purchase-batch-cost-categories", "read"],
+    ["GET", "/supplier-purchase-batch-catalog", "read"],
+    ["GET", "/supplier-purchase-batches", "read"],
+    ["POST", "/supplier-purchasable-products/:id", "write"],
+  ] as const)("excludes supplier procurement route %s %s from trial capabilities", async (
+    method,
+    url,
+    access,
+  ) => {
+    const { resolveTenantServiceRouteCapability } = await import(
+      "./tenant-service-capability-map"
+    );
+
+    expect(resolveTenantServiceRouteCapability(route(method, url, access)))
+      .toEqual({ kind: "excluded", reason: "not_trial_capability" });
+  });
+
   test("classifies every registered read/write route exactly once", async () => {
     const { default: routes } = await import("@/routes");
     const { matchTenantServiceRouteCapabilityRules } = await import(

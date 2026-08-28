@@ -66,6 +66,11 @@ export function buildTestSuites(
       releaseContracts,
       domain,
       {
+        name: "api-route-capabilities",
+        cwd: join(configuration.repoRoot, "apps/api"),
+        targets: ["./src/services/tenant-service-capability-map.test.ts"],
+      },
+      {
         name: "web",
         cwd: join(configuration.repoRoot, "apps/web"),
         targets: ["./tests"],
