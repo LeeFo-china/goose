@@ -187,7 +187,10 @@ export function ServiceProviderPublicationDialog({
           onOpenChange={(nextOpen) => {
             if (!nextOpen) setAction(null);
           }}
-          onCompleted={onCompleted}
+          onCompleted={() => {
+            setAction(null);
+            onCompleted();
+          }}
         />
       ) : null}
     </>

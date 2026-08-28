@@ -137,6 +137,7 @@ export default async function PlatformTenantOnboardingPage({
             <TenantManagementTabs
               activeTab={tab}
               permissions={session.permissions}
+              isPlatformSuperAdmin={hasPlatformAccess}
               pageSize={pageSize}
             />
           }

@@ -15,16 +15,18 @@ export type TenantManagementTab =
 export function TenantManagementTabs({
   activeTab,
   permissions,
+  isPlatformSuperAdmin = false,
   pageSize,
 }: {
   activeTab: TenantManagementTab;
   permissions: readonly AdminPermission[];
+  isPlatformSuperAdmin?: boolean;
   pageSize?: number;
 }) {
-  const canReviewApplications = permissions.some(
+  const canReviewApplications = isPlatformSuperAdmin || permissions.some(
     ({ code }) => code === "platform.tenant_onboarding.review",
   );
-  const canPublishProfiles = permissions.some(
+  const canPublishProfiles = isPlatformSuperAdmin || permissions.some(
     ({ code }) => code === "platform.service_provider.publish",
   );
   const pageSizeQuery = pageSize ? `&pageSize=${pageSize}` : "";

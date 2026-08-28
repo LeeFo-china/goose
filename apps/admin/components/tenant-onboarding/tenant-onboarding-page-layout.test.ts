@@ -38,6 +38,7 @@ describe("platform tenant onboarding page", () => {
 
   test("keeps review mutations authenticated, idempotent, and refreshable", () => {
     const actionsSource = readSource("./tenant-onboarding-actions.tsx");
+    const publicationDialogSource = readSource("./service-provider-publication-dialog.tsx");
     const proxySource = readSource("../../app/api/backend/[...path]/route.ts");
 
     expect(actionsSource).toContain("requestBackendJson");
@@ -52,6 +53,9 @@ describe("platform tenant onboarding page", () => {
     expect(actionsSource).toContain("/publish");
     expect(actionsSource).toContain("/return-draft");
     expect(actionsSource).toContain("/suspend");
+    expect(publicationDialogSource).toMatch(
+      /setAction\(null\);\s+onCompleted\(\);/,
+    );
     expect(proxySource).toContain('request.headers.get("idempotency-key")');
     expect(proxySource).toContain('headers.set("idempotency-key"');
   });
