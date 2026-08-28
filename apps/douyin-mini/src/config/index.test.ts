@@ -4,11 +4,25 @@ import { resolveApiBaseUrl } from "./index";
 
 describe("resolveApiBaseUrl", () => {
   test.each([
-    ["development", "https://api-dev.goodcms.cn"],
-    ["preview", "https://api-dev.goodcms.cn"],
-    ["production", "https://api.goodcms.cn"],
-  ] as const)("maps %s to its fixed API origin", (envType, expected) => {
-    expect(resolveApiBaseUrl(envType)).toBe(expected);
+    ["development", undefined, "https://api-dev.goodcms.cn"],
+    ["development", "production", "https://api-dev.goodcms.cn"],
+    ["preview", "development", "https://api-dev.goodcms.cn"],
+    ["preview", "production", "https://api.goodcms.cn"],
+    ["production", undefined, "https://api.goodcms.cn"],
+    ["production", "production", "https://api.goodcms.cn"],
+  ] as const)(
+    "maps %s with deployment target %p to %s",
+    (envType, deploymentEnvironment, expected) => {
+      expect(resolveApiBaseUrl(envType, deploymentEnvironment)).toBe(expected);
+    },
+  );
+
+  test.each([
+    ["preview", undefined],
+    ["preview", "staging"],
+    ["production", "development"],
+  ] as const)("rejects unsafe %s deployment target %p", (envType, target) => {
+    expect(() => resolveApiBaseUrl(envType, target)).toThrow(ApiRequestError);
   });
 
   test.each([

@@ -43,7 +43,7 @@ const release: DouyinMiniappReleaseRecord = {
   ext_json: {
     extEnable: true as const,
     extAppid: target.authorizer_appid,
-    ext: { deployment_key: target.deployment_key },
+    ext: { deployment_key: target.deployment_key, deployment_environment: "production" },
   },
   status: "uploaded" as const,
   douyin_log_id: "upload-log",
@@ -123,7 +123,7 @@ function dependencies(overrides: Record<string, unknown> = {}) {
     accessTokens,
     gateway,
     now: () => NOW,
-    claimToken: () => CLAIM_TOKEN,
+    claimToken: () => CLAIM_TOKEN, deploymentEnvironment: () => "production" as const,
     ...overrides,
   };
 }

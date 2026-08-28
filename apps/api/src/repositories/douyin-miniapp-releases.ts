@@ -64,6 +64,7 @@ const ExtJsonSchema = z.strictObject({
   extAppid: z.string().trim().min(1).max(128),
   ext: z.strictObject({
     deployment_key: z.string().trim().min(1).max(128),
+    deployment_environment: z.enum(["development", "production"]).optional(),
   }),
 });
 const ReleaseSchema = z.strictObject({

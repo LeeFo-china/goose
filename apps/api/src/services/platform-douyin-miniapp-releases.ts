@@ -11,6 +11,7 @@ import type {
 import type { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import type { DouyinMiniappAccessTokenService } from "@/services/douyin-miniapp/access-tokens";
+import type { DouyinDeploymentEnvironment } from "@/services/douyin-miniapp/deployment-environment";
 import { PlatformDouyinMiniappReleaseOperations } from "./platform-douyin-miniapp-releases/operation-service";
 import {
   AuditInputSchema,
@@ -45,6 +46,7 @@ export type PlatformDouyinMiniappReleasesDependencies = {
   readonly gateway: DouyinMiniappReleaseGateway;
   readonly now?: () => string;
   readonly claimToken?: () => string;
+  readonly deploymentEnvironment: () => DouyinDeploymentEnvironment;
 };
 
 export type {

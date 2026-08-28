@@ -5,6 +5,7 @@ import { DouyinThirdPartyComponentsRepository } from "@/repositories/douyin-thir
 import { accessPolicyService } from "@/services/access-policy";
 import { DouyinMiniappAccessTokenService } from "@/services/douyin-miniapp/access-tokens";
 import { loadDouyinMiniappConfig } from "@/services/douyin-miniapp/config";
+import { resolveDouyinDeploymentEnvironment } from "@/services/douyin-miniapp/deployment-environment";
 import type { PlatformDouyinMiniappReleasesDependencies } from "../platform-douyin-miniapp-releases";
 
 export function createDefaultReleaseDependencies(): PlatformDouyinMiniappReleasesDependencies {
@@ -25,5 +26,8 @@ export function createDefaultReleaseDependencies(): PlatformDouyinMiniappRelease
     accessPolicy: accessPolicyService,
     accessTokens,
     gateway: openPlatform,
+    deploymentEnvironment: () => resolveDouyinDeploymentEnvironment(
+      process.env.GOOES_DEPLOY_ENV,
+    ),
   };
 }

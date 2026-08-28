@@ -23,14 +23,15 @@ import { SessionManager } from "./state/session";
 import { createUuidV4IdempotencyKey } from "./utils/idempotency";
 
 const environment = readDouyinEnvironment();
+const deployment = readDeploymentConfig();
 const transport = new DouyinRequestTransport(
-  resolveApiBaseUrl(environment.envType),
+  resolveApiBaseUrl(environment.envType, deployment.deployment_environment),
   API_TIMEOUT_MS,
 );
 const session = new SessionManager({
   now: () => Date.now(),
   readEnvironment: () => environment,
-  readDeploymentConfig,
+  readDeploymentConfig: () => deployment,
   loginOnce,
   exchangeSession: (input) => exchangeDouyinSession(transport, input),
   readStoredSession,

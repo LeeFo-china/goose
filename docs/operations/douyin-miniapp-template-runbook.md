@@ -32,17 +32,25 @@
 | `DOUYIN_CREDENTIAL_KEYS_JSON` | 授权凭证信封密钥环 | JSON object；每个值是 32 字节标准 Base64 |
 | `DOUYIN_CREDENTIAL_ACTIVE_KEY_VERSION` | 当前写入密钥版本 | 必须存在于密钥环中 |
 | `DOUYIN_SUBJECT_HASH_KEY` | OpenID 等主体标识散列密钥 | 至少 32 字符，仅服务端 |
+| `GOOES_DEPLOY_ENV` | 商户版本部署目标 | 仅允许 `development` 或 `production`；由服务器配置 |
 
-小程序 API Origin 由 `tt.getEnvInfoSync().microapp.envType` 严格决定：
+小程序 API Origin 由运行环境和商户版本中服务端写入的
+`deployment_environment` 共同决定：
 
-| envType | API Origin |
-| --- | --- |
-| `development` | `https://api-dev.goodcms.cn` |
-| `preview` | `https://api-dev.goodcms.cn` |
-| `production` | `https://api.goodcms.cn` |
+| envType | 部署目标 | API Origin |
+| --- | --- | --- |
+| `development` | 不读取 | `https://api-dev.goodcms.cn` |
+| `preview` | `development` | `https://api-dev.goodcms.cn` |
+| `preview` | `production` | `https://api.goodcms.cn` |
+| `production` | `production` 或旧版本缺失 | `https://api.goodcms.cn` |
 
-未知环境、缺少环境信息或不支持该 API 时失败关闭，不回落生产。API Origin 不从启动参数、
-`ext.json`、租户配置或远端响应读取；`deployment_key` 仍只用于商户实例识别。
+商户版本上传时，API 根据自身 `GOOES_DEPLOY_ENV` 写入
+`extConfig.deployment_environment`，租户和客户端不能覆盖。体验版缺失或携带非法目标、
+正式版显式携带开发目标、未知运行环境或不支持该 API 时均失败关闭，不静默回落。
+`deployment_key` 仍只用于商户实例识别。
+
+模板 `0.1.6` 及更早代码把 `preview` 固定到开发 API，不能通过服务端配置原地修复。
+生产商户必须上传并确认包含本规则的新模板，再生成新的商户体验版本并重新扫码验收。
 
 启动前检查：
 
@@ -147,12 +155,14 @@ POST /platform/douyin-miniapps/template-development
 ### 6.1 模板库准备
 
 1. 在抖音开发者工具中打开 `apps/douyin-mini`。
-2. 执行 `bun run douyin-mini:check`，再完成 Android、iOS 真机检查。
-3. 确认 `project.config.json` 使用固定模板开发 AppID
+2. 本地调试商户安装时，先配置开发 AppID 和部署键并执行
+   `bun run douyin-mini:write-ext`；该工具固定写入 `development`，不得用于生产商户构建。
+3. 执行 `bun run douyin-mini:check`，再完成 Android、iOS 真机检查。
+4. 确认 `project.config.json` 使用固定模板开发 AppID
    `tt0d647bd99301341b01`，经明确授权后从 IDE 上传代码。
-4. 平台运营进入 Gooes 平台后台「抖音模板」，核对最新草稿后点击「确认最新模板」。
+5. 平台运营进入 Gooes 平台后台「抖音模板」，核对最新草稿后点击「确认最新模板」。
    服务端负责把该草稿加入模板库并记录唯一的新 `template_id`，不得手工选择商户安装。
-5. 同一最新草稿重复确认会返回当前记录，不会重复加入模板。多个 Gooes 环境共享同一抖音模板库时，仅当既有模板的 `template_id` 与最新 `draft_id` 相同，且版本、描述、创建时间全部一致，当前环境才能复用该模板；不得绑定仅元数据相同的历史模板。如果加入后仍没有唯一身份或新增记录证据，流程失败关闭。
+6. 同一最新草稿重复确认会返回当前记录，不会重复加入模板。多个 Gooes 环境共享同一抖音模板库时，仅当既有模板的 `template_id` 与最新 `draft_id` 相同，且版本、描述、创建时间全部一致，当前环境才能复用该模板；不得绑定仅元数据相同的历史模板。如果加入后仍没有唯一身份或新增记录证据，流程失败关闭。
 
 部署 `20260813200000_create_douyin_deployable_templates.sql` 前先执行只读预检：
 

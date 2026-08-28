@@ -145,6 +145,7 @@ function harness(
     gateway,
     now: () => NOW,
     claimToken: () => CLAIM_TOKEN,
+    deploymentEnvironment: () => "production",
   } as never);
   return { operations, gateway, current: () => current };
 }

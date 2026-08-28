@@ -21,7 +21,10 @@ export interface DouyinMiniExtWriteInput extends DouyinMiniExtConfigInput {
 export interface DouyinMiniExtJson {
   readonly extEnable: true;
   readonly extAppid: string;
-  readonly ext: { readonly deployment_key: string };
+  readonly ext: {
+    readonly deployment_key: string;
+    readonly deployment_environment: "development";
+  };
 }
 
 export interface DouyinMiniExtWriteResult {
@@ -53,7 +56,10 @@ export function buildDouyinMiniExtJson(
   return {
     extEnable: true,
     extAppid,
-    ext: { deployment_key: deploymentKey },
+    ext: {
+      deployment_key: deploymentKey,
+      deployment_environment: "development",
+    },
   };
 }
 

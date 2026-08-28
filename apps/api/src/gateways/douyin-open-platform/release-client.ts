@@ -23,7 +23,10 @@ const SafeQrCodeUrlSchema = z.string().url().max(2048).refine(isSafeQrCodeUrl);
 const TemplateExtJsonSchema = z.strictObject({
   extEnable: z.literal(true),
   extAppid: z.string().min(1).max(128),
-  ext: z.strictObject({ deployment_key: z.string().min(1).max(128) }),
+  ext: z.strictObject({
+    deployment_key: z.string().min(1).max(128),
+    deployment_environment: z.enum(["development", "production"]),
+  }),
 });
 const TemplateUploadSuccessSchema = z.looseObject({
   err_no: z.literal(0),
@@ -78,7 +81,10 @@ export type DouyinQrCodeVersion = "latest" | "audit";
 export type DouyinTemplateExtJson = {
   readonly extEnable: true;
   readonly extAppid: string;
-  readonly ext: { readonly deployment_key: string };
+  readonly ext: {
+    readonly deployment_key: string;
+    readonly deployment_environment: "development" | "production";
+  };
 };
 
 export type UploadTemplateVersionInput = AuthorizerRequestInput & {

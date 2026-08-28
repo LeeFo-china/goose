@@ -21,12 +21,36 @@ afterEach(() => {
 describe("readDeploymentConfig", () => {
   test("reads and normalizes the official extConfig wrapper", () => {
     stubExtConfig({
-      extConfig: { deployment_key: "  merchant-deployment-key  " },
+      extConfig: {
+        deployment_key: "  merchant-deployment-key  ",
+        deployment_environment: "production",
+      },
     });
 
     expect(readDeploymentConfig()).toEqual({
       deployment_key: "merchant-deployment-key",
+      deployment_environment: "production",
     });
+  });
+
+  test.each(["development", "production"] as const)(
+    "reads supported deployment environment %s",
+    (deploymentEnvironment) => {
+      stubExtConfig({ extConfig: { deployment_environment: deploymentEnvironment } });
+      expect(readDeploymentConfig()).toEqual({
+        deployment_environment: deploymentEnvironment,
+      });
+    },
+  );
+
+  test("drops an unsupported deployment environment", () => {
+    stubExtConfig({
+      extConfig: {
+        deployment_key: "merchant-key",
+        deployment_environment: "staging",
+      },
+    });
+    expect(readDeploymentConfig()).toEqual({ deployment_key: "merchant-key" });
   });
 
   test.each([

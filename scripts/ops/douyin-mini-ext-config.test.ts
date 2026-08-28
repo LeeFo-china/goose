@@ -16,7 +16,10 @@ const DEPLOYMENT_KEY = "tenant-bJ4JdQryRi5H2zqrGYaI7kpqqnZHlZyh";
 const EXPECTED_JSON = `${JSON.stringify({
   extEnable: true,
   extAppid: EXT_APPID,
-  ext: { deployment_key: DEPLOYMENT_KEY },
+  ext: {
+    deployment_key: DEPLOYMENT_KEY,
+    deployment_environment: "development",
+  },
 }, null, 2)}\n`;
 
 const temporaryRoots = new Set<string>();
@@ -54,7 +57,10 @@ describe("douyin miniapp ext config operations", () => {
     expect(extJson).toEqual({
       extEnable: true,
       extAppid: EXT_APPID,
-      ext: { deployment_key: DEPLOYMENT_KEY },
+      ext: {
+        deployment_key: DEPLOYMENT_KEY,
+        deployment_environment: "development",
+      },
     });
     expect(JSON.stringify(extJson)).not.toMatch(/secret|token|openid|phone/i);
   });

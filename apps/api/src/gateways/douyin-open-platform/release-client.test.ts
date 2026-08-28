@@ -42,7 +42,10 @@ describe("DouyinOpenPlatformClient release operations", () => {
       extJson: {
         extEnable: true,
         extAppid: "authorizer-appid",
-        ext: { deployment_key: "deployment-key" },
+        ext: {
+          deployment_key: "deployment-key",
+          deployment_environment: "production",
+        },
       },
       userDescription: "装修交付\"稳定版",
       userVersion: "1.2.3",
@@ -62,7 +65,7 @@ describe("DouyinOpenPlatformClient release operations", () => {
     });
     const body = fetch.mock.calls[0]?.[1]?.body;
     expect(body).toBe(
-      "{\"ext_json\":\"{\\\"extEnable\\\":true,\\\"extAppid\\\":\\\"authorizer-appid\\\",\\\"ext\\\":{\\\"deployment_key\\\":\\\"deployment-key\\\"}}\",\"template_id\":9133504853504535288,\"user_desc\":\"装修交付\\\"稳定版\",\"user_version\":\"1.2.3\",\"tag\":\"1\"}",
+      "{\"ext_json\":\"{\\\"extEnable\\\":true,\\\"extAppid\\\":\\\"authorizer-appid\\\",\\\"ext\\\":{\\\"deployment_key\\\":\\\"deployment-key\\\",\\\"deployment_environment\\\":\\\"production\\\"}}\",\"template_id\":9133504853504535288,\"user_desc\":\"装修交付\\\"稳定版\",\"user_version\":\"1.2.3\",\"tag\":\"1\"}",
     );
     expect(body).not.toContain('"template_id":"9133504853504535288"');
   });
@@ -79,7 +82,10 @@ describe("DouyinOpenPlatformClient release operations", () => {
         extJson: {
           extEnable: true,
           extAppid: "authorizer-appid",
-          ext: { deployment_key: "deployment-key" },
+          ext: {
+            deployment_key: "deployment-key",
+            deployment_environment: "production",
+          },
         },
         userDescription: "description",
         userVersion: "1.2.3",
@@ -98,7 +104,10 @@ describe("DouyinOpenPlatformClient release operations", () => {
       extJson: {
         extEnable: true as const,
         extAppid: "authorizer-appid",
-        ext: { deployment_key: "deployment-key" },
+        ext: {
+          deployment_key: "deployment-key",
+          deployment_environment: "production" as const,
+        },
       },
       userDescription: "description",
       userVersion: "1.2.3",
@@ -390,7 +399,10 @@ describe("DouyinOpenPlatformClient release operations", () => {
             extJson: {
               extEnable: true,
               extAppid: "authorizer-appid",
-              ext: { deployment_key: "deployment-key" },
+              ext: {
+                deployment_key: "deployment-key",
+                deployment_environment: "production",
+              },
             },
             userDescription: "description",
             userVersion: "1.2.3",

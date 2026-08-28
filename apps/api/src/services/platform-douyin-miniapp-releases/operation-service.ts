@@ -10,6 +10,7 @@ import type {
   UpdateDouyinMiniappReleaseInput,
 } from "@/repositories/douyin-miniapp-releases";
 import type { DouyinMiniappAccessTokenService } from "@/services/douyin-miniapp/access-tokens";
+import type { DouyinDeploymentEnvironment } from "@/services/douyin-miniapp/deployment-environment";
 import {
   exactAuditStage,
   isExplicitOpenPlatformApiRejection,
@@ -33,6 +34,7 @@ type Dependencies = {
   readonly gateway: DouyinMiniappReleaseGateway;
   readonly now: () => string;
   readonly claimToken: () => string;
+  readonly deploymentEnvironment: () => DouyinDeploymentEnvironment;
 };
 type Claim = { readonly token: string; readonly recoveryRequired: boolean };
 type Acquired = { readonly claim: Claim; readonly release: DouyinMiniappReleaseRecord };
@@ -56,7 +58,10 @@ export class PlatformDouyinMiniappReleaseOperations {
     const extJson = {
       extEnable: true as const,
       extAppid: installation.authorizer_appid,
-      ext: { deployment_key: installation.deployment_key },
+      ext: {
+        deployment_key: installation.deployment_key,
+        deployment_environment: this.dependencies.deploymentEnvironment(),
+      },
     };
     const claimed = await this.dependencies.releaseRepository.getOrCreateAndClaimUpload({
       installationId,

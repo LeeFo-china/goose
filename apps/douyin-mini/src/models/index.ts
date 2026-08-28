@@ -35,6 +35,7 @@ export type DouyinEnvironment = {
 
 export type DeploymentConfig = {
   deployment_key?: string;
+  deployment_environment?: "development" | "production";
 };
 
 export type StoredSession = {
