@@ -85,6 +85,9 @@ describe("ReleaseReadinessPanel", () => {
     expect(html).toContain("5");
     expect(html).toContain('href="/settings/service-provider"');
     expect(html).toContain('href="/douyin-miniapp/budget"');
+    expect(html).not.toContain("PUBLIC_PROFILE_INCOMPLETE");
+    expect(html).not.toContain("BUDGET_PRICING_MISSING");
+    expect(html).not.toContain("SMS_UNAVAILABLE");
     expect(JSON.stringify(html)).not.toMatch(/13800138000|token|secret/i);
   });
 

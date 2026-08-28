@@ -96,9 +96,6 @@ export function ReleaseReadinessPanel({
                 >
                   <div className="min-w-0">
                     <p className="text-sm font-medium">{item.message}</p>
-                    <p className="mt-1 break-words text-xs text-muted-foreground">
-                      {item.code}
-                    </p>
                   </div>
                   <Button asChild size="sm" variant="outline">
                     <Link href={action.href}>

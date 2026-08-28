@@ -42,6 +42,10 @@ type WorkspacePort = {
   findCurrentInstallation(
     tenantId: string,
   ): Promise<TenantDouyinMiniappWorkspaceInstallation | null>;
+  findPreviousInstallation(
+    tenantId: string,
+    authorizerAppId: string,
+  ): Promise<TenantDouyinMiniappWorkspaceInstallation | null>;
 };
 
 type InstallationPort = {
@@ -281,12 +285,21 @@ export class TenantDouyinMiniappAuthorizationService {
     >[0]["refreshToken"];
     readonly permissions: readonly unknown[] | null;
   }): Promise<void> {
+    const previousInstallation =
+      await this.dependencies.workspace.findPreviousInstallation(
+        input.claim.tenantId,
+        input.authorizerAppId,
+      );
+    const runtimeConfig = DouyinRuntimeConfigSchema.parse({
+      ...this.dependencies.runtimeConfig,
+      ...previousInstallation?.runtime_config,
+    });
     await this.dependencies.intents.complete({
       intentId: input.claim.intentId,
       authorizationCodeDigest: input.codeDigest,
       authorizerAppId: input.authorizerAppId,
       deploymentKey: this.deploymentKey(),
-      runtimeConfig: this.dependencies.runtimeConfig,
+      runtimeConfig,
       accessToken: input.accessToken,
       refreshToken: input.refreshToken,
       permissions: input.permissions,

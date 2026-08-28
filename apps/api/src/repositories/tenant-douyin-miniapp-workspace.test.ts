@@ -136,6 +136,24 @@ describe("TenantDouyinMiniappWorkspaceRepository", () => {
     });
   });
 
+  test("loads the previous merchant installation for runtime config inheritance", async () => {
+    const { client, calls } = createClient([{ data: null, error: null }]);
+    const repository = new Repository(client);
+
+    await repository.findPreviousInstallation(TENANT_ID, "current-authorizer");
+
+    expect(calls).toContainEqual({
+      table: "douyin_miniapp_installations",
+      method: "neq",
+      args: ["authorizer_appid", "current-authorizer"],
+    });
+    expect(calls).toContainEqual({
+      table: "douyin_miniapp_installations",
+      method: "limit",
+      args: [1],
+    });
+  });
+
   test("loads the internal tenant name separately from the public brand", async () => {
     const tenant = { id: TENANT_ID, name: "后台租户名称" };
     const { client, calls } = createClient([{ data: tenant, error: null }]);

@@ -214,6 +214,21 @@ export class TenantDouyinMiniappWorkspaceRepository {
     );
   }
 
+  findPreviousInstallation(tenantId: string, authorizerAppId: string) {
+    return this.findOne(
+      this.client.from("douyin_miniapp_installations")
+        .select(SAFE_INSTALLATION_SELECT)
+        .eq("tenant_id", tenantId)
+        .eq("installation_kind", "merchant")
+        .in("authorization_status", ["active", "disabled", "revoked"])
+        .neq("authorizer_appid", authorizerAppId)
+        .order("updated_at", { ascending: false })
+        .limit(1),
+      InstallationSchema,
+      "查询租户历史抖音小程序失败",
+    );
+  }
+
   findProfile(tenantId: string) {
     return this.findOne(
       this.client.from("tenant_service_provider_profiles")

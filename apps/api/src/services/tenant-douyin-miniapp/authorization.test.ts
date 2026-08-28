@@ -97,6 +97,7 @@ function intentRecord(overrides: Record<string, unknown> = {}) {
 
 function createService(options: {
   readonly currentInstallation?: object | null;
+  readonly previousInstallation?: object | null;
   readonly claim?: object;
   readonly exchangeError?: Error;
   readonly eventAuthorizerAppId?: string | null;
@@ -150,6 +151,8 @@ function createService(options: {
   const workspace = {
     findCurrentInstallation: mock(async () =>
       options.currentInstallation ?? null),
+    findPreviousInstallation: mock(async () =>
+      options.previousInstallation ?? null),
   };
   const installations = {
     findActiveByAuthorizerAppId: mock(async () =>
@@ -288,6 +291,36 @@ describe("TenantDouyinMiniappAuthorizationService", () => {
     expect(accessToken.expiresAt).toBe(
       "2026-07-26T12:00:00.000Z",
     );
+  });
+
+  test("preserves the previous tenant runtime config when authorizing a replacement miniapp", async () => {
+    const previousRuntimeConfig = {
+      ...runtimeConfig,
+      brand: {
+        logo_url: "https://assets.gooes.cn/douyin/tenant/logo.png",
+        qualifications: [],
+      },
+    };
+    const { service, intents, workspace } = createService({
+      previousInstallation: {
+        authorizer_appid: "previous-authorizer",
+        runtime_config: previousRuntimeConfig,
+      },
+    });
+
+    await service.completeAuthorizationCallback(tenantContext(), {
+      intent: OPAQUE_INTENT,
+      authorization_code: AUTHORIZATION_CODE,
+      expires_in: 7_200,
+    });
+
+    expect(workspace.findPreviousInstallation).toHaveBeenCalledWith(
+      TENANT_ID,
+      AUTHORIZER_APP_ID,
+    );
+    expect(intents.complete).toHaveBeenCalledWith(expect.objectContaining({
+      runtimeConfig: previousRuntimeConfig,
+    }));
   });
 
   test("completes through event correlation when event exchange won the race", async () => {
