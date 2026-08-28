@@ -3165,22 +3165,37 @@ describe("production orchestrator", () => {
     expect(deploy).not.toContain("upload-artifact");
   });
 
+  test("packages only deployment runtime files into the production source artifact", () => {
+    const candidate = sliceWorkflowJob(releaseProductionWorkflow, "candidate", "authorize-deploy");
+
+    expect(candidate).toContain(
+      'git archive --format=tar.gz --output production-deploy-source.tar.gz "${GITHUB_SHA}" deploy scripts',
+    );
+    expect(candidate).not.toContain(
+      'git archive --format=tar.gz --output production-deploy-source.tar.gz "${GITHUB_SHA}"\n',
+    );
+    expect(candidate).toContain('test -s production-deploy-source.tar.gz');
+    expect(candidate).toContain('tar -tzf production-deploy-source.tar.gz');
+    expect(candidate).toContain('test -s "${deployment_source_listing}"');
+  });
+
   test("binds candidate and receipt evidence to the canonical workflow identity", () => {
     const candidate = sliceWorkflowJob(releaseProductionWorkflow, "candidate", "authorize-deploy");
     const authorize = sliceWorkflowJob(releaseProductionWorkflow, "authorize-deploy", "deploy");
+    const candidateVerifierInvocation = "node scripts/verify-production-release-candidate.mjs";
 
     expect(candidate).toContain('gh run download "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n production-build-plan');
     expect(candidate).toContain('gh run download "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n "image-manifest-${service}"');
-    expect(candidate).toContain("verify-production-release-candidate.mjs");
+    expect(candidate).toContain(candidateVerifierInvocation);
     expect(candidate).toContain(allowedRegistryPairArm);
     expect(candidate).toContain('image_base="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}"');
     expect(candidate).toContain('"${REQUESTED_SERVICES}" \\');
     expect(candidate).toContain('"${image_base}" \\');
     expect(candidate.indexOf(allowedRegistryPairArm)).toBeLessThan(
-      candidate.indexOf("verify-production-release-candidate.mjs"),
+      candidate.indexOf(candidateVerifierInvocation),
     );
     expect(candidate).toContain("name: production-release-candidate");
-    expect(candidate.indexOf("verify-production-release-candidate.mjs")).toBeLessThan(
+    expect(candidate.indexOf(candidateVerifierInvocation)).toBeLessThan(
       candidate.indexOf("name: production-release-candidate"),
     );
     expect(candidate.trimEnd()).toEndWith("retention-days: 30");

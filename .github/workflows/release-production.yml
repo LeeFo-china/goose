@@ -116,8 +116,18 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
-          git archive --format=tar.gz --output production-deploy-source.tar.gz "${GITHUB_SHA}"
+          git archive --format=tar.gz --output production-deploy-source.tar.gz "${GITHUB_SHA}" deploy scripts
           test -s production-deploy-source.tar.gz
+          deployment_source_listing="${RUNNER_TEMP}/production-deploy-source-files.txt"
+          tar -tzf production-deploy-source.tar.gz > "${deployment_source_listing}"
+          test -s "${deployment_source_listing}"
+          test -z "$(grep -Ev '^(deploy|scripts)/' "${deployment_source_listing}")"
+          grep -Fx 'deploy/docker-compose.api.yml' "${deployment_source_listing}"
+          grep -Fx 'deploy/docker-compose.admin.yml' "${deployment_source_listing}"
+          grep -Fx 'deploy/docker-compose.web.yml' "${deployment_source_listing}"
+          grep -Fx 'scripts/verify-production-release-candidate.mjs' "${deployment_source_listing}"
+          grep -Fx 'scripts/resolve-admin-release-services.mjs' "${deployment_source_listing}"
+          grep -Fx 'scripts/resolve-web-deployment.mjs' "${deployment_source_listing}"
 
       - name: Download immutable production build evidence
         env:
