@@ -926,7 +926,7 @@ BEGIN
           ''token_refresh_claim_token'', NULL,
           ''token_refresh_claim_expires_at'', NULL,
           ''token_refresh_last_error'', NULL,
-          ''runtime_config'', ''{}''::jsonb,
+          ''runtime_config'', row.runtime_config,
           ''template_id'', NULL,
           ''template_version'', NULL,
           ''template_release_id'', NULL,
