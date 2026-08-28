@@ -168,9 +168,22 @@ jobs:
           test "${SOURCE_DIR}" = "${expected_source_dir}"
           source_artifact_dir="${RUNNER_TEMP}/production-source-${BUILD_RUN_ID}"
           source_archive="${source_artifact_dir}/production-deploy-source.tar.gz"
-          rm -rf "${SOURCE_DIR}" "${source_artifact_dir}"
-          mkdir -p "${SOURCE_DIR}" "${source_artifact_dir}"
-          gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n production-deploy-source -D "${source_artifact_dir}"
+          rm -rf "${SOURCE_DIR}"
+          mkdir -p "${SOURCE_DIR}"
+          downloaded=false
+          for attempt in 1 2 3 4 5; do
+            rm -rf "${source_artifact_dir}"
+            mkdir -p "${source_artifact_dir}"
+            if timeout --signal=TERM --kill-after=10s 120 gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n production-deploy-source -D "${source_artifact_dir}"; then
+              downloaded=true
+              break
+            fi
+            if [ "${attempt}" -lt 5 ]; then
+              echo "::warning::Deployment source download attempt ${attempt}/5 failed; retrying."
+              sleep $((attempt * 10))
+            fi
+          done
+          test "${downloaded}" = true
           test -s "${source_archive}"
           tar -tzf "${source_archive}" >/dev/null
           tar -xzf "${source_archive}" --strip-components=0 -C "${SOURCE_DIR}"

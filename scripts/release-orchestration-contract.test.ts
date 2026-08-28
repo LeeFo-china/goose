@@ -3258,8 +3258,10 @@ describe("production orchestrator", () => {
       );
     }
     expect(checkout).toContain(
-      'gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n production-deploy-source',
+      'timeout --signal=TERM --kill-after=10s 120 gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n production-deploy-source',
     );
+    expect(checkout).toContain("for attempt in 1 2 3 4 5; do");
+    expect(checkout).toContain('test "${downloaded}" = true');
     expect(checkout).toContain('tar -xzf "${source_archive}"');
     expect(checkout).not.toContain("git clone");
     expect(deployProductionWorkflow).not.toContain("${RUNNER_WORKSPACE}/source");
@@ -3389,8 +3391,10 @@ describe("production orchestrator", () => {
     );
 
     expect(checkout).toContain(
-      'gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n production-deploy-source',
+      'timeout --signal=TERM --kill-after=10s 120 gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n production-deploy-source',
     );
+    expect(checkout).toContain("for attempt in 1 2 3 4 5; do");
+    expect(checkout).toContain('test "${downloaded}" = true');
     expect(checkout).toContain(
       'tar -xzf "${source_archive}" --strip-components=0 -C "${SOURCE_DIR}"',
     );
