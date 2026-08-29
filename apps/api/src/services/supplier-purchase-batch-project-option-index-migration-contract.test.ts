@@ -16,14 +16,27 @@ describe("supplier purchase batch project option index migration", () => {
     expect(sql).not.toMatch(/^\s*(?:BEGIN|COMMIT)\s*;/im);
     expect(sql).toContain("SET lock_timeout = '5s';");
     expect(sql).toContain("SET statement_timeout = '30min';");
+    expect(sql).toContain("RESET statement_timeout;");
+    expect(sql).toContain("RESET lock_timeout;");
   });
 
   test("builds the project option filter index concurrently with rollback guidance", () => {
+    expect(sql).toContain(
+      "-- Existing projects may already contain substantial data. Build this index\n" +
+        "-- without a write-blocking ShareLock while the project option API stays live.",
+    );
+    expect(sql).toContain(
+      "-- Failure/retry: release tooling validates pg_index readiness and removes only\n" +
+        "-- this listed INVALID index concurrently before retrying.",
+    );
     expect(sql).toContain(
       "CREATE INDEX CONCURRENTLY IF NOT EXISTS\n" +
         "  projects_tenant_updated_id_purchase_batch_idx\n" +
         "ON public.projects(tenant_id, updated_at DESC, id DESC);",
     );
-    expect(sql).toMatch(/-- Rollback:[\s\S]*DROP INDEX CONCURRENTLY/);
+    expect(sql).toContain(
+      "-- Rollback: after reverting the filtered API revision, run\n" +
+        "-- DROP INDEX CONCURRENTLY IF EXISTS public.projects_tenant_updated_id_purchase_batch_idx;",
+    );
   });
 });
