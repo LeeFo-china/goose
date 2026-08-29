@@ -167,7 +167,7 @@ function collectTableMutations(source: string, table: string) {
         `\\s+(?:only\\s+)?${tablePattern}\\b`, "gi",
     ))].map((match) => ({
       kind: match[1]?.split(/\s+/)[0]?.toLowerCase(),
-      statement,
+      statement: `${statement.slice(match.index, -1).trim()};`,
     }));
     const isTruncate = new RegExp(
       `\\btruncate(?:\\s+table)?\\b[^;]*\\b(?:only\\s+)?${tablePattern}\\b`,
@@ -327,20 +327,15 @@ describe("standard new-tenant organization template migration", () => {
     const source = sql();
     const { initializer, nonAdminPermissions } = runtimeConfig(source);
     const normalized = normalizeSql(initializer);
-    const rolePermissionMutations = collectTableMutations(initializer, "role_permissions");
+    const rolePermissionMutations = collectTableMutations(source, "role_permissions");
     const nonAdminGrants = rolePermissionMutations.filter(({ statement }) =>
       statement.includes("from resolved_non_admin_permissions")
     );
     const systemAdminGrants = rolePermissionMutations.filter((mutation) =>
       !nonAdminGrants.includes(mutation)
     );
-    const adminRoleAssignments = [
-      ...normalized.matchAll(/select\b[^;]*\binto v_admin_role_id\b[^;]*;/g),
-    ].map((match) => match[0]);
-    const resolutionStart = normalized.indexOf("resolved_non_admin_permissions as (");
-    const resolutionEnd = resolutionStart + normalized.slice(resolutionStart)
-      .search(/\binsert into (?:public\.)?role_permissions\b/);
-    const resolution = normalized.slice(resolutionStart, resolutionEnd);
+    const adminRoleAssignments = [...normalized.matchAll(/select\b[^;]*\binto v_admin_role_id\b[^;]*;/g)].map((match) => match[0]);
+    const resolution = normalizeSql(normalized.match(/resolved_non_admin_permissions as \(([\s\S]*?)\)\s*insert into (?:public\.)?role_permissions\b/)?.[1] ?? "");
 
     expect(expectedNonAdminPermissions).toHaveLength(162);
     expect(sortPermissionTriples(nonAdminPermissions)).toEqual(
@@ -349,24 +344,30 @@ describe("standard new-tenant organization template migration", () => {
     expect(rolePermissionMutations).toHaveLength(2);
     expect(rolePermissionMutations.every(({ kind }) => kind === "insert")).toBe(true);
     expect(nonAdminGrants).toHaveLength(1);
-    expect(nonAdminGrants[0]?.statement).toMatch(
-      /insert into (?:public\.)?role_permissions\b[^;]*from resolved_non_admin_permissions/,
+    expect(nonAdminGrants[0]?.statement).toBe(
+      "insert into public.role_permissions (role_id, permission_id, access_scope) " +
+        "select role_id, permission_id, access_scope from resolved_non_admin_permissions " +
+        "on conflict (role_id, permission_id) do update set access_scope = excluded.access_scope;",
     );
     expect(systemAdminGrants).toHaveLength(1);
-    expect(systemAdminGrants[0]?.statement).toMatch(
-      /insert into (?:public\.)?role_permissions\s*\(\s*role_id\s*,\s*permission_id\s*,\s*access_scope\s*\)\s*select\s+v_admin_role_id\s*,\s*permission\.id\s*,\s*'all'\s+from (?:public\.)?permissions as permission where permission\.status = 'active' and permission\.code not like 'platform\.%'/,
+    expect(systemAdminGrants[0]?.statement).toBe(
+      "insert into public.role_permissions (role_id, permission_id, access_scope) " +
+        "select v_admin_role_id, permission.id, 'all' from public.permissions as permission " +
+        "where permission.status = 'active' and permission.code not like 'platform.%' on conflict " +
+        "(role_id, permission_id) do update set access_scope = excluded.access_scope;",
     );
-    expect(systemAdminGrants[0]?.statement).not.toMatch(/\b(?:or|union|join (?:public\.)?roles|from (?:public\.)?roles)\b/);
     expect(adminRoleAssignments).toEqual([
       "select role.id into v_admin_role_id from public.roles as role " +
         "where role.tenant_id = p_tenant_id and role.code = 'system_admin' limit 1;",
     ]);
-    expect(resolutionStart).toBeGreaterThan(-1);
-    expect(resolutionEnd).toBeGreaterThan(resolutionStart);
-    expect(resolution).toContain("from non_admin_permission_defaults");
-    expect(resolution).toContain("join public.roles");
-    expect(resolution).toContain("join public.permissions");
-    expect(resolution).toContain("permission.status = 'active'");
+    expect(resolution).toBe(
+      "select role.id as role_id, permission.id as permission_id, defaults.access_scope " +
+        "from non_admin_permission_defaults as defaults " +
+        "inner join public.roles as role on role.tenant_id = p_tenant_id " +
+        "and role.code = defaults.role_code and role.status = 'active' " +
+        "inner join public.permissions as permission on permission.code = defaults.permission_code " +
+        "and permission.status = 'active'",
+    );
     expect(normalized).toMatch(
       /select (?:pg_catalog\.)?count\(\*\)(?:::integer)? into v_expected_non_admin_permission_count from non_admin_permission_defaults;/,
     );
@@ -380,23 +381,21 @@ describe("standard new-tenant organization template migration", () => {
 
   test("binds only the initialized administrator role and writes no overrides", () => {
     const source = sql();
-    const { initializer } = runtimeConfig(source);
-    const employeeRoleMutations = collectTableMutations(initializer, "employee_roles");
+    const employeeRoleMutations = collectTableMutations(source, "employee_roles");
 
     expect(collectTableMutations(source, "employee_permission_overrides")).toHaveLength(0);
     expect(employeeRoleMutations).toHaveLength(1);
     expect(employeeRoleMutations[0]?.kind).toBe("insert");
-    expect(employeeRoleMutations[0]?.statement).toMatch(
-      /insert into (?:public\.)?employee_roles\s*\(\s*employee_id\s*,\s*role_id\s*\)\s*values\s*\(\s*v_admin_employee_id\s*,\s*v_admin_role_id\s*\)\s+on conflict\s*\(\s*employee_id\s*,\s*role_id\s*\)\s+do nothing;/,
+    expect(employeeRoleMutations[0]?.statement).toBe(
+      "insert into public.employee_roles (employee_id, role_id) " +
+        "values (v_admin_employee_id, v_admin_role_id) " +
+        "on conflict (employee_id, role_id) do nothing;",
     );
   });
 
   test("keeps both commands security-definer and service-role-only", () => {
     const source = sql();
-    for (const name of [
-      "initialize_default_decoration_tenant",
-      "create_tenant_with_default_template",
-    ]) {
+    for (const name of ["initialize_default_decoration_tenant", "create_tenant_with_default_template"]) {
       const body = extractFunction(source, name);
       expect(body).not.toBe("");
       expect(body).toMatch(/SECURITY DEFINER/i);
@@ -408,7 +407,7 @@ describe("standard new-tenant organization template migration", () => {
         ));
       }
       const grantees = [...source.matchAll(new RegExp(
-        `GRANT\\s+(EXECUTE|ALL(?:\\s+PRIVILEGES)?)\\s+ON\\s+FUNCTION\\s+` +
+        `GRANT\\s+(EXECUTE|ALL(?:\\s+PRIVILEGES)?)\\s+ON\\s+(?:FUNCTION|ROUTINE)\\s+` +
           `public\\.${name}\\([^;]+\\)\\s+TO\\s+([^;]+);`,
         "gi",
       ))].map((match) => [
@@ -418,10 +417,10 @@ describe("standard new-tenant organization template migration", () => {
       expect(grantees).toEqual([["execute", "service_role"]]);
     }
     expect(source).not.toMatch(
-      /\bGRANT\b[^;]*\bON\s+ALL\s+FUNCTIONS\s+IN\s+SCHEMA\b[^;]*;/i,
+      /\bGRANT\b[^;]*\bON\s+ALL\s+(?:FUNCTIONS|ROUTINES)\s+IN\s+SCHEMA\b[^;]*;/i,
     );
     expect(source).not.toMatch(
-      /\bGRANT\s+(?:EXECUTE|ALL(?:\s+PRIVILEGES)?)\s+ON\s+FUNCTION\b[^;]*\bTO\s+[^;]*\b(?:PUBLIC|anon|authenticated)\b[^;]*;/i,
+      /\bGRANT\s+(?:EXECUTE|ALL(?:\s+PRIVILEGES)?)\s+ON\s+(?:FUNCTION|ROUTINE)\b[^;]*\bTO\s+[^;]*\b(?:PUBLIC|anon|authenticated)\b[^;]*;/i,
     );
   });
 
@@ -453,6 +452,7 @@ describe("standard new-tenant organization template migration", () => {
       /WITH\s+audit_department_defaults\b[\s\S]*?INSERT INTO public\.tenant_templates\b[\s\S]*?ON CONFLICT\s*\(\s*code\s*,\s*version\s*\)[\s\S]*?;/i,
     )?.[0] ?? "";
     const normalized = normalizeSql(payloadStatement);
+    const valueSql = "(?:(?!\\b(?:select|from|union)\\b|'(?:departments|posts|department_posts|roles|role_permissions|system_admin_permission_rule)'\\s*,)[\\s\\S])*?";
 
     expect(audit.departments).toEqual(runtime.departments);
     expect(audit.posts).toEqual(runtime.posts);
@@ -461,14 +461,14 @@ describe("standard new-tenant organization template migration", () => {
     expect(audit.nonAdminPermissions).toEqual(runtime.nonAdminPermissions);
     expect(normalized).toMatch(/insert into public\.tenant_templates\s*\([^)]*payload[^)]*\)/);
     for (const [key, cte] of [
-      ["departments", "audit_department_defaults"],
-      ["posts", "audit_post_defaults"],
-      ["department_posts", "audit_department_post_defaults"],
-      ["roles", "audit_role_defaults"],
+      ["departments", "audit_department_defaults"], ["posts", "audit_post_defaults"],
+      ["department_posts", "audit_department_post_defaults"], ["roles", "audit_role_defaults"],
       ["role_permissions", "audit_non_admin_permission_defaults"],
     ] as const) {
-      expect(normalized).toContain(`'${key}'`);
-      expect(normalized).toContain(`from ${cte}`);
+      expect(normalized).toMatch(new RegExp(
+        `'${key}'\\s*,\\s*\\(\\s*select\\s+(?:pg_catalog\\.)?jsonb_agg\\(${valueSql}\\)` +
+          `\\s+from\\s+${cte}\\s*\\)`,
+      ));
     }
     expect(normalized).not.toContain("'department_post_rules'");
     expect(normalized).not.toContain("'non_admin_permissions'");
