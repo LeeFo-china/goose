@@ -9,7 +9,11 @@ export function resolveApiBaseUrl(
   envType: string,
   deploymentEnvironment?: string,
 ): string {
-  if (envType === "development") return DEVELOPMENT_API_BASE_URL;
+  if (envType === "development") {
+    return deploymentEnvironment === "production"
+      ? PRODUCTION_API_BASE_URL
+      : DEVELOPMENT_API_BASE_URL;
+  }
   if (envType === "preview") {
     if (deploymentEnvironment === "development") return DEVELOPMENT_API_BASE_URL;
     if (deploymentEnvironment === "production") return PRODUCTION_API_BASE_URL;

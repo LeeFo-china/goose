@@ -2,16 +2,19 @@
 
 ## 问题
 
-抖音体验版运行时统一报告 `envType=preview`。旧模板据此固定访问开发 API，导致生产商户
-体验版使用生产 AppID 和部署键访问开发环境，会话交换失败。
+抖音商户体验版在真机可能报告 `envType=development`，而不是稳定报告 `preview`。
+旧模板把 `development` 无条件映射到开发 API，导致生产商户体验版使用生产 AppID 和部署键
+访问开发环境，会话交换失败。
 
 ## 决策
 
 - 服务器根据只读环境变量 `GOOES_DEPLOY_ENV` 生成商户版本的
   `extConfig.deployment_environment`。
 - 仅允许 `development`、`production`，配置缺失或非法时禁止上传商户版本。
-- 小程序开发工具始终访问开发 API。
-- 商户体验版按 `deployment_environment` 选择开发或生产 API；字段缺失或非法时失败关闭。
+- 小程序开发工具未携带部署目标时访问开发 API。
+- 商户测试版和预览版按服务端下发的 `deployment_environment` 选择开发或生产 API；
+  显式部署目标优先于运行时报告的 `development` 或 `preview`。
+- `preview` 缺少部署目标或部署目标非法时失败关闭。
 - 正式版始终访问生产 API；为兼容已发布旧版本，缺失字段仍允许，显式开发目标则失败关闭。
 - 旧 release 数据继续允许只含 `deployment_key`，新上传记录必须由应用写入部署目标。
 

@@ -5,7 +5,6 @@ import { resolveApiBaseUrl } from "./index";
 describe("resolveApiBaseUrl", () => {
   test.each([
     ["development", undefined, "https://api-dev.goodcms.cn"],
-    ["development", "production", "https://api-dev.goodcms.cn"],
     ["preview", "development", "https://api-dev.goodcms.cn"],
     ["preview", "production", "https://api.goodcms.cn"],
     ["production", undefined, "https://api.goodcms.cn"],
@@ -16,6 +15,11 @@ describe("resolveApiBaseUrl", () => {
       expect(resolveApiBaseUrl(envType, deploymentEnvironment)).toBe(expected);
     },
   );
+
+  test("honors the production target when an experience build reports development", () => {
+    expect(resolveApiBaseUrl("development", "production"))
+      .toBe("https://api.goodcms.cn");
+  });
 
   test.each([
     ["preview", undefined],
