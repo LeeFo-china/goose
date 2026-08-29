@@ -11,72 +11,139 @@ const migration = new URL(
 );
 
 const enabledDepartments = [
-  "EXEC_OFFICE",
-  "MARKETING",
-  "DESIGN",
-  "PROJECT",
-  "FINANCE",
-  "SELF_MEDIA",
+  "EXEC_OFFICE", "MARKETING", "DESIGN", "PROJECT", "FINANCE", "SELF_MEDIA",
   "CUSTOMER_SERVICE",
 ] as const;
 
 const enabledPosts = [
-  "GENERAL_MANAGER",
-  "SYSTEM_ADMIN",
-  "SALES_CONSULTANT",
-  "MARKETING_MANAGER",
-  "DESIGN_DIRECTOR",
-  "CHIEF_DESIGNER",
-  "ENGINEERING_DIRECTOR",
-  "CONSTRUCTION_SUPER",
-  "HYDROPOWER_FOREMAN",
-  "TILE_FOREMAN",
-  "CARPENTRY_FOREMAN",
-  "PAINT_FOREMAN",
-  "MAINTENANCE_WORKER",
-  "FINANCE_ACCOUNTANT",
-  "FINANCE_MANAGER",
-  "OPERATIONS_DIRECTOR",
-  "NEW_MEDIA_OPERATOR",
-  "VIDEO_EDITOR",
-  "LIVE_STREAM_OPERATOR",
-  "CUSTOMER_SERVICE_MANAGER",
-  "CUSTOMER_SERVICE",
+  "GENERAL_MANAGER", "SYSTEM_ADMIN", "SALES_CONSULTANT", "MARKETING_MANAGER",
+  "DESIGN_DIRECTOR", "CHIEF_DESIGNER", "ENGINEERING_DIRECTOR", "CONSTRUCTION_SUPER",
+  "HYDROPOWER_FOREMAN", "TILE_FOREMAN", "CARPENTRY_FOREMAN", "PAINT_FOREMAN",
+  "MAINTENANCE_WORKER", "FINANCE_ACCOUNTANT", "FINANCE_MANAGER", "OPERATIONS_DIRECTOR",
+  "NEW_MEDIA_OPERATOR", "VIDEO_EDITOR", "LIVE_STREAM_OPERATOR",
+  "CUSTOMER_SERVICE_MANAGER", "CUSTOMER_SERVICE",
 ] as const;
 
 const stableRoles = [
-  "system_admin",
-  "employee_base",
-  "business_manager",
-  "salesperson",
-  "design_manage",
-  "designer",
-  "engineering_manager",
-  "construction_supervisor",
-  "construction_worker",
-  "finance_base",
-  "cashier",
+  "system_admin", "employee_base", "business_manager", "salesperson", "design_manage",
+  "designer", "engineering_manager", "construction_supervisor", "construction_worker",
+  "finance_base", "cashier",
+] as const;
+
+type NonAdminRole = Exclude<(typeof stableRoles)[number], "system_admin">;
+type PermissionScope = "all" | "department" | "self";
+type PermissionTriple = readonly [NonAdminRole, string, PermissionScope];
+
+function permissionsFor(
+  role: NonAdminRole,
+  scope: PermissionScope,
+  permissions: readonly string[],
+): PermissionTriple[] {
+  return permissions.map((permission) => [role, permission, scope]);
+}
+
+const expectedNonAdminPermissions = [
+  ...permissionsFor("employee_base", "self", [
+    "dashboard.read", "employee.read", "expense_request.create", "expense_request.read",
+    "expense_request.submit", "task_center.read",
+  ]),
+  ...permissionsFor("business_manager", "all", ["customer.assign_owner", "project.read"]),
+  ...permissionsFor("business_manager", "department", [
+    "customer.create", "customer.phone.call", "customer.phone.copy", "customer.phone.view",
+    "customer.read", "customer.update", "employee.read", "expense_request.approve_manager",
+    "expense_request.read", "marketing_lead.read", "marketing_lead.update",
+    "marketing_page.create", "marketing_page.delete", "marketing_page.publish",
+    "marketing_page.read", "marketing_page.update", "project.create", "project.delete",
+    "project.update",
+  ]),
+  ...permissionsFor("business_manager", "self", [
+    "dashboard.read", "expense_request.create", "expense_request.submit", "project_acceptance.read",
+    "task_center.read",
+  ]),
+  ...permissionsFor("salesperson", "self", [
+    "customer.create", "customer.phone.call", "customer.phone.view", "customer.read",
+    "customer.update", "dashboard.read", "expense_request.create", "expense_request.read",
+    "expense_request.submit", "marketing_lead.read", "marketing_lead.update",
+    "marketing_page.read", "project.create", "project.delete", "project.read", "project.update",
+    "task_center.read",
+  ]),
+  ...permissionsFor("design_manage", "all", ["project_acceptance.read"]),
+  ...permissionsFor("design_manage", "department", [
+    "expense_request.approve_manager", "expense_request.read", "project.read",
+  ]),
+  ...permissionsFor("design_manage", "self", [
+    "dashboard.read", "expense_request.create", "expense_request.submit", "project_procedure.adjust",
+    "project_procedure.assign", "project_procedure.read", "task_center.read",
+  ]),
+  ...permissionsFor("designer", "self", [
+    "dashboard.read", "expense_request.create", "expense_request.read", "expense_request.submit",
+    "project.read", "project.update", "project_log.create", "project_procedure.read",
+    "project_acceptance.read", "task_center.read",
+  ]),
+  ...permissionsFor("engineering_manager", "all", [
+    "project_acceptance.manage", "project_acceptance.reject", "project_acceptance.review",
+    "project_acceptance.submit", "project.read", "project.update",
+  ]),
+  ...permissionsFor("engineering_manager", "department", [
+    "expense_request.approve_manager", "expense_request.read", "project_acceptance.create",
+    "project_acceptance.read", "project_log.create", "project_procedure.adjust",
+    "project_procedure.assign", "project_procedure.read",
+  ]),
+  ...permissionsFor("engineering_manager", "self", [
+    "customer.phone.call", "customer.phone.view", "dashboard.read", "employee.read",
+    "expense_request.create", "expense_request.submit", "project_acceptance.update_own",
+    "task_center.read",
+  ]),
+  ...permissionsFor("construction_supervisor", "department", [
+    "project_acceptance.create", "project_acceptance.submit",
+    "project_acceptance.update_own", "project.read",
+  ]),
+  ...permissionsFor("construction_supervisor", "self", [
+    "dashboard.read", "expense_request.create", "expense_request.read", "expense_request.submit",
+    "project_acceptance.read", "project_log.create", "project_procedure.adjust",
+    "project_procedure.assign", "project_procedure.complete", "project_procedure.read",
+    "project.update", "social_video_transcription.create", "social_video_transcription.manage",
+    "task_center.read",
+  ]),
+  ...permissionsFor("construction_worker", "self", [
+    "project_log.create", "project_procedure.assignee", "task_center.read",
+  ]),
+  ...permissionsFor("finance_base", "all", [
+    "expense_request.approve_finance", "expense_request.pay", "expense_request.read",
+    "finance.budget.manage", "finance.budget.view", "finance.closing.manage", "finance.closing.read",
+    "finance.cost-allocation.manage", "finance.cost-category.manage", "finance.cost-category.view",
+    "finance.dashboard.view", "finance.expense.pay", "finance.expense.review", "finance.ledger.view",
+    "finance.payment.confirm", "finance.payment.create", "finance.receivable.manage",
+    "finance.receivable.view", "finance.reconciliation.manage", "finance.reports.export",
+    "finance.reports.read", "finance.view", "project_acceptance.read", "project.read",
+    "project_referral.manage", "project_referral.read", "wechat_pay.notify.read", "wechat_pay.order.read",
+  ]),
+  ...permissionsFor("finance_base", "self", [
+    "dashboard.read", "expense_request.create", "expense_request.submit",
+    "task_center.read",
+  ]),
+  ...permissionsFor("cashier", "all", [
+    "expense_request.approve_finance", "expense_request.pay", "expense_request.read",
+    "finance.expense.pay", "finance.expense.review", "finance.ledger.view", "finance.payment.create",
+    "finance.receivable.manage", "finance.receivable.view", "finance.view",
+  ]),
+  ...permissionsFor("cashier", "department", ["task_center.read"]),
+  ...permissionsFor("cashier", "self", [
+    "dashboard.read", "finance.budget.view", "finance.cost-allocation.manage",
+    "finance.cost-category.manage", "finance.cost-category.view", "finance.dashboard.view",
+  ]),
 ] as const;
 
 const expectedDepartmentPostRules = [
-  ["EXEC_OFFICE", "GENERAL_MANAGER"],
-  ["EXEC_OFFICE", "SYSTEM_ADMIN"],
-  ["MARKETING", "SALES_CONSULTANT"],
-  ["MARKETING", "MARKETING_MANAGER"],
-  ["DESIGN", "DESIGN_DIRECTOR"],
-  ["DESIGN", "CHIEF_DESIGNER"],
-  ["PROJECT", "ENGINEERING_DIRECTOR"],
-  ["PROJECT", "CONSTRUCTION_SUPER"],
-  ["PROJECT", "HYDROPOWER_FOREMAN"],
-  ["PROJECT", "TILE_FOREMAN"],
-  ["PROJECT", "CARPENTRY_FOREMAN"],
-  ["PROJECT", "PAINT_FOREMAN"],
-  ["PROJECT", "MAINTENANCE_WORKER"],
-  ["FINANCE", "FINANCE_ACCOUNTANT"],
-  ["FINANCE", "FINANCE_MANAGER"],
-  ["SELF_MEDIA", "OPERATIONS_DIRECTOR"],
-  ["SELF_MEDIA", "NEW_MEDIA_OPERATOR"],
-  ["SELF_MEDIA", "VIDEO_EDITOR"],
+  ["EXEC_OFFICE", "GENERAL_MANAGER"], ["EXEC_OFFICE", "SYSTEM_ADMIN"],
+  ["MARKETING", "SALES_CONSULTANT"], ["MARKETING", "MARKETING_MANAGER"],
+  ["DESIGN", "DESIGN_DIRECTOR"], ["DESIGN", "CHIEF_DESIGNER"],
+  ["PROJECT", "ENGINEERING_DIRECTOR"], ["PROJECT", "CONSTRUCTION_SUPER"],
+  ["PROJECT", "HYDROPOWER_FOREMAN"], ["PROJECT", "TILE_FOREMAN"],
+  ["PROJECT", "CARPENTRY_FOREMAN"], ["PROJECT", "PAINT_FOREMAN"],
+  ["PROJECT", "MAINTENANCE_WORKER"], ["FINANCE", "FINANCE_ACCOUNTANT"],
+  ["FINANCE", "FINANCE_MANAGER"], ["SELF_MEDIA", "OPERATIONS_DIRECTOR"],
+  ["SELF_MEDIA", "NEW_MEDIA_OPERATOR"], ["SELF_MEDIA", "VIDEO_EDITOR"],
   ["SELF_MEDIA", "LIVE_STREAM_OPERATOR"],
   ["CUSTOMER_SERVICE", "CUSTOMER_SERVICE_MANAGER"],
   ["CUSTOMER_SERVICE", "CUSTOMER_SERVICE"],
@@ -91,6 +158,24 @@ function sql(): string {
 
 function normalizeSql(value: string): string {
   return value.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function sortPermissionTriples(
+  rows: readonly (readonly SqlValue[])[],
+): string[][] {
+  return rows
+    .map((row) => row.map(String))
+    .sort((left, right) => left.join("\u0000").localeCompare(right.join("\u0000")));
+}
+
+function withoutFunctionsAndComments(source: string): string {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/--.*$/gm, "")
+    .replace(
+      /\bCREATE(?:\s+OR\s+REPLACE)?\s+FUNCTION\b[\s\S]*?\bAS\s+(\$[a-z0-9_]*\$)[\s\S]*?\1\s*;/gi,
+      "",
+    );
 }
 
 function extractFunction(source: string, name: string): string {
@@ -233,14 +318,12 @@ describe("standard new-tenant organization template migration", () => {
     const source = sql();
     const { initializer, nonAdminPermissions } = runtimeConfig(source);
     const normalized = normalizeSql(initializer);
-    const configuredRoles = [...new Set(nonAdminPermissions.map((row) => row[0]))].sort();
     const rolePermissionInserts = [
       ...initializer.matchAll(/INSERT INTO public\.role_permissions\b[\s\S]*?;/gi),
     ].map((match) => normalizeSql(match[0]));
-    const systemAdminGrant = rolePermissionInserts.find((statement) =>
-      statement.includes("v_admin_role_id") &&
-      statement.includes("from public.permissions as permission")
-    ) ?? "";
+    const systemAdminGrants = rolePermissionInserts.filter((statement) =>
+      statement.includes("v_admin_role_id")
+    );
     const resolutionStart = normalized.indexOf(
       "resolved_non_admin_permissions as (",
     );
@@ -250,14 +333,12 @@ describe("standard new-tenant organization template migration", () => {
     );
     const resolution = normalized.slice(resolutionStart, resolutionEnd);
 
-    expect(nonAdminPermissions.length).toBeGreaterThan(0);
-    expect(configuredRoles).toEqual([...stableRoles.slice(1)].sort());
-    expect(nonAdminPermissions.every((row) => row[0] !== "system_admin")).toBe(true);
-    expect(nonAdminPermissions.every((row) =>
-      typeof row[1] === "string" && row[1] !== "" &&
-      ["self", "department", "assigned", "all"].includes(String(row[2]))
-    )).toBe(true);
-    expect(systemAdminGrant).toMatch(
+    expect(expectedNonAdminPermissions).toHaveLength(162);
+    expect(sortPermissionTriples(nonAdminPermissions)).toEqual(
+      sortPermissionTriples(expectedNonAdminPermissions),
+    );
+    expect(systemAdminGrants).toHaveLength(1);
+    expect(systemAdminGrants[0]).toMatch(
       /from public\.permissions as permission where permission\.status = 'active' and permission\.code not like 'platform\.%'/,
     );
     expect(resolutionStart).toBeGreaterThan(-1);
@@ -265,6 +346,7 @@ describe("standard new-tenant organization template migration", () => {
     expect(resolution).toContain("from non_admin_permission_defaults");
     expect(resolution).toContain("join public.roles");
     expect(resolution).toContain("join public.permissions");
+    expect(resolution).toContain("permission.status = 'active'");
     expect(normalized).toMatch(
       /insert into public\.role_permissions[\s\S]*from resolved_non_admin_permissions/,
     );
@@ -289,7 +371,7 @@ describe("standard new-tenant organization template migration", () => {
     ].map((match) => normalizeSql(match[0]));
 
     expect(source).not.toMatch(
-      /\b(?:INSERT INTO|UPDATE|DELETE FROM)\s+public\.employee_permission_overrides\b/i,
+      /\b(?:INSERT INTO|UPDATE|DELETE FROM)\s+(?:public\.)?employee_permission_overrides\b/i,
     );
     expect(employeeRoleInserts).toHaveLength(1);
     expect(employeeRoleInserts[0]).toMatch(
@@ -317,11 +399,18 @@ describe("standard new-tenant organization template migration", () => {
         ));
       }
       const grantees = [...source.matchAll(new RegExp(
-        `GRANT EXECUTE ON FUNCTION public\\.${name}\\([^;]+\\)\\s+TO ([a-z_]+);`,
+        `GRANT\\s+(EXECUTE|ALL(?:\\s+PRIVILEGES)?)\\s+ON\\s+FUNCTION\\s+` +
+          `public\\.${name}\\([^;]+\\)\\s+TO\\s+([^;]+);`,
         "gi",
-      ))].map((match) => match[1]?.toLowerCase());
-      expect(grantees).toEqual(["service_role"]);
+      ))].map((match) => [
+        match[1]?.toLowerCase(),
+        match[2]?.trim().toLowerCase(),
+      ]);
+      expect(grantees).toEqual([["execute", "service_role"]]);
     }
+    expect(source).not.toMatch(
+      /\bGRANT\s+(?:EXECUTE|ALL(?:\s+PRIVILEGES)?)\s+ON\s+(?:FUNCTION\b|ALL\s+FUNCTIONS\s+IN\s+SCHEMA\b)[^;]*\bTO\s+[^;]*\b(?:PUBLIC|anon|authenticated)\b[^;]*;/i,
+    );
   });
 
   test("creates a tenant through the initializer and returns both results", () => {
@@ -334,7 +423,11 @@ describe("standard new-tenant organization template migration", () => {
     expect(normalized).toMatch(
       /v_initialization := public\.initialize_default_decoration_tenant\(/,
     );
-    expect(returnValue).toMatch(/'tenant'\s*,/);
+    expect(returnValue.match(/'tenant'\s*,/g)).toHaveLength(1);
+    expect(returnValue.match(/'initialization'\s*,/g)).toHaveLength(1);
+    expect(returnValue).toMatch(
+      /'tenant'\s*,\s*pg_catalog\.to_jsonb\(v_tenant\)/,
+    );
     expect(returnValue).toMatch(/'initialization'\s*,\s*v_initialization/);
     expect(normalized).toContain("'default_decoration_company'");
     expect(normalized).toContain("'2026.08.30'");
@@ -358,13 +451,15 @@ describe("standard new-tenant organization template migration", () => {
     for (const [key, cte] of [
       ["departments", "audit_department_defaults"],
       ["posts", "audit_post_defaults"],
-      ["department_post_rules", "audit_department_post_defaults"],
+      ["department_posts", "audit_department_post_defaults"],
       ["roles", "audit_role_defaults"],
-      ["non_admin_permissions", "audit_non_admin_permission_defaults"],
+      ["role_permissions", "audit_non_admin_permission_defaults"],
     ] as const) {
       expect(normalized).toContain(`'${key}'`);
       expect(normalized).toContain(`from ${cte}`);
     }
+    expect(normalized).not.toContain("'department_post_rules'");
+    expect(normalized).not.toContain("'non_admin_permissions'");
     expect(normalized).toContain(
       "'system_admin_permission_rule', 'active_non_platform'",
     );
@@ -372,11 +467,9 @@ describe("standard new-tenant organization template migration", () => {
     expect(normalized).toContain("'2026.08.30'");
   });
 
-  test("does not unconditionally rewrite existing tenant organization or permissions", () => {
+  test("does not mutate existing tenant organization or permissions at top level", () => {
     const source = sql();
-    const topLevel = source
-      .replace(/CREATE OR REPLACE FUNCTION public\.[a-z0-9_]+\([\s\S]*?\n\$\$;/gi, "")
-      .replace(/--.*$/gm, "");
+    const topLevel = withoutFunctionsAndComments(source);
     for (const table of [
       "tenant_departments",
       "posts",
@@ -386,13 +479,11 @@ describe("standard new-tenant organization template migration", () => {
       "employee_roles",
       "employee_permission_overrides",
     ]) {
-      const writes = [...topLevel.matchAll(new RegExp(
-        `\\b(?:UPDATE\\s+public\\.${table}\\s+SET|DELETE\\s+FROM\\s+public\\.${table}\\b)[\\s\\S]*?;`,
+      const mutations = [...topLevel.matchAll(new RegExp(
+        `\\b(?:INSERT\\s+INTO|UPDATE|DELETE\\s+FROM)\\s+(?:public\\.)?${table}\\b`,
         "gi",
       ))];
-      for (const write of writes) {
-        expect(normalizeSql(write[0]), `${table} top-level write`).toMatch(/\bwhere\b/);
-      }
+      expect(mutations, `${table} top-level mutations`).toHaveLength(0);
     }
   });
 });
