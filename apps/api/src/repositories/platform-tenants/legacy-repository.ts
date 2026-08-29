@@ -15,17 +15,6 @@ import {
   findRolesByIds,
   listTenantRoles,
 } from "./legacy/members";
-import {
-  initializeDefaultData,
-  upsertDefaultDepartments,
-  upsertDefaultPosts,
-  upsertDefaultRoles,
-  grantAllPermissionsToRole,
-  createTenantAdminEmployee,
-  findTenantDepartmentIdByCode,
-  assignEmployeeRole,
-  recordTemplateApplication,
-} from "./legacy/initialization";
 
 export type {
   PlatformTenantEmployeeLite,
@@ -88,7 +77,6 @@ class PlatformTenantRepository {
     );
   }
   findEmployeesByPhone = findEmployeesByPhone;
-  initializeDefaultData = initializeDefaultData;
   update = update;
   updateStatus = updateStatus;
   getUsageStats = getUsageStats;
@@ -97,14 +85,6 @@ class PlatformTenantRepository {
   findTenantAdminEmployees = findTenantAdminEmployees;
   findRolesByIds = findRolesByIds;
   listTenantRoles = listTenantRoles;
-  private upsertDefaultDepartments = upsertDefaultDepartments;
-  private upsertDefaultPosts = upsertDefaultPosts;
-  private upsertDefaultRoles = upsertDefaultRoles;
-  private grantAllPermissionsToRole = grantAllPermissionsToRole;
-  private createTenantAdminEmployee = createTenantAdminEmployee;
-  private findTenantDepartmentIdByCode = findTenantDepartmentIdByCode;
-  private assignEmployeeRole = assignEmployeeRole;
-  private recordTemplateApplication = recordTemplateApplication;
 }
 
 export const platformTenantRepository = new PlatformTenantRepository();

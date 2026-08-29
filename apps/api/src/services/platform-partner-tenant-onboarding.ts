@@ -29,7 +29,7 @@ type PartnerRepositoryPort = Pick<
 
 type TenantRepositoryPort = Pick<
   typeof platformTenantRepository,
-  "findBySlug" | "findEmployeesByPhone" | "create" | "initializeDefaultData"
+  "findBySlug" | "findEmployeesByPhone" | "createWithDefaultTemplate"
 >;
 
 type SmsServicePort = Pick<
@@ -49,7 +49,7 @@ type PlatformPartnerTenantOnboardingDependencies = {
 const PARTNER_TENANT_ONBOARDING_SMS_SCENE =
   "partner_tenant_onboarding" satisfies SmsScene;
 const INVITE_BINDING_CHANGE_REASON = "装企小程序扫码入驻自动绑定";
-const ADMIN_DEPARTMENT_CODE = "ADMIN";
+const ADMIN_DEPARTMENT_CODE = "EXEC_OFFICE";
 const ADMIN_POST_CODE = "SYSTEM_ADMIN";
 const MAX_SLUG_ATTEMPTS = 5;
 const LEGACY_PARTNER_TENANT_ONBOARDING_CUTOFF_ENV =
@@ -159,12 +159,10 @@ export class PlatformPartnerTenantOnboardingService {
     } satisfies NonNullable<CreatePlatformTenantInput["admin"]>;
 
     const tenantInput = await this.buildTenantInput(input, phone, admin);
-    const tenant = await this.tenantRepository.create(tenantInput);
-    const initialization = await this.tenantRepository.initializeDefaultData({
-      tenantId: tenant.id,
-      operatorEmployeeId: null,
-      admin,
-    });
+    const { tenant, initialization } =
+      await this.tenantRepository.createWithDefaultTemplate(tenantInput, {
+        operatorEmployeeId: null,
+      });
 
     const existingBinding =
       await this.partnerRepository.findActiveTenantBinding(tenant.id);

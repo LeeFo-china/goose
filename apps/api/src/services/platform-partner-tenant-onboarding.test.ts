@@ -108,13 +108,13 @@ const tenant = {
 
 const initialization = {
   template_code: "default_decoration_company",
-  template_version: "2026.05.10",
-  departments_count: 4,
-  posts_count: 8,
-  roles_count: 3,
+  template_version: "2026.08.30",
+  departments_count: 42,
+  posts_count: 21,
+  roles_count: 11,
   admin_employee_id: "00000000-0000-4000-8000-000000000601",
   admin_role_id: "00000000-0000-4000-8000-000000000701",
-} satisfies PlatformTenantInitializationResult;
+} as const satisfies PlatformTenantInitializationResult;
 
 const binding = {
   id: "00000000-0000-4000-8000-000000000401",
@@ -163,8 +163,7 @@ const partnerRepository = {
 const tenantRepository = {
   findBySlug: mock(async () => null as PlatformTenantRecord | null),
   findEmployeesByPhone: mock(async (): Promise<EmployeePhoneRow[]> => []),
-  create: mock(async () => tenant),
-  initializeDefaultData: mock(async () => initialization),
+  createWithDefaultTemplate: mock(async () => ({ tenant, initialization })),
 };
 
 const smsService = {
@@ -207,8 +206,9 @@ describe("PlatformPartnerTenantOnboardingService", () => {
     partnerRepository.findActiveTenantBinding.mockImplementation(async () => null);
     tenantRepository.findBySlug.mockImplementation(async () => null);
     tenantRepository.findEmployeesByPhone.mockImplementation(async () => []);
-    tenantRepository.create.mockImplementation(async () => tenant);
-    tenantRepository.initializeDefaultData.mockImplementation(async () => initialization);
+    tenantRepository.createWithDefaultTemplate.mockImplementation(
+      async () => ({ tenant, initialization }),
+    );
     smsService.findValidPending.mockImplementation(async () => smsCode);
   });
 
@@ -261,41 +261,36 @@ describe("PlatformPartnerTenantOnboardingService", () => {
     });
     expect(smsService.markVerified).toHaveBeenCalledWith("sms-code-id");
     expect(tenantRepository.findEmployeesByPhone).toHaveBeenCalledWith("13900139000");
-    expect(tenantRepository.create).toHaveBeenCalledWith(expect.objectContaining({
-      name: "晴天装饰",
-      slug: "tenant-9000-abc123",
-      status: "active",
-      contact_name: "王总",
-      contact_phone: "13900139000",
-      address: "信阳市浉河区北京路 1 号",
-      address_title: "北京路 1 号",
-      address_poi_id: null,
-      address_province: "河南省",
-      address_city: "信阳市",
-      address_district: "浉河区",
-      address_adcode: "411502",
-      address_latitude: 32.123,
-      address_longitude: 114.123,
-      address_source: "map_picker",
-      address_confidence: 1,
-      address_confirmed_at: expect.any(String),
-      admin: {
-        name: "王总",
-        phone: "13900139000",
-        department_code: "ADMIN",
-        post_code: "SYSTEM_ADMIN",
-      },
-    }));
-    expect(tenantRepository.initializeDefaultData).toHaveBeenCalledWith({
-      tenantId: tenant.id,
-      operatorEmployeeId: null,
-      admin: {
-        name: "王总",
-        phone: "13900139000",
-        department_code: "ADMIN",
-        post_code: "SYSTEM_ADMIN",
-      },
-    });
+    expect(tenantRepository.createWithDefaultTemplate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "晴天装饰",
+        slug: "tenant-9000-abc123",
+        status: "active",
+        contact_name: "王总",
+        contact_phone: "13900139000",
+        address: "信阳市浉河区北京路 1 号",
+        address_title: "北京路 1 号",
+        address_poi_id: null,
+        address_province: "河南省",
+        address_city: "信阳市",
+        address_district: "浉河区",
+        address_adcode: "411502",
+        address_latitude: 32.123,
+        address_longitude: 114.123,
+        address_source: "map_picker",
+        address_confidence: 1,
+        address_confirmed_at: expect.any(String),
+        admin: {
+          name: "王总",
+          phone: "13900139000",
+          department_code: "EXEC_OFFICE",
+          post_code: "SYSTEM_ADMIN",
+        },
+      }),
+      { operatorEmployeeId: null },
+    );
+    expect("create" in tenantRepository).toBe(false);
+    expect("initializeDefaultData" in tenantRepository).toBe(false);
     expect(partnerRepository.createTenantBinding).toHaveBeenCalledWith({
       tenant_id: tenant.id,
       partner_id: partner.id,
@@ -339,7 +334,7 @@ describe("PlatformPartnerTenantOnboardingService", () => {
       sms_code: "123456",
     })).rejects.toMatchObject({ code: "TENANT_ADMIN_PHONE_EXISTS" });
 
-    expect(tenantRepository.create).not.toHaveBeenCalled();
+    expect(tenantRepository.createWithDefaultTemplate).not.toHaveBeenCalled();
     expect(partnerRepository.createTenantBinding).not.toHaveBeenCalled();
     expect(smsService.markVerified).not.toHaveBeenCalled();
   });
@@ -356,6 +351,6 @@ describe("PlatformPartnerTenantOnboardingService", () => {
       sms_code: "000000",
     })).rejects.toMatchObject({ code: "SMS_CODE_INVALID" });
 
-    expect(tenantRepository.create).not.toHaveBeenCalled();
+    expect(tenantRepository.createWithDefaultTemplate).not.toHaveBeenCalled();
   });
 });

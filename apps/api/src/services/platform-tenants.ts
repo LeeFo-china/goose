@@ -30,12 +30,10 @@ class PlatformTenantService {
       await this.assertAdminPhoneAvailable(input.admin.phone);
     }
 
-    const record = await platformTenantRepository.create(input);
-    const initialization = await platformTenantRepository.initializeDefaultData({
-      tenantId: record.id,
-      operatorEmployeeId: authContext.employeeId,
-      admin: input.admin,
-    });
+    const { tenant: record, initialization } =
+      await platformTenantRepository.createWithDefaultTemplate(input, {
+        operatorEmployeeId: authContext.employeeId,
+      });
     const usage = await platformTenantRepository.getUsageStats([record.id]);
     await platformAuditLogService.recordBestEffort({
       action: "tenant_create",
