@@ -249,7 +249,9 @@ describe("standard new-tenant organization template migration", () => {
       !nonAdminGrants.includes(mutation)
     );
     const adminRoleAssignments = [...normalized.matchAll(/select\b[^;]*\binto v_admin_role_id\b[^;]*;/g)].map((match) => match[0]);
-    const resolution = normalizeSql(normalized.match(/resolved_non_admin_permissions as \(([\s\S]*?)\)\s*insert into (?:public\.)?role_permissions\b/)?.[1] ?? "");
+    const resolution = normalizeSql(normalized.match(
+      /resolved_non_admin_permissions as \(([\s\S]*?)\)\s*,\s*permission_counts as/,
+    )?.[1] ?? "");
 
     const actualPermissions = sortPermissionTriples(nonAdminPermissions);
     const expectedPermissions = sortPermissionTriples(expectedNonAdminPermissions);
@@ -264,11 +266,15 @@ describe("standard new-tenant organization template migration", () => {
     expect(rolePermissionMutations).toHaveLength(2);
     expect(rolePermissionMutations.every(({ kind }) => kind === "insert")).toBe(true);
     expect(nonAdminGrants).toHaveLength(1);
-    // Security contract: exact SQL shape rejects added filters and outer-join bypasses.
-    expect(nonAdminGrants[0]?.statement).toBe(
+    // Security contract: the immutable VALUES source drives both validation and insertion.
+    expect(nonAdminGrants[0]?.statement).toContain(
       "insert into public.role_permissions (role_id, permission_id, access_scope) " +
-        "select role_id, permission_id, access_scope from resolved_non_admin_permissions " +
-        "on conflict (role_id, permission_id) do update set access_scope = excluded.access_scope;",
+        "select resolved.role_id, resolved.permission_id, resolved.access_scope " +
+        "from resolved_non_admin_permissions as resolved " +
+        "cross join permission_counts as counts " +
+        "where counts.expected_count = counts.resolved_count " +
+        "on conflict (role_id, permission_id) do update set " +
+        "access_scope = excluded.access_scope returning role_permissions.id",
     );
     expect(systemAdminGrants).toHaveLength(1);
     expect(systemAdminGrants[0]?.statement).toBe(
@@ -289,14 +295,13 @@ describe("standard new-tenant organization template migration", () => {
         "inner join public.permissions as permission on permission.code = defaults.permission_code " +
         "and permission.status = 'active'",
     );
+    expect(normalized).not.toContain("jsonb_to_recordset");
+    expect(normalized).not.toContain("template.payload -> 'role_permissions'");
     expect(normalized).toMatch(
-      /select (?:pg_catalog\.)?count\(\*\)(?:::integer)? into v_expected_non_admin_permission_count from non_admin_permission_defaults;/,
+      /permission_counts as \( select \(select (?:pg_catalog\.)?count\(\*\) from non_admin_permission_defaults\) as expected_count, \(select (?:pg_catalog\.)?count\(\*\) from resolved_non_admin_permissions\) as resolved_count \)/,
     );
     expect(normalized).toMatch(
-      /select (?:pg_catalog\.)?count\(\*\)(?:::integer)? into v_resolved_non_admin_permission_count from resolved_non_admin_permissions;/,
-    );
-    expect(normalized).toMatch(
-      /if v_expected_non_admin_permission_count <> v_resolved_non_admin_permission_count then raise exception using [^;]*message = 'tenant_template_permission_missing'; end if;/,
+      /if v_expected_non_admin_permission_count <> v_resolved_non_admin_permission_count or v_inserted_non_admin_permission_count <> v_expected_non_admin_permission_count then raise exception using [^;]*message = 'tenant_template_permission_missing'; end if;/,
     );
   });
 
