@@ -152,19 +152,33 @@ const expectedDepartmentPostRules = [
 type SqlValue = string | number | boolean;
 type SqlTuple = SqlValue[];
 
-function sql(): string {
-  return readFileSync(migration, "utf8");
-}
+function sql(): string { return readFileSync(migration, "utf8"); }
 
 function normalizeSql(value: string): string {
   return value.replace(/\s+/g, " ").trim().toLowerCase();
 }
 
-function sortPermissionTriples(
-  rows: readonly (readonly SqlValue[])[],
-): string[][] {
-  return rows
-    .map((row) => row.map(String))
+function collectTableMutations(source: string, table: string) {
+  const tablePattern = `(?:public\\.)?${table}`;
+  return source.split(";").flatMap((rawStatement) => {
+    const statement = `${normalizeSql(rawStatement)};`;
+    const direct = [...statement.matchAll(new RegExp(
+      `\\b(insert\\s+into|update|delete\\s+from|merge\\s+into)` +
+        `\\s+(?:only\\s+)?${tablePattern}\\b`, "gi",
+    ))].map((match) => ({
+      kind: match[1]?.split(/\s+/)[0]?.toLowerCase(),
+      statement,
+    }));
+    const isTruncate = new RegExp(
+      `\\btruncate(?:\\s+table)?\\b[^;]*\\b(?:only\\s+)?${tablePattern}\\b`,
+      "i",
+    ).test(statement);
+    return isTruncate ? [...direct, { kind: "truncate", statement }] : direct;
+  });
+}
+
+function sortPermissionTriples(rows: readonly (readonly SqlValue[])[]): string[][] {
+  return rows.map((row) => row.map(String))
     .sort((left, right) => left.join("\u0000").localeCompare(right.join("\u0000")));
 }
 
@@ -172,17 +186,12 @@ function withoutFunctionsAndComments(source: string): string {
   return source
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/--.*$/gm, "")
-    .replace(
-      /\bCREATE(?:\s+OR\s+REPLACE)?\s+FUNCTION\b[\s\S]*?\bAS\s+(\$[a-z0-9_]*\$)[\s\S]*?\1\s*;/gi,
-      "",
-    );
+    .replace(/\bCREATE(?:\s+OR\s+REPLACE)?\s+FUNCTION\b[\s\S]*?\bAS\s+(\$[a-z0-9_]*\$)[\s\S]*?\1\s*;/gi, "");
 }
 
 function extractFunction(source: string, name: string): string {
-  return source.match(new RegExp(
-    `CREATE OR REPLACE FUNCTION public\\.${name}\\([\\s\\S]*?\\n\\$\\$;`,
-    "i",
-  ))?.[0] ?? "";
+  const pattern = `CREATE OR REPLACE FUNCTION public\\.${name}\\([\\s\\S]*?\\n\\$\\$;`;
+  return source.match(new RegExp(pattern, "i"))?.[0] ?? "";
 }
 
 function extractValuesCte(
@@ -318,29 +327,40 @@ describe("standard new-tenant organization template migration", () => {
     const source = sql();
     const { initializer, nonAdminPermissions } = runtimeConfig(source);
     const normalized = normalizeSql(initializer);
-    const rolePermissionInserts = [
-      ...initializer.matchAll(/INSERT INTO public\.role_permissions\b[\s\S]*?;/gi),
-    ].map((match) => normalizeSql(match[0]));
-    const systemAdminGrants = rolePermissionInserts.filter((statement) =>
-      statement.includes("v_admin_role_id")
+    const rolePermissionMutations = collectTableMutations(initializer, "role_permissions");
+    const nonAdminGrants = rolePermissionMutations.filter(({ statement }) =>
+      statement.includes("from resolved_non_admin_permissions")
     );
-    const resolutionStart = normalized.indexOf(
-      "resolved_non_admin_permissions as (",
+    const systemAdminGrants = rolePermissionMutations.filter((mutation) =>
+      !nonAdminGrants.includes(mutation)
     );
-    const resolutionEnd = normalized.indexOf(
-      "insert into public.role_permissions",
-      resolutionStart,
-    );
+    const adminRoleAssignments = [
+      ...normalized.matchAll(/select\b[^;]*\binto v_admin_role_id\b[^;]*;/g),
+    ].map((match) => match[0]);
+    const resolutionStart = normalized.indexOf("resolved_non_admin_permissions as (");
+    const resolutionEnd = resolutionStart + normalized.slice(resolutionStart)
+      .search(/\binsert into (?:public\.)?role_permissions\b/);
     const resolution = normalized.slice(resolutionStart, resolutionEnd);
 
     expect(expectedNonAdminPermissions).toHaveLength(162);
     expect(sortPermissionTriples(nonAdminPermissions)).toEqual(
       sortPermissionTriples(expectedNonAdminPermissions),
     );
-    expect(systemAdminGrants).toHaveLength(1);
-    expect(systemAdminGrants[0]).toMatch(
-      /from public\.permissions as permission where permission\.status = 'active' and permission\.code not like 'platform\.%'/,
+    expect(rolePermissionMutations).toHaveLength(2);
+    expect(rolePermissionMutations.every(({ kind }) => kind === "insert")).toBe(true);
+    expect(nonAdminGrants).toHaveLength(1);
+    expect(nonAdminGrants[0]?.statement).toMatch(
+      /insert into (?:public\.)?role_permissions\b[^;]*from resolved_non_admin_permissions/,
     );
+    expect(systemAdminGrants).toHaveLength(1);
+    expect(systemAdminGrants[0]?.statement).toMatch(
+      /insert into (?:public\.)?role_permissions\s*\(\s*role_id\s*,\s*permission_id\s*,\s*access_scope\s*\)\s*select\s+v_admin_role_id\s*,\s*permission\.id\s*,\s*'all'\s+from (?:public\.)?permissions as permission where permission\.status = 'active' and permission\.code not like 'platform\.%'/,
+    );
+    expect(systemAdminGrants[0]?.statement).not.toMatch(/\b(?:or|union|join (?:public\.)?roles|from (?:public\.)?roles)\b/);
+    expect(adminRoleAssignments).toEqual([
+      "select role.id into v_admin_role_id from public.roles as role " +
+        "where role.tenant_id = p_tenant_id and role.code = 'system_admin' limit 1;",
+    ]);
     expect(resolutionStart).toBeGreaterThan(-1);
     expect(resolutionEnd).toBeGreaterThan(resolutionStart);
     expect(resolution).toContain("from non_admin_permission_defaults");
@@ -348,37 +368,26 @@ describe("standard new-tenant organization template migration", () => {
     expect(resolution).toContain("join public.permissions");
     expect(resolution).toContain("permission.status = 'active'");
     expect(normalized).toMatch(
-      /insert into public\.role_permissions[\s\S]*from resolved_non_admin_permissions/,
+      /select (?:pg_catalog\.)?count\(\*\)(?:::integer)? into v_expected_non_admin_permission_count from non_admin_permission_defaults;/,
     );
     expect(normalized).toMatch(
-      /(?:pg_catalog\.)?count\(\*\)::integer[\s\S]*from non_admin_permission_defaults/,
+      /select (?:pg_catalog\.)?count\(\*\)(?:::integer)? into v_resolved_non_admin_permission_count from resolved_non_admin_permissions;/,
     );
     expect(normalized).toMatch(
-      /(?:pg_catalog\.)?count\(\*\)::integer[\s\S]*from resolved_non_admin_permissions/,
-    );
-    expect(normalized).toContain("v_expected_non_admin_permission_count");
-    expect(normalized).toContain("v_resolved_non_admin_permission_count");
-    expect(normalized).toMatch(
-      /if v_expected_non_admin_permission_count <> v_resolved_non_admin_permission_count then[\s\S]*message = 'tenant_template_permission_missing'/,
+      /if v_expected_non_admin_permission_count <> v_resolved_non_admin_permission_count then raise exception using [^;]*message = 'tenant_template_permission_missing'; end if;/,
     );
   });
 
   test("binds only the initialized administrator role and writes no overrides", () => {
     const source = sql();
     const { initializer } = runtimeConfig(source);
-    const employeeRoleInserts = [
-      ...source.matchAll(/INSERT INTO public\.employee_roles\b[\s\S]*?;/gi),
-    ].map((match) => normalizeSql(match[0]));
+    const employeeRoleMutations = collectTableMutations(initializer, "employee_roles");
 
-    expect(source).not.toMatch(
-      /\b(?:INSERT INTO|UPDATE|DELETE FROM)\s+(?:public\.)?employee_permission_overrides\b/i,
-    );
-    expect(employeeRoleInserts).toHaveLength(1);
-    expect(employeeRoleInserts[0]).toMatch(
-      /insert into public\.employee_roles\s*\(\s*employee_id\s*,\s*role_id\s*\)\s*values\s*\(\s*v_admin_employee_id\s*,\s*v_admin_role_id\s*\)/,
-    );
-    expect(normalizeSql(initializer)).toMatch(
-      /select role\.id into v_admin_role_id from public\.roles as role where role\.tenant_id = p_tenant_id and role\.code = 'system_admin'/,
+    expect(collectTableMutations(source, "employee_permission_overrides")).toHaveLength(0);
+    expect(employeeRoleMutations).toHaveLength(1);
+    expect(employeeRoleMutations[0]?.kind).toBe("insert");
+    expect(employeeRoleMutations[0]?.statement).toMatch(
+      /insert into (?:public\.)?employee_roles\s*\(\s*employee_id\s*,\s*role_id\s*\)\s*values\s*\(\s*v_admin_employee_id\s*,\s*v_admin_role_id\s*\)\s+on conflict\s*\(\s*employee_id\s*,\s*role_id\s*\)\s+do nothing;/,
     );
   });
 
@@ -409,7 +418,10 @@ describe("standard new-tenant organization template migration", () => {
       expect(grantees).toEqual([["execute", "service_role"]]);
     }
     expect(source).not.toMatch(
-      /\bGRANT\s+(?:EXECUTE|ALL(?:\s+PRIVILEGES)?)\s+ON\s+(?:FUNCTION\b|ALL\s+FUNCTIONS\s+IN\s+SCHEMA\b)[^;]*\bTO\s+[^;]*\b(?:PUBLIC|anon|authenticated)\b[^;]*;/i,
+      /\bGRANT\b[^;]*\bON\s+ALL\s+FUNCTIONS\s+IN\s+SCHEMA\b[^;]*;/i,
+    );
+    expect(source).not.toMatch(
+      /\bGRANT\s+(?:EXECUTE|ALL(?:\s+PRIVILEGES)?)\s+ON\s+FUNCTION\b[^;]*\bTO\s+[^;]*\b(?:PUBLIC|anon|authenticated)\b[^;]*;/i,
     );
   });
 
@@ -479,10 +491,7 @@ describe("standard new-tenant organization template migration", () => {
       "employee_roles",
       "employee_permission_overrides",
     ]) {
-      const mutations = [...topLevel.matchAll(new RegExp(
-        `\\b(?:INSERT\\s+INTO|UPDATE|DELETE\\s+FROM)\\s+(?:public\\.)?${table}\\b`,
-        "gi",
-      ))];
+      const mutations = collectTableMutations(topLevel, table);
       expect(mutations, `${table} top-level mutations`).toHaveLength(0);
     }
   });
