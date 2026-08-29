@@ -4,11 +4,17 @@ type UpdatedWindow = NonNullable<
   SupplierPurchaseBatchProjectOptionQuery["updatedWindow"]
 >;
 
-export type SupplierPurchaseBatchProjectOptionUpdatedAtRange = {
-  updated_at_from: string;
-  updated_at_to?: string;
-  updated_at_before?: string;
-};
+export type SupplierPurchaseBatchProjectOptionUpdatedAtRange =
+  | {
+    updated_at_from: string;
+    updated_at_to: string;
+    updated_at_before?: never;
+  }
+  | {
+    updated_at_from: string;
+    updated_at_before: string;
+    updated_at_to?: never;
+  };
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const SHANGHAI_UTC_OFFSET_MS = 8 * 60 * 60 * 1000;

@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { createClient } from "@supabase/supabase-js";
 
+import type { BatchProjectOptionInput } from "./supplier-purchase-batches";
+
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
@@ -11,6 +13,26 @@ const PROJECT_OPTION = {
   id: PROJECT_ID,
   name: "示范项目",
   status: "active",
+};
+
+// @ts-expect-error a project option time range requires a lower bound
+const UPPER_ONLY_RANGE: BatchProjectOptionInput = {
+  tenant_id: TENANT_ID,
+  visible_project_ids: [PROJECT_ID],
+  updated_at_to: "2026-08-29T03:04:05.000Z",
+  page: 1,
+  pageSize: 20,
+};
+
+// @ts-expect-error a project option time range has one upper boundary
+const TWO_UPPER_BOUNDARIES: BatchProjectOptionInput = {
+  tenant_id: TENANT_ID,
+  visible_project_ids: [PROJECT_ID],
+  updated_at_from: "2026-08-22T03:04:05.000Z",
+  updated_at_to: "2026-08-29T03:04:05.000Z",
+  updated_at_before: "2026-08-30T03:04:05.000Z",
+  page: 1,
+  pageSize: 20,
 };
 
 type ResponseSpec = { body: unknown; count: number };

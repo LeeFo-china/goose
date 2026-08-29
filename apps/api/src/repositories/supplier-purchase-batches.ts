@@ -58,14 +58,27 @@ export type BatchCatalogInput = PageInput & {
   tenant_supplier_id?: string;
   priced_at: string;
 };
+type BatchProjectOptionTimeRange =
+  | {
+    updated_at_from?: never;
+    updated_at_to?: never;
+    updated_at_before?: never;
+  }
+  | {
+    updated_at_from: string;
+    updated_at_to: string;
+    updated_at_before?: never;
+  }
+  | {
+    updated_at_from: string;
+    updated_at_before: string;
+    updated_at_to?: never;
+  };
 export type BatchProjectOptionInput = PageInput & {
   tenant_id: string;
   visible_project_ids: string[] | null;
   keyword?: string;
-  updated_at_from?: string;
-  updated_at_to?: string;
-  updated_at_before?: string;
-};
+} & BatchProjectOptionTimeRange;
 export type BatchCostCategoryInput = PageInput & {
   tenant_id: string;
   keyword?: string;
