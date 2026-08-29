@@ -78,14 +78,34 @@ describe("standard tenant template spec-review contracts", () => {
     const retryBranch = replacementBody.match(
       /if v_application\.status = 'approved' then([\s\S]*?)if v_application\.status not in/,
     )?.[1] ?? "";
-    const expectedReplacementBody = legacyBody.replace(
-      "and template_application.template_version = '2026.05.10' limit 1;",
-      "and template_application.template_version in ('2026.08.30', '2026.05.10') " +
-        "order by case template_application.template_version " +
-        "when '2026.08.30' then 0 else 1 end limit 1;",
+    const historicalPhoneLock =
+      "perform public.lock_tenant_onboarding_employee_phones( " +
+      "array[v_application.admin_phone]::text[] );";
+    const sharedPhonePrecheck =
+      "if public.lock_and_check_active_employee_phone(v_application.admin_phone) " +
+      "then return pg_catalog.jsonb_build_object('status', 'admin_phone_exists'); " +
+      "end if;";
+    const historicalActivePhonePrecheck =
+      "perform employee.id from public.employees as employee " +
+      "where employee.status = 'active' and employee.phone is not null " +
+      "and pg_catalog.btrim(employee.phone) <> '' " +
+      "and pg_catalog.btrim(employee.phone) = " +
+      "pg_catalog.btrim(v_application.admin_phone) limit 1; " +
+      "if found then return pg_catalog.jsonb_build_object(" +
+      "'status', 'admin_phone_exists'); end if;";
+    const expectedReplacementBody = normalizeSql(
+      legacyBody.replace(
+        "and template_application.template_version = '2026.05.10' limit 1;",
+        "and template_application.template_version in ('2026.08.30', '2026.05.10') " +
+          "order by case template_application.template_version " +
+          "when '2026.08.30' then 0 else 1 end limit 1;",
+      ).replace(historicalPhoneLock, sharedPhonePrecheck)
+        .replace(historicalActivePhonePrecheck, ""),
     );
 
     expect(legacyBody).toContain("template_application.template_version = '2026.05.10'");
+    expect(legacyBody).toContain(historicalPhoneLock);
+    expect(legacyBody).toContain(historicalActivePhonePrecheck);
     expect(sql(migration)).toMatch(
       /^CREATE OR REPLACE FUNCTION public\.approve_tenant_onboarding_application\(/m,
     );
@@ -314,6 +334,10 @@ describe("standard tenant template spec-review contracts", () => {
 
   test("uses the global phone-lock helper before both conflict checks", () => {
     const source = sql(migration);
+    const activePhoneHelper = normalizeSql(extractFunction(
+      source,
+      "lock_and_check_active_employee_phone",
+    ));
     const direct = normalizeSql(extractFunction(
       source,
       "create_tenant_with_default_template",
@@ -322,23 +346,40 @@ describe("standard tenant template spec-review contracts", () => {
       source,
       "approve_tenant_onboarding_application",
     ));
-    const directPrecheck = direct.match(
-      /perform employee\.id[\s\S]*?message = 'tenant_admin_phone_exists'; end if;/,
-    )?.[0] ?? "";
-    const approvalPrecheck = approval.match(
-      /perform employee\.id[\s\S]*?return pg_catalog\.jsonb_build_object\('status', 'admin_phone_exists'\); end if;/,
-    )?.[0] ?? "";
+    const helperLock = activePhoneHelper.indexOf(
+      "public.lock_tenant_onboarding_employee_phones",
+    );
+    const helperActivePhoneExists = activePhoneHelper.indexOf(
+      "return exists ( select 1 from public.employees as employee",
+    );
 
-    for (const [body, precheck] of [
-      [direct, directPrecheck],
-      [approval, approvalPrecheck],
+    expect(activePhoneHelper).not.toBe("");
+    expect(activePhoneHelper.match(
+      /public\.lock_tenant_onboarding_employee_phones/g,
+    )).toHaveLength(1);
+    expect(helperLock).toBeGreaterThan(0);
+    expect(helperActivePhoneExists).toBeGreaterThan(helperLock);
+
+    for (const [body, conflict] of [
+      [direct, "message = 'tenant_admin_phone_exists'"],
+      [approval, "'status', 'admin_phone_exists'"],
     ] as const) {
-      const helperCall = body.indexOf(
+      const sharedHelperCall = body.indexOf(
+        "public.lock_and_check_active_employee_phone",
+      );
+      const conflictHandling = body.indexOf(conflict, sharedHelperCall);
+
+      expect(body.match(
+        /public\.lock_and_check_active_employee_phone/g,
+      )).toHaveLength(1);
+      expect(sharedHelperCall).toBeGreaterThan(0);
+      expect(conflictHandling).toBeGreaterThan(sharedHelperCall);
+      expect(body).not.toContain(
         "public.lock_tenant_onboarding_employee_phones",
       );
-      expect(helperCall).toBeGreaterThan(0);
-      expect(precheck).not.toBe("");
-      expect(helperCall).toBeLessThan(body.indexOf(precheck));
+      expect(body).not.toContain(
+        "from public.employees as employee where employee.status = 'active'",
+      );
       expect(body).not.toContain("'employee-phone:'");
       expect(body).not.toContain("'tenant-onboarding-admin-phone:'");
     }
