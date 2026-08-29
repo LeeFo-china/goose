@@ -107,8 +107,8 @@ export async function createWithDefaultTemplate(
       p_admin_name: input.admin?.name ?? null,
       p_admin_phone: input.admin?.phone ?? null,
       p_admin_auth_user_id: input.admin?.auth_user_id ?? null,
-      p_admin_department_code: input.admin?.department_code ?? "EXEC_OFFICE",
-      p_admin_post_code: input.admin?.post_code ?? "SYSTEM_ADMIN",
+      p_admin_department_code: "EXEC_OFFICE",
+      p_admin_post_code: "SYSTEM_ADMIN",
       p_operator_employee_id: operatorEmployeeId,
     });
   } catch {

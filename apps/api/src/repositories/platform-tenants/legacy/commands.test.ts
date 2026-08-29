@@ -1,9 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 
-import {
-  CreatePlatformTenantSchema,
-  type CreatePlatformTenantInput,
-} from "@/schema/platform-tenants";
+import { CreatePlatformTenantSchema } from "@/schema/platform-tenants";
 
 import {
   createWithDefaultTemplate,
@@ -57,17 +54,6 @@ function rpcHarness(result: { data: unknown; error: unknown }) {
   const rpc = mock<PlatformTenantRpc>(async () => result);
   return { rpc };
 }
-
-function callRepositoryWithTask5Shape(
-  repository: typeof import("../legacy-repository").platformTenantRepository,
-  input: CreatePlatformTenantInput,
-) {
-  return repository.createWithDefaultTemplate(input, {
-    operatorEmployeeId: OPERATOR_ID,
-  });
-}
-
-void callRepositoryWithTask5Shape;
 
 describe("platform tenant atomic create command", () => {
   test("calls the exact RPC with every tenant, admin, and operator field", async () => {
@@ -165,6 +151,31 @@ describe("platform tenant atomic create command", () => {
       p_admin_department_code: "EXEC_OFFICE",
       p_admin_post_code: "SYSTEM_ADMIN",
       p_operator_employee_id: null,
+    });
+  });
+
+  test("keeps legacy admin input compatible with the fixed template placement", async () => {
+    const input = CreatePlatformTenantSchema.parse({
+      name: tenant.name,
+      slug: tenant.slug,
+      admin: {
+        name: "管理员",
+        phone: "13800138000",
+        department_code: "ADMIN",
+        post_code: "GENERAL_MANAGER",
+      },
+    });
+    expect(input.admin).toMatchObject({
+      department_code: "ADMIN",
+      post_code: "GENERAL_MANAGER",
+    });
+    const { rpc } = rpcHarness({ data: success, error: null });
+
+    await createWithDefaultTemplate(rpc, input, OPERATOR_ID);
+
+    expect(rpc.mock.calls[0]?.[1]).toMatchObject({
+      p_admin_department_code: "EXEC_OFFICE",
+      p_admin_post_code: "SYSTEM_ADMIN",
     });
   });
 

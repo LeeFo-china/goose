@@ -40,6 +40,24 @@ export type {
   PlatformTenantRpc,
 } from "./legacy/commands";
 
+type PlatformTenantRpcResult = Awaited<ReturnType<PlatformTenantRpc>>;
+
+export type PlatformTenantRpcClient = {
+  rpc(
+    functionName: string,
+    args: Record<string, unknown>,
+  ): PromiseLike<PlatformTenantRpcResult>;
+};
+
+export function createPlatformTenantRpcAdapter(
+  client: PlatformTenantRpcClient,
+): PlatformTenantRpc {
+  return async (functionName, args) => {
+    const { data, error } = await client.rpc(functionName, args);
+    return { data, error };
+  };
+}
+
 export type PlatformTenantCreateWithDefaultTemplateOptions = {
   readonly operatorEmployeeId: string | null;
 };
@@ -47,9 +65,9 @@ export type PlatformTenantCreateWithDefaultTemplateOptions = {
 class PlatformTenantRepository {
   private client = SupabaseDB.getAdminClient();
 
-  private rpc: PlatformTenantRpc = (functionName, args) =>
-    (this.client as unknown as { rpc: PlatformTenantRpc })
-      .rpc(functionName, args);
+  private rpc = createPlatformTenantRpcAdapter(
+    this.client as unknown as PlatformTenantRpcClient,
+  );
 
   private from(table: string) {
     return (this.client as unknown as { from: (table: string) => any }).from(table);
