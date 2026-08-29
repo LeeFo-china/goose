@@ -1,4 +1,11 @@
-import { SupabaseDB } from "./legacy/shared";
+import {
+  SupabaseDB,
+  type CreatePlatformTenantInput,
+} from "./legacy/shared";
+import {
+  createWithDefaultTemplate as createWithDefaultTemplateCommand,
+  type PlatformTenantRpc,
+} from "./legacy/commands";
 import { list, findById, findBySlug, create, update, updateStatus } from "./legacy/tenants";
 import { getUsageStats, getLatestTemplateApplication } from "./legacy/usage";
 import {
@@ -28,9 +35,17 @@ export type {
   PlatformTenantTemplateApplication,
   PlatformTenantUsageStats,
 } from "./legacy/shared";
+export type {
+  PlatformTenantAtomicCreateResult,
+  PlatformTenantRpc,
+} from "./legacy/commands";
 
 class PlatformTenantRepository {
   private client = SupabaseDB.getAdminClient();
+
+  private rpc: PlatformTenantRpc = (functionName, args) =>
+    (this.client as unknown as { rpc: PlatformTenantRpc })
+      .rpc(functionName, args);
 
   private from(table: string) {
     return (this.client as unknown as { from: (table: string) => any }).from(table);
@@ -40,6 +55,12 @@ class PlatformTenantRepository {
   findById = findById;
   findBySlug = findBySlug;
   create = create;
+  createWithDefaultTemplate(
+    input: CreatePlatformTenantInput,
+    operatorEmployeeId: string | null,
+  ) {
+    return createWithDefaultTemplateCommand(this.rpc, input, operatorEmployeeId);
+  }
   findEmployeesByPhone = findEmployeesByPhone;
   initializeDefaultData = initializeDefaultData;
   update = update;

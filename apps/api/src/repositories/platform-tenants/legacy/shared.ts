@@ -33,6 +33,7 @@ export type PlatformTenantRecord = {
   address_confirmed_at: string | null;
   contact_name: string | null;
   contact_phone: string | null;
+  unified_social_credit_code: string | null;
   created_at: string;
   updated_at: string;
 };

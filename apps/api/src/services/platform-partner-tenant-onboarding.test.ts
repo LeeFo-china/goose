@@ -101,6 +101,7 @@ const tenant = {
   address_confirmed_at: "2026-07-07T10:00:00.000Z",
   contact_name: "王总",
   contact_phone: "13900139000",
+  unified_social_credit_code: null,
   created_at: "2026-07-07T10:00:00.000Z",
   updated_at: "2026-07-07T10:00:00.000Z",
 } satisfies PlatformTenantRecord;
