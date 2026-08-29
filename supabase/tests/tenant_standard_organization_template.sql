@@ -15,35 +15,78 @@ SELECT
   'tenant-standard-direct-' || :'tenant_standard_run_token' AS direct_slug,
   'tenant-standard-approval-' || :'tenant_standard_run_token' AS approval_slug,
   'tenant-standard-null-' || :'tenant_standard_run_token' AS null_admin_slug,
-  'tenant-standard-conflict-' || :'tenant_standard_run_token' AS conflict_slug,
-  '19' || pg_catalog.lpad(
-    (
-      ('x' || pg_catalog.substr(
-        pg_catalog.md5(:'tenant_standard_run_token' || ':direct-phone'),
-        1,
-        8
-      ))::bit(32)::bigint % 1000000000
-    )::text,
-    9,
-    '0'
-  ) AS direct_phone,
-  '19' || pg_catalog.lpad(
-    (
-      ('x' || pg_catalog.substr(
-        pg_catalog.md5(:'tenant_standard_run_token' || ':approval-phone'),
-        1,
-        8
-      ))::bit(32)::bigint % 1000000000
-    )::text,
-    9,
-    '0'
-  ) AS approval_phone
+  'tenant-standard-conflict-' || :'tenant_standard_run_token' AS conflict_slug
 \gset tenant_standard_
 
 BEGIN;
 
 SET LOCAL statement_timeout = '30s';
 SET LOCAL lock_timeout = '10s';
+
+CREATE TEMP TABLE tenant_standard_phone_candidates
+ON COMMIT DROP
+AS
+WITH candidate_pool AS (
+  SELECT
+    candidate.ordinal,
+    '17' || pg_catalog.lpad(
+      (
+        (
+          pg_catalog.hashtextextended(
+            :'tenant_standard_run_token' || ':phone:' || candidate.ordinal::text,
+            0
+          ) & 9223372036854775807
+        ) % 1000000000
+      )::text,
+      9,
+      '0'
+    ) AS phone
+  FROM pg_catalog.generate_series(0, 2047) AS candidate(ordinal)
+),
+unique_candidates AS (
+  SELECT candidate.phone, pg_catalog.min(candidate.ordinal) AS ordinal
+  FROM candidate_pool AS candidate
+  GROUP BY candidate.phone
+),
+available_candidates AS (
+  SELECT candidate.phone, candidate.ordinal
+  FROM unique_candidates AS candidate
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM public.employees AS employee
+    WHERE employee.status = 'active'
+      AND employee.phone IS NOT NULL
+      AND pg_catalog.btrim(employee.phone) <> ''
+      AND pg_catalog.btrim(employee.phone) = candidate.phone
+  )
+)
+SELECT
+  candidate.phone,
+  pg_catalog.row_number() OVER (
+    ORDER BY candidate.ordinal, candidate.phone
+  ) AS selection_rank
+FROM available_candidates AS candidate
+ORDER BY candidate.ordinal, candidate.phone
+LIMIT 2;
+
+DO $phone_fixture$
+BEGIN
+  IF NOT (
+    SELECT pg_catalog.count(DISTINCT selected.phone) = 2
+    FROM tenant_standard_phone_candidates AS selected
+  ) OR EXISTS (
+    SELECT 1
+    FROM public.employees AS employee
+    JOIN tenant_standard_phone_candidates AS selected
+      ON pg_catalog.btrim(employee.phone) = selected.phone
+    WHERE employee.status = 'active'
+      AND employee.phone IS NOT NULL
+      AND pg_catalog.btrim(employee.phone) <> ''
+  ) THEN
+    RAISE EXCEPTION 'TENANT_STANDARD_PHONE_FIXTURE_SELECTION_FAILED';
+  END IF;
+END;
+$phone_fixture$;
 
 CREATE TEMP TABLE tenant_standard_organization_template_fixture
 ON COMMIT DROP
@@ -54,8 +97,16 @@ SELECT
   :'tenant_standard_approval_slug'::text AS approval_slug,
   :'tenant_standard_null_admin_slug'::text AS null_admin_slug,
   :'tenant_standard_conflict_slug'::text AS conflict_slug,
-  :'tenant_standard_direct_phone'::text AS direct_phone,
-  :'tenant_standard_approval_phone'::text AS approval_phone,
+  (
+    SELECT selected.phone
+    FROM tenant_standard_phone_candidates AS selected
+    WHERE selected.selection_rank = 1
+  ) AS direct_phone,
+  (
+    SELECT selected.phone
+    FROM tenant_standard_phone_candidates AS selected
+    WHERE selected.selection_rank = 2
+  ) AS approval_phone,
   pg_catalog.md5(
     :'tenant_standard_run_token' || ':approval-tenant'
   )::uuid AS approval_tenant_id,

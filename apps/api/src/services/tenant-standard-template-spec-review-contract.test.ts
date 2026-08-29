@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 const migration = new URL(
@@ -11,6 +12,14 @@ const legacyApprovalMigration = new URL(
 );
 const platformOperatorMigration = new URL(
   "../../../../supabase/migrations/20260805180000_create_platform_operator_rbac_foundation.sql",
+  import.meta.url,
+);
+const concurrencySmoke = new URL(
+  "../../../../supabase/tests/tenant_standard_organization_template_concurrency.sh",
+  import.meta.url,
+);
+const transactionalSmoke = new URL(
+  "../../../../supabase/tests/tenant_standard_organization_template.sql",
   import.meta.url,
 );
 
@@ -38,6 +47,56 @@ function functionParameters(source: string, name: string): string {
 }
 
 describe("standard tenant template spec-review contracts", () => {
+  test("pins the historical approval migration used as the replacement oracle", () => {
+    const contents = readFileSync(legacyApprovalMigration);
+
+    expect(createHash("sha256").update(contents).digest("hex")).toBe(
+      "8c09a8bf94d870e2ca668338df78ef556dfb7f3dea09d1c9c8b72e4d22af3684",
+    );
+  });
+
+  test("hardens the committed concurrency harness safety boundaries", () => {
+    const source = sql(concurrencySmoke);
+    const normalized = normalizeSql(source);
+
+    expect(source).toContain("error=database_url_query_or_fragment_rejected");
+    expect(source).not.toContain("database_without_query=");
+    expect(source).toContain("error=custom_database_requires_native_psql");
+    expect(source).toContain("generate_series(0, 2047)");
+    expect(normalized).toContain(
+      "employee.status = 'active' and employee.phone is not null " +
+      "and pg_catalog.btrim(employee.phone) <> ''",
+    );
+    expect(source).toContain("TENANT_TEMPLATE_CONCURRENCY_PHONE_COLLISION");
+    expect(source).toContain("unexpected_direct_tenant");
+    expect(source).toContain("tenant.slug = run.direct_slug");
+    expect(source).toContain("tenant.name = run.ownership_marker");
+    expect(source).toContain("tenant.contact_name = run.ownership_marker");
+    expect(source).toContain("public.approve_tenant_onboarding_application(");
+    expect(source.match(/background_pids=\(\)/g)).toHaveLength(3);
+    expect(source.match(/PGCONNECT_TIMEOUT=3/g)).toHaveLength(2);
+    expect(source.match(/statement_timeout=15s/g)).toHaveLength(2);
+    expect(source.match(/lock_timeout=8s/g)).toHaveLength(2);
+    expect(source.match(/^\s+psql /gm)).toHaveLength(2);
+    expect(source).toContain("cleanup_rows || cleanup_status=$?");
+    expect(source).toMatch(
+      /if \[ "\$\{original_status\}" -ne 0 \]; then\s+exit "\$\{original_status\}"\s+fi\s+exit "\$\{cleanup_status\}"/,
+    );
+  });
+
+  test("selects transactional smoke phones independently of existing employees", () => {
+    const source = sql(transactionalSmoke);
+    const normalized = normalizeSql(source);
+
+    expect(source).toContain("generate_series(0, 2047)");
+    expect(normalized).toContain(
+      "employee.status = 'active' and employee.phone is not null " +
+      "and pg_catalog.btrim(employee.phone) <> ''",
+    );
+    expect(normalized).toContain("count(distinct selected.phone) = 2");
+    expect(source).toContain("TENANT_STANDARD_PHONE_FIXTURE_SELECTION_FAILED");
+  });
+
   test("uses one deterministic runtime permission source for validation and grants", () => {
     const initializer = normalizeSql(extractFunction(
       sql(migration),
