@@ -143,9 +143,10 @@ const ActiveInviteSchema = z.object({
 
 const MutationSchema = z.object({ application_id: z.uuid() }).strict();
 const SubmitMutationSchema = MutationSchema.extend({ created: z.boolean() }).strict();
+const TenantTemplateVersionSchema = z.enum(["2026.05.10", "2026.08.30"]);
 const ApprovalInitializationSchema = z.object({
   template_code: z.literal("default_decoration_company"),
-  template_version: z.literal("2026.05.10"),
+  template_version: TenantTemplateVersionSchema,
   departments_count: z.number().int().nonnegative(),
   posts_count: z.number().int().nonnegative(),
   roles_count: z.number().int().nonnegative(),

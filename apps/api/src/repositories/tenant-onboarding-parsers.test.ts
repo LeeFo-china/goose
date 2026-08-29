@@ -126,7 +126,7 @@ describe("tenant onboarding repository runtime parsers", () => {
       .toEqual({ application_id: ID });
   });
 
-  test("parses every stable approval RPC result", () => {
+  test("parses approval initialization for historical template version", () => {
     const initialization = {
       template_code: "default_decoration_company",
       template_version: "2026.05.10",
@@ -145,7 +145,30 @@ describe("tenant onboarding repository runtime parsers", () => {
       initialization,
       idempotent: false,
     }, "bad")).toMatchObject({ status: "approved", idempotent: false });
+  });
 
+  test("parses approval initialization for current template version", () => {
+    const initialization = {
+      template_code: "default_decoration_company",
+      template_version: "2026.08.30",
+      departments_count: 42,
+      posts_count: 48,
+      roles_count: 11,
+      admin_employee_id: ID,
+      admin_role_id: ID_2,
+    };
+    expect(parseTenantOnboardingApprovalRpcResult({
+      status: "approved",
+      application_id: ID,
+      tenant_id: ID_2,
+      binding_id: null,
+      profile_id: ID,
+      initialization,
+      idempotent: false,
+    }, "bad")).toMatchObject({ status: "approved", initialization });
+  });
+
+  test("parses every stable approval RPC failure result", () => {
     for (const status of [
       "application_not_found", "application_state_conflict",
       "application_version_conflict", "subject_exists", "admin_phone_exists",
@@ -184,6 +207,26 @@ describe("tenant onboarding repository runtime parsers", () => {
     for (const parseInvalid of invalidParsers) {
       expect(parseInvalid).toThrow(expect.objectContaining({ code: "DB_ERROR" }));
     }
+  });
+
+  test("fails unknown approval template versions closed", () => {
+    expect(() => parseTenantOnboardingApprovalRpcResult({
+      status: "approved",
+      application_id: ID,
+      tenant_id: ID_2,
+      binding_id: null,
+      profile_id: ID,
+      initialization: {
+        template_code: "default_decoration_company",
+        template_version: "2099.01.01",
+        departments_count: 42,
+        posts_count: 48,
+        roles_count: 11,
+        admin_employee_id: ID,
+        admin_role_id: ID_2,
+      },
+      idempotent: false,
+    }, "invalid")).toThrow(expect.objectContaining({ code: "DB_ERROR" }));
   });
 
   test("maps only stable applicant RPC boundary errors", async () => {
