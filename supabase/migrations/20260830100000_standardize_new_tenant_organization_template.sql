@@ -1,8 +1,162 @@
 -- Rollback (forward only): add a later migration that marks template version
--- 2026.08.30 inactive and restores both commands to a compatible version.
+-- 2026.08.30 inactive and restores the template commands, approval RPC, and
+-- employee-phone lock functions to compatible versions.
 -- Preserve all tenant organization data already applied from this template.
 
 BEGIN;
+
+CREATE OR REPLACE FUNCTION public.lock_tenant_onboarding_employee_phones(
+  p_phones text[]
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public, auth
+AS $$
+DECLARE
+  v_phone text;
+BEGIN
+  FOR v_phone IN
+    SELECT normalized.normalized_phone
+    FROM (
+      SELECT DISTINCT pg_catalog.btrim(input.phone) AS normalized_phone
+      FROM pg_catalog.unnest(COALESCE(p_phones, '{}'::text[]))
+        AS input(phone)
+      WHERE input.phone IS NOT NULL
+        AND pg_catalog.btrim(input.phone) <> ''
+    ) AS normalized
+    ORDER BY normalized_phone ASC
+  LOOP
+    PERFORM pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended(
+        'employee-phone:' || v_phone,
+        0
+      )
+    );
+    PERFORM pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended(
+        'tenant-onboarding-admin-phone:' || v_phone,
+        0
+      )
+    );
+  END LOOP;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.lock_tenant_onboarding_employee_phones(text[])
+  FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.lock_tenant_onboarding_employee_phones(text[])
+  FROM anon;
+REVOKE ALL ON FUNCTION public.lock_tenant_onboarding_employee_phones(text[])
+  FROM authenticated;
+REVOKE ALL ON FUNCTION public.lock_tenant_onboarding_employee_phones(text[])
+  FROM service_role;
+
+CREATE OR REPLACE FUNCTION public.guard_platform_employee_phone()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public, auth
+AS $$
+DECLARE
+  v_phones text[] := '{}'::text[];
+BEGIN
+  IF TG_OP = 'UPDATE'
+    AND OLD.phone IS NOT NULL
+    AND pg_catalog.btrim(OLD.phone) <> ''
+  THEN
+    v_phones := pg_catalog.array_append(v_phones, OLD.phone);
+  END IF;
+
+  IF NEW.phone IS NOT NULL THEN
+    NEW.phone := NULLIF(pg_catalog.btrim(NEW.phone), '');
+  END IF;
+
+  IF NEW.phone IS NOT NULL THEN
+    v_phones := pg_catalog.array_append(v_phones, NEW.phone);
+  END IF;
+
+  PERFORM public.lock_tenant_onboarding_employee_phones(v_phones);
+
+  IF NEW.phone IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  IF NEW.tenant_id IS NULL AND EXISTS (
+    SELECT 1
+    FROM public.employees AS existing
+    WHERE existing.id <> NEW.id
+      AND existing.phone = pg_catalog.btrim(NEW.phone)
+  ) THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '23505',
+      MESSAGE = 'PLATFORM_OPERATOR_PHONE_CONFLICT';
+  END IF;
+
+  IF NEW.tenant_id IS NOT NULL AND EXISTS (
+    SELECT 1
+    FROM public.employees AS existing
+    WHERE existing.id <> NEW.id
+      AND existing.tenant_id IS NULL
+      AND existing.phone = pg_catalog.btrim(NEW.phone)
+  ) THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '23505',
+      MESSAGE = 'PLATFORM_OPERATOR_PHONE_CONFLICT';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.guard_platform_employee_phone() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.guard_platform_employee_phone()
+  TO service_role;
+
+CREATE OR REPLACE FUNCTION public.lock_active_employee_phone_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public, auth
+AS $$
+DECLARE
+  v_phones text[] := '{}'::text[];
+BEGIN
+  IF TG_OP IN ('UPDATE', 'DELETE') THEN
+    IF OLD.status = 'active'
+      AND OLD.phone IS NOT NULL
+      AND pg_catalog.btrim(OLD.phone) <> ''
+    THEN
+      v_phones := pg_catalog.array_append(v_phones, OLD.phone);
+    END IF;
+  END IF;
+
+  IF TG_OP IN ('INSERT', 'UPDATE') THEN
+    IF NEW.status = 'active'
+      AND NEW.phone IS NOT NULL
+      AND pg_catalog.btrim(NEW.phone) <> ''
+    THEN
+      v_phones := pg_catalog.array_append(v_phones, NEW.phone);
+    END IF;
+  END IF;
+
+  PERFORM public.lock_tenant_onboarding_employee_phones(v_phones);
+
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.lock_active_employee_phone_mutation()
+  FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.lock_active_employee_phone_mutation()
+  FROM anon;
+REVOKE ALL ON FUNCTION public.lock_active_employee_phone_mutation()
+  FROM authenticated;
+REVOKE ALL ON FUNCTION public.lock_active_employee_phone_mutation()
+  FROM service_role;
 
 WITH audit_department_defaults(code, alias_name, enabled, sort) AS (
   VALUES

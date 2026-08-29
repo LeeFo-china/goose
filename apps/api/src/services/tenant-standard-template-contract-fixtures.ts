@@ -1,40 +1,103 @@
-import {
-  DEPARTMENT_CODE_VALUES,
-  DepartmentConfig,
-  EMPLOYEE_POST_CODE_VALUES,
-  EmployeePostConfig,
-  type DepartmentCode,
-  type EmployeePostCode,
-  type PermissionCode,
-} from "@gooes/domain";
+import type { PermissionCode } from "@gooes/domain";
 
-export const enabledDepartments = [
-  "EXEC_OFFICE", "MARKETING", "DESIGN", "PROJECT", "FINANCE", "SELF_MEDIA",
-  "CUSTOMER_SERVICE",
-] as const satisfies readonly DepartmentCode[];
+export type DepartmentTuple = [string, string, boolean, number];
+export type PostTuple = [string, string, number, number];
 
-export const enabledPosts = [
-  "GENERAL_MANAGER", "SYSTEM_ADMIN", "SALES_CONSULTANT", "MARKETING_MANAGER",
-  "DESIGN_DIRECTOR", "CHIEF_DESIGNER", "ENGINEERING_DIRECTOR", "CONSTRUCTION_SUPER",
-  "HYDROPOWER_FOREMAN", "TILE_FOREMAN", "CARPENTRY_FOREMAN", "PAINT_FOREMAN",
-  "MAINTENANCE_WORKER", "FINANCE_ACCOUNTANT", "FINANCE_MANAGER", "OPERATIONS_DIRECTOR",
-  "NEW_MEDIA_OPERATOR", "VIDEO_EDITOR", "LIVE_STREAM_OPERATOR",
-  "CUSTOMER_SERVICE_MANAGER", "CUSTOMER_SERVICE",
-] as const satisfies readonly EmployeePostCode[];
+export const expectedDepartments: DepartmentTuple[] = [
+  ["BOARD", "董事会", false, 1],
+  ["EXEC_OFFICE", "总裁办/总经理办公室", true, 2],
+  ["SALES", "销售部/客户部", false, 3],
+  ["MARKETING", "市场部", true, 4],
+  ["DESIGN", "设计部", true, 5],
+  ["PROJECT", "工程部", true, 6],
+  ["PROCURE", "采购部", false, 7],
+  ["AFTER_SALE", "售后部/维保部", false, 8],
+  ["PRODUCT", "产品部", false, 9],
+  ["TECH", "技术研发部", false, 10],
+  ["IT", "信息技术部", false, 11],
+  ["BIM_CENTER", "BIM中心", false, 12],
+  ["SUPPLY_CHAIN", "供应链管理部", false, 13],
+  ["LOGISTICS", "物流部", false, 14],
+  ["WAREHOUSE", "仓储部", false, 15],
+  ["FACTORY", "工厂/生产基地", false, 16],
+  ["PROJECT_MGT", "工程项目管理部", false, 17],
+  ["QUALITY_SUPERVISION", "质量监理部", false, 18],
+  ["SAFETY", "安全监察部", false, 19],
+  ["ACCEPTANCE", "竣工验收部", false, 20],
+  ["MAINTENANCE", "维修保养部", false, 21],
+  ["ADMIN", "行政人事部", false, 22],
+  ["FINANCE", "财务部", true, 23],
+  ["LEGAL", "法务部", false, 24],
+  ["COMPLIANCE", "合规部", false, 25],
+  ["INTERNAL_AUDIT", "内审部", false, 26],
+  ["BRAND", "品牌管理部", false, 27],
+  ["PUBLIC_RELATIONS", "公关部", false, 28],
+  ["DIGITAL_MARKETING", "数字营销部", false, 29],
+  ["SELF_MEDIA", "自媒体部", true, 30],
+  ["CHANNEL", "渠道部", false, 31],
+  ["COMMUNITY", "社区运营部", false, 32],
+  ["CUSTOMER_SERVICE", "客服部", true, 33],
+  ["CUSTOMER_SUCCESS", "客户成功部", false, 34],
+  ["COMPLAINTS", "客诉处理部", false, 35],
+  ["STRATEGY", "战略发展部", false, 36],
+  ["INVESTOR", "投资者关系部", false, 37],
+  ["BUSINESS_DEV", "商务拓展部", false, 38],
+  ["PMO", "项目管理办公室", false, 39],
+  ["TRAINING", "培训部", false, 40],
+  ["OPERATIONS", "运营部", false, 41],
+  ["DATA_CENTER", "数据中心", false, 42],
+];
 
-const enabledDepartmentSet = new Set<DepartmentCode>(enabledDepartments);
-const enabledPostSet = new Set<EmployeePostCode>(enabledPosts);
-
-export type DepartmentTuple = [DepartmentCode, string, boolean, number];
-export type PostTuple = [EmployeePostCode, string, number, number];
-
-export const expectedDepartments: DepartmentTuple[] = DEPARTMENT_CODE_VALUES.map(
-  (code, index) => [code, DepartmentConfig[code].label, enabledDepartmentSet.has(code), index + 1],
-);
-
-export const expectedPosts: PostTuple[] = EMPLOYEE_POST_CODE_VALUES.map(
-  (code, index) => [code, EmployeePostConfig[code].label, enabledPostSet.has(code) ? 1 : 0, index + 1],
-);
+export const expectedPosts: PostTuple[] = [
+  ["GENERAL_MANAGER", "总经理", 1, 1],
+  ["OPERATIONS_DIRECTOR", "运营总监", 1, 2],
+  ["GENERAL_MANAGER_ASSISTANT", "总经理助理", 0, 3],
+  ["HR_ADMIN_MANAGER", "行政人事主管", 0, 4],
+  ["HR_SPECIALIST", "人事专员", 0, 5],
+  ["ADMIN_SPECIALIST", "行政专员", 0, 6],
+  ["MARKETING_DIRECTOR", "营销总监", 0, 7],
+  ["MARKETING_MANAGER", "市场经理", 1, 8],
+  ["NEW_MEDIA_OPERATOR", "新媒体运营", 1, 9],
+  ["VIDEO_EDITOR", "摄影剪辑", 1, 10],
+  ["LIVE_STREAM_OPERATOR", "直播运营", 1, 11],
+  ["AD_OPERATOR", "投流专员", 0, 12],
+  ["CUSTOMER_INVITER", "客服邀约专员", 0, 13],
+  ["SALES_MANAGER", "销售经理", 0, 14],
+  ["SALES_CONSULTANT", "客户经理", 1, 15],
+  ["TELESALES", "电话销售", 0, 16],
+  ["CHANNEL_MANAGER", "渠道经理", 0, 17],
+  ["DESIGN_DIRECTOR", "设计总监", 1, 18],
+  ["CHIEF_DESIGNER", "主案设计师", 1, 19],
+  ["INTERIOR_DESIGNER", "设计师", 0, 20],
+  ["ASSISTANT_DESIGNER", "助理设计师", 0, 21],
+  ["RENDERING_DESIGNER", "效果图设计师", 0, 22],
+  ["ENGINEERING_DIRECTOR", "工程总监", 1, 23],
+  ["PROJECT_MANAGER", "项目经理", 0, 24],
+  ["CONSTRUCTION_SUPER", "工程监理", 1, 25],
+  ["QUALITY_INSPECTOR", "质检专员", 0, 26],
+  ["SAFETY_OFFICER", "安全员", 0, 27],
+  ["HYDROPOWER_FOREMAN", "水电工长", 1, 28],
+  ["TILE_FOREMAN", "瓦工工长", 1, 29],
+  ["CARPENTRY_FOREMAN", "木工工长", 1, 30],
+  ["PAINT_FOREMAN", "油漆工长", 1, 31],
+  ["MAINTENANCE_WORKER", "维修工", 1, 32],
+  ["PROCUREMENT_MANAGER", "采购主管", 0, 33],
+  ["PROCURE_OFFICER", "采购专员", 0, 34],
+  ["MATERIAL_CLERK", "材料员", 0, 35],
+  ["WAREHOUSE_KEEPER", "仓库管理员", 0, 36],
+  ["DELIVERY_COORDINATOR", "配送协调员", 0, 37],
+  ["FINANCE_MANAGER", "财务经理", 1, 38],
+  ["FINANCE_ACCOUNTANT", "会计", 1, 39],
+  ["CASHIER", "出纳", 0, 40],
+  ["COST_ACCOUNTANT", "成本核算员", 0, 41],
+  ["CUSTOMER_SERVICE_MANAGER", "客服主管", 1, 42],
+  ["CUSTOMER_SERVICE", "客服专员", 1, 43],
+  ["AFTER_SALES_SPECIALIST", "售后专员", 0, 44],
+  ["CUSTOMER_RETURN_VISITOR", "回访专员", 0, 45],
+  ["SYSTEM_ADMIN", "系统管理员", 1, 46],
+  ["DATA_SPECIALIST", "数据专员", 0, 47],
+  ["IT_SUPPORT", "IT技术支持", 0, 48],
+];
 
 const departmentPostCodes = [
   ["EXEC_OFFICE", "GENERAL_MANAGER"], ["EXEC_OFFICE", "SYSTEM_ADMIN"],
@@ -49,14 +112,20 @@ const departmentPostCodes = [
   ["SELF_MEDIA", "LIVE_STREAM_OPERATOR"],
   ["CUSTOMER_SERVICE", "CUSTOMER_SERVICE_MANAGER"],
   ["CUSTOMER_SERVICE", "CUSTOMER_SERVICE"],
-] as const satisfies readonly (readonly [DepartmentCode, EmployeePostCode])[];
+] as const;
 
-const departmentPostAliases: Partial<Record<EmployeePostCode, string>> = {
+const departmentPostAliases: Record<string, string> = {
   SALES_CONSULTANT: "销售专员",
   FINANCE_ACCOUNTANT: "财务专员",
 };
 
-export type DepartmentPostTuple = [DepartmentCode, EmployeePostCode, string | null, boolean, number];
+export type DepartmentPostTuple = [
+  string,
+  string,
+  string | null,
+  boolean,
+  number,
+];
 export const expectedDepartmentPosts: DepartmentPostTuple[] = departmentPostCodes.map(
   ([department, post], index) => [department, post, departmentPostAliases[post] ?? null, true, index + 1],
 );

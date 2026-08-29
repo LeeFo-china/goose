@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import {
+  DEPARTMENT_CODE_VALUES,
+  DepartmentConfig,
+  EMPLOYEE_POST_CODE_VALUES,
+  EmployeePostConfig,
+} from "@gooes/domain";
+import {
   expectedDepartmentPosts,
   expectedDepartments,
   expectedNonAdminPermissions,
@@ -10,6 +16,10 @@ import {
 
 const migration = new URL(
   "../../../../supabase/migrations/20260830100000_standardize_new_tenant_organization_template.sql",
+  import.meta.url,
+);
+const fixture = new URL(
+  "./tenant-standard-template-contract-fixtures.ts",
   import.meta.url,
 );
 
@@ -319,9 +329,13 @@ describe("standard new-tenant organization template migration", () => {
     );
   });
 
-  test("keeps both commands security-definer and service-role-only", () => {
+  test("keeps template and approval commands service-role-only", () => {
     const source = sql();
-    for (const name of ["initialize_default_decoration_tenant", "create_tenant_with_default_template"]) {
+    for (const name of [
+      "initialize_default_decoration_tenant",
+      "create_tenant_with_default_template",
+      "approve_tenant_onboarding_application",
+    ]) {
       const body = extractFunction(source, name);
       expect(body).not.toBe("");
       expect(body).toMatch(
@@ -334,6 +348,26 @@ describe("standard new-tenant organization template migration", () => {
     );
     expect(source).not.toMatch(
       /\bGRANT\s+(?:EXECUTE|ALL(?:\s+PRIVILEGES)?)\s+ON\s+(?:FUNCTION|ROUTINE)\b[^;]*\bTO\s+[^;]*\b(?:PUBLIC|anon|authenticated)\b[^;]*;/i,
+    );
+  });
+
+  test("freezes the 2026.08.30 department and post fixtures explicitly", () => {
+    const source = readFileSync(fixture, "utf8");
+
+    expect(source).not.toContain("DEPARTMENT_CODE_VALUES.map");
+    expect(source).not.toContain("EMPLOYEE_POST_CODE_VALUES.map");
+    expect(source).not.toContain("DepartmentConfig[code].label");
+    expect(source).not.toContain("EmployeePostConfig[code].label");
+    expect(expectedDepartments).toHaveLength(42);
+    expect(expectedPosts).toHaveLength(48);
+  });
+
+  test("keeps the frozen 2026.08.30 fixtures compatible with the current domain", () => {
+    expect(expectedDepartments.map(([code, label]) => [code, label])).toEqual(
+      DEPARTMENT_CODE_VALUES.map((code) => [code, DepartmentConfig[code].label]),
+    );
+    expect(expectedPosts.map(([code, label]) => [code, label])).toEqual(
+      EMPLOYEE_POST_CODE_VALUES.map((code) => [code, EmployeePostConfig[code].label]),
     );
   });
 

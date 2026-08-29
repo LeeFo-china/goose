@@ -9,6 +9,10 @@ const legacyApprovalMigration = new URL(
   "../../../../supabase/migrations/20260714220000_create_tenant_onboarding_approval_rpc.sql",
   import.meta.url,
 );
+const platformOperatorMigration = new URL(
+  "../../../../supabase/migrations/20260805180000_create_platform_operator_rbac_foundation.sql",
+  import.meta.url,
+);
 
 function normalizeSql(value: string): string {
   return value.replace(/\s+/g, " ").trim().toLowerCase();
@@ -233,5 +237,110 @@ describe("standard tenant template spec-review contracts", () => {
     expect(releasedAt).not.toBe("");
     expect(releasedAt).not.toBe("2026.08.30");
     expect(Number.isNaN(Date.parse(releasedAt))).toBe(false);
+  });
+
+  test("centralizes both employee-phone advisory locks in one global order", () => {
+    const source = sql(migration);
+    const normalized = normalizeSql(source);
+    const helper = normalizeSql(extractFunction(
+      source,
+      "lock_tenant_onboarding_employee_phones",
+    ));
+    const platformGuard = normalizeSql(extractFunction(
+      source,
+      "guard_platform_employee_phone",
+    ));
+    const activePhoneTrigger = normalizeSql(extractFunction(
+      source,
+      "lock_active_employee_phone_mutation",
+    ));
+    const employeeLock = helper.indexOf("'employee-phone:' || v_phone");
+    const onboardingLock = helper.indexOf(
+      "'tenant-onboarding-admin-phone:' || v_phone",
+    );
+
+    expect(helper).not.toBe("");
+    expect(helper).toContain("security definer");
+    expect(helper).toContain("set search_path = pg_catalog, public, auth");
+    expect(helper).toMatch(/select distinct[\s\S]*order by normalized_phone asc/);
+    expect(employeeLock).toBeGreaterThan(0);
+    expect(onboardingLock).toBeGreaterThan(employeeLock);
+    expect(helper.match(/pg_catalog\.pg_advisory_xact_lock/g)).toHaveLength(2);
+
+    for (const triggerFunction of [platformGuard, activePhoneTrigger]) {
+      expect(triggerFunction).not.toBe("");
+      expect(triggerFunction).toContain("security definer");
+      expect(triggerFunction).toContain("set search_path = pg_catalog, public, auth");
+      expect(triggerFunction.match(
+        /public\.lock_tenant_onboarding_employee_phones/g,
+      )).toHaveLength(1);
+      expect(triggerFunction).not.toContain("pg_advisory_xact_lock");
+    }
+    expect(platformGuard).toContain("platform_operator_phone_conflict");
+    expect(platformGuard).toContain("tg_op = 'update'");
+    expect(platformGuard).toMatch(
+      /array_append\(v_phones, old\.phone\)[\s\S]*array_append\(v_phones, new\.phone\)/,
+    );
+    expect(activePhoneTrigger).toContain("old.status = 'active'");
+    expect(activePhoneTrigger).toContain("new.status = 'active'");
+
+    for (const role of ["public", "anon", "authenticated", "service_role"]) {
+      expect(normalized).toMatch(new RegExp(
+        `revoke all on function public\\.lock_tenant_onboarding_employee_phones\\(text\\[\\]\\) from ${role};`,
+      ));
+      expect(normalized).toMatch(new RegExp(
+        `revoke all on function public\\.lock_active_employee_phone_mutation\\(\\) from ${role};`,
+      ));
+    }
+    expect(normalized).toContain(
+      "revoke all on function public.guard_platform_employee_phone() from public;",
+    );
+    expect(normalized).toContain(
+      "grant execute on function public.guard_platform_employee_phone() to service_role;",
+    );
+
+    const platformTriggerSql = normalizeSql(sql(platformOperatorMigration));
+    const onboardingTriggerSql = normalizeSql(sql(legacyApprovalMigration));
+    expect(platformTriggerSql).toMatch(
+      /create trigger tr_guard_platform_employee_phone before insert or update of phone, tenant_id on public\.employees for each row execute function public\.guard_platform_employee_phone\(\);/,
+    );
+    expect(onboardingTriggerSql).toMatch(
+      /create trigger tr_lock_active_employee_phone_mutation before insert or update of phone, status or delete on public\.employees for each row execute function public\.lock_active_employee_phone_mutation\(\);/,
+    );
+    expect("tr_guard_platform_employee_phone".localeCompare(
+      "tr_lock_active_employee_phone_mutation",
+    )).toBeLessThan(0);
+  });
+
+  test("uses the global phone-lock helper before both conflict checks", () => {
+    const source = sql(migration);
+    const direct = normalizeSql(extractFunction(
+      source,
+      "create_tenant_with_default_template",
+    ));
+    const approval = normalizeSql(extractFunction(
+      source,
+      "approve_tenant_onboarding_application",
+    ));
+    const directPrecheck = direct.match(
+      /perform employee\.id[\s\S]*?message = 'tenant_admin_phone_exists'; end if;/,
+    )?.[0] ?? "";
+    const approvalPrecheck = approval.match(
+      /perform employee\.id[\s\S]*?return pg_catalog\.jsonb_build_object\('status', 'admin_phone_exists'\); end if;/,
+    )?.[0] ?? "";
+
+    for (const [body, precheck] of [
+      [direct, directPrecheck],
+      [approval, approvalPrecheck],
+    ] as const) {
+      const helperCall = body.indexOf(
+        "public.lock_tenant_onboarding_employee_phones",
+      );
+      expect(helperCall).toBeGreaterThan(0);
+      expect(precheck).not.toBe("");
+      expect(helperCall).toBeLessThan(body.indexOf(precheck));
+      expect(body).not.toContain("'employee-phone:'");
+      expect(body).not.toContain("'tenant-onboarding-admin-phone:'");
+    }
   });
 });
