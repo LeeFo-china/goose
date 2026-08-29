@@ -159,7 +159,7 @@ describe("DouyinMiniappReleasesRepository operation claims", () => {
     });
     expect(result).toEqual(internalRow);
     expect(calls[0]).toEqual({ method: "rpc", args: [
-      "get_or_create_and_claim_douyin_miniapp_release_upload",
+      "get_or_create_and_claim_douyin_miniapp_release_upload_v2",
       expect.objectContaining({
         p_installation_id: releaseRow.installation_id,
         p_template_id: releaseRow.template_id,
