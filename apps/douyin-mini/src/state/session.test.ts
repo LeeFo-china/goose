@@ -81,6 +81,23 @@ describe("Douyin native session state", () => {
     });
   });
 
+  test("exchanges an anonymous credential when Douyin has no signed-in host account", async () => {
+    const deps = dependencies({
+      loginOnce: mock(async () => ({
+        anonymousCode: "one-time-anonymous-code",
+      })) as never,
+    });
+    const session = new SessionManager(deps);
+
+    await expect(session.initialize(launchContext)).resolves.toBe("fresh-token");
+    expect(deps.exchangeSession).toHaveBeenCalledWith({
+      app_id: "tt-authorizer-1",
+      deployment_key: "deployment-public-key",
+      anonymous_code: "one-time-anonymous-code",
+      launch_context: launchContext,
+    });
+  });
+
   test("uses a stored unexpired session without invoking tt.login", async () => {
     const deps = dependencies({
       readStoredSession: mock(() => ({ accessToken: "stored-token", expiresAt: now + 60_000 })),

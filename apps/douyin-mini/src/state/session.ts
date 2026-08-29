@@ -14,7 +14,10 @@ export type SessionDependencies = {
   now(): number;
   readEnvironment(): DouyinEnvironment;
   readDeploymentConfig(): DeploymentConfig;
-  loginOnce(): Promise<{ code: string }>;
+  loginOnce(): Promise<
+    | { code: string; anonymousCode?: never }
+    | { code?: never; anonymousCode: string }
+  >;
   exchangeSession(input: SessionExchangeInput): Promise<SessionExchangeResult>;
   readStoredSession(): StoredSession | null;
   writeStoredSession(session: StoredSession): void;
@@ -87,8 +90,8 @@ export class SessionManager implements SessionTokenProvider {
     const login = await this.dependencies.loginOnce();
     const input: SessionExchangeInput = {
       app_id: environment.appId,
-      code: login.code,
       launch_context: this.launchContext,
+      ...sessionCredential(login),
       ...(deployment.deployment_key
         ? { deployment_key: deployment.deployment_key }
         : {}),
@@ -102,4 +105,16 @@ export class SessionManager implements SessionTokenProvider {
     this.dependencies.writeStoredSession(session);
     return session;
   }
+}
+
+function sessionCredential(login: Awaited<ReturnType<SessionDependencies["loginOnce"]>>):
+  | { code: string; anonymous_code?: never }
+  | { code?: never; anonymous_code: string } {
+  if (login.code) return { code: login.code };
+  if (login.anonymousCode) return { anonymous_code: login.anonymousCode };
+  throw new ApiRequestError(
+    0,
+    "DOUYIN_SESSION_EXCHANGE_FAILED",
+    "抖音会话初始化失败",
+  );
 }

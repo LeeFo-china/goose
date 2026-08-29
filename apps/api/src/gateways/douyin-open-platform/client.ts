@@ -148,16 +148,17 @@ export type AuthorizerTokenResult = {
   readonly permissions: readonly unknown[];
 };
 
-export type Code2SessionInput = {
+type Code2SessionCredential = { readonly code: string; readonly anonymousCode?: never }
+  | { readonly code?: never; readonly anonymousCode: string };
+
+export type Code2SessionInput = Code2SessionCredential & {
   readonly authorizerAccessToken: string;
   readonly appId: string;
-  readonly code: string;
 };
 
-export type TemplateCode2SessionInput = {
+export type TemplateCode2SessionInput = Code2SessionCredential & {
   readonly appId: string;
   readonly appSecret: string;
-  readonly code: string;
 };
 
 export type Code2SessionResult = {
@@ -166,6 +167,10 @@ export type Code2SessionResult = {
   readonly anonymousOpenId?: string;
   readonly unionId?: string;
 };
+
+function serializeCode2SessionCredential(input: Code2SessionCredential) {
+  return input.code ? { code: input.code } : { anonymous_code: input.anonymousCode };
+}
 
 export interface DouyinOpenPlatformGateway {
   getComponentAccessToken(input: ComponentTokenInput): Promise<ComponentTokenResult>;
@@ -290,7 +295,7 @@ export class DouyinOpenPlatformClient
     const body = await this.request(TEMPLATE_CODE2SESSION_URL, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ appid: input.appId, secret: input.appSecret, code: input.code }),
+      body: JSON.stringify({ appid: input.appId, secret: input.appSecret, ...serializeCode2SessionCredential(input) }),
     });
     assertOpenApiSuccess(body);
     const parsed = TemplateCode2SessionSuccessSchema.safeParse(body);
@@ -357,7 +362,7 @@ export class DouyinOpenPlatformClient
     const body = await this.request(MERCHANT_CODE2SESSION_URL, {
       method: "POST",
       headers: { "access-token": accessToken, "content-type": "application/json" },
-      body: JSON.stringify({ code: input.code, app_id: input.appId }),
+      body: JSON.stringify({ ...serializeCode2SessionCredential(input), app_id: input.appId }),
     });
     assertOpenApiSuccess(body);
     const parsed = MerchantCode2SessionSuccessSchema.safeParse(body);

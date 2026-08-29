@@ -163,7 +163,7 @@ export class DouyinMiniappSessionService {
     return this.options.openPlatform.code2Session({
       authorizerAccessToken,
       appId: installation.authorizer_appid,
-      code: input.code,
+      ...providerCredential(input),
     });
   }
 
@@ -181,7 +181,7 @@ export class DouyinMiniappSessionService {
     return this.options.openPlatform.code2SessionForTemplate({
       appId: installation.authorizer_appid,
       appSecret: this.options.templateAppSecretProvider(),
-      code: input.code,
+      ...providerCredential(input),
     });
   }
 
@@ -190,6 +190,14 @@ export class DouyinMiniappSessionService {
       .update(`${appId}:${douyinIdentity}`)
       .digest("hex");
   }
+}
+
+function providerCredential(input: DouyinMiniappSessionRequest):
+  | { readonly code: string; readonly anonymousCode?: never }
+  | { readonly code?: never; readonly anonymousCode: string } {
+  if (input.code) return { code: input.code };
+  if (input.anonymous_code) return { anonymousCode: input.anonymous_code };
+  throw Errors.badRequest("抖音登录凭证无效");
 }
 
 const SAFE_SESSION_ERROR_CODES = new Set([

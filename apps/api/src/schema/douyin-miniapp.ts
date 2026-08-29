@@ -28,9 +28,13 @@ export const DouyinLaunchContextSchema = z.strictObject({
 export const DouyinMiniappSessionRequestSchema = z.strictObject({
   app_id: z.string().trim().min(1).max(128),
   deployment_key: z.string().trim().min(1).max(128).optional(),
-  code: z.string().trim().min(1).max(256),
+  code: z.string().trim().min(1).max(256).optional(),
+  anonymous_code: z.string().trim().min(1).max(256).optional(),
   launch_context: DouyinLaunchContextSchema,
-});
+}).refine(
+  (value) => Number(value.code !== undefined) + Number(value.anonymous_code !== undefined) === 1,
+  { message: "抖音登录凭证无效", path: ["code"] },
+);
 
 export const DouyinContentPageQuerySchema = PaginationQuerySchema.strict();
 

@@ -178,6 +178,27 @@ describe("DouyinMiniappSessionService", () => {
     }));
   });
 
+  test("exchanges an anonymous merchant credential without requiring a host login", async () => {
+    const deps = dependencies();
+    deps.openPlatform.code2Session = mock(async () => ({
+      sessionKey: "raw-session-key",
+      anonymousOpenId: "raw-anonymous-open-id",
+    })) as never;
+    const anonymousRequest = {
+      ...request,
+      code: undefined,
+      anonymous_code: "one-time-anonymous-code",
+    } as never;
+
+    await new DouyinMiniappSessionService(deps).exchange(anonymousRequest);
+
+    expect(deps.openPlatform.code2Session).toHaveBeenCalledWith({
+      authorizerAccessToken: "authorizer-access-token",
+      appId: request.app_id,
+      anonymousCode: "one-time-anonymous-code",
+    });
+  });
+
   test("rejects installation, deployment, tenant and authorization boundary failures", async () => {
     const cases = [
       [null, request, "DOUYIN_INSTALLATION_MISSING"],
@@ -216,6 +237,20 @@ describe("DouyinMiniappSessionService", () => {
   });
 
   test("strict request schema rejects forged tenant fields and unbounded attribution", () => {
+    expect(DouyinMiniappSessionRequestSchema.safeParse({
+      ...request,
+      code: undefined,
+      anonymous_code: "one-time-anonymous-code",
+    }).success).toBe(true);
+    expect(DouyinMiniappSessionRequestSchema.safeParse({
+      ...request,
+      code: undefined,
+      anonymous_code: undefined,
+    }).success).toBe(false);
+    expect(DouyinMiniappSessionRequestSchema.safeParse({
+      ...request,
+      anonymous_code: "one-time-anonymous-code",
+    }).success).toBe(false);
     expect(DouyinMiniappSessionRequestSchema.safeParse({
       ...request,
       tenant_id: TENANT_ID,

@@ -1,15 +1,24 @@
 import { ApiRequestError } from "../api/request";
 
-export function loginOnce(): Promise<{ code: string }> {
+export function loginOnce(): Promise<
+  | { code: string; anonymousCode?: never }
+  | { code?: never; anonymousCode: string }
+> {
   return new Promise((resolve, reject) => {
     tt.login({
-      force: true,
-      success: ({ code }) => {
-        if (!code) {
-          reject(sessionExchangeFailed());
+      force: false,
+      success: ({ code, anonymousCode }) => {
+        const normalizedCode = code?.trim() ?? "";
+        if (normalizedCode) {
+          resolve({ code: normalizedCode });
           return;
         }
-        resolve({ code });
+        const normalizedAnonymousCode = anonymousCode?.trim() ?? "";
+        if (normalizedAnonymousCode) {
+          resolve({ anonymousCode: normalizedAnonymousCode });
+          return;
+        }
+        reject(sessionExchangeFailed());
       },
       fail: () => reject(sessionExchangeFailed()),
     });

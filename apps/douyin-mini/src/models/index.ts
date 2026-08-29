@@ -43,10 +43,13 @@ export type StoredSession = {
   expiresAt: number;
 };
 
-export type SessionExchangeInput = {
+type SessionCredential =
+  | { code: string; anonymous_code?: never }
+  | { code?: never; anonymous_code: string };
+
+export type SessionExchangeInput = SessionCredential & {
   app_id: string;
   deployment_key?: string;
-  code: string;
   launch_context: LaunchContext;
 };
 
