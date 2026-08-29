@@ -80,6 +80,13 @@ const supplierBatchExistingTableIndexMigration = readFileSync(
   ),
   "utf8",
 );
+const supplierBatchProjectOptionIndexMigration = readFileSync(
+  new URL(
+    "../supabase/migrations/20260829170000_prepare_supplier_purchase_batch_project_option_filters.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const supplierBatchMigrationRunbookUrl = new URL(
   "../docs/runbooks/supplier-purchase-batch-nontransactional-migrations.md",
   import.meta.url,
@@ -339,6 +346,7 @@ function runNontransactionalMigrationHelper(
   migrationSql: string,
   preDdlIndexState: string,
   postDdlIndexState: string,
+  postDdlIndexOptions = "",
   ddlExitCode = 0,
 ): { exitCode: number; log: string; stderr: string } {
   const planAndApplyScript = extractWorkflowRunScript(
@@ -370,7 +378,11 @@ function runNontransactionalMigrationHelper(
 psql_prod() {
   if [ "\${1:-}" = "-Atc" ]; then
     if [[ "\${2:-}" == *"idx.relkind"* ]]; then
-      printf '%s\\n' "\${POST_DDL_INDEX_STATE}"
+      if [[ "\${2:-}" == *"index_record.indoption"* ]]; then
+        printf '%s|%s\\n' "\${POST_DDL_INDEX_STATE}" "\${POST_DDL_INDEX_OPTIONS}"
+      else
+        printf '%s\\n' "\${POST_DDL_INDEX_STATE}"
+      fi
     else
       printf '%s\\n' "\${PRE_DDL_INDEX_STATE}"
     fi
@@ -399,6 +411,7 @@ psql_prod() {
           HISTORY_STATEMENT: "insert into supabase_migrations.schema_migrations values ('fixture');",
           LOG_PATH: logPath,
           MIGRATION_FILE: migrationPath,
+          POST_DDL_INDEX_OPTIONS: postDdlIndexOptions,
           POST_DDL_INDEX_STATE: postDdlIndexState,
           PRE_DDL_INDEX_STATE: preDdlIndexState,
         },
@@ -1147,6 +1160,10 @@ describe("production migration precheck workflow", () => {
     "-- gooes:expected-index=public.fixture_idx|public.fixture|false|gin|name|extensions.gin_trgm_ops|null";
   const validFixtureIndexState =
     "i|public|public|fixture|false|true|true|true|gin|name|extensions.gin_trgm_ops|null";
+  const projectOptionDirectionMarker =
+    "-- gooes:expected-index=public.fixture_idx|public.fixture|false|btree|tenant_id,updated_at,id|pg_catalog.uuid_ops,pg_catalog.timestamptz_ops,pg_catalog.uuid_ops|null|asc_nulls_last,desc_nulls_first,desc_nulls_first";
+  const validProjectOptionIndexState =
+    "i|public|public|fixture|false|true|true|true|btree|tenant_id,updated_at,id|pg_catalog.uuid_ops,pg_catalog.timestamptz_ops,pg_catalog.uuid_ops|null";
 
   test("routes marked nontransactional migrations outside transaction wrappers", () => {
     const productionScript = extractWorkflowRunScript(
@@ -1166,6 +1183,7 @@ describe("production migration precheck workflow", () => {
       expect(script).toContain(
         "case when index_record.indpred is null then 'null' else 'expression:' || pg_catalog.pg_get_expr(index_record.indpred, index_record.indrelid) end",
       );
+      expect(script).toContain("index_record.indoption");
     }
     for (const helper of [
       "expected_nontransactional_index_metadata",
@@ -1184,6 +1202,7 @@ describe("production migration precheck workflow", () => {
       supplierPriceSnapshotIndexMigration,
       supplierBatchCatalogIndexMigration,
       supplierBatchExistingTableIndexMigration,
+      supplierBatchProjectOptionIndexMigration,
     ]) {
       const lines = migration.split(/\r?\n/);
       expect(lines[0]).toBe("-- gooes:migration-mode=nontransactional");
@@ -1191,6 +1210,113 @@ describe("production migration precheck workflow", () => {
       expect(migration).toContain("CREATE");
       expect(migration).toContain("INDEX CONCURRENTLY IF NOT EXISTS");
     }
+  });
+
+  test("applies the project option index through the nontransactional parser before history", () => {
+    const projectOptionIndexState =
+      "i|public|public|projects|false|true|true|true|btree|tenant_id,updated_at,id|pg_catalog.uuid_ops,pg_catalog.timestamptz_ops,pg_catalog.uuid_ops|null";
+    const result = runNontransactionalMigrationHelper(
+      supplierBatchProjectOptionIndexMigration,
+      "",
+      projectOptionIndexState,
+      "0,3,3",
+    );
+
+    expect(result.exitCode, result.stderr).toBe(0);
+    expect(result.log.split(/\r?\n/).filter(Boolean)).toEqual([
+      "DDL",
+      "SQL:insert into supabase_migrations.schema_migrations values ('fixture');",
+    ]);
+  });
+
+  test("accepts exact direction and null-order metadata before history", () => {
+    const result = runNontransactionalMigrationHelper([
+      "-- gooes:migration-mode=nontransactional",
+      projectOptionDirectionMarker,
+      "CREATE INDEX CONCURRENTLY IF NOT EXISTS fixture_idx ON fixture(tenant_id, updated_at DESC, id DESC);",
+    ].join("\n"), "true|true|true", validProjectOptionIndexState, "0,3,3");
+
+    expect(result.exitCode, result.stderr).toBe(0);
+    expect(result.log.split(/\r?\n/).filter(Boolean)).toEqual([
+      "DDL",
+      "SQL:insert into supabase_migrations.schema_migrations values ('fixture');",
+    ]);
+  });
+
+  test("accepts every allowlisted btree key-option mapping", () => {
+    const marker = projectOptionDirectionMarker.replace(
+      "asc_nulls_last,desc_nulls_first,desc_nulls_first",
+      "asc_nulls_first,desc_nulls_last,desc_nulls_first",
+    );
+    const result = runNontransactionalMigrationHelper([
+      "-- gooes:migration-mode=nontransactional",
+      marker,
+      "CREATE INDEX CONCURRENTLY IF NOT EXISTS fixture_idx ON fixture(tenant_id, updated_at DESC NULLS LAST, id DESC);",
+    ].join("\n"), "true|true|true", validProjectOptionIndexState, "2,1,3");
+
+    expect(result.exitCode, result.stderr).toBe(0);
+    expect(result.log).toContain("schema_migrations");
+  });
+
+  test.each([
+    ["id ASC NULLS LAST", "0,3,0"],
+    ["updated_at DESC NULLS LAST", "0,1,3"],
+  ])("rejects wrong key options before history: %s", (_label, postDdlIndexOptions) => {
+    const result = runNontransactionalMigrationHelper([
+      "-- gooes:migration-mode=nontransactional",
+      projectOptionDirectionMarker,
+      "CREATE INDEX CONCURRENTLY IF NOT EXISTS fixture_idx ON fixture(tenant_id, updated_at DESC, id DESC);",
+    ].join("\n"), "true|true|true", validProjectOptionIndexState, postDdlIndexOptions);
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.log).toBe("DDL\n");
+    expect(result.log).not.toContain("schema_migrations");
+    expect(result.stderr).toContain("nontransactional_index_metadata_invalid");
+  });
+
+  test.each([
+    ["unknown option", "asc_nulls_last,desc_nulls_first,sideways_nulls_first"],
+    ["option metacharacter", "asc_nulls_last,desc_nulls_first,desc_nulls_first;drop"],
+    ["option count mismatch", "asc_nulls_last,desc_nulls_first"],
+  ])("rejects malformed direction metadata before any database write: %s", (
+    _label,
+    keyOptions,
+  ) => {
+    const marker = projectOptionDirectionMarker.replace(
+      "asc_nulls_last,desc_nulls_first,desc_nulls_first",
+      keyOptions,
+    );
+    const result = runNontransactionalMigrationHelper([
+      "-- gooes:migration-mode=nontransactional",
+      marker,
+      "CREATE INDEX CONCURRENTLY IF NOT EXISTS fixture_idx ON fixture(tenant_id, updated_at DESC, id DESC);",
+    ].join("\n"), "", validProjectOptionIndexState, "0,3,3");
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.log).toBe("");
+    expect(result.stderr).toContain(
+      "nontransactional_index_metadata_marker_invalid",
+    );
+  });
+
+  test("rejects direction metadata for a non-btree marker before any database write", () => {
+    const marker = projectOptionDirectionMarker
+      .replace("|btree|", "|gin|")
+      .replace(
+        "|pg_catalog.uuid_ops,pg_catalog.timestamptz_ops,pg_catalog.uuid_ops|",
+        "|extensions.gin_trgm_ops,extensions.gin_trgm_ops,extensions.gin_trgm_ops|",
+      );
+    const result = runNontransactionalMigrationHelper([
+      "-- gooes:migration-mode=nontransactional",
+      marker,
+      "CREATE INDEX CONCURRENTLY IF NOT EXISTS fixture_idx ON fixture USING gin(tenant_id, updated_at, id);",
+    ].join("\n"), "", validProjectOptionIndexState, "0,3,3");
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.log).toBe("");
+    expect(result.stderr).toContain(
+      "nontransactional_index_metadata_marker_invalid",
+    );
   });
 
   test("accepts only the batch ownership partial-index predicate marker", () => {
@@ -1229,7 +1355,7 @@ describe("production migration precheck workflow", () => {
       "-- gooes:migration-mode=nontransactional",
       fixtureIndexMarker,
       "CREATE INDEX CONCURRENTLY IF NOT EXISTS fixture_idx ON fixture(id);",
-    ].join("\n"), "", validFixtureIndexState, 42);
+    ].join("\n"), "", validFixtureIndexState, "", 42);
 
     expect(result.exitCode).toBe(42);
     expect(result.log).toBe("DDL\n");
@@ -1335,6 +1461,9 @@ describe("production migration precheck workflow", () => {
       "20260826141500",
       "20260826142500",
       "20260826142600",
+      "20260829170000",
+      "projects_tenant_updated_id_purchase_batch_idx",
+      "forward-only",
       "migrate-dev-database.yml",
       "migrate-production-database.yml",
       "Supabase CLI 2.99",
@@ -1345,6 +1474,23 @@ describe("production migration precheck workflow", () => {
       "indisready",
       "indisvalid",
       "indislive",
+      "pg_index.indoption",
+      "asc_nulls_last,desc_nulls_first,desc_nulls_first",
+      "supplier:purchase-project-options:explain",
+      "SUPPLIER_PURCHASE_PROJECT_OPTIONS_EXPLAIN_CONFIRM",
+      "SUPPLIER_PURCHASE_PROJECT_OPTIONS_EXPLAIN_DB_URL",
+      "tenant_time_page",
+      "tenant_time_count",
+      "tenant_time_keyword_page",
+      "tenant_time_keyword_count",
+      "bounded_visible_page",
+      "planning 50ms",
+      "execution 250ms",
+      "shared read blocks 20,000",
+      "temp",
+      "SET LOCAL statement_timeout",
+      "statementTimeoutMs",
+      "5,000ms",
     ]) expect(supplierBatchMigrationRunbook).toContain(fragment);
     expect(supplierBatchMigrationRunbook).toContain("禁止");
   });

@@ -58,11 +58,27 @@ export type BatchCatalogInput = PageInput & {
   tenant_supplier_id?: string;
   priced_at: string;
 };
+type BatchProjectOptionTimeRange =
+  | {
+    updated_at_from?: never;
+    updated_at_to?: never;
+    updated_at_before?: never;
+  }
+  | {
+    updated_at_from: string;
+    updated_at_to: string;
+    updated_at_before?: never;
+  }
+  | {
+    updated_at_from: string;
+    updated_at_before: string;
+    updated_at_to?: never;
+  };
 export type BatchProjectOptionInput = PageInput & {
   tenant_id: string;
   visible_project_ids: string[] | null;
   keyword?: string;
-};
+} & BatchProjectOptionTimeRange;
 export type BatchCostCategoryInput = PageInput & {
   tenant_id: string;
   keyword?: string;
@@ -102,6 +118,9 @@ type SingleResult = { data: unknown; error: unknown };
 type Query = {
   select: (...args: unknown[]) => Query;
   eq: (column: string, value: unknown) => Query;
+  gte: (column: string, value: unknown) => Query;
+  lte: (column: string, value: unknown) => Query;
+  lt: (column: string, value: unknown) => Query;
   in: (column: string, values: readonly string[]) => Query;
   or: (filter: string) => Query;
   order: (column: string, options: { ascending: boolean }) => Query;
@@ -249,10 +268,25 @@ export class SupplierPurchaseBatchesRepository {
       request = request.in("id", input.visible_project_ids);
     }
     request = applyKeyword(request, input.keyword, ["name"]);
-    const { data, error, count } = await request
-      .order("name", { ascending: true })
-      .order("id", { ascending: true })
-      .range(...pageRange(pagination));
+    if (input.updated_at_from) {
+      request = request.gte("updated_at", input.updated_at_from);
+    }
+    if (input.updated_at_to) {
+      request = request.lte("updated_at", input.updated_at_to);
+    }
+    if (input.updated_at_before) {
+      request = request.lt("updated_at", input.updated_at_before);
+    }
+    request = input.updated_at_from
+      ? request.order("updated_at", { ascending: false }).order("id", {
+        ascending: false,
+      })
+      : request.order("name", { ascending: true }).order("id", {
+        ascending: true,
+      });
+    const { data, error, count } = await request.range(
+      ...pageRange(pagination),
+    );
     if (error) throw Errors.dbError("查询采购批次项目选项失败", error);
     return toPage(
       parseRows(

@@ -237,6 +237,8 @@ describe("SupplierPurchaseBatchesService reads", () => {
       page: 1,
       pageSize: 20,
       keyword: "一期",
+      updatedWindow: "current_month",
+      timezone: "Asia/Shanghai",
     });
     await service.listCatalog(context, {
       projectId: PROJECT_ID,
@@ -261,6 +263,8 @@ describe("SupplierPurchaseBatchesService reads", () => {
       page: 1,
       pageSize: 20,
       keyword: "一期",
+      updated_at_from: "2026-07-31T16:00:00.000Z",
+      updated_at_before: "2026-08-31T16:00:00.000Z",
     });
     expect(deps.repository.listCatalog).toHaveBeenCalledWith({
       tenant_id: TENANT_ID,

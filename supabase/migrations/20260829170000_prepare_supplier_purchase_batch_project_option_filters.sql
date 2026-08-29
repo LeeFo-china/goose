@@ -1,0 +1,20 @@
+-- gooes:migration-mode=nontransactional
+-- gooes:expected-index=public.projects_tenant_updated_id_purchase_batch_idx|public.projects|false|btree|tenant_id,updated_at,id|pg_catalog.uuid_ops,pg_catalog.timestamptz_ops,pg_catalog.uuid_ops|null|asc_nulls_last,desc_nulls_first,desc_nulls_first
+-- Existing projects may already contain substantial data. Build this index
+-- without a write-blocking ShareLock while the project option API stays live.
+-- Failure/retry: release tooling validates pg_index readiness and removes only
+-- this listed INVALID index concurrently before retrying.
+-- Rollback: forward-only. After reverting the filtered API revision, leave this
+-- additive index in place; retaining it is safe. Any later removal requires a
+-- separately reviewed timestamped migration after release tooling supports
+-- expected-absence/drop contracts.
+
+SET lock_timeout = '5s';
+SET statement_timeout = '30min';
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS
+  projects_tenant_updated_id_purchase_batch_idx
+ON public.projects(tenant_id, updated_at DESC, id DESC);
+
+RESET statement_timeout;
+RESET lock_timeout;
