@@ -121,7 +121,7 @@ export async function createWithDefaultTemplate(
 
   const parsed = PlatformTenantAtomicCreateResultSchema.safeParse(result.data);
   if (!parsed.success) {
-    throw Errors.dbError(COMMAND_ERROR_MESSAGE, parsed.error.issues);
+    throw Errors.dbError(COMMAND_ERROR_MESSAGE);
   }
 
   return parsed.data;

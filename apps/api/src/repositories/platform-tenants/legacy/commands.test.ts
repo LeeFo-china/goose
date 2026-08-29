@@ -1,6 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
 
-import { CreatePlatformTenantSchema } from "@/schema/platform-tenants";
+import {
+  CreatePlatformTenantSchema,
+  type CreatePlatformTenantInput,
+} from "@/schema/platform-tenants";
 
 import {
   createWithDefaultTemplate,
@@ -54,6 +57,17 @@ function rpcHarness(result: { data: unknown; error: unknown }) {
   const rpc = mock<PlatformTenantRpc>(async () => result);
   return { rpc };
 }
+
+function callRepositoryWithTask5Shape(
+  repository: typeof import("../legacy-repository").platformTenantRepository,
+  input: CreatePlatformTenantInput,
+) {
+  return repository.createWithDefaultTemplate(input, {
+    operatorEmployeeId: OPERATOR_ID,
+  });
+}
+
+void callRepositoryWithTask5Shape;
 
 describe("platform tenant atomic create command", () => {
   test("calls the exact RPC with every tenant, admin, and operator field", async () => {
@@ -180,8 +194,13 @@ describe("platform tenant atomic create command", () => {
     });
     const { rpc } = rpcHarness({ data, error: null });
 
-    await expect(createWithDefaultTemplate(rpc, input, OPERATOR_ID)).rejects
-      .toMatchObject({ statusCode: 500, code: "DB_ERROR" });
+    const error = await createWithDefaultTemplate(rpc, input, OPERATOR_ID)
+      .catch((caught: unknown) => caught);
+    expect(error).toMatchObject({
+      statusCode: 500,
+      code: "DB_ERROR",
+      details: undefined,
+    });
   });
 
   test.each([
@@ -218,7 +237,11 @@ describe("platform tenant atomic create command", () => {
 
     for (const rpc of [returned.rpc, rejected]) {
       await expect(createWithDefaultTemplate(rpc, input, OPERATOR_ID)).rejects
-        .toMatchObject({ statusCode: 500, code: "DB_ERROR" });
+        .toMatchObject({
+          statusCode: 500,
+          code: "DB_ERROR",
+          details: undefined,
+        });
     }
   });
 });

@@ -40,6 +40,10 @@ export type {
   PlatformTenantRpc,
 } from "./legacy/commands";
 
+export type PlatformTenantCreateWithDefaultTemplateOptions = {
+  readonly operatorEmployeeId: string | null;
+};
+
 class PlatformTenantRepository {
   private client = SupabaseDB.getAdminClient();
 
@@ -57,9 +61,13 @@ class PlatformTenantRepository {
   create = create;
   createWithDefaultTemplate(
     input: CreatePlatformTenantInput,
-    operatorEmployeeId: string | null,
+    options: PlatformTenantCreateWithDefaultTemplateOptions,
   ) {
-    return createWithDefaultTemplateCommand(this.rpc, input, operatorEmployeeId);
+    return createWithDefaultTemplateCommand(
+      this.rpc,
+      input,
+      options.operatorEmployeeId,
+    );
   }
   findEmployeesByPhone = findEmployeesByPhone;
   initializeDefaultData = initializeDefaultData;
