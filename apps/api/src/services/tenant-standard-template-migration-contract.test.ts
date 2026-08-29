@@ -59,20 +59,35 @@ function collectTableMutations(source: string, table: string) {
   });
 }
 
+function withoutComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/--.*$/gm, "");
+}
+
 function collectFunctionAcl(source: string, name: string): string[][] {
   const target = `(?:public\\.)?${name}\\([^;]+\\)`;
-  return source.split(";").map(normalizeSql)
-    .filter((statement) => new RegExp(`\\bon\\s+(?:function|routine)\\s+${target}(?=\\s|$)`).test(statement))
-    .map((statement) => {
+  const targetAcl = new RegExp(
+    `^(?:revoke|grant)\\b[\\s\\S]*\\bon\\s+(?:function|routine)\\s+${target}(?=\\s|$)`,
+  );
+  return withoutComments(source).split(";").map(normalizeSql)
+    .flatMap((statement) => {
+      if (!targetAcl.test(statement)) return [];
       const acl = statement.match(new RegExp(
-        `\\b(revoke|grant)\\s+(all(?:\\s+privileges)?|execute)\\s+on\\s+` +
+        `^(revoke|grant)\\s+(all(?:\\s+privileges)?|execute)\\s+on\\s+` +
           `(?:function|routine)\\s+${target}\\s+(from|to)\\s+(.+)$`,
       ));
-      return acl
+      return [acl
         ? [acl[1] ?? "", acl[2]?.replace(/\s+/g, " ") ?? "", acl[3] ?? "", acl[4] ?? ""]
-        : ["invalid", statement];
+        : ["invalid", statement]];
     });
 }
+
+const expectedFunctionAcl = [
+  ["revoke", "all", "from", "public"],
+  ["revoke", "all", "from", "anon"],
+  ["revoke", "all", "from", "authenticated"],
+  ["revoke", "all", "from", "service_role"],
+  ["grant", "execute", "to", "service_role"],
+];
 
 function sortPermissionTriples(rows: readonly (readonly SqlValue[])[]): string[][] {
   return rows.map((row) => row.map(String))
@@ -80,9 +95,7 @@ function sortPermissionTriples(rows: readonly (readonly SqlValue[])[]): string[]
 }
 
 function withoutFunctionsAndComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/--.*$/gm, "")
+  return withoutComments(source)
     .replace(/\bCREATE(?:\s+OR\s+REPLACE)?\s+FUNCTION\b[\s\S]*?\bAS\s+(\$[a-z0-9_]*\$)[\s\S]*?\1\s*;/gi, "");
 }
 
@@ -175,6 +188,26 @@ function auditConfig(source: string) {
     ), 3),
   };
 }
+
+test("collects only executable function ACL statements", () => {
+  const aclLines = [
+    "REVOKE ALL ON FUNCTION public.acl_target(uuid) FROM PUBLIC;",
+    "REVOKE ALL ON FUNCTION public.acl_target(uuid) FROM anon;",
+    "REVOKE ALL ON FUNCTION public.acl_target(uuid) FROM authenticated;",
+    "REVOKE ALL ON FUNCTION public.acl_target(uuid) FROM service_role;",
+    "GRANT EXECUTE ON FUNCTION public.acl_target(uuid) TO service_role;",
+  ];
+  const aclSql = aclLines.join("\n");
+
+  expect(collectFunctionAcl(aclSql, "acl_target")).toEqual(expectedFunctionAcl);
+  expect(collectFunctionAcl(aclLines.map((line) => `-- ${line}`).join("\n"), "acl_target"))
+    .toEqual([]);
+  expect(collectFunctionAcl(`/* ${aclSql} */`, "acl_target")).toEqual([]);
+  expect(collectFunctionAcl(
+    "SELECT 'GRANT EXECUTE ON FUNCTION public.acl_target(uuid) TO service_role';",
+    "acl_target",
+  )).toEqual([]);
+});
 
 describe("standard new-tenant organization template migration", () => {
   test("pins the complete department, post, and department-post runtime matrix", () => {
@@ -289,13 +322,7 @@ describe("standard new-tenant organization template migration", () => {
       expect(body).toMatch(
         /\bsecurity\s+definer\s+set\s+search_path\s*=\s*pg_catalog\s*,\s*public\s*,\s*auth\s+as\s+\$\$/i,
       );
-      expect(collectFunctionAcl(source, name)).toEqual([
-        ["revoke", "all", "from", "public"],
-        ["revoke", "all", "from", "anon"],
-        ["revoke", "all", "from", "authenticated"],
-        ["revoke", "all", "from", "service_role"],
-        ["grant", "execute", "to", "service_role"],
-      ]);
+      expect(collectFunctionAcl(source, name)).toEqual(expectedFunctionAcl);
     }
     expect(source).not.toMatch(
       /\bGRANT\b[^;]*\bON\s+ALL\s+(?:FUNCTIONS|ROUTINES)\s+IN\s+SCHEMA\b[^;]*;/i,
