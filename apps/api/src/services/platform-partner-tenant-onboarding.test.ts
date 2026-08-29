@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { Errors } from "@/errors/error-factory";
 import type {
   PlatformPartnerInviteCodeRecord,
   PlatformPartnerLevelRecord,
@@ -110,7 +111,7 @@ const initialization = {
   template_code: "default_decoration_company",
   template_version: "2026.08.30",
   departments_count: 42,
-  posts_count: 21,
+  posts_count: 48,
   roles_count: 11,
   admin_employee_id: "00000000-0000-4000-8000-000000000601",
   admin_role_id: "00000000-0000-4000-8000-000000000701",
@@ -336,6 +337,29 @@ describe("PlatformPartnerTenantOnboardingService", () => {
 
     expect(tenantRepository.createWithDefaultTemplate).not.toHaveBeenCalled();
     expect(partnerRepository.createTenantBinding).not.toHaveBeenCalled();
+    expect(smsService.markVerified).not.toHaveBeenCalled();
+  });
+
+  test("propagates atomic creation failures without downstream side effects", async () => {
+    const atomicError = Errors.dbError("创建租户并初始化模板失败");
+    tenantRepository.createWithDefaultTemplate.mockImplementationOnce(async () => {
+      throw atomicError;
+    });
+    const service = await createService();
+
+    const caught = await service.submitPublicTenantOnboarding({
+      invite_code: inviteCode.code,
+      company_name: "晴天装饰",
+      admin_name: "王总",
+      admin_phone: "13900139000",
+      sms_code: "123456",
+    }).catch((error: unknown) => error);
+
+    expect(caught).toBe(atomicError);
+    expect(tenantRepository.createWithDefaultTemplate).toHaveBeenCalledTimes(1);
+    expect(partnerRepository.findActiveTenantBinding).not.toHaveBeenCalled();
+    expect(partnerRepository.createTenantBinding).not.toHaveBeenCalled();
+    expect(partnerRepository.incrementInviteCodeCounts).not.toHaveBeenCalled();
     expect(smsService.markVerified).not.toHaveBeenCalled();
   });
 

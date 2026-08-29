@@ -41,7 +41,7 @@ const initialization = {
   template_code: "default_decoration_company",
   template_version: "2026.08.30",
   departments_count: 42,
-  posts_count: 21,
+  posts_count: 48,
   roles_count: 11,
   admin_employee_id: "22222222-2222-4222-8222-222222222222",
   admin_role_id: "33333333-3333-4333-8333-333333333333",
