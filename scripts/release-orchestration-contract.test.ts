@@ -1488,6 +1488,9 @@ describe("production migration precheck workflow", () => {
       "execution 250ms",
       "shared read blocks 20,000",
       "temp",
+      "SET LOCAL statement_timeout",
+      "statementTimeoutMs",
+      "5,000ms",
     ]) expect(supplierBatchMigrationRunbook).toContain(fragment);
     expect(supplierBatchMigrationRunbook).toContain("禁止");
   });

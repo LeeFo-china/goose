@@ -2,6 +2,7 @@ import { ProjectOptionExplainError } from
   "./supplier-purchase-project-options-explain-config";
 
 export const PROJECT_OPTION_EXPLAIN_THRESHOLDS = {
+  statementTimeoutMs: 5_000,
   planningMs: 50,
   executionMs: 250,
   sharedReadBlocks: 20_000,

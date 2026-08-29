@@ -49,6 +49,9 @@ describe("supplier purchase project option EXPLAIN documentation", () => {
       "executionMs",
       "sharedReadBlocks",
       "cardinalityBucket",
+      "SET LOCAL statement_timeout",
+      "statementTimeoutMs",
+      "5,000ms",
     ]) {
       expect(runbook).toContain(value);
     }

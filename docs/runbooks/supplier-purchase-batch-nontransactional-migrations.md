@@ -87,7 +87,8 @@ Workflow 对普通和显式事务 migration 保持原路径。对带 marker 的�
 
 仅在 development migration history 已对齐且 API readiness 成功后运行。脚本只接受
 显式数据库 URL 和 `development-read-only` 确认；它先开启事务并执行
-`SET TRANSACTION READ ONLY`，随后才允许任何基数查询或
+`SET TRANSACTION READ ONLY`，再执行受控的 `SET LOCAL statement_timeout`，随后才
+允许任何基数查询或
 `EXPLAIN (ANALYZE, BUFFERS, SETTINGS, FORMAT JSON)`。禁止把生产库 URL 传给此命令，
 禁止使用 INSERT、UPDATE、DELETE、DDL、独立 ANALYZE 或 seed。
 
@@ -122,7 +123,9 @@ bun run supplier:purchase-project-options:explain
 - `bounded_visible_page`：提供可见 ID 时，再与同一时间和关键词相交的有界页。
 
 开发门阈值是 planning 50ms、execution 250ms、shared read blocks 20,000、temp
-read/write blocks 必须为 0。租户项目基数达到 1,000 时，`tenant_time_page` 必须使用
+read/write blocks 必须为 0；server statement timeout 固定为 5,000ms，并在摘要的
+`thresholds.statementTimeoutMs` 中报告。该值是代码常量，不接受环境变量或用户输入。
+租户项目基数达到 1,000 时，`tenant_time_page` 必须使用
 `projects_tenant_updated_id_purchase_batch_idx` 且不能出现显式 Sort；两个关键词计划
 必须使用该复合索引或 `projects_name_purchase_batch_trgm_idx`。低于 1,000 时 planner
 可自行选择索引，但时间、buffer 和 temp 阈值仍强制执行。
@@ -130,5 +133,6 @@ read/write blocks 必须为 0。租户项目基数达到 1,000 时，`tenant_tim
 只归档脚本的 JSON 摘要字段：`explainQueryCount`、`queryNames`、`planningMs`、
 `executionMs`、`indexNames`、`nodeTypes`、`sharedHitBlocks`、`sharedReadBlocks`、
 `tempReadBlocks`、`tempWrittenBlocks`、`cardinalityBucket`、`visibleProjectCount` 和固定
-`thresholds`。不得归档数据库 URL、tenant/project UUID、关键词、查询参数、原始计划或
+`thresholds`（含 `statementTimeoutMs`）。不得归档数据库 URL、tenant/project UUID、
+关键词、查询参数、原始计划或
 结果行。所有计划通过后，才可继续 authenticated dev smoke 和 Orange 交接。

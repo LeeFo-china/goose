@@ -88,8 +88,8 @@ export function buildProjectOptionExplainQueries(
   const queries: ExplainQuery[] = [
     {
       name: "tenant_time_page",
-      text: `${explain}\n${pageSelect}\n${from}\nwhere ${commonWhere}\n${order}\nlimit ${config.pageSize}`,
-      values,
+      text: `${explain}\n${pageSelect}\n${from}\nwhere ${commonWhere}\n${order}\nlimit $4::integer`,
+      values: [...values, config.pageSize],
       limit: config.pageSize,
     },
     {
@@ -99,8 +99,8 @@ export function buildProjectOptionExplainQueries(
     },
     {
       name: "tenant_time_keyword_page",
-      text: `${explain}\n${pageSelect}\n${from}\nwhere ${commonWhere}\n  ${keyword}\n${order}\nlimit ${config.pageSize}`,
-      values: keywordValues,
+      text: `${explain}\n${pageSelect}\n${from}\nwhere ${commonWhere}\n  ${keyword}\n${order}\nlimit $5::integer`,
+      values: [...keywordValues, config.pageSize],
       limit: config.pageSize,
     },
     {
@@ -112,8 +112,8 @@ export function buildProjectOptionExplainQueries(
   if (config.visibleProjectIds) {
     queries.push({
       name: "bounded_visible_page",
-      text: `${explain}\n${pageSelect}\n${from}\nwhere ${commonWhere}\n  ${keyword}\n  and project.id = any($5::uuid[])\n${order}\nlimit ${config.pageSize}`,
-      values: [...keywordValues, config.visibleProjectIds],
+      text: `${explain}\n${pageSelect}\n${from}\nwhere ${commonWhere}\n  ${keyword}\n  and project.id = any($5::uuid[])\n${order}\nlimit $6::integer`,
+      values: [...keywordValues, config.visibleProjectIds, config.pageSize],
       limit: config.pageSize,
     });
   }
@@ -129,15 +129,16 @@ export async function runProjectOptionExplainGate(
   try {
     const result = await database.begin(async (sql) => {
       await sql.unsafe("set transaction read only");
+      await sql.unsafe(
+        `set local statement_timeout = '${PROJECT_OPTION_EXPLAIN_THRESHOLDS.statementTimeoutMs}ms'`,
+      );
       const tenantProjectCount = await readTenantProjectCount(sql, config);
       const plans: ProjectOptionExplainEvidence[] = [];
       for (const query of buildProjectOptionExplainQueries(config)) {
-        const values = query.name === "bounded_visible_page"
-          ? [
-              ...query.values.slice(0, -1),
-              sql.array(config.visibleProjectIds!, "uuid"),
-            ]
-          : query.values;
+        const values = [...query.values];
+        if (query.name === "bounded_visible_page") {
+          values[4] = sql.array(config.visibleProjectIds!, "uuid");
+        }
         plans.push({
           name: query.name,
           ...parseProjectOptionExplainPlan(

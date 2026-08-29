@@ -58,6 +58,16 @@ function passingEvidence(): ProjectOptionExplainEvidence[] {
 }
 
 describe("supplier purchase project option EXPLAIN evidence", () => {
+  test("publishes the fixed server statement timeout with dev thresholds", () => {
+    expect(PROJECT_OPTION_EXPLAIN_THRESHOLDS).toEqual({
+      planningMs: 50,
+      executionMs: 250,
+      sharedReadBlocks: 20_000,
+      tempBlocks: 0,
+      statementTimeoutMs: 5_000,
+    });
+  });
+
   test("parses timings, indexes, node types, and top-level buffer evidence", () => {
     const parsed = parseProjectOptionExplainPlan([{
       "QUERY PLAN": JSON.stringify(plan({
