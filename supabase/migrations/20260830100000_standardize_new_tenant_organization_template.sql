@@ -464,6 +464,18 @@ BEGIN
     AND application.template_code = 'default_decoration_company'
   FOR UPDATE;
 
+  PERFORM application.id
+  FROM public.tenant_template_applications AS application
+  WHERE application.tenant_id = p_tenant_id
+    AND application.template_code = 'default_decoration_company'
+    AND application.template_version IS DISTINCT FROM '2026.08.30'
+  LIMIT 1;
+  IF FOUND THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '23514',
+      MESSAGE = 'TENANT_TEMPLATE_STATE_CONFLICT';
+  END IF;
+
   SELECT application.*
   INTO v_existing_application
   FROM public.tenant_template_applications AS application
@@ -502,18 +514,6 @@ BEGIN
     END IF;
 
     RETURN v_existing_application.result;
-  END IF;
-
-  PERFORM application.id
-  FROM public.tenant_template_applications AS application
-  WHERE application.tenant_id = p_tenant_id
-    AND application.template_code = 'default_decoration_company'
-    AND application.template_version <> '2026.08.30'
-  LIMIT 1;
-  IF FOUND THEN
-    RAISE EXCEPTION USING
-      ERRCODE = '23514',
-      MESSAGE = 'TENANT_TEMPLATE_STATE_CONFLICT';
   END IF;
 
   IF EXISTS (

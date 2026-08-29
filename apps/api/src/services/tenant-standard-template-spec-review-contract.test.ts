@@ -173,6 +173,41 @@ describe("standard tenant template spec-review contracts", () => {
     );
   });
 
+  test("rejects mixed template versions before current-version idempotency", () => {
+    const initializer = normalizeSql(extractFunction(
+      sql(migration),
+      "initialize_default_decoration_tenant",
+    ));
+    const allVersionsLock = initializer.indexOf(
+      "perform application.id from public.tenant_template_applications as application " +
+        "where application.tenant_id = p_tenant_id " +
+        "and application.template_code = 'default_decoration_company' for update;",
+    );
+    const mixedVersionCheck = initializer.indexOf(
+      "and application.template_version is distinct from '2026.08.30'",
+      allVersionsLock,
+    );
+    const currentVersionLookup = initializer.indexOf(
+      "select application.* into v_existing_application",
+      allVersionsLock,
+    );
+    const mixedVersionGuard = initializer.slice(
+      mixedVersionCheck,
+      currentVersionLookup,
+    );
+
+    expect(allVersionsLock).toBeGreaterThan(0);
+    expect(mixedVersionCheck).toBeGreaterThan(allVersionsLock);
+    expect(currentVersionLookup).toBeGreaterThan(mixedVersionCheck);
+    expect(mixedVersionGuard).toMatch(
+      /application\.template_version is distinct from '2026\.08\.30' limit 1; if found then raise exception using [^;]*message = 'tenant_template_state_conflict'; end if;/,
+    );
+    expect(initializer.indexOf(
+      "return v_existing_application.result;",
+      currentVersionLookup,
+    )).toBeGreaterThan(currentVersionLookup);
+  });
+
   test("fails closed when initialization identity fields are null", () => {
     const command = normalizeSql(extractFunction(
       sql(migration),
