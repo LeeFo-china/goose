@@ -4,6 +4,16 @@ import { existsSync, readFileSync } from "node:fs";
 const migrationUrl = new URL("../../../../supabase/migrations/20260829170000_prepare_supplier_purchase_batch_project_option_filters.sql", import.meta.url);
 const sql = existsSync(migrationUrl) ? readFileSync(migrationUrl, "utf8") : "";
 
+function normalizeExecutableStatements(value: string): string[] {
+  return value
+    .split(/\r?\n/)
+    .filter((line) => !line.trimStart().startsWith("--"))
+    .join("\n")
+    .split(";")
+    .map((statement) => statement.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+}
+
 describe("supplier purchase batch project option index migration", () => {
   test("declares the nontransactional concurrent-index protocol", () => {
     expect(existsSync(migrationUrl)).toBe(true);
@@ -20,7 +30,22 @@ describe("supplier purchase batch project option index migration", () => {
     expect(sql).toContain("RESET lock_timeout;");
   });
 
-  test("builds the project option filter index concurrently with rollback guidance", () => {
+  test("contains only the ordered nontransactional index statements", () => {
+    const executableStatements = normalizeExecutableStatements(sql);
+
+    expect(executableStatements).toEqual([
+      "SET lock_timeout = '5s'",
+      "SET statement_timeout = '30min'",
+      "CREATE INDEX CONCURRENTLY IF NOT EXISTS projects_tenant_updated_id_purchase_batch_idx ON public.projects(tenant_id, updated_at DESC, id DESC)",
+      "RESET statement_timeout",
+      "RESET lock_timeout",
+    ]);
+    expect(executableStatements.join(";\n")).not.toMatch(
+      /\b(?:DROP|INSERT|UPDATE|DELETE|MERGE|TRUNCATE|BEGIN|COMMIT|ROLLBACK|START\s+TRANSACTION|END|ABORT)\b/i,
+    );
+  });
+
+  test("builds the project option filter index concurrently with forward-only rollback guidance", () => {
     expect(sql).toContain(
       "-- Existing projects may already contain substantial data. Build this index\n" +
         "-- without a write-blocking ShareLock while the project option API stays live.",
@@ -35,8 +60,10 @@ describe("supplier purchase batch project option index migration", () => {
         "ON public.projects(tenant_id, updated_at DESC, id DESC);",
     );
     expect(sql).toContain(
-      "-- Rollback: after reverting the filtered API revision, run\n" +
-        "-- DROP INDEX CONCURRENTLY IF EXISTS public.projects_tenant_updated_id_purchase_batch_idx;",
+      "-- Rollback: forward-only. After reverting the filtered API revision, leave this\n" +
+        "-- additive index in place; retaining it is safe. Any later removal requires a\n" +
+        "-- separately reviewed timestamped migration after release tooling supports\n" +
+        "-- expected-absence/drop contracts.",
     );
   });
 });

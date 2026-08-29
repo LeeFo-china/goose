@@ -144,8 +144,10 @@ migration 使用仓库已有的 `gooes:migration-mode=nontransactional` 和 expe
 元数据，设置有限的 `lock_timeout` 与 `statement_timeout`。发布前验证索引定义、有效性和
 查询计划；发布后使用 `supabase migration list` 验证 Local/Remote 对齐。
 
-回滚顺序为：先回滚/停用依赖时间排序的 API revision，再并发删除上述精确索引。索引删除
-不会删除业务数据；API 代码回滚后恢复原查询。
+该 migration 是 forward-only：先回滚/停用依赖时间排序的 API revision，保留上述
+additive index 是安全的，且不会改变 API 回滚后的查询语义。若日后确需移除索引，必须在
+release tooling 支持 expected-absence/drop contract 后，以单独审查的带时间戳 migration
+完成；不得手工删除远端索引或编辑 migration history。
 
 ## 错误处理
 

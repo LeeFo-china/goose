@@ -80,6 +80,13 @@ const supplierBatchExistingTableIndexMigration = readFileSync(
   ),
   "utf8",
 );
+const supplierBatchProjectOptionIndexMigration = readFileSync(
+  new URL(
+    "../supabase/migrations/20260829170000_prepare_supplier_purchase_batch_project_option_filters.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const supplierBatchMigrationRunbookUrl = new URL(
   "../docs/runbooks/supplier-purchase-batch-nontransactional-migrations.md",
   import.meta.url,
@@ -1184,6 +1191,7 @@ describe("production migration precheck workflow", () => {
       supplierPriceSnapshotIndexMigration,
       supplierBatchCatalogIndexMigration,
       supplierBatchExistingTableIndexMigration,
+      supplierBatchProjectOptionIndexMigration,
     ]) {
       const lines = migration.split(/\r?\n/);
       expect(lines[0]).toBe("-- gooes:migration-mode=nontransactional");
@@ -1191,6 +1199,22 @@ describe("production migration precheck workflow", () => {
       expect(migration).toContain("CREATE");
       expect(migration).toContain("INDEX CONCURRENTLY IF NOT EXISTS");
     }
+  });
+
+  test("applies the project option index through the nontransactional parser before history", () => {
+    const projectOptionIndexState =
+      "i|public|public|projects|false|true|true|true|btree|tenant_id,updated_at,id|pg_catalog.uuid_ops,pg_catalog.timestamptz_ops,pg_catalog.uuid_ops|null";
+    const result = runNontransactionalMigrationHelper(
+      supplierBatchProjectOptionIndexMigration,
+      "",
+      projectOptionIndexState,
+    );
+
+    expect(result.exitCode, result.stderr).toBe(0);
+    expect(result.log.split(/\r?\n/).filter(Boolean)).toEqual([
+      "DDL",
+      "SQL:insert into supabase_migrations.schema_migrations values ('fixture');",
+    ]);
   });
 
   test("accepts only the batch ownership partial-index predicate marker", () => {
@@ -1335,6 +1359,9 @@ describe("production migration precheck workflow", () => {
       "20260826141500",
       "20260826142500",
       "20260826142600",
+      "20260829170000",
+      "projects_tenant_updated_id_purchase_batch_idx",
+      "forward-only",
       "migrate-dev-database.yml",
       "migrate-production-database.yml",
       "Supabase CLI 2.99",

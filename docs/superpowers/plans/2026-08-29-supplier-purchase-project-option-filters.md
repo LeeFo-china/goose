@@ -23,6 +23,8 @@
 - Create `apps/api/src/repositories/supplier-purchase-batch-project-options.test.ts`: query contract.
 - Create `supabase/migrations/20260829170000_prepare_supplier_purchase_batch_project_option_filters.sql`: concurrent index.
 - Create `apps/api/src/services/supplier-purchase-batch-project-option-index-migration-contract.test.ts`: migration contract.
+- Modify `scripts/release-orchestration-contract.test.ts`: release parser integration contract.
+- Modify `docs/runbooks/supplier-purchase-batch-nontransactional-migrations.md`: four-migration release and recovery procedure.
 
 ## Task 1: Lock the HTTP query contract
 
@@ -552,6 +554,8 @@ git commit -m "feat(supplier): 分页前筛选采购项目更新时间"
 **Files:**
 - Create: `apps/api/src/services/supplier-purchase-batch-project-option-index-migration-contract.test.ts`
 - Create: `supabase/migrations/20260829170000_prepare_supplier_purchase_batch_project_option_filters.sql`
+- Modify: `scripts/release-orchestration-contract.test.ts`
+- Modify: `docs/runbooks/supplier-purchase-batch-nontransactional-migrations.md`
 
 - [ ] **Step 1: Write the failing migration contract test**
 
@@ -573,7 +577,8 @@ describe("supplier purchase batch project option index migration", () => {
     );
     expect(sql).not.toMatch(/^\s*(?:BEGIN|COMMIT)\s*;/im);
     expect(sql).toMatch(/CREATE INDEX CONCURRENTLY IF NOT EXISTS\s+projects_tenant_updated_id_purchase_batch_idx\s+ON public\.projects\(tenant_id, updated_at DESC, id DESC\)/i);
-    expect(sql).toMatch(/Rollback:[\s\S]*DROP INDEX CONCURRENTLY/i);
+    expect(sql).toContain("-- Rollback: forward-only.");
+    expect(sql).not.toMatch(/^\s*DROP\s+INDEX/im);
     expect(sql).toContain("SET lock_timeout = '5s';");
     expect(sql).toContain("SET statement_timeout = '30min';");
   });
@@ -597,8 +602,10 @@ Expected: FAIL because the migration does not exist.
 -- without a write-blocking ShareLock while the project option API stays live.
 -- Failure/retry: release tooling validates pg_index readiness and removes only
 -- this listed INVALID index concurrently before retrying.
--- Rollback: after reverting the filtered API revision, run
--- DROP INDEX CONCURRENTLY IF EXISTS public.projects_tenant_updated_id_purchase_batch_idx;
+-- Rollback: forward-only. After reverting the filtered API revision, leave this
+-- additive index in place; retaining it is safe. Any later removal requires a
+-- separately reviewed timestamped migration after release tooling supports
+-- expected-absence/drop contracts.
 
 SET lock_timeout = '5s';
 SET statement_timeout = '30min';
@@ -618,13 +625,17 @@ bun test apps/api/src/services/supplier-purchase-batch-project-option-index-migr
   scripts/release-orchestration-contract.test.ts
 ```
 
-Expected: PASS; release tooling recognizes the nontransactional expected-index contract.
+Expected: PASS; the release contract loads the actual migration, exercises the
+nontransactional parser helpers through DDL then migration-history recording, and
+requires the runbook to document the new version and forward-only recovery path.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add supabase/migrations/20260829170000_prepare_supplier_purchase_batch_project_option_filters.sql \
-  apps/api/src/services/supplier-purchase-batch-project-option-index-migration-contract.test.ts
+  apps/api/src/services/supplier-purchase-batch-project-option-index-migration-contract.test.ts \
+  scripts/release-orchestration-contract.test.ts \
+  docs/runbooks/supplier-purchase-batch-nontransactional-migrations.md
 git commit -m "perf(supplier): 索引采购项目更新时间筛选"
 ```
 

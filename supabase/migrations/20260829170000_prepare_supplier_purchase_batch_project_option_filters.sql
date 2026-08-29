@@ -4,8 +4,10 @@
 -- without a write-blocking ShareLock while the project option API stays live.
 -- Failure/retry: release tooling validates pg_index readiness and removes only
 -- this listed INVALID index concurrently before retrying.
--- Rollback: after reverting the filtered API revision, run
--- DROP INDEX CONCURRENTLY IF EXISTS public.projects_tenant_updated_id_purchase_batch_idx;
+-- Rollback: forward-only. After reverting the filtered API revision, leave this
+-- additive index in place; retaining it is safe. Any later removal requires a
+-- separately reviewed timestamped migration after release tooling supports
+-- expected-absence/drop contracts.
 
 SET lock_timeout = '5s';
 SET statement_timeout = '30min';
