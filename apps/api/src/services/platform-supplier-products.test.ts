@@ -29,8 +29,8 @@ function dependencies() {
       createPlatformProduct: mock(async () => ({ status: "created" })),
       updatePlatformProduct: mock(async () => ({ status: "updated" })),
       mutatePlatformProduct: mock(async () => ({ status: "updated" })),
-      createPlatformSku: mock(async () => ({ status: "created" })),
-      updatePlatformSku: mock(async () => ({ status: "updated" })),
+      createPlatformSku: mock(async (_input: unknown) => ({ status: "created" })),
+      updatePlatformSku: mock(async (_input: unknown) => ({ status: "updated" })),
       mutatePlatformSku: mock(async () => ({ status: "updated" })),
       replaceSkuUnitConversions: mock(async () => ({ status: "updated" })),
     },
@@ -130,7 +130,12 @@ describe("PlatformSupplierProductsService", () => {
       color_managed: true,
       serial_managed: false,
       spec_values: { size: "600×600", colors: ["灰色"] },
-    }, "platform-sku:create");
+    } as never, "platform-sku:create");
+    await service.updateSku(auth, SUPPLIER_ID, PRODUCT_ID, SKU_ID, {
+      expected_version: 1,
+      sku_code: "MANUAL-REPLACEMENT",
+      name: "平台灰色瓷砖",
+    } as never, "platform-sku:update");
     await service.replaceSkuUnitConversions(
       auth,
       SUPPLIER_ID,
@@ -156,6 +161,7 @@ describe("PlatformSupplierProductsService", () => {
         supplier_id: SUPPLIER_ID,
         product_id: PRODUCT_ID,
         sku_id: SKU_ID,
+        sku_code: `PS-${SKU_ID.replaceAll("-", "").toUpperCase()}`,
         batch_managed: true,
         color_managed: true,
         serial_managed: false,
@@ -164,6 +170,13 @@ describe("PlatformSupplierProductsService", () => {
         actor_employee_id: EMPLOYEE_ID,
       }),
     );
+    const createdSku = deps.repository.createPlatformSku.mock.calls[0]![0] as {
+      sku_code: string;
+    };
+    expect(createdSku.sku_code)
+      .not.toBe("SKU-1");
+    expect(deps.repository.updatePlatformSku.mock.calls[0]![0])
+      .not.toHaveProperty("sku_code");
     expect(deps.repository.replaceSkuUnitConversions).toHaveBeenCalledWith({
       ownership_scope: "platform",
       tenant_id: null,
@@ -273,7 +286,6 @@ describe("PlatformSupplierProductsService", () => {
     });
 
     await expect(service.createSku(auth, SUPPLIER_ID, PRODUCT_ID, SKU_ID, {
-      sku_code: "SKU-invalid",
       name: "错误枚举 SKU",
       purchase_unit_id: CATEGORY_ID,
       batch_managed: false,

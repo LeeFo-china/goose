@@ -1,14 +1,12 @@
 import { describe, expect, mock, test } from "bun:test";
 
-import {
-  SupplierPurchasableProductCommandEnvelopeSchema,
+import { SupplierPurchasableProductCommandEnvelopeSchema,
   type SupplierPurchasableProductCreatedResult,
 } from "./supplier-purchasable-product-records";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
-
 const PRODUCT_ID = "10000000-0000-4000-8000-000000000001";
 const SKU_ID = "20000000-0000-4000-8000-000000000002";
 const TENANT_ID = "30000000-0000-4000-8000-000000000003";
@@ -22,8 +20,7 @@ const UNIT_ID = "a0000000-0000-4000-8000-00000000000a";
 const PRICE_LIST_ID = "b0000000-0000-4000-8000-00000000000b";
 const PRICE_ITEM_ID = "c0000000-0000-4000-8000-00000000000c";
 const NOW = "2026-08-27T08:00:00+00:00";
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 type ResultMutation = (result: SupplierPurchasableProductCreatedResult) => void;
 
 const command = {
@@ -35,7 +32,7 @@ const command = {
   product: { product_code: "TP-1000000000004000", name: "耐水腻子粉",
     category_id: CATEGORY_ID, brand_id: BRAND_ID },
   sku: {
-    sku_code: "TS-2000000000004000",
+    sku_code: "TS-20000000000040008000000000000002",
     name: "20kg/袋",
     purchase_unit_id: UNIT_ID,
     spec_values: { weight: "20kg", count: 1, tags: ["bulk", "dry"] },
@@ -318,16 +315,14 @@ describe("SupplierPurchasableProductsRepository", () => {
     const { SupplierPurchasableProductsRepository } = await import(
       "./supplier-purchasable-products"
     );
-    const repository = new SupplierPurchasableProductsRepository(() => ({
-      rpc,
-    }));
+    const repository = new SupplierPurchasableProductsRepository(() => ({ rpc }));
 
     await expect(repository.create(command)).resolves.toEqual(
       createdResult(false),
     );
     expect(rpc).toHaveBeenCalledTimes(1);
     expect(rpc).toHaveBeenCalledWith(
-      "command_supplier_purchasable_product_v1",
+      "command_supplier_purchasable_product_v2",
       {
         p_product_id: PRODUCT_ID,
         p_sku_id: SKU_ID,
@@ -355,9 +350,15 @@ describe("SupplierPurchasableProductsRepository", () => {
     const { SupplierPurchasableProductsRepository } = await import(
       "./supplier-purchasable-products"
     );
-
-    await expect(new SupplierPurchasableProductsRepository(() => ({ rpc }))
-      .create(command)).resolves.toEqual(replay);
+    const repository = new SupplierPurchasableProductsRepository(() => ({ rpc }));
+    await expect(repository.create(command)).resolves.toEqual(replay);
+    replay.sku.sku_code = replay.catalog_item.sku_code =
+      "TS-2000000000004000";
+    await expect(repository.create(command)).resolves.toEqual(replay);
+    replay.idempotent = false;
+    await expect(repository.create(command)).rejects.toMatchObject({
+      code: "SUPPLIER_PURCHASABLE_PRODUCT_CREATE_FAILED",
+    });
   });
 
   test("returns a stable comma-separated eligibility failure envelope", async () => {

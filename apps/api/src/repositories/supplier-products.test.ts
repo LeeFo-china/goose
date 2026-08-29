@@ -274,7 +274,7 @@ describe("SupplierProductsRepository", () => {
     });
   });
 
-  test("writes tenant SKUs only through the product-scoped v2 command", async () => {
+  test("writes tenant SKUs only through the system-code v3 command", async () => {
     const { repository, requests } = await repositoryFor(() => ({
       body: { status: "updated", idempotent: false, version: 3 },
     }));
@@ -306,7 +306,7 @@ describe("SupplierProductsRepository", () => {
     });
 
     expect(requests.every((request) =>
-      new URL(request.url).pathname.endsWith("/rpc/command_supplier_sku_v2")
+      new URL(request.url).pathname.endsWith("/rpc/command_supplier_sku_v3")
     )).toBe(true);
     expect(await requests[0]!.clone().json()).toMatchObject({
       p_action: "update",

@@ -49,7 +49,7 @@ export class SupplierPurchasableProductsRepository {
     input: SupplierPurchasableProductCommandInput,
   ): Promise<SupplierPurchasableProductCommandResult> {
     const { data, error } = await this.clientProvider().rpc(
-      "command_supplier_purchasable_product_v1",
+      "command_supplier_purchasable_product_v2",
       {
         p_product_id: input.product_id,
         p_sku_id: input.sku_id,
@@ -97,7 +97,7 @@ function matchesCommandIdentity(
     sameUuid(result.product.owner_tenant_id, input.tenant_id) &&
     sameUuid(result.product.acting_employee_id, input.actor_employee_id) &&
     sameUuid(result.sku.id, input.sku_id) &&
-    result.sku.sku_code === input.sku.sku_code &&
+    matchesSkuCode(result.sku.sku_code, input, result.idempotent) &&
     result.sku.name === input.sku.name &&
     sameUuid(result.sku.purchase_unit_id, input.sku.purchase_unit_id) &&
     sameJsonValue(result.sku.spec_values, input.sku.spec_values) &&
@@ -107,6 +107,16 @@ function matchesCommandIdentity(
     sameLimitedDecimal(result.price.unit_price, input.price.unit_price) &&
     sameLimitedDecimal(result.price.tax_rate, input.price.tax_rate) &&
     result.price.tax_inclusive === input.price.tax_inclusive;
+}
+
+function matchesSkuCode(
+  resultCode: string,
+  input: SupplierPurchasableProductCommandInput,
+  idempotent: boolean,
+): boolean {
+  const legacyCode = `TS-${input.sku_id.replaceAll("-", "").slice(0, 16)}`;
+  return resultCode === input.sku.sku_code ||
+    (idempotent && resultCode === legacyCode);
 }
 
 function sameUuid(left: string, right: string): boolean {

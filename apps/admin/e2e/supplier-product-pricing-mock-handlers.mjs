@@ -231,11 +231,15 @@ async function createSku(request, response, url, productId, skuId, platform) {
   if (!product || !writableInScope(product, platform) || !purchaseUnit) {
     return notFound(response, "商品或单位不存在");
   }
+  const skuCode = [
+    platform ? "PS" : "TS",
+    skuId.replaceAll("-", "").toUpperCase(),
+  ].join("-");
   mockStore.state.skus.push({
     id: skuId,
     supplier_id: product.supplier_id,
     supplier_product_id: productId,
-    sku_code: payload.sku_code,
+    sku_code: skuCode,
     name: payload.name,
     specification: payload.specification,
     model: payload.model,
@@ -261,6 +265,7 @@ async function createSku(request, response, url, productId, skuId, platform) {
 async function updateSku(request, response, url, skuId, platform) {
   if (!requireIdempotency(request, response)) return;
   const payload = await readBody(request);
+  const { sku_code: _legacySkuCode, ...safePayload } = payload;
   const sku = mockStore.state.skus.find(
     (record) => record.id === skuId && writableInScope(record, platform),
   );
@@ -273,7 +278,7 @@ async function updateSku(request, response, url, skuId, platform) {
       message: "单位身份必须通过单位换算命令维护",
     });
   }
-  Object.assign(sku, payload, {
+  Object.assign(sku, safePayload, {
     version: sku.version + 1,
     updated_at: now,
   });
