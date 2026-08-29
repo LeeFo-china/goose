@@ -10,15 +10,67 @@ cleanup() {
 }
 trap cleanup EXIT
 
+canonical_libpq_variables=(
+  PGHOST
+  PGHOSTADDR
+  PGPORT
+  PGDATABASE
+  PGUSER
+  PGPASSWORD
+  PGPASSFILE
+  PGSERVICE
+  PGSERVICEFILE
+  PGSYSCONFDIR
+  PGOPTIONS
+  PGAPPNAME
+  PGCONNECT_TIMEOUT
+  PGCLIENTENCODING
+  PGDATESTYLE
+  PGTZ
+  PGGEQO
+  PGCHANNELBINDING
+  PGSSLMODE
+  PGREQUIRESSL
+  PGREQUIREPEER
+  PGSSLCOMPRESSION
+  PGSSLCERT
+  PGSSLKEY
+  PGSSLROOTCERT
+  PGSSLCRL
+  PGSSLCRLDIR
+  PGSSLSNI
+  PGSSLNEGOTIATION
+  PGSSLCERTMODE
+  PGSSLMINPROTOCOLVERSION
+  PGSSLMAXPROTOCOLVERSION
+  PGKRBSRVNAME
+  PGGSSLIB
+  PGGSSENCMODE
+  PGGSSDELEGATION
+  PGTARGETSESSIONATTRS
+  PGLOADBALANCEHOSTS
+  PGREQUIREAUTH
+  PGLOCALEDIR
+)
+
 mkdir "${scratch_directory}/bin" "${scratch_directory}/empty"
 printf '%s\n' \
   '#!/bin/bash' \
   'if [ "${ASSERT_SANITIZED_LIBPQ:-}" = "1" ]; then' \
-  '  if [ "${PGHOST+x}" = x ] || [ "${PGHOSTADDR+x}" = x ] || [ "${PGPORT+x}" = x ] || [ "${PGDATABASE+x}" = x ] || [ "${PGUSER+x}" = x ] || [ "${PGPASSWORD+x}" = x ] || [ "${PGPASSFILE+x}" = x ] || [ "${PGSERVICE+x}" = x ] || [ "${PGSERVICEFILE+x}" = x ] || [ "${PGCHANNELBINDING+x}" = x ] || [ "${PGCLIENTENCODING+x}" = x ] || [ "${PGSSLMODE+x}" = x ] || [ "${PGTARGETSESSIONATTRS+x}" = x ] || [ "${PGLOADBALANCEHOSTS+x}" = x ]; then' \
-  '    printf "unsafe_libpq_environment\n" >"${PSQL_ENV_MARKER}"' \
-  '    exit 96' \
-  '  fi' \
-  '  if [ "${PGAPPNAME:-}" = "inherited-app" ] || [ "${PGCONNECT_TIMEOUT:-}" != "3" ] || [ "${PGOPTIONS:-}" != "-c statement_timeout=15s -c lock_timeout=8s" ]; then' \
+  "  canonical_libpq_variables=(${canonical_libpq_variables[*]})" \
+  '  for variable in "${canonical_libpq_variables[@]}"; do' \
+  '    case "${variable}" in PGOPTIONS|PGAPPNAME|PGCONNECT_TIMEOUT) continue ;; esac' \
+  '    if /usr/bin/env | /usr/bin/grep -q "^${variable}="; then' \
+  '      printf "unsafe_libpq_environment=%s\n" "${variable}" >"${PSQL_ENV_MARKER}"' \
+  '      exit 96' \
+  '    fi' \
+  '  done' \
+  '  case "${PGAPPNAME:-}" in tenant-template-*) ;; *)' \
+  '    printf "uncontrolled_libpq_environment\n" >"${PSQL_ENV_MARKER}"' \
+  '    exit 95' \
+  '    ;;' \
+  '  esac' \
+  '  if [ "${PGCONNECT_TIMEOUT:-}" != "3" ] || [ "${PGOPTIONS:-}" != "-c statement_timeout=15s -c lock_timeout=8s" ]; then' \
   '    printf "uncontrolled_libpq_environment\n" >"${PSQL_ENV_MARKER}"' \
   '    exit 95' \
   '  fi' \
@@ -86,29 +138,17 @@ done
 
 libpq_output="${scratch_directory}/libpq.out"
 libpq_marker="${scratch_directory}/libpq-environment"
+malicious_libpq_environment=()
+for variable in "${canonical_libpq_variables[@]}"; do
+  malicious_libpq_environment+=("${variable}=inherited-${variable}")
+done
 set +e
-PATH="${scratch_directory}/bin:${PATH}" \
+env "${malicious_libpq_environment[@]}" \
+  PATH="${scratch_directory}/bin:${PATH}" \
   DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:54322/postgres' \
   ASSERT_SANITIZED_LIBPQ=1 \
   PSQL_ENV_MARKER="${libpq_marker}" \
   PSQL_INVOKED_MARKER="${scratch_directory}/libpq-psql-invoked" \
-  PGHOST='/var/run/postgresql' \
-  PGHOSTADDR='203.0.113.10' \
-  PGPORT='6543' \
-  PGDATABASE='remote' \
-  PGUSER='remote' \
-  PGPASSWORD='secret' \
-  PGPASSFILE='/tmp/remote.pgpass' \
-  PGSERVICE='remote' \
-  PGSERVICEFILE='/tmp/remote.pg_service.conf' \
-  PGCHANNELBINDING='disable' \
-  PGCLIENTENCODING='LATIN1' \
-  PGSSLMODE='disable' \
-  PGTARGETSESSIONATTRS='read-write' \
-  PGLOADBALANCEHOSTS='random' \
-  PGOPTIONS='-c statement_timeout=0' \
-  PGAPPNAME='inherited-app' \
-  PGCONNECT_TIMEOUT='99' \
   /bin/bash "${target}" >"${libpq_output}" 2>&1
 libpq_status=$?
 set -e

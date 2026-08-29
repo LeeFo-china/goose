@@ -75,10 +75,16 @@ describe("standard tenant template spec-review contracts", () => {
     expect(source).toContain("public.approve_tenant_onboarding_application(");
     for (const variable of [
       "PGHOST", "PGHOSTADDR", "PGPORT", "PGDATABASE", "PGUSER", "PGPASSWORD",
-      "PGPASSFILE", "PGSERVICE", "PGSERVICEFILE", "PGCHANNELBINDING",
-      "PGCLIENTENCODING", "PGOPTIONS", "PGAPPNAME", "PGCONNECT_TIMEOUT",
-      "PGSSLMODE", "PGTARGETSESSIONATTRS", "PGLOADBALANCEHOSTS",
+      "PGPASSFILE", "PGSERVICE", "PGSERVICEFILE", "PGSYSCONFDIR", "PGOPTIONS",
+      "PGAPPNAME", "PGCONNECT_TIMEOUT", "PGCLIENTENCODING", "PGDATESTYLE", "PGTZ",
+      "PGGEQO", "PGCHANNELBINDING", "PGSSLMODE", "PGREQUIRESSL", "PGREQUIREPEER",
+      "PGSSLCOMPRESSION", "PGSSLCERT", "PGSSLKEY", "PGSSLROOTCERT", "PGSSLCRL",
+      "PGSSLCRLDIR", "PGSSLSNI", "PGSSLNEGOTIATION", "PGSSLCERTMODE",
+      "PGSSLMINPROTOCOLVERSION", "PGSSLMAXPROTOCOLVERSION", "PGKRBSRVNAME",
+      "PGGSSLIB", "PGGSSENCMODE", "PGGSSDELEGATION", "PGTARGETSESSIONATTRS",
+      "PGLOADBALANCEHOSTS", "PGREQUIREAUTH", "PGLOCALEDIR",
     ]) expect(source).toContain(`-u ${variable}`);
+    expect(source).not.toMatch(/^\s+-u PGSSNI$/m);
     expect(source).toContain("psql -h /var/run/postgresql");
     const cleanupArmed = source.indexOf("fixtures_created=true");
     const setupInvocation = source.indexOf(
