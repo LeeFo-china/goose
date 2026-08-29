@@ -49,7 +49,14 @@ export const SupplierPurchaseBatchOrderListQuerySchema = childListQuery;
 const optionQuery = PaginationQuerySchema.extend({
   keyword: keyword.optional(),
 }).strict();
-export const SupplierPurchaseBatchProjectOptionQuerySchema = optionQuery;
+export const SupplierPurchaseBatchProjectOptionQuerySchema = optionQuery.extend({
+  updatedWindow: z.enum(["last_7_days", "current_month"], {
+    message: "无效的项目更新时间范围",
+  }).optional(),
+  timezone: z.enum(["Asia/Shanghai"], {
+    message: "无效的项目更新时间时区",
+  }).optional(),
+}).strict();
 export const SupplierPurchaseBatchCostCategoryQuerySchema = optionQuery;
 
 export const SupplierPurchaseBatchCatalogQuerySchema =

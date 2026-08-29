@@ -162,7 +162,13 @@ describe("SupplierPurchaseBatchesController", () => {
     const value = await controller();
 
     await value.listProjectOptions({
-      query: { page: "2", pageSize: "100", keyword: "项目" },
+      query: {
+        page: "2",
+        pageSize: "100",
+        keyword: "项目",
+        updatedWindow: "current_month",
+        timezone: "Asia/Shanghai",
+      },
     } as never);
     await value.listCostCategories({
       query: { page: "3", pageSize: "20", keyword: "材料" },
@@ -180,6 +186,8 @@ describe("SupplierPurchaseBatchesController", () => {
       page: 2,
       pageSize: 100,
       keyword: "项目",
+      updatedWindow: "current_month",
+      timezone: "Asia/Shanghai",
     });
     expect(listCostCategories).toHaveBeenCalledWith(auth, {
       page: 3,
@@ -193,6 +201,13 @@ describe("SupplierPurchaseBatchesController", () => {
       keyword: "瓷砖",
     });
     expect(response).toEqual({ data: emptyPage, message: "success" });
+
+    await expect(value.listProjectOptions({
+      query: { updatedWindow: "last_month" },
+    } as never)).rejects.toMatchObject({
+      statusCode: 400,
+      code: "VALIDATION_ERROR",
+    });
   });
 
   test("passes validated mutations and idempotency keys", async () => {

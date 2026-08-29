@@ -90,16 +90,51 @@ describe("supplier purchase batch query schemas", () => {
     }
   });
 
-  test("supports bounded project and cost category option searches", () => {
+  test("supports project option update-window and timezone filters", () => {
+    expect(SupplierPurchaseBatchProjectOptionQuerySchema.parse({
+      keyword: " 水泥 ",
+      pageSize: "100",
+      updatedWindow: "current_month",
+      timezone: "Asia/Shanghai",
+    })).toEqual({
+      page: 1,
+      pageSize: 100,
+      keyword: "水泥",
+      updatedWindow: "current_month",
+      timezone: "Asia/Shanghai",
+    });
+    expect(SupplierPurchaseBatchProjectOptionQuerySchema.parse({
+      updatedWindow: "last_7_days",
+    })).toEqual({ page: 1, pageSize: 20, updatedWindow: "last_7_days" });
+    expect(SupplierPurchaseBatchProjectOptionQuerySchema.parse({
+      timezone: "Asia/Shanghai",
+    })).toEqual({ page: 1, pageSize: 20, timezone: "Asia/Shanghai" });
+    for (const input of [
+      { updatedWindow: "last_month" },
+      { timezone: "UTC" },
+      { updated_window: "last_7_days" },
+    ]) {
+      expect(SupplierPurchaseBatchProjectOptionQuerySchema.safeParse(input)
+        .success).toBe(false);
+    }
+  });
+
+  test("keeps cost category options isolated from project filters", () => {
+    expect(SupplierPurchaseBatchCostCategoryQuerySchema.parse({
+      keyword: " 水泥 ",
+      pageSize: "100",
+    })).toEqual({ page: 1, pageSize: 100, keyword: "水泥" });
+    for (const input of [
+      { updatedWindow: "last_7_days" },
+      { timezone: "Asia/Shanghai" },
+    ]) {
+      expect(SupplierPurchaseBatchCostCategoryQuerySchema.safeParse(input)
+        .success).toBe(false);
+    }
     for (const schema of [
       SupplierPurchaseBatchProjectOptionQuerySchema,
       SupplierPurchaseBatchCostCategoryQuerySchema,
     ]) {
-      expect(schema.parse({ keyword: " 水泥 ", pageSize: "100" })).toEqual({
-        page: 1,
-        pageSize: 100,
-        keyword: "水泥",
-      });
       expect(schema.safeParse({ pageSize: 101 }).success).toBe(false);
       expect(schema.safeParse({ keyword: "a".repeat(81) }).success).toBe(false);
     }
