@@ -51,23 +51,62 @@ if ! command -v psql >/dev/null 2>&1; then
   psql_mode="docker"
 fi
 
+libpq_unset_args=(
+  -u PGHOST
+  -u PGHOSTADDR
+  -u PGPORT
+  -u PGDATABASE
+  -u PGUSER
+  -u PGPASSWORD
+  -u PGPASSFILE
+  -u PGSERVICE
+  -u PGSERVICEFILE
+  -u PGSYSCONFDIR
+  -u PGOPTIONS
+  -u PGAPPNAME
+  -u PGCONNECT_TIMEOUT
+  -u PGCLIENTENCODING
+  -u PGDATESTYLE
+  -u PGTZ
+  -u PGGEQO
+  -u PGCHANNELBINDING
+  -u PGSSLMODE
+  -u PGREQUIRESSL
+  -u PGREQUIREPEER
+  -u PGSSLCOMPRESSION
+  -u PGSSLCERT
+  -u PGSSLKEY
+  -u PGSSLROOTCERT
+  -u PGSSLCRL
+  -u PGSSLCRLDIR
+  -u PGSSNI
+  -u PGKRBSRVNAME
+  -u PGGSSLIB
+  -u PGGSSENCMODE
+  -u PGTARGETSESSIONATTRS
+  -u PGLOADBALANCEHOSTS
+  -u PGREQUIREAUTH
+)
+
 psql_run() {
   local application_name="$1"
   shift
   if [ "${psql_mode}" = "native" ]; then
-    PGAPPNAME="${application_name}" \
-      PGCONNECT_TIMEOUT=3 \
-      PGOPTIONS="-c statement_timeout=15s -c lock_timeout=8s" \
+    env "${libpq_unset_args[@]}" \
+      "PGAPPNAME=${application_name}" \
+      "PGCONNECT_TIMEOUT=3" \
+      "PGOPTIONS=-c statement_timeout=15s -c lock_timeout=8s" \
       psql "${database_url}" -X -q -v ON_ERROR_STOP=1 "$@"
     return
   fi
 
-  docker exec -i \
-    --env "PGAPPNAME=${application_name}" \
-    --env "PGCONNECT_TIMEOUT=3" \
-    --env "PGOPTIONS=-c statement_timeout=15s -c lock_timeout=8s" \
-    "${container_name}" \
-    psql -X -q -U postgres -d "${database_name}" -v ON_ERROR_STOP=1 "$@"
+  docker exec -i "${container_name}" \
+    env "${libpq_unset_args[@]}" \
+      "PGAPPNAME=${application_name}" \
+      "PGCONNECT_TIMEOUT=3" \
+      "PGOPTIONS=-c statement_timeout=15s -c lock_timeout=8s" \
+      psql -h /var/run/postgresql -X -q -U postgres -d "${database_name}" \
+        -v ON_ERROR_STOP=1 "$@"
 }
 
 is_uuid() {
@@ -133,6 +172,35 @@ selected_candidates AS (
   FROM available_candidates AS candidate
   ORDER BY candidate.ordinal, candidate.phone
   LIMIT 2
+),
+region_candidates AS (
+  SELECT
+    candidate.ordinal,
+    '9' || pg_catalog.lpad(
+      (
+        (
+          pg_catalog.hashtextextended(
+            fixture.ownership_id::text || ':region:' || candidate.ordinal::text,
+            0
+          ) & 9223372036854775807
+        ) % 100000
+      )::text,
+      5,
+      '0'
+    ) AS adcode
+  FROM fixture
+  CROSS JOIN pg_catalog.generate_series(0, 2047) AS candidate(ordinal)
+),
+selected_region AS (
+  SELECT candidate.adcode
+  FROM region_candidates AS candidate
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM public.administrative_areas AS area
+    WHERE area.adcode = candidate.adcode
+  )
+  ORDER BY candidate.ordinal, candidate.adcode
+  LIMIT 1
 )
 SELECT
   fixture.ownership_id,
@@ -151,13 +219,14 @@ SELECT
     SELECT selected.phone
     FROM selected_candidates AS selected
     WHERE selected.selection_rank = 2
-  )
+  ),
+  (SELECT region.adcode FROM selected_region AS region)
 FROM fixture;
 SQL
 )"
 IFS='|' read -r ownership_id direct_holder_tenant_id direct_holder_employee_id \
   approval_holder_tenant_id approval_holder_employee_id approval_application_id \
-  approval_file_id phone_number approval_phone_number <<<"${manifest}"
+  approval_file_id phone_number approval_phone_number region_code <<<"${manifest}"
 
 for fixture_uuid in \
   "${ownership_id}" \
@@ -175,6 +244,10 @@ done
 if [[ ! "${phone_number}" =~ ^[0-9]{11}$ ]] \
   || [[ ! "${approval_phone_number}" =~ ^[0-9]{11}$ ]]; then
   echo "error=invalid_fixture_phone" >&2
+  exit 1
+fi
+if [[ ! "${region_code}" =~ ^[0-9]{6}$ ]]; then
+  echo "error=invalid_fixture_region" >&2
   exit 1
 fi
 
@@ -199,6 +272,8 @@ cleanup_rows() {
     -v approval_holder_slug="${approval_holder_slug}" \
     -v approval_phone="${approval_phone_number}" \
     -v direct_slug="${direct_slug}" \
+    -v approval_slug="${approval_rpc_slug}" \
+    -v region_code="${region_code}" \
     -v approval_application_id="${approval_application_id}" \
     -v approval_file_id="${approval_file_id}" >/dev/null <<'SQL'
 BEGIN;
@@ -206,6 +281,8 @@ BEGIN;
 CREATE TEMP TABLE cleanup_run (
   ownership_marker text PRIMARY KEY,
   direct_slug text UNIQUE NOT NULL,
+  approval_slug text UNIQUE NOT NULL,
+  region_code text UNIQUE NOT NULL,
   direct_phone text NOT NULL,
   approval_phone text NOT NULL,
   approval_application_id uuid UNIQUE NOT NULL,
@@ -217,6 +294,8 @@ CREATE TEMP TABLE cleanup_run (
 INSERT INTO cleanup_run (
   ownership_marker,
   direct_slug,
+  approval_slug,
+  region_code,
   direct_phone,
   approval_phone,
   approval_application_id,
@@ -227,6 +306,8 @@ INSERT INTO cleanup_run (
 VALUES (
   :'ownership_marker',
   :'direct_slug',
+  :'approval_slug',
+  :'region_code',
   :'direct_phone',
   :'approval_phone',
   :'approval_application_id'::uuid,
@@ -245,6 +326,21 @@ CREATE TEMP TABLE unexpected_direct_tenant (
   id uuid PRIMARY KEY,
   slug text NOT NULL,
   ownership_marker text NOT NULL
+) ON COMMIT DROP;
+
+CREATE TEMP TABLE owned_approval_application (
+  id uuid PRIMARY KEY,
+  status text NOT NULL,
+  version integer NOT NULL,
+  converted_tenant_id uuid NULL
+) ON COMMIT DROP;
+
+CREATE TEMP TABLE unexpected_approved_tenant (
+  id uuid PRIMARY KEY,
+  application_id uuid UNIQUE NOT NULL,
+  slug text UNIQUE NOT NULL,
+  ownership_marker text NOT NULL,
+  phone text NOT NULL
 ) ON COMMIT DROP;
 
 CREATE TEMP TABLE expected_cleanup_employees (
@@ -282,6 +378,72 @@ VALUES
     :'approval_phone'
   );
 
+INSERT INTO owned_approval_application (
+  id,
+  status,
+  version,
+  converted_tenant_id
+)
+SELECT
+  application.id,
+  application.status,
+  application.version,
+  application.converted_tenant_id
+FROM public.tenant_onboarding_applications AS application
+CROSS JOIN cleanup_run AS run
+WHERE application.id = run.approval_application_id
+  AND application.application_no = run.application_no
+  AND application.visitor_id = run.ownership_marker
+  AND application.company_name = run.ownership_marker
+  AND application.unified_social_credit_code = run.credit_code
+  AND application.business_license_file_id = run.approval_file_id
+  AND application.admin_name = run.ownership_marker
+  AND application.admin_phone = run.approval_phone
+  AND application.idempotency_key = run.ownership_marker
+  AND (
+    (
+      application.status = 'submitted'
+      AND application.version = 1
+      AND application.converted_tenant_id IS NULL
+      AND application.reviewed_by_employee_id IS NULL
+      AND application.reviewed_at IS NULL
+    )
+    OR (
+      application.status = 'approved'
+      AND application.version = 2
+      AND application.converted_tenant_id IS NOT NULL
+      AND application.final_partner_id IS NULL
+      AND application.attribution_source_type IS NULL
+      AND application.reviewed_by_employee_id IS NULL
+      AND application.reviewed_at IS NOT NULL
+    )
+  );
+
+INSERT INTO unexpected_approved_tenant (
+  id,
+  application_id,
+  slug,
+  ownership_marker,
+  phone
+)
+SELECT
+  tenant.id,
+  application.id,
+  tenant.slug,
+  run.ownership_marker,
+  run.approval_phone
+FROM owned_approval_application AS application
+JOIN public.tenants AS tenant
+  ON application.converted_tenant_id = tenant.id
+CROSS JOIN cleanup_run AS run
+WHERE application.status = 'approved'
+  AND tenant.slug = run.approval_slug
+  AND tenant.name = run.ownership_marker
+  AND tenant.unified_social_credit_code = pg_catalog.upper(run.credit_code)
+  AND tenant.contact_name = run.ownership_marker
+  AND tenant.contact_phone = run.approval_phone
+  AND tenant.status = 'active';
+
 DO $$
 BEGIN
   IF EXISTS (
@@ -313,17 +475,44 @@ BEGIN
     FROM public.tenant_onboarding_applications AS application
     CROSS JOIN cleanup_run AS run
     WHERE application.id = run.approval_application_id
+      AND NOT EXISTS (
+        SELECT 1
+        FROM owned_approval_application AS owned
+        WHERE owned.id = application.id
+      )
+  ) OR EXISTS (
+    SELECT 1
+    FROM owned_approval_application AS application
+    WHERE application.status = 'approved'
+      AND NOT EXISTS (
+        SELECT 1
+        FROM unexpected_approved_tenant AS tenant
+        WHERE tenant.application_id = application.id
+      )
+  ) OR EXISTS (
+    SELECT 1
+    FROM public.tenants AS tenant
+    CROSS JOIN cleanup_run AS run
+    WHERE tenant.slug = run.approval_slug
+      AND NOT EXISTS (
+        SELECT 1
+        FROM unexpected_approved_tenant AS owned
+        WHERE owned.id = tenant.id
+      )
+  ) OR EXISTS (
+    SELECT 1
+    FROM public.administrative_areas AS area
+    CROSS JOIN cleanup_run AS run
+    WHERE area.adcode = run.region_code
       AND (
-        application.application_no IS DISTINCT FROM run.application_no
-        OR application.visitor_id IS DISTINCT FROM run.ownership_marker
-        OR application.company_name IS DISTINCT FROM run.ownership_marker
-        OR application.unified_social_credit_code IS DISTINCT FROM run.credit_code
-        OR application.business_license_file_id IS DISTINCT FROM run.approval_file_id
-        OR application.admin_name IS DISTINCT FROM run.ownership_marker
-        OR application.admin_phone IS DISTINCT FROM run.approval_phone
-        OR application.idempotency_key IS DISTINCT FROM run.ownership_marker
-        OR application.status IS DISTINCT FROM 'submitted'
-        OR application.version IS DISTINCT FROM 1
+        area.name IS DISTINCT FROM run.ownership_marker
+        OR area.full_name IS DISTINCT FROM run.ownership_marker
+        OR area.level IS DISTINCT FROM 'province'
+        OR area.parent_adcode IS NOT NULL
+        OR area.source IS DISTINCT FROM 'local_smoke'
+        OR area.source_version IS DISTINCT FROM run.ownership_marker
+        OR area.raw_payload ->> 'ownership_marker' IS DISTINCT FROM
+          run.ownership_marker
       )
   ) OR EXISTS (
     SELECT 1
@@ -367,9 +556,99 @@ BEGIN
 END;
 $$;
 
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM public.employees AS employee
+    JOIN unexpected_approved_tenant AS tenant
+      ON tenant.id = employee.tenant_id
+    WHERE employee.name IS DISTINCT FROM tenant.ownership_marker
+       OR employee.phone IS DISTINCT FROM tenant.phone
+  ) OR EXISTS (
+    SELECT 1
+    FROM unexpected_approved_tenant AS tenant
+    WHERE (
+      SELECT pg_catalog.count(*)
+      FROM public.employees AS employee
+      WHERE employee.tenant_id = tenant.id
+    ) <> 1
+  ) OR EXISTS (
+    SELECT 1
+    FROM public.tenant_service_provider_profiles AS profile
+    JOIN unexpected_approved_tenant AS tenant
+      ON tenant.id = profile.tenant_id
+    WHERE profile.public_name IS DISTINCT FROM tenant.ownership_marker
+       OR profile.public_phone IS NOT NULL
+       OR profile.status IS DISTINCT FROM 'draft'
+  ) OR EXISTS (
+    SELECT 1
+    FROM unexpected_approved_tenant AS tenant
+    WHERE (
+      SELECT pg_catalog.count(*)
+      FROM public.tenant_service_provider_profiles AS profile
+      WHERE profile.tenant_id = tenant.id
+    ) <> 1
+  ) OR EXISTS (
+    SELECT 1
+    FROM public.tenant_service_areas AS area
+    JOIN unexpected_approved_tenant AS tenant ON tenant.id = area.tenant_id
+    WHERE area.status IS DISTINCT FROM 'inactive'
+  ) OR EXISTS (
+    SELECT 1
+    FROM public.tenant_partner_bindings AS binding
+    JOIN unexpected_approved_tenant AS tenant ON tenant.id = binding.tenant_id
+    WHERE binding.source_id IS DISTINCT FROM tenant.application_id::text
+       OR binding.changed_by_employee_id IS NOT NULL
+  ) OR EXISTS (
+    SELECT 1
+    FROM public.tenant_onboarding_application_reviews AS review
+    JOIN unexpected_approved_tenant AS tenant
+      ON tenant.application_id = review.application_id
+    WHERE review.review_stage IS DISTINCT FROM 'platform_review'
+       OR review.decision IS DISTINCT FROM 'approved'
+       OR review.actor_type IS DISTINCT FROM 'platform_employee'
+       OR review.actor_employee_id IS NOT NULL
+       OR review.before_status IS DISTINCT FROM 'submitted'
+       OR review.after_status IS DISTINCT FROM 'approved'
+       OR review.metadata ->> 'tenant_id' IS DISTINCT FROM tenant.id::text
+  ) OR EXISTS (
+    SELECT 1
+    FROM unexpected_approved_tenant AS tenant
+    WHERE (
+      SELECT pg_catalog.count(*)
+      FROM public.tenant_onboarding_application_reviews AS review
+      WHERE review.application_id = tenant.application_id
+    ) <> 1
+  ) OR EXISTS (
+    SELECT 1
+    FROM public.tenant_template_applications AS template_application
+    JOIN unexpected_approved_tenant AS tenant
+      ON tenant.id = template_application.tenant_id
+    WHERE template_application.template_code IS DISTINCT FROM
+        'default_decoration_company'
+       OR template_application.template_version IS DISTINCT FROM '2026.08.30'
+  ) OR EXISTS (
+    SELECT 1
+    FROM unexpected_approved_tenant AS tenant
+    WHERE (
+      SELECT pg_catalog.count(*)
+      FROM public.tenant_template_applications AS template_application
+      WHERE template_application.tenant_id = tenant.id
+    ) <> 1
+  ) THEN
+    RAISE EXCEPTION 'TENANT_TEMPLATE_CONCURRENCY_CLEANUP_OWNERSHIP_MISMATCH';
+  END IF;
+END;
+$$;
+
 INSERT INTO expected_cleanup_tenants (id, slug, ownership_marker)
 SELECT tenant.id, tenant.slug, tenant.ownership_marker
 FROM unexpected_direct_tenant AS tenant;
+
+INSERT INTO expected_cleanup_tenants (id, slug, ownership_marker)
+SELECT tenant.id, tenant.slug, tenant.ownership_marker
+FROM unexpected_approved_tenant AS tenant;
 
 INSERT INTO expected_cleanup_employees (id, tenant_id, ownership_marker, phone)
 SELECT employee.id, employee.tenant_id, run.ownership_marker, run.direct_phone
@@ -379,17 +658,61 @@ CROSS JOIN cleanup_run AS run
 WHERE employee.name = run.ownership_marker
   AND employee.phone = run.direct_phone;
 
+INSERT INTO expected_cleanup_employees (id, tenant_id, ownership_marker, phone)
+SELECT employee.id, employee.tenant_id, tenant.ownership_marker, tenant.phone
+FROM public.employees AS employee
+JOIN unexpected_approved_tenant AS tenant ON tenant.id = employee.tenant_id
+WHERE employee.name = tenant.ownership_marker
+  AND employee.phone = tenant.phone;
+
+SET LOCAL session_replication_role = replica;
+
+DELETE FROM public.tenant_onboarding_application_reviews AS review
+USING owned_approval_application AS application
+WHERE review.application_id = application.id;
+
+SET LOCAL session_replication_role = origin;
+
+DELETE FROM public.tenant_onboarding_notification_deliveries AS delivery
+USING owned_approval_application AS application
+WHERE delivery.application_id = application.id;
+
 DELETE FROM public.tenant_onboarding_applications AS application
-USING cleanup_run AS run
-WHERE application.id = run.approval_application_id
-  AND application.application_no = run.application_no
-  AND application.visitor_id = run.ownership_marker
-  AND application.company_name = run.ownership_marker
-  AND application.unified_social_credit_code = run.credit_code
-  AND application.business_license_file_id = run.approval_file_id
-  AND application.admin_name = run.ownership_marker
-  AND application.admin_phone = run.approval_phone
-  AND application.idempotency_key = run.ownership_marker;
+USING owned_approval_application AS owned
+WHERE application.id = owned.id;
+
+DELETE FROM public.tenant_partner_bindings AS binding
+USING unexpected_approved_tenant AS tenant
+WHERE binding.tenant_id = tenant.id
+  AND binding.source_id = tenant.application_id::text;
+
+DELETE FROM public.tenant_service_provider_profiles AS profile
+USING unexpected_approved_tenant AS tenant
+WHERE profile.tenant_id = tenant.id
+  AND profile.public_name = tenant.ownership_marker
+  AND profile.status = 'draft';
+
+DELETE FROM public.tenant_service_areas AS area
+USING unexpected_approved_tenant AS tenant
+WHERE area.tenant_id = tenant.id
+  AND area.status = 'inactive';
+
+DELETE FROM public.employee_permission_overrides AS override
+USING expected_cleanup_employees AS employee
+WHERE override.employee_id = employee.id;
+
+DELETE FROM public.employee_roles AS employee_role
+USING expected_cleanup_employees AS employee
+WHERE employee_role.employee_id = employee.id;
+
+DELETE FROM public.role_permissions AS role_permission
+USING public.roles AS role, expected_cleanup_tenants AS tenant
+WHERE role_permission.role_id = role.id
+  AND role.tenant_id = tenant.id;
+
+DELETE FROM public.department_post_rules AS rule
+USING expected_cleanup_tenants AS tenant
+WHERE rule.tenant_id = tenant.id;
 
 DELETE FROM public.employees AS employee
 USING expected_cleanup_employees AS expected
@@ -397,6 +720,22 @@ WHERE employee.id = expected.id
   AND employee.tenant_id = expected.tenant_id
   AND employee.name = expected.ownership_marker
   AND employee.phone = expected.phone;
+
+DELETE FROM public.roles AS role
+USING expected_cleanup_tenants AS tenant
+WHERE role.tenant_id = tenant.id;
+
+DELETE FROM public.tenant_departments AS department
+USING expected_cleanup_tenants AS tenant
+WHERE department.tenant_id = tenant.id;
+
+DELETE FROM public.posts AS post
+USING expected_cleanup_tenants AS tenant
+WHERE post.tenant_id = tenant.id;
+
+DELETE FROM public.tenant_template_applications AS template_application
+USING expected_cleanup_tenants AS tenant
+WHERE template_application.tenant_id = tenant.id;
 
 DELETE FROM public.tenants AS tenant
 USING expected_cleanup_tenants AS expected
@@ -412,12 +751,28 @@ WHERE file.id = run.approval_file_id
   AND file.owner_visitor_id = run.ownership_marker
   AND file.metadata ->> 'ownership_marker' = run.ownership_marker;
 
+DELETE FROM public.administrative_areas AS area
+USING cleanup_run AS run
+WHERE area.adcode = run.region_code
+  AND area.name = run.ownership_marker
+  AND area.full_name = run.ownership_marker
+  AND area.level = 'province'
+  AND area.parent_adcode IS NULL
+  AND area.source = 'local_smoke'
+  AND area.source_version = run.ownership_marker
+  AND area.raw_payload ->> 'ownership_marker' = run.ownership_marker;
+
 DO $$
 BEGIN
   IF EXISTS (
     SELECT 1
     FROM expected_cleanup_tenants AS expected
     JOIN public.tenants AS tenant ON tenant.id = expected.id
+  ) OR EXISTS (
+    SELECT 1
+    FROM public.administrative_areas AS area
+    CROSS JOIN cleanup_run AS run
+    WHERE area.adcode = run.region_code
   ) OR EXISTS (
     SELECT 1
     FROM expected_cleanup_employees AS expected
@@ -440,6 +795,86 @@ $$;
 
 COMMIT;
 SQL
+}
+
+assert_no_fixture_residue() {
+  local residue_count
+  residue_count="$(psql_run "${application_prefix}-residue" -At \
+    -v ownership_marker="${ownership_marker}" \
+    -v direct_holder_tenant_id="${direct_holder_tenant_id}" \
+    -v direct_holder_employee_id="${direct_holder_employee_id}" \
+    -v direct_holder_slug="${direct_holder_slug}" \
+    -v direct_slug="${direct_slug}" \
+    -v approval_holder_tenant_id="${approval_holder_tenant_id}" \
+    -v approval_holder_employee_id="${approval_holder_employee_id}" \
+    -v approval_holder_slug="${approval_holder_slug}" \
+    -v approval_rpc_slug="${approval_rpc_slug}" \
+    -v region_code="${region_code}" \
+    -v approval_application_id="${approval_application_id}" \
+    -v approval_file_id="${approval_file_id}" <<'SQL'
+SELECT (
+  SELECT pg_catalog.count(*)
+  FROM public.tenants AS tenant
+  WHERE tenant.id IN (
+      :'direct_holder_tenant_id'::uuid,
+      :'approval_holder_tenant_id'::uuid
+    )
+     OR tenant.slug IN (
+       :'direct_holder_slug',
+       :'direct_slug',
+       :'approval_holder_slug',
+       :'approval_rpc_slug'
+     )
+     OR tenant.contact_name = :'ownership_marker'
+) + (
+  SELECT pg_catalog.count(*)
+  FROM public.administrative_areas AS area
+  WHERE area.adcode = :'region_code'
+     OR area.source_version = :'ownership_marker'
+) + (
+  SELECT pg_catalog.count(*)
+  FROM public.employees AS employee
+  WHERE employee.id IN (
+      :'direct_holder_employee_id'::uuid,
+      :'approval_holder_employee_id'::uuid
+    )
+     OR employee.name = :'ownership_marker'
+) + (
+  SELECT pg_catalog.count(*)
+  FROM public.tenant_onboarding_applications AS application
+  WHERE application.id = :'approval_application_id'::uuid
+     OR (
+       application.visitor_id = :'ownership_marker'
+       AND application.idempotency_key = :'ownership_marker'
+     )
+) + (
+  SELECT pg_catalog.count(*)
+  FROM public.platform_file_objects AS file
+  WHERE file.id = :'approval_file_id'::uuid
+     OR file.object_key = :'ownership_marker'
+);
+SQL
+)"
+  if [ "${residue_count}" != "0" ]; then
+    echo "error=concurrency_cleanup_residue count=${residue_count}" >&2
+    return 1
+  fi
+}
+
+assert_no_fixture_sessions() {
+  local session_count
+  session_count="$(psql_run "${application_prefix}-sessions" -At \
+    -v application_prefix="${application_prefix}" <<'SQL'
+SELECT pg_catalog.count(*)
+FROM pg_catalog.pg_stat_activity
+WHERE application_name LIKE :'application_prefix' || '%'
+  AND pid <> pg_catalog.pg_backend_pid();
+SQL
+)"
+  if [ "${session_count}" != "0" ]; then
+    echo "error=concurrency_session_residue count=${session_count}" >&2
+    return 1
+  fi
 }
 
 cleanup() {
@@ -497,6 +932,7 @@ END;
 $$;
 SQL
 
+fixtures_created=true
 psql_run "${application_prefix}-setup" \
   -v ownership_marker="${ownership_marker}" \
   -v direct_holder_tenant_id="${direct_holder_tenant_id}" \
@@ -510,6 +946,7 @@ psql_run "${application_prefix}-setup" \
   -v approval_phone="${approval_phone_number}" \
   -v approval_application_id="${approval_application_id}" \
   -v approval_file_id="${approval_file_id}" \
+  -v region_code="${region_code}" \
   -v approval_rpc_slug="${approval_rpc_slug}" >/dev/null <<'SQL'
 BEGIN;
 
@@ -527,6 +964,7 @@ CREATE TEMP TABLE concurrency_run (
   approval_rpc_slug text UNIQUE NOT NULL,
   approval_application_id uuid UNIQUE NOT NULL,
   approval_file_id uuid UNIQUE NOT NULL,
+  region_code text UNIQUE NOT NULL,
   application_no text UNIQUE NOT NULL,
   credit_code text UNIQUE NOT NULL
 ) ON COMMIT DROP;
@@ -537,6 +975,7 @@ INSERT INTO concurrency_run (
   approval_rpc_slug,
   approval_application_id,
   approval_file_id,
+  region_code,
   application_no,
   credit_code
 )
@@ -546,6 +985,7 @@ VALUES (
   :'approval_rpc_slug',
   :'approval_application_id'::uuid,
   :'approval_file_id'::uuid,
+  :'region_code',
   'TTS-' || :'ownership_marker',
   'TTS-CREDIT-' || :'ownership_marker'
 );
@@ -603,6 +1043,11 @@ BEGIN
        )
   ) OR EXISTS (
     SELECT 1
+    FROM public.administrative_areas AS area
+    CROSS JOIN concurrency_run AS run
+    WHERE area.adcode = run.region_code
+  ) OR EXISTS (
+    SELECT 1
     FROM public.employees AS employee
     WHERE employee.id IN (SELECT fixture.employee_id FROM concurrency_fixture AS fixture)
        OR employee.name IN (
@@ -632,6 +1077,29 @@ BEGIN
   END IF;
 END;
 $$;
+
+INSERT INTO public.administrative_areas (
+  adcode,
+  name,
+  level,
+  parent_adcode,
+  full_name,
+  source,
+  source_version,
+  status,
+  raw_payload
+)
+SELECT
+  run.region_code,
+  run.ownership_marker,
+  'province',
+  NULL,
+  run.ownership_marker,
+  'local_smoke',
+  run.ownership_marker,
+  'active',
+  pg_catalog.jsonb_build_object('ownership_marker', run.ownership_marker)
+FROM concurrency_run AS run;
 
 INSERT INTO public.tenants (id, name, slug, status, contact_name)
 SELECT
@@ -698,9 +1166,9 @@ SELECT
   run.ownership_marker,
   fixture.phone,
   'Local city',
-  '000000',
+  run.region_code,
   'Local smoke address',
-  ARRAY['000000']::text[],
+  ARRAY[run.region_code]::text[],
   'local_services',
   'local-smoke',
   'local-smoke',
@@ -712,7 +1180,38 @@ WHERE fixture.tenant_id = :'approval_holder_tenant_id'::uuid;
 
 COMMIT;
 SQL
-fixtures_created=true
+
+if [ "${TENANT_TEMPLATE_APPROVAL_CLEANUP_ONLY:-false}" = true ]; then
+  approval_success_result="$(psql_run \
+    "${application_prefix}-approval-cleanup-proof" -At \
+    -v approval_application_id="${approval_application_id}" \
+    -v approval_rpc_slug="${approval_rpc_slug}" <<'SQL'
+SELECT public.approve_tenant_onboarding_application(
+  p_application_id => :'approval_application_id'::uuid,
+  p_expected_version => 1,
+  p_reviewer_employee_id => NULL,
+  p_tenant_slug => :'approval_rpc_slug',
+  p_final_partner_id => NULL,
+  p_attribution_source_type => NULL,
+  p_review_remark => NULL
+);
+SQL
+)"
+  case "${approval_success_result}" in
+    *'"status": "approved"'*) ;;
+    *)
+      echo "error=approval_cleanup_proof_did_not_approve result=${approval_success_result}" >&2
+      exit 1
+      ;;
+  esac
+
+  cleanup_rows
+  fixtures_created=false
+  assert_no_fixture_residue
+  assert_no_fixture_sessions
+  echo "tenant_template_approval_cleanup_ok status=approved residue=0 sessions=0"
+  exit 0
+fi
 
 wait_for_session_sleep() {
   local application_name="$1"
@@ -886,73 +1385,7 @@ echo "approval_rpc_phone_concurrency_ok rpc=approve_tenant_onboarding_applicatio
 
 cleanup_rows
 fixtures_created=false
-
-residue_count="$(psql_run "${application_prefix}-residue" -At \
-  -v ownership_marker="${ownership_marker}" \
-  -v direct_holder_tenant_id="${direct_holder_tenant_id}" \
-  -v direct_holder_employee_id="${direct_holder_employee_id}" \
-  -v direct_holder_slug="${direct_holder_slug}" \
-  -v direct_slug="${direct_slug}" \
-  -v approval_holder_tenant_id="${approval_holder_tenant_id}" \
-  -v approval_holder_employee_id="${approval_holder_employee_id}" \
-  -v approval_holder_slug="${approval_holder_slug}" \
-  -v approval_rpc_slug="${approval_rpc_slug}" \
-  -v approval_application_id="${approval_application_id}" \
-  -v approval_file_id="${approval_file_id}" <<'SQL'
-SELECT (
-  SELECT pg_catalog.count(*)
-  FROM public.tenants AS tenant
-  WHERE tenant.id IN (
-      :'direct_holder_tenant_id'::uuid,
-      :'approval_holder_tenant_id'::uuid
-    )
-     OR tenant.slug IN (
-       :'direct_holder_slug',
-       :'direct_slug',
-       :'approval_holder_slug',
-       :'approval_rpc_slug'
-     )
-     OR tenant.contact_name = :'ownership_marker'
-) + (
-  SELECT pg_catalog.count(*)
-  FROM public.employees AS employee
-  WHERE employee.id IN (
-      :'direct_holder_employee_id'::uuid,
-      :'approval_holder_employee_id'::uuid
-    )
-     OR employee.name = :'ownership_marker'
-) + (
-  SELECT pg_catalog.count(*)
-  FROM public.tenant_onboarding_applications AS application
-  WHERE application.id = :'approval_application_id'::uuid
-     OR (
-       application.visitor_id = :'ownership_marker'
-       AND application.idempotency_key = :'ownership_marker'
-     )
-) + (
-  SELECT pg_catalog.count(*)
-  FROM public.platform_file_objects AS file
-  WHERE file.id = :'approval_file_id'::uuid
-     OR file.object_key = :'ownership_marker'
-);
-SQL
-)"
-if [ "${residue_count}" != "0" ]; then
-  echo "error=concurrency_cleanup_residue count=${residue_count}" >&2
-  exit 1
-fi
-
-session_count="$(psql_run "${application_prefix}-sessions" -At \
-  -v application_prefix="${application_prefix}" <<'SQL'
-SELECT pg_catalog.count(*)
-FROM pg_catalog.pg_stat_activity
-WHERE application_name LIKE :'application_prefix' || '%'
-  AND pid <> pg_catalog.pg_backend_pid();
-SQL
-)"
-if [ "${session_count}" != "0" ]; then
-  echo "error=concurrency_session_residue count=${session_count}" >&2
-  exit 1
-fi
+assert_no_fixture_residue
+assert_no_fixture_sessions
 
 echo "tenant_template_concurrency_cleanup_ok residue=0 sessions=0"

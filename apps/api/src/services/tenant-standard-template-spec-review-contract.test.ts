@@ -73,6 +73,41 @@ describe("standard tenant template spec-review contracts", () => {
     expect(source).toContain("tenant.name = run.ownership_marker");
     expect(source).toContain("tenant.contact_name = run.ownership_marker");
     expect(source).toContain("public.approve_tenant_onboarding_application(");
+    for (const variable of [
+      "PGHOST", "PGHOSTADDR", "PGPORT", "PGDATABASE", "PGUSER", "PGPASSWORD",
+      "PGPASSFILE", "PGSERVICE", "PGSERVICEFILE", "PGCHANNELBINDING",
+      "PGCLIENTENCODING", "PGOPTIONS", "PGAPPNAME", "PGCONNECT_TIMEOUT",
+      "PGSSLMODE", "PGTARGETSESSIONATTRS", "PGLOADBALANCEHOSTS",
+    ]) expect(source).toContain(`-u ${variable}`);
+    expect(source).toContain("psql -h /var/run/postgresql");
+    const cleanupArmed = source.indexOf("fixtures_created=true");
+    const setupInvocation = source.indexOf(
+      'psql_run "${application_prefix}-setup"',
+    );
+    expect(cleanupArmed).toBeGreaterThan(0);
+    expect(setupInvocation).toBeGreaterThan(cleanupArmed);
+    expect(source).toContain("unexpected_approved_tenant");
+    expect(source).toContain("application.status = 'approved'");
+    expect(source).toContain("application.converted_tenant_id = tenant.id");
+    expect(source).toContain("tenant.slug = run.approval_slug");
+    expect(source).toContain(
+      "tenant.unified_social_credit_code = pg_catalog.upper(run.credit_code)",
+    );
+    expect(source).toContain("DELETE FROM public.tenant_onboarding_application_reviews");
+    expect(source).toContain("DELETE FROM public.tenant_service_provider_profiles");
+    expect(source).toContain("DELETE FROM public.tenant_service_areas");
+    expect(source).toContain("DELETE FROM public.tenant_partner_bindings");
+    expect(source).toContain("DELETE FROM public.employee_permission_overrides");
+    expect(source).toContain("DELETE FROM public.employee_roles");
+    expect(source).toContain("DELETE FROM public.role_permissions");
+    expect(source).toContain("DELETE FROM public.department_post_rules");
+    expect(source).toContain("DELETE FROM public.roles");
+    expect(source).toContain("DELETE FROM public.tenant_departments");
+    expect(source).toContain("DELETE FROM public.posts");
+    expect(source).toContain("DELETE FROM public.tenant_template_applications");
+    expect(source.match(/SET LOCAL session_replication_role = replica/g)).toHaveLength(1);
+    expect(source.match(/SET LOCAL session_replication_role = origin/g)).toHaveLength(1);
+    expect(source).toContain("TENANT_TEMPLATE_APPROVAL_CLEANUP_ONLY");
     expect(source.match(/background_pids=\(\)/g)).toHaveLength(3);
     expect(source.match(/PGCONNECT_TIMEOUT=3/g)).toHaveLength(2);
     expect(source.match(/statement_timeout=15s/g)).toHaveLength(2);
