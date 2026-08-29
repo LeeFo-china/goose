@@ -21,6 +21,8 @@ import {
   deriveSupplierPurchaseBatchActions,
   supplierPurchaseBatchAccessService,
 } from "@/services/supplier-purchase-batch-access";
+import { resolveSupplierPurchaseBatchProjectOptionWindow } from
+  "@/services/supplier-purchase-batch-project-option-window";
 
 type BatchAccessPort = Pick<
   typeof supplierPurchaseBatchAccessService,
@@ -149,12 +151,19 @@ export class SupplierPurchaseBatchesService {
   ) {
     const scope = await this.access.requireView(auth);
     const visibleProjectIds = await this.access.getVisibleProjectIds(auth);
+    const updatedAtRange = query.updatedWindow
+      ? resolveSupplierPurchaseBatchProjectOptionWindow(
+        query.updatedWindow,
+        this.nowFactory(),
+      )
+      : {};
     return this.repository.listProjectOptions({
       tenant_id: scope.tenantId,
       visible_project_ids: visibleProjectIds,
       page: query.page,
       pageSize: query.pageSize,
       ...(query.keyword ? { keyword: query.keyword } : {}),
+      ...updatedAtRange,
     });
   }
 
