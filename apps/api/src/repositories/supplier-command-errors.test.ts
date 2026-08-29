@@ -33,6 +33,16 @@ describe("mapSupplierCommandDatabaseError", () => {
       .toMatchObject({ code: "PRODUCT_OWNERSHIP_CONFLICT", statusCode: 409 });
   });
 
+  test("explains that an active SKU is required before product activation", () => {
+    expect(mapSupplierCommandDatabaseError(
+      "SUPPLIER_PRODUCT_ACTIVE_SKU_REQUIRED",
+    )).toMatchObject({
+      code: "SUPPLIER_PRODUCT_ACTIVE_SKU_REQUIRED",
+      statusCode: 409,
+      message: "启用商品前至少需要启用一个 SKU",
+    });
+  });
+
   test.each([
     [
       "supplier_products_platform_code_unique_idx",

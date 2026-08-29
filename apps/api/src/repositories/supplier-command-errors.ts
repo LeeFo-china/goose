@@ -43,12 +43,10 @@ const BUSINESS_ERRORS = {
     message: "租户供应商合作关系不存在",
   },
   SUPPLIER_PRODUCT_NOT_FOUND: {
-    statusCode: 404,
-    message: "供应商商品不存在",
+    statusCode: 404, message: "供应商商品不存在",
   },
   SUPPLIER_PRODUCT_CODE_CONFLICT: {
-    statusCode: 409,
-    message: "供应商商品编码已存在",
+    statusCode: 409, message: "供应商商品编码已存在",
   },
   SUPPLIER_PRODUCT_ID_CONFLICT: {
     statusCode: 409,
@@ -135,8 +133,10 @@ const BUSINESS_ERRORS = {
     message: "供应标准目录仍被业务数据引用",
   },
   SUPPLIER_PRODUCT_STATE_CONFLICT: {
-    statusCode: 409,
-    message: "供应商商品当前状态不允许该操作",
+    statusCode: 409, message: "供应商商品当前状态不允许该操作",
+  },
+  SUPPLIER_PRODUCT_ACTIVE_SKU_REQUIRED: {
+    statusCode: 409, message: "启用商品前至少需要启用一个 SKU",
   },
   SUPPLIER_PRODUCT_VERSION_CONFLICT: {
     statusCode: 409, message: "供应商商品版本已变化，请刷新后重试",
