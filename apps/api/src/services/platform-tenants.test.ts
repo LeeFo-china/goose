@@ -94,7 +94,6 @@ const authContext = {
 const findBySlug = mock(async () => null as PlatformTenantRecord | null);
 const findEmployeesByPhone = mock(async () => [] as Array<{ id: string }>);
 const createWithDefaultTemplate = mock(async () => ({ tenant, initialization }));
-const createLegacy = mock(async () => tenant);
 const initializeDefaultData = mock(async () => initialization);
 const getUsageStats = mock(async () => new Map([[tenant.id, usage]]));
 const recordBestEffort = mock(async (_input: PlatformAuditLogCreateInput) => null);
@@ -109,7 +108,6 @@ mock.module("@/repositories/platform-tenants", () => ({
     findBySlug,
     findEmployeesByPhone,
     createWithDefaultTemplate,
-    create: createLegacy,
     initializeDefaultData,
     getUsageStats,
   },
@@ -133,7 +131,6 @@ describe("PlatformTenantService.create", () => {
     findBySlug.mockClear();
     findEmployeesByPhone.mockClear();
     createWithDefaultTemplate.mockClear();
-    createLegacy.mockClear();
     initializeDefaultData.mockClear();
     getUsageStats.mockClear();
     recordBestEffort.mockClear();
@@ -162,7 +159,6 @@ describe("PlatformTenantService.create", () => {
     expect(createWithDefaultTemplate).toHaveBeenCalledWith(input, {
       operatorEmployeeId: authContext.employeeId,
     });
-    expect(createLegacy).not.toHaveBeenCalled();
     expect(initializeDefaultData).not.toHaveBeenCalled();
     expect(getUsageStats).toHaveBeenCalledWith([tenant.id]);
     expect(recordBestEffort).toHaveBeenCalledTimes(2);
@@ -226,7 +222,6 @@ describe("PlatformTenantService.create", () => {
     });
 
     expect(createWithDefaultTemplate).toHaveBeenCalledTimes(1);
-    expect(createLegacy).not.toHaveBeenCalled();
     expect(initializeDefaultData).not.toHaveBeenCalled();
     expect(getUsageStats).not.toHaveBeenCalled();
     expect(recordBestEffort).not.toHaveBeenCalled();

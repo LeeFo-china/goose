@@ -4,6 +4,21 @@ process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
+test("does not expose non-atomic tenant creation", async () => {
+  const [{ platformTenantRepository }, tenantFunctions] = await Promise.all([
+    import("./legacy-repository"),
+    import("./legacy/tenants"),
+  ]);
+
+  expect({
+    repository: "create" in platformTenantRepository,
+    tenantModule: "create" in tenantFunctions,
+  }).toEqual({
+    repository: false,
+    tenantModule: false,
+  });
+});
+
 test("adapts a bound Supabase RPC thenable to the command Promise boundary", async () => {
   const response = {
     data: { tenant_id: "tenant-1" },

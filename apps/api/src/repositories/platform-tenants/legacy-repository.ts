@@ -6,7 +6,7 @@ import {
   createWithDefaultTemplate as createWithDefaultTemplateCommand,
   type PlatformTenantRpc,
 } from "./legacy/commands";
-import { list, findById, findBySlug, create, update, updateStatus } from "./legacy/tenants";
+import { list, findById, findBySlug, update, updateStatus } from "./legacy/tenants";
 import { getUsageStats, getLatestTemplateApplication } from "./legacy/usage";
 import {
   findEmployeesByPhone,
@@ -65,7 +65,6 @@ class PlatformTenantRepository {
   list = list;
   findById = findById;
   findBySlug = findBySlug;
-  create = create;
   createWithDefaultTemplate(
     input: CreatePlatformTenantInput,
     options: PlatformTenantCreateWithDefaultTemplateOptions,
