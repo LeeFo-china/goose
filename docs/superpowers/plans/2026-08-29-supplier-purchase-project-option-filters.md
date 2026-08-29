@@ -573,7 +573,7 @@ describe("supplier purchase batch project option index migration", () => {
   test("builds the tenant and update ordering index safely", () => {
     expect(existsSync(migrationUrl)).toBe(true);
     expect(sql).toMatch(
-      /^-- gooes:migration-mode=nontransactional\n-- gooes:expected-index=public\.projects_tenant_updated_id_purchase_batch_idx\|public\.projects\|false\|btree\|tenant_id,updated_at,id\|pg_catalog\.uuid_ops,pg_catalog\.timestamptz_ops,pg_catalog\.uuid_ops\|null\n/,
+      /^-- gooes:migration-mode=nontransactional\n-- gooes:expected-index=public\.projects_tenant_updated_id_purchase_batch_idx\|public\.projects\|false\|btree\|tenant_id,updated_at,id\|pg_catalog\.uuid_ops,pg_catalog\.timestamptz_ops,pg_catalog\.uuid_ops\|null\|asc_nulls_last,desc_nulls_first,desc_nulls_first\n/,
     );
     expect(sql).not.toMatch(/^\s*(?:BEGIN|COMMIT)\s*;/im);
     expect(sql).toMatch(/CREATE INDEX CONCURRENTLY IF NOT EXISTS\s+projects_tenant_updated_id_purchase_batch_idx\s+ON public\.projects\(tenant_id, updated_at DESC, id DESC\)/i);
@@ -597,7 +597,7 @@ Expected: FAIL because the migration does not exist.
 
 ```sql
 -- gooes:migration-mode=nontransactional
--- gooes:expected-index=public.projects_tenant_updated_id_purchase_batch_idx|public.projects|false|btree|tenant_id,updated_at,id|pg_catalog.uuid_ops,pg_catalog.timestamptz_ops,pg_catalog.uuid_ops|null
+-- gooes:expected-index=public.projects_tenant_updated_id_purchase_batch_idx|public.projects|false|btree|tenant_id,updated_at,id|pg_catalog.uuid_ops,pg_catalog.timestamptz_ops,pg_catalog.uuid_ops|null|asc_nulls_last,desc_nulls_first,desc_nulls_first
 -- Existing projects may already contain substantial data. Build this index
 -- without a write-blocking ShareLock while the project option API stays live.
 -- Failure/retry: release tooling validates pg_index readiness and removes only
@@ -627,7 +627,8 @@ bun test apps/api/src/services/supplier-purchase-batch-project-option-index-migr
 
 Expected: PASS; the release contract loads the actual migration, exercises the
 nontransactional parser helpers through DDL then migration-history recording, and
-requires the runbook to document the new version and forward-only recovery path.
+requires exact `pg_index.indoption=0,3,3` validation before history, while the runbook
+documents the new version and forward-only recovery path.
 
 - [ ] **Step 5: Commit**
 

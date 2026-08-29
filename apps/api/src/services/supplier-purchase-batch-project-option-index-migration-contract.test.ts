@@ -21,7 +21,7 @@ describe("supplier purchase batch project option index migration", () => {
     const [mode, expectedIndex] = sql.split(/\r?\n/);
     expect(mode).toBe("-- gooes:migration-mode=nontransactional");
     expect(expectedIndex).toBe(
-      "-- gooes:expected-index=public.projects_tenant_updated_id_purchase_batch_idx|public.projects|false|btree|tenant_id,updated_at,id|pg_catalog.uuid_ops,pg_catalog.timestamptz_ops,pg_catalog.uuid_ops|null",
+      "-- gooes:expected-index=public.projects_tenant_updated_id_purchase_batch_idx|public.projects|false|btree|tenant_id,updated_at,id|pg_catalog.uuid_ops,pg_catalog.timestamptz_ops,pg_catalog.uuid_ops|null|asc_nulls_last,desc_nulls_first,desc_nulls_first",
     );
     expect(sql).not.toMatch(/^\s*(?:BEGIN|COMMIT)\s*;/im);
     expect(sql).toContain("SET lock_timeout = '5s';");

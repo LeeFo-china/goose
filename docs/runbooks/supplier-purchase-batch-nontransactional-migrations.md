@@ -23,9 +23,12 @@ workflow 手工登记 migration history。
    有序 key columns、opclass 和 predicate。普通索引使用 `null` sentinel；
    142500 的四个 partial index 只允许精确的
    `expression:(purchase_batch_id IS NOT NULL)`，runner 不接受任意表达式。
-   20260829170000 还必须声明
+   现有七字段 marker 保持兼容；需要锁定 btree key 排序时，第八字段必须按 key
+   顺序逐项使用 `asc_nulls_last`、`asc_nulls_first`、`desc_nulls_last` 或
+   `desc_nulls_first`，数量必须与 key columns 完全一致。20260829170000 必须声明
    `projects_tenant_updated_id_purchase_batch_idx` 的 `tenant_id,updated_at,id`
-   btree opclass 元数据。
+   btree opclass，以及
+   `asc_nulls_last,desc_nulls_first,desc_nulls_first` 排序元数据。
 3. 使用 workflow 的 plan 模式记录发布前 migration 数量、最新版本和待执行
    版本；不要以 `db push --dry-run` 作为本批发布授权。
 4. 只读检查同名 relation。若存在索引，记录 `pg_index.indisready`、
@@ -40,7 +43,8 @@ Workflow 对普通和显式事务 migration 保持原路径。对带 marker 的�
    的失败索引；删除使用 `DROP INDEX CONCURRENTLY`。
 3. 在事务外用 `psql` 的 `ON_ERROR_STOP=1` 执行版本控制中的原始 migration。
 4. 从 PostgreSQL catalog 再次验证 relation 类型、schema/table、唯一性、三个
-   状态位、access method、有序 key columns、opclass 和 predicate。
+   状态位、access method、有序 key columns、opclass 和 predicate；方向感知 marker
+   还会把 `pg_index.indoption` 精确匹配到每个 key 的方向和 NULL 顺序。
 5. 只有全部验证通过后，才单独登记 `supabase_migrations.schema_migrations`。
 
 ## 失败恢复
@@ -49,7 +53,8 @@ Workflow 对普通和显式事务 migration 保持原路径。对带 marker 的�
   修正数据或锁问题后重新运行同一 workflow。
 - 留下 INVALID index：不要手工改 history。确认索引名属于 marker；重跑 workflow，
   由 runner 精确删除失败索引并重建。
-- 同名 relation 不是 index，或有效索引的表、列、opclass、唯一性、方法、predicate
+- 同名 relation 不是 index，或有效索引的表、列、opclass、唯一性、方法、predicate、
+  key 方向或 NULL 顺序
   不符：workflow 会在 history 前停止。先通过审查后的 migration/运维变更处理冲突，
   不得删除未知对象后直接补 history。
 - DDL 已成功但 history 写入失败：重跑 workflow。`IF NOT EXISTS` 保留有效索引，
@@ -73,5 +78,7 @@ Workflow 对普通和显式事务 migration 保持原路径。对带 marker 的�
    batch ownership index 还必须核对 partial predicate。另查询
    `projects_tenant_updated_id_purchase_batch_idx`，确认三个状态位均为 true，且
    `pg_get_indexdef` 显示 `public.projects(tenant_id, updated_at DESC, id DESC)`。
+   该索引的 `pg_index.indoption` 三个 key 值必须精确为 `0,3,3`（分别表示
+   `ASC NULLS LAST`、`DESC NULLS FIRST`、`DESC NULLS FIRST`）。
 4. 140500 的索引会被 141000 作为唯一约束接管并重命名；应验证约束及其底层
    六列 unique btree 定义，不能再按 preflight 临时索引名判断缺失。

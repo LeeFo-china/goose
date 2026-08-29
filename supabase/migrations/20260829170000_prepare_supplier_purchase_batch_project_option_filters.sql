@@ -1,5 +1,5 @@
 -- gooes:migration-mode=nontransactional
--- gooes:expected-index=public.projects_tenant_updated_id_purchase_batch_idx|public.projects|false|btree|tenant_id,updated_at,id|pg_catalog.uuid_ops,pg_catalog.timestamptz_ops,pg_catalog.uuid_ops|null
+-- gooes:expected-index=public.projects_tenant_updated_id_purchase_batch_idx|public.projects|false|btree|tenant_id,updated_at,id|pg_catalog.uuid_ops,pg_catalog.timestamptz_ops,pg_catalog.uuid_ops|null|asc_nulls_last,desc_nulls_first,desc_nulls_first
 -- Existing projects may already contain substantial data. Build this index
 -- without a write-blocking ShareLock while the project option API stays live.
 -- Failure/retry: release tooling validates pg_index readiness and removes only
