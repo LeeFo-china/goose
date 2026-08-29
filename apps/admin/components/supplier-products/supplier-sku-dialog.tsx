@@ -64,7 +64,6 @@ export function SupplierSkuDialog({
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [definitions, setDefinitions] = useState<CatalogSpecDefinition[]>([]);
-  const [skuCode, setSkuCode] = useState(sku?.sku_code ?? "");
   const [name, setName] = useState(sku?.name ?? "");
   const [specification, setSpecification] = useState(sku?.specification ?? "");
   const [model, setModel] = useState(sku?.model ?? "");
@@ -79,7 +78,6 @@ export function SupplierSkuDialog({
 
   useEffect(() => {
     if (!open) return;
-    setSkuCode(sku?.sku_code ?? "");
     setName(sku?.name ?? "");
     setSpecification(sku?.specification ?? "");
     setModel(sku?.model ?? "");
@@ -104,14 +102,13 @@ export function SupplierSkuDialog({
     };
   }, [open, product.category.id, scope, sku]);
 
-  const invalid = loading || !skuCode.trim() || !name.trim() ||
+  const invalid = loading || !name.trim() ||
     !purchaseUnitId || !requiredSpecsPresent(definitions, specValues);
 
   async function submit() {
     if (invalid) return;
     setSaving(true);
     const fields = {
-      sku_code: skuCode.trim(),
       name: name.trim(),
       specification: specification.trim() || null,
       model: model.trim() || null,
@@ -180,7 +177,11 @@ export function SupplierSkuDialog({
           <div className="grid gap-4 md:grid-cols-2">
             <Field>
               <FieldLabel htmlFor={`supplier-sku-code-${sku?.id ?? "new"}`}>SKU 编码</FieldLabel>
-              <Input id={`supplier-sku-code-${sku?.id ?? "new"}`} value={skuCode} maxLength={80} onChange={(event) => setSkuCode(event.target.value)} />
+              <Input
+                id={`supplier-sku-code-${sku?.id ?? "new"}`}
+                value={sku?.sku_code ?? "保存后系统自动生成"}
+                disabled readOnly
+              />
             </Field>
             <Field>
               <FieldLabel htmlFor={`supplier-sku-name-${sku?.id ?? "new"}`}>SKU 名称</FieldLabel>

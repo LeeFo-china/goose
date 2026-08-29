@@ -23,6 +23,7 @@ import {
   type SpecTemplateRepositoryPort,
   validateSkuSpecsAgainstCurrentTemplate,
 } from "@/services/supplier-product-spec-template";
+import { generateSupplierSkuCode } from "@/services/supplier-sku-codes";
 
 type ProductAccessPort = Pick<
   typeof supplierProductAccessService,
@@ -199,6 +200,7 @@ export class SupplierProductsService {
     );
     return requireCommand(await this.repository.createSku({
       ...safeInput,
+      sku_code: generateSupplierSkuCode("tenant", skuId),
       sku_id: skuId,
       product_id: productId,
       ...commandContext(scope, idempotencyKey),
@@ -226,7 +228,7 @@ export class SupplierProductsService {
         this.catalogRepository,
       );
     }
-    const { expected_version, ...fields } = input;
+    const { expected_version, sku_code: _legacySkuCode, ...fields } = input;
     return requireCommand(await this.repository.updateSku({
       ...fields,
       supplier_id: scope.supplierId,

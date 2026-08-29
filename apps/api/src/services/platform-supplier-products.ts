@@ -20,6 +20,7 @@ import {
   type SpecTemplateRepositoryPort,
   validateSkuSpecsAgainstCurrentTemplate,
 } from "@/services/supplier-product-spec-template";
+import { generateSupplierSkuCode } from "@/services/supplier-sku-codes";
 
 const MANAGE_PERMISSION = "platform.supplier-product.manage" as const;
 
@@ -162,6 +163,7 @@ export class PlatformSupplierProductsService {
     );
     return requireCommand(await this.repository.createPlatformSku({
       ...input,
+      sku_code: generateSupplierSkuCode("platform", skuId),
       product_id: productId,
       sku_id: skuId,
       ...commandContext(actor, supplierId, idempotencyKey),
@@ -186,8 +188,10 @@ export class PlatformSupplierProductsService {
         this.catalogRepository,
       );
     }
+    const { sku_code: _legacySkuCode, ...safeInput } = input as
+      SupplierSkuUpdateInput & { sku_code?: unknown };
     return requireCommand(await this.repository.updatePlatformSku({
-      ...input,
+      ...safeInput,
       supplier_product_id: productId,
       sku_id: skuId,
       ...commandContext(actor, supplierId, idempotencyKey),

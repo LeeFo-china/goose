@@ -6,6 +6,7 @@ import {
 import { mapSupplierPurchasableProductEnvelopeError } from "@/repositories/supplier-command-errors";
 import type { SupplierPurchasableProductCreateInput } from "@/schema/supplier-purchasable-products";
 import type { AuthContext } from "@/services/authorization";
+import { generateSupplierSkuCode } from "@/services/supplier-sku-codes";
 import {
   supplierProductAccessService,
   type SupplierProxyScope,
@@ -83,12 +84,12 @@ export class SupplierPurchasableProductsService {
         ...input.product,
         category_id: canonicalUuid(input.product.category_id),
         brand_id: canonicalUuid(input.product.brand_id),
-        product_code: generatedCode("TP", productId),
+        product_code: generatedProductCode(productId),
       },
       sku: {
         ...input.sku,
         purchase_unit_id: canonicalUuid(input.sku.purchase_unit_id),
-        sku_code: generatedCode("TS", skuId),
+        sku_code: generateSupplierSkuCode("tenant", skuId),
       },
       price: {
         unit_price: input.price.unit_price,
@@ -174,8 +175,8 @@ function productCreateFailed() {
   );
 }
 
-function generatedCode(prefix: "TP" | "TS", id: string): string {
-  return `${prefix}-${id.replaceAll("-", "").slice(0, 16)}`;
+function generatedProductCode(id: string): string {
+  return `TP-${id.replaceAll("-", "").slice(0, 16)}`;
 }
 
 export const supplierPurchasableProductsService =

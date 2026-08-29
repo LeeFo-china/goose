@@ -272,7 +272,7 @@ describe("SupplierPurchasableProductsService", () => {
       },
       sku: {
         ...input.sku,
-        sku_code: "TS-2000000000004000",
+        sku_code: "TS-20000000000040008000000000000002",
       },
       price: {
         unit_price: "48.00",
@@ -338,7 +338,7 @@ describe("SupplierPurchasableProductsService", () => {
           brand_id: BRAND_ID,
         }),
         sku: expect.objectContaining({
-          sku_code: "TS-fedcbafedcba4fed",
+          sku_code: "TS-FEDCBAFEDCBA4FED8CBAFEDCBAFEDCBA",
           purchase_unit_id: UNIT_ID,
         }),
       }),

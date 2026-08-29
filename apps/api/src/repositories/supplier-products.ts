@@ -468,7 +468,7 @@ export class SupplierProductsRepository {
     expectedVersion: number | null,
     payload: Record<string, unknown>,
   ) {
-    return this.command("command_supplier_sku_v2", {
+    return this.command("command_supplier_sku_v3", {
       ...supplierCommandBaseParams(scope, input),
       p_action: action,
       p_supplier_product_id:

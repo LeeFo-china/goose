@@ -3,11 +3,13 @@ import { describe, expect, test } from "bun:test";
 import {
   PlatformSupplierProductCommandSchema,
   PlatformSupplierProductCreateSchema,
+  PlatformSupplierSkuCreateSchema,
   SupplierProductCommandSchema,
   SupplierProductCreateSchema,
   SupplierProductListQuerySchema,
   SupplierProductUpdateSchema,
   SupplierSkuCreateSchema,
+  SupplierSkuUpdateSchema,
 } from "./supplier-products";
 import * as supplierProductSchemas from "./supplier-products";
 
@@ -153,6 +155,32 @@ describe("supplier product schemas", () => {
       purchase_unit_id: unitId,
       base_unit_conversion: "100",
     }).success).toBe(false);
+  });
+
+  test("accepts legacy client SKU codes for service normalization", () => {
+    const createInput = {
+      sku_code: "MANUAL-SKU-CODE",
+      name: "600×600 灰色",
+      purchase_unit_id: unitId,
+    };
+
+    expect(SupplierSkuCreateSchema.parse(createInput))
+      .toHaveProperty("sku_code", "MANUAL-SKU-CODE");
+    expect(PlatformSupplierSkuCreateSchema.parse(createInput))
+      .toHaveProperty("sku_code", "MANUAL-SKU-CODE");
+    expect(SupplierSkuUpdateSchema.safeParse({
+      expected_version: 2,
+      sku_code: "REPLACED-CODE",
+    }).success).toBe(true);
+    expect(SupplierSkuUpdateSchema.parse({
+      expected_version: 2,
+      sku_code: "REPLACED-CODE",
+      name: "灰色瓷砖",
+    })).toEqual({
+      expected_version: 2,
+      sku_code: "REPLACED-CODE",
+      name: "灰色瓷砖",
+    });
   });
 
   test("validates versioned unit conversion replacement payloads", () => {

@@ -44,7 +44,9 @@ export function SupplierSkuTable({
       cell: ({ row }) => (
         <div className="flex flex-col gap-1">
           <span className="font-medium">{row.original.name}</span>
-          <span className="text-xs text-muted-foreground">{row.original.sku_code}</span>
+          {scope.kind === "platform" ? (
+            <span className="text-xs text-muted-foreground">{row.original.sku_code}</span>
+          ) : null}
         </div>
       ),
     },

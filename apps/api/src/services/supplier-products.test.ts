@@ -253,9 +253,10 @@ describe("SupplierProductsService", () => {
       SKU_ID,
       {
         expected_version: 2,
+        sku_code: "MANUAL-REPLACEMENT",
         name: "防滑瓷砖 SKU",
         spec_values: { size: "600×600" },
-      },
+      } as never,
       "sku:update",
     );
     await service.mutateSku(
@@ -281,6 +282,8 @@ describe("SupplierProductsService", () => {
         idempotency_key: "sku:update",
       }),
     );
+    expect(deps.repository.updateSku.mock.calls[0]![0])
+      .not.toHaveProperty("sku_code");
     expect(deps.repository.mutateSku).toHaveBeenCalledWith({
       supplier_id: SUPPLIER_ID,
       tenant_id: TENANT_ID,
@@ -295,7 +298,7 @@ describe("SupplierProductsService", () => {
     });
   });
 
-  test("discards a legacy proxy reason from direct tenant SKU creates", async () => {
+  test("generates the tenant SKU code and discards legacy create fields", async () => {
     const deps = dependencies();
     const { SupplierProductsService } = await import("./supplier-products");
     const service = new SupplierProductsService(deps as never);
@@ -319,8 +322,16 @@ describe("SupplierProductsService", () => {
     );
 
     expect(deps.repository.createSku).toHaveBeenCalledTimes(1);
+    expect(deps.repository.createSku.mock.calls[0]![0]).toMatchObject({
+      sku_code: `TS-${SKU_ID.replaceAll("-", "").toUpperCase()}`,
+    });
     expect(deps.repository.createSku.mock.calls[0]![0])
       .not.toHaveProperty("proxy_reason");
+    const createdSku = deps.repository.createSku.mock.calls[0]![0] as {
+      sku_code: string;
+    };
+    expect(createdSku.sku_code)
+      .not.toBe("SKU-LEGACY");
   });
 
   test("builds the full trusted boundary for unit conversion writes", async () => {
@@ -411,7 +422,6 @@ describe("SupplierProductsService", () => {
       PRODUCT_ID,
       SKU_ID,
       {
-        sku_code: "SKU-1",
         name: "无规格 SKU",
         purchase_unit_id: CATEGORY_ID,
         batch_managed: false,

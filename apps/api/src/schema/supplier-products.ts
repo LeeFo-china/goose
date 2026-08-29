@@ -155,6 +155,7 @@ const skuFields = {
 
 export const SupplierSkuCreateSchema = z.object({
   ...skuFields,
+  sku_code: skuFields.sku_code.optional(),
   batch_managed: skuFields.batch_managed.default(false),
   color_managed: skuFields.color_managed.default(false),
   serial_managed: skuFields.serial_managed.default(false),
@@ -164,6 +165,7 @@ export const SupplierSkuCreateSchema = z.object({
 
 export const PlatformSupplierSkuCreateSchema = z.object({
   ...skuFields,
+  sku_code: skuFields.sku_code.optional(),
   batch_managed: skuFields.batch_managed.default(false),
   color_managed: skuFields.color_managed.default(false),
   serial_managed: skuFields.serial_managed.default(false),

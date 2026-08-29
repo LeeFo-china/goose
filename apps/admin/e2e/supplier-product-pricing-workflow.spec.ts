@@ -68,11 +68,12 @@ async function chooseCatalogOption(
 async function fillStructuredSku(
   page: Page,
   dialogName: string,
-  code: string,
   expectedName: string,
 ) {
   const dialog = page.getByRole("dialog", { name: dialogName });
-  await dialog.getByLabel("SKU 编码").fill(code);
+  await expect(dialog.getByLabel("SKU 编码")).toBeDisabled();
+  await expect(dialog.getByLabel("SKU 编码"))
+    .toHaveValue("保存后系统自动生成");
   await dialog.getByLabel("尺寸").fill("800×800×10mm");
   await dialog.getByRole("combobox", { name: "颜色 *" }).click();
   await page.getByRole("option", { name: "灰色", exact: true }).click();
@@ -167,7 +168,9 @@ test("租户可检索第21个合作供应商并维护私有商品、规格、换
   await page.reload({ waitUntil: "networkidle" });
   await expect(page.getByRole("heading", { name: "平台共享瓷砖 · SKU" })).toBeVisible();
   await expect(page.getByLabel("搜索供应商商品")).toHaveCount(0);
-  const sharedSkuRow = page.getByRole("row").filter({ hasText: "PLATFORM-SKU" });
+  const sharedSkuRow = page.getByRole("row").filter({
+    hasText: "平台共享瓷砖 600×600",
+  });
   await expect(sharedSkuRow.getByRole("button", { name: "编辑 SKU" })).toHaveCount(0);
   await expect(sharedSkuRow.getByRole("button", { name: "查看换算" })).toBeVisible();
   await page.getByRole("button", { name: "返回商品列表" }).click();
@@ -201,13 +204,13 @@ test("租户可检索第21个合作供应商并维护私有商品、规格、换
   await fillStructuredSku(
     page,
     "新增供应商 SKU",
-    "E2E-SKU",
     "租户自有品牌 E2E 瓷砖 800×800×10mm 灰色",
   );
-  await expect(page.getByText("E2E-SKU", { exact: true })).toBeVisible();
-  await saveConversionChain(page, "租户自有品牌 E2E 瓷砖 800×800×10mm 灰色");
+  const createdSkuName = "租户自有品牌 E2E 瓷砖 800×800×10mm 灰色";
+  await expect(page.getByText(createdSkuName, { exact: true })).toBeVisible();
+  await saveConversionChain(page, createdSkuName);
 
-  let skuRow = page.getByRole("row").filter({ hasText: "E2E-SKU" });
+  let skuRow = page.getByRole("row").filter({ hasText: createdSkuName });
   await skuRow.getByRole("button", { name: "启用 SKU" }).click();
   dialog = page.getByRole("dialog", { name: /启用.*800×800×10mm/ });
   await expect(dialog.getByLabel("代录原因")).toHaveCount(0);
@@ -263,6 +266,7 @@ test("租户可检索第21个合作供应商并维护私有商品、规格、换
   expect(mutations).toHaveLength(8);
   expect(mutations.every(({ payload }) => !("proxy_reason" in payload))).toBe(true);
   expect("product_code" in mutations[0].payload).toBe(false);
+  expect("sku_code" in mutations[1].payload).toBe(false);
   expect(mutations[1].payload).toMatchObject({
     spec_values: {
       size: "800×800×10mm",
@@ -383,9 +387,9 @@ test("平台员工持专用权限时检索第21个平台供应商并仅维护共
   await fillStructuredSku(
     page,
     "新增供应商 SKU",
-    "PLATFORM-E2E-SKU",
     "E2E 品牌 平台 E2E 瓷砖 800×800×10mm 灰色",
   );
+  await expect(page.getByText(/^PS-[0-9A-F]{32}$/)).toBeVisible();
   await saveConversionChain(page, "E2E 品牌 平台 E2E 瓷砖 800×800×10mm 灰色");
 
   const mutations = await readMutations(request);
@@ -394,6 +398,7 @@ test("平台员工持专用权限时检索第21个平台供应商并仅维护共
     expect.stringMatching(/^\/platform\/supplier-products\/[^/]+\/skus\/[^/]+$/),
     expect.stringMatching(/^\/platform\/supplier-products\/[^/]+\/skus\/[^/]+\/unit-conversions$/),
   ]);
+  expect("sku_code" in mutations[1].payload).toBe(false);
   const requests = await readRequests(request);
   expect(requests.some(({ path }) => path.startsWith("/supplier-price-lists"))).toBe(false);
 
