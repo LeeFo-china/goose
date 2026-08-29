@@ -313,6 +313,7 @@ export class SupplierProductsService {
       scope.supplierId,
       productId,
       scope.tenantId,
+      false,
     );
     if (!product) throw productNotFound();
     if (

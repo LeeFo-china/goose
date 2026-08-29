@@ -9,6 +9,7 @@ import type {
   SupplierCommandResult,
   SupplierPriceItemPage,
   SupplierPriceListPage,
+  SupplierProduct,
   SupplierProductPage,
   SupplierSkuPage,
   SupplierSkuUnitConversion,
@@ -21,6 +22,11 @@ const MAX_CATALOG_PAGES = 5;
 
 type CatalogKind = "categories" | "brands" | "units";
 type WritableCatalogKind = "categories" | "brands";
+
+export function isSupplierResourceNotFound(error: unknown) {
+  return error instanceof Error
+    && (error as Error & { status?: number }).status === 404;
+}
 
 export function buildRelationshipListPath(keyword = "", page = 1) {
   const query = pagedQuery(page, PAGE_SIZE);
@@ -35,11 +41,25 @@ export function loadSupplierRelationships(keyword = "", page = 1) {
   );
 }
 
+export function loadSupplierRelationship(tenantSupplierId: string) {
+  return requestBackendJson<TenantSupplierRelationship>(
+    `/suppliers/${tenantSupplierId}`,
+    { fallbackMessage: "合作供应商加载失败" },
+  );
+}
+
 export function loadPlatformSuppliers(keyword = "", page = 1) {
   const query = pagedQuery(page, PAGE_SIZE);
   if (keyword.trim()) query.set("keyword", keyword.trim());
   return requestBackendJson<PageData<PlatformSupplierOption>>(
     `/platform/suppliers?${query}`,
+    { fallbackMessage: "平台供应商加载失败" },
+  );
+}
+
+export function loadPlatformSupplier(supplierId: string) {
+  return requestBackendJson<PlatformSupplierOption>(
+    `/platform/suppliers/${supplierId}`,
     { fallbackMessage: "平台供应商加载失败" },
   );
 }
@@ -61,6 +81,16 @@ export function loadSupplierProducts(
 ) {
   return requestBackendJson<SupplierProductPage>(
     buildProductListPath(scope, page, keyword),
+    { fallbackMessage: "供应商商品加载失败" },
+  );
+}
+
+export function loadSupplierProduct(
+  scope: ProductApiScope,
+  productId: string,
+) {
+  return requestBackendJson<SupplierProduct>(
+    `${buildProductResourcePath(scope, productId)}?${scopeOnly(scope)}`,
     { fallbackMessage: "供应商商品加载失败" },
   );
 }

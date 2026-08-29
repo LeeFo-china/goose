@@ -260,6 +260,7 @@ export class PlatformSupplierProductsService {
     const product = await this.repository.findPlatformProduct(
       supplierId,
       productId,
+      false,
     );
     if (!product) throw productNotFound();
     return product;

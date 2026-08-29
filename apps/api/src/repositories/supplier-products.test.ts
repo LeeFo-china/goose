@@ -56,10 +56,10 @@ async function repositoryFor(
 
 describe("SupplierProductsRepository", () => {
   test("paginates the exact platform plus current-tenant product scope", async () => {
-    const { repository, requests } = await repositoryFor(() => ({
-      body: [product],
-      count: 21,
-    }));
+    const { repository, requests } = await repositoryFor((request) =>
+      new URL(request.url).pathname.includes("/rpc/")
+        ? { body: [] }
+        : { body: [product], count: 21 });
 
     const result = await repository.listProducts({
       supplier_id: SUPPLIER_ID,
@@ -81,10 +81,14 @@ describe("SupplierProductsRepository", () => {
   });
 
   test("tenant scopes product details and SKU lists without legacy rows", async () => {
-    const { repository, requests } = await repositoryFor((request) => ({
-      body: request.url.includes("supplier_skus") ? [] : product,
-      count: 0,
-    }));
+    const { repository, requests } = await repositoryFor((request) => {
+      const url = new URL(request.url);
+      if (url.pathname.includes("/rpc/")) return { body: [] };
+      return {
+        body: request.url.includes("supplier_skus") ? [] : product,
+        count: 0,
+      };
+    });
 
     await repository.findProduct(SUPPLIER_ID, PRODUCT_ID, TENANT_ID);
     await repository.listSkus({
@@ -95,13 +99,14 @@ describe("SupplierProductsRepository", () => {
       pageSize: 20,
     });
 
-    for (const request of requests) {
+    for (const request of requests.filter((item) =>
+      !new URL(item.url).pathname.includes("/rpc/"))) {
       const url = new URL(request.url);
       expect(url.searchParams.get("supplier_id")).toBe(`eq.${SUPPLIER_ID}`);
       expect(url.searchParams.get("or")).toBe(PRODUCT_READ_SCOPE_FILTER);
       expect(url.searchParams.get("select")).not.toContain("*");
     }
-    expect(new URL(requests[1]!.url).searchParams.get("select"))
+    expect(new URL(requests[2]!.url).searchParams.get("select"))
       .toContain("spec_values");
   });
 
@@ -313,10 +318,14 @@ describe("SupplierProductsRepository", () => {
   });
 
   test("platform reads are strictly platform-owned and paginated", async () => {
-    const { repository, requests } = await repositoryFor((request) => ({
-      body: request.url.includes(`id=eq.${PRODUCT_ID}`) ? product : [product],
-      count: 1,
-    }));
+    const { repository, requests } = await repositoryFor((request) => {
+      const url = new URL(request.url);
+      if (url.pathname.includes("/rpc/")) return { body: [] };
+      return {
+        body: request.url.includes(`id=eq.${PRODUCT_ID}`) ? product : [product],
+        count: 1,
+      };
+    });
     const platformRepository = repository as unknown as {
       listPlatformProducts: (input: Record<string, unknown>) => Promise<unknown>;
       findPlatformProduct: (
@@ -333,12 +342,23 @@ describe("SupplierProductsRepository", () => {
     });
     await platformRepository.findPlatformProduct(SUPPLIER_ID, PRODUCT_ID);
 
-    for (const request of requests) {
+    for (const request of requests.filter((item) =>
+      !new URL(item.url).pathname.includes("/rpc/"))) {
       const url = new URL(request.url);
       expect(url.searchParams.get("supplier_id")).toBe(`eq.${SUPPLIER_ID}`);
       expect(url.searchParams.get("ownership_scope")).toBe("eq.platform");
       expect(url.searchParams.get("owner_tenant_id")).toBe("is.null");
       expect(url.searchParams.get("select")).not.toContain("*");
+    }
+    const countRequests = requests.filter((item) =>
+      new URL(item.url).pathname.endsWith("/rpc/list_supplier_product_sku_counts")
+    );
+    expect(countRequests).toHaveLength(2);
+    for (const request of countRequests) {
+      expect(await request.clone().json()).toMatchObject({
+        p_ownership_scope: "platform",
+        p_tenant_id: null,
+      });
     }
   });
 

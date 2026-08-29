@@ -72,7 +72,7 @@ const ConversionUnitReferenceSchema = z.object({
   unit_dimension: z.string(),
 }).strict();
 
-export const ProductSchema = z.object({
+export const ProductRowSchema = z.object({
   id: z.uuid(),
   supplier_id: z.uuid(),
   product_code: z.string(),
@@ -86,6 +86,23 @@ export const ProductSchema = z.object({
   brand: CatalogReferenceSchema,
   updated_at: z.string(),
 }).strict();
+
+export const ProductSchema = ProductRowSchema.extend({
+  sku_count: z.number().int().nonnegative(),
+  active_sku_count: z.number().int().nonnegative(),
+}).strict().refine(
+  ({ sku_count, active_sku_count }) => active_sku_count <= sku_count,
+  { message: "已启用 SKU 数量不能超过 SKU 总数" },
+);
+
+export const ProductSkuCountSchema = z.object({
+  supplier_product_id: z.uuid(),
+  sku_count: z.number().int().nonnegative(),
+  active_sku_count: z.number().int().nonnegative(),
+}).strict().refine(
+  ({ sku_count, active_sku_count }) => active_sku_count <= sku_count,
+  { message: "已启用 SKU 数量不能超过 SKU 总数" },
+);
 
 const SpecValueSchema = z.union([
   z.string(),
@@ -139,6 +156,8 @@ export const ProductCommandResultSchema = z.object({
 }).passthrough();
 
 export type SupplierProduct = z.infer<typeof ProductSchema>;
+export type SupplierProductRow = z.infer<typeof ProductRowSchema>;
+export type SupplierProductSkuCount = z.infer<typeof ProductSkuCountSchema>;
 export type SupplierSku = z.infer<typeof SkuSchema>;
 export type SupplierSkuUnitConversion = z.infer<
   typeof SkuUnitConversionSchema

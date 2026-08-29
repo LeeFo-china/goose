@@ -3,6 +3,11 @@ import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { catalogOptionLabel } from "./catalog-search-select";
+import {
+  buildSupplierProductClearedScopeHref,
+  buildSupplierProductDrilldownHref,
+  buildSupplierProductScopeHref,
+} from "./supplier-product-drilldown";
 import { SupplierProductSourceBadge } from "./supplier-product-source-badge";
 import {
   createLatestRequestGate,
@@ -14,6 +19,7 @@ import {
   buildRelationshipListPath,
   buildSpecDefinitionListPath,
   canCreateCatalogOptionInline,
+  isSupplierResourceNotFound,
   normalizeCreatedCatalogOption,
 } from "./supplier-product-api";
 import {
@@ -31,7 +37,6 @@ import type {
   TenantSupplierRelationship,
   UnitOption,
 } from "./supplier-product-types";
-
 const activeRelationship = {
   id: "relationship-1",
   relationship_status: "active",
@@ -40,7 +45,6 @@ const activeRelationship = {
     operational_status: "active",
   },
 } as TenantSupplierRelationship;
-
 const platformProduct = {
   id: "product-platform",
   name: "地砖",
@@ -48,15 +52,81 @@ const platformProduct = {
   owner_tenant_id: null,
   brand: { name: "东鹏" },
 } as SupplierProduct;
-
 const tenantProduct = {
   ...platformProduct,
   id: "product-tenant",
   ownership_scope: "tenant",
   owner_tenant_id: "tenant-1",
 } as SupplierProduct;
-
 describe("供应商品与供货价行为", () => {
+  test("商品列表展示 SKU 数量并使用同区域下钻工作区", () => {
+    const listSource = readFileSync(
+      new URL("./supplier-product-list.tsx", import.meta.url),
+      "utf8",
+    );
+    const typeSource = readFileSync(
+      new URL("./supplier-product-types.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(typeSource).toContain("sku_count: number");
+    expect(typeSource).toContain("active_sku_count: number");
+    expect(listSource).toContain('header: "SKU"');
+    expect(listSource).toContain("row.original.sku_count");
+    expect(listSource).toContain("row.original.active_sku_count");
+    expect(listSource).toContain("buildSupplierProductDrilldownHref");
+    expect(listSource).toContain("loadSupplierProduct");
+    expect(listSource).toContain("requestedProductId && !selected");
+    expect(listSource).toContain("refreshSkuWorkspace");
+    expect(listSource).toContain("await refreshSkuWorkspace(selected, 1)");
+    expect(listSource).toContain("await refreshSkuWorkspace(selected)");
+    expect(listSource).toContain("if (handledSearch.current === search) return;\n    productRequests.current.invalidate();\n    setProductRestoring(false);");
+    expect(listSource).toContain("const closeSkuWorkspace = useCallback(() => {\n    productRequests.current.invalidate()");
+    expect(listSource).toContain("currentRequestedProductId.current !== requestedProductId");
+    expect(listSource).toContain('aria-label="返回商品列表"');
+    expect(listSource).toContain("if (selected) return (");
+    expect(listSource).not.toContain('className="flex flex-col gap-3 border-t px-5 py-4"');
+    expect(buildSupplierProductDrilldownHref(
+      "/supplier-products",
+      "tab=products&page=2",
+      "product-1",
+    )).toBe("/supplier-products?tab=products&page=2&productId=product-1");
+    expect(buildSupplierProductDrilldownHref(
+      "/supplier-products",
+      "tab=products&productId=product-1",
+      null,
+    )).toBe("/supplier-products?tab=products");
+    const tenantWorkspaceSource = readFileSync(
+      new URL("./supplier-product-workspace.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(tenantWorkspaceSource).toContain("requestedRelationshipId");
+    expect(tenantWorkspaceSource).toContain("loadSupplierRelationship");
+    expect(tenantWorkspaceSource).toContain("buildSupplierProductScopeHref");
+    expect(tenantWorkspaceSource).toContain("buildSupplierProductClearedScopeHref");
+    expect(tenantWorkspaceSource).toContain("requestedRelationshipUnavailable");
+    expect(buildSupplierProductDrilldownHref(
+      "/supplier-products",
+      "tab=products",
+      "product-1",
+      { kind: "tenant", tenantSupplierId: "relationship-1" },
+    )).toBe(
+      "/supplier-products?tab=products&tenantSupplierId=relationship-1&productId=product-1",
+    );
+    expect(buildSupplierProductScopeHref(
+      "/supplier-products",
+      "supplierId=old&productId=product-1",
+      { kind: "tenant", tenantSupplierId: "relationship-2" },
+    )).toBe("/supplier-products?tenantSupplierId=relationship-2");
+    expect(buildSupplierProductClearedScopeHref(
+      "/supplier-products",
+      "tab=products&tenantSupplierId=missing&productId=product-1",
+      "tenant",
+    )).toBe("/supplier-products?tab=products");
+    expect(isSupplierResourceNotFound(Object.assign(new Error("missing"), { status: 404 }))).toBe(true);
+    expect(isSupplierResourceNotFound(Object.assign(new Error("server"), { status: 500 }))).toBe(false);
+  });
+
   test("合作供应商检索卡片保持稳定的两列工具栏布局", () => {
     const source = readFileSync(
       new URL("./supplier-search-select.tsx", import.meta.url),

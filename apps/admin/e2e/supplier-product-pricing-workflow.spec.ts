@@ -111,6 +111,36 @@ async function saveConversionChain(page: Page, skuName: string) {
   await expect(dialog).toBeHidden();
 }
 
+test("失效的供应商与商品链接回退到可用商品列表", async ({ page, request }) => {
+  await resetMock(request);
+  await login(page);
+  await page.goto(
+    "/supplier-products?tenantSupplierId=00000000-0000-4000-8000-000000000001&productId=00000000-0000-4000-8000-000000000002",
+    { waitUntil: "networkidle" },
+  );
+
+  await expect(page).toHaveURL("/supplier-products");
+  await expect(page.getByRole("columnheader", { name: "SKU" })).toBeVisible();
+});
+
+test("SKU 下钻中切换供应商不会被旧商品 URL 覆盖", async ({ page, request }) => {
+  await resetMock(request);
+  await login(page);
+  await page.goto("/supplier-products", { waitUntil: "networkidle" });
+  await selectTwentyFirstSupplier(page);
+  const sharedRow = page.getByRole("row").filter({ hasText: "平台共享瓷砖" });
+  await sharedRow.getByRole("button", { name: "查看 SKU" }).click();
+  await expect(page).toHaveURL(/productId=/);
+
+  await page.getByLabel("搜索合作供应商").fill("平台供应商");
+  await page.getByRole("button", { name: "搜索合作供应商", exact: true }).click();
+  await page.getByLabel("合作供应商", { exact: true }).click();
+  await page.getByRole("option", { name: /PLATFORM-002/ }).click();
+  await expect(page).toHaveURL(/tenantSupplierId=/);
+  await expect(page).not.toHaveURL(/productId=/);
+  await expect(page.getByRole("columnheader", { name: "SKU" })).toBeVisible();
+});
+
 test("租户可检索第21个合作供应商并维护私有商品、规格、换算和价格", async ({
   page,
   request,
@@ -125,10 +155,23 @@ test("租户可检索第21个合作供应商并维护私有商品、规格、换
 
   const sharedRow = page.getByRole("row").filter({ hasText: "平台共享瓷砖" });
   await expect(sharedRow.getByRole("button", { name: "编辑商品" })).toHaveCount(0);
+  await expect(sharedRow.getByRole("button", { name: /1 个.*已启用 1/ })).toBeVisible();
   await sharedRow.getByRole("button", { name: "查看 SKU" }).click();
+  await expect(page).toHaveURL(
+    /productId=21000000-0000-4000-8000-000000000031/,
+  );
+  await expect(
+    page.getByRole("row").filter({ hasText: "PLATFORM-TILE" }),
+  ).toHaveCount(0);
+  await expect(page.getByLabel("搜索供应商商品")).toHaveCount(0);
+  await page.reload({ waitUntil: "networkidle" });
+  await expect(page.getByRole("heading", { name: "平台共享瓷砖 · SKU" })).toBeVisible();
+  await expect(page.getByLabel("搜索供应商商品")).toHaveCount(0);
   const sharedSkuRow = page.getByRole("row").filter({ hasText: "PLATFORM-SKU" });
   await expect(sharedSkuRow.getByRole("button", { name: "编辑 SKU" })).toHaveCount(0);
   await expect(sharedSkuRow.getByRole("button", { name: "查看换算" })).toBeVisible();
+  await page.getByRole("button", { name: "返回商品列表" }).click();
+  await expect(page).not.toHaveURL(/productId=/);
 
   await page.getByRole("button", { name: "新增商品" }).click();
   let dialog = page.getByRole("dialog", { name: "新增租户私有商品" });
@@ -151,7 +194,8 @@ test("租户可检索第21个合作供应商并维护私有商品、规格、换
   await dialog.getByRole("button", { name: "保存商品" }).click();
   await expect(page.getByText("E2E 瓷砖", { exact: true })).toBeVisible();
 
-  const productRow = page.getByRole("row").filter({ hasText: "E2E 瓷砖" });
+  let productRow = page.getByRole("row").filter({ hasText: "E2E 瓷砖" });
+  await expect(productRow.getByRole("button", { name: /0 个.*已启用 0/ })).toBeVisible();
   await productRow.getByRole("button", { name: "查看 SKU" }).click();
   await page.getByRole("button", { name: "新增 SKU" }).click();
   await fillStructuredSku(
@@ -169,6 +213,9 @@ test("租户可检索第21个合作供应商并维护私有商品、规格、换
   await expect(dialog.getByLabel("代录原因")).toHaveCount(0);
   await dialog.getByRole("button", { name: "确认启用" }).click();
 
+  await page.getByRole("button", { name: "返回商品列表" }).click();
+  productRow = page.getByRole("row").filter({ hasText: "E2E 瓷砖" });
+  await expect(productRow.getByRole("button", { name: /1 个.*已启用 1/ })).toBeVisible();
   await productRow.getByRole("button", { name: "启用商品" }).click();
   dialog = page.getByRole("dialog", { name: /启用 E2E 瓷砖/ });
   await expect(dialog.getByLabel("代录原因")).toHaveCount(0);
@@ -283,7 +330,10 @@ test("租户新增私有商品可快速新建分类和品牌并保持单位只�
     expect.stringMatching(/^POST \/supplier-products\/[0-9a-f-]+$/),
   ]);
   expect(mutations[0].payload).toEqual({ name: "E2E 快速分类" });
-  expect(mutations[1].payload).toEqual({ name: "E2E 快速品牌" });
+  expect(mutations[1].payload).toEqual({
+    name: "E2E 快速品牌",
+    category_id: "29000000-0000-4000-8000-000000000001",
+  });
   expect("product_code" in mutations[2].payload).toBe(false);
 });
 

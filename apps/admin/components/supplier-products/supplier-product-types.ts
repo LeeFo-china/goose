@@ -39,6 +39,8 @@ export type SupplierProduct = {
   owner_tenant_id: string | null;
   category: CatalogReference;
   brand: CatalogReference;
+  sku_count: number;
+  active_sku_count: number;
   updated_at: string;
 };
 

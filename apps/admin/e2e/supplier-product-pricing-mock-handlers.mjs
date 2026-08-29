@@ -97,7 +97,15 @@ function visibleProducts(url, platform) {
   return mockStore.state.products.filter((product) =>
     product.supplier_id === supplierId && (platform
       ? product.ownership_scope === "platform"
-      : product.ownership_scope === "platform" || product.owner_tenant_id === tenantId));
+      : product.ownership_scope === "platform" || product.owner_tenant_id === tenantId))
+    .map((product) => {
+      const skus = visibleSkus(url, product.id, platform);
+      return {
+        ...product,
+        sku_count: skus.length,
+        active_sku_count: skus.filter(({ status }) => status === "active").length,
+      };
+    });
 }
 
 function visibleSkus(url, productId, platform) {
@@ -433,6 +441,16 @@ export async function handleSupplierProductPricingMock(request, response) {
   }
   if (request.method === "GET" && url.pathname === "/suppliers") return sendData(response, paginate(tenantRelationships(), url));
   if (request.method === "GET" && url.pathname === "/platform/suppliers") return sendData(response, paginate(platformSuppliers(), url));
+  const tenantSupplierResource = url.pathname.match(/^\/suppliers\/([^/]+)$/);
+  if (request.method === "GET" && tenantSupplierResource) {
+    const relationship = tenantRelationships().find(({ id }) => id === tenantSupplierResource[1]);
+    return relationship ? sendData(response, relationship) : notFound(response, "合作供应商不存在");
+  }
+  const platformSupplierResource = url.pathname.match(/^\/platform\/suppliers\/([^/]+)$/);
+  if (request.method === "GET" && platformSupplierResource) {
+    const supplier = platformSuppliers().find(({ id }) => id === platformSupplierResource[1]);
+    return supplier ? sendData(response, supplier) : notFound(response, "平台供应商不存在");
+  }
   const catalog = url.pathname.match(/^\/(platform\/)?catalog\/(categories|brands|units)$/);
   if (request.method === "GET" && catalog) {
     const records = catalog[2] === "categories" ? categories : catalog[2] === "brands" ? brands : units;
@@ -458,6 +476,11 @@ export async function handleSupplierProductPricingMock(request, response) {
   const productStatus = url.pathname.match(/^\/(platform\/)?supplier-products\/([^/]+)\/(activate|deactivate)$/);
   if (request.method === "POST" && productStatus) return mutateStatus(request, response, url, "product", productStatus[2], productStatus[3], Boolean(productStatus[1]));
   const productResource = url.pathname.match(/^\/(platform\/)?supplier-products\/([^/]+)$/);
+  if (request.method === "GET" && productResource) {
+    const product = visibleProducts(url, Boolean(productResource[1]))
+      .find(({ id }) => id === productResource[2]);
+    return product ? sendData(response, product) : notFound(response, "商品不存在");
+  }
   if (request.method === "POST" && productResource) return createProduct(request, response, url, productResource[2], Boolean(productResource[1]));
   if (request.method === "PATCH" && productResource) return updateProduct(request, response, url, productResource[2], Boolean(productResource[1]));
   if (request.method === "GET" && url.pathname === "/supplier-price-lists") return sendData(response, paginate(mockStore.state.priceLists, url));

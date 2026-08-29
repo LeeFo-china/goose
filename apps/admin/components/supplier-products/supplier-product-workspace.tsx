@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PackageSearch, Search } from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-import { loadSupplierProducts, loadSupplierRelationships } from "./supplier-product-api";
+import { isSupplierResourceNotFound, loadSupplierProducts, loadSupplierRelationship, loadSupplierRelationships } from "./supplier-product-api";
+import { buildSupplierProductClearedScopeHref, buildSupplierProductScopeHref } from "./supplier-product-drilldown";
 import { SupplierProductDialog } from "./supplier-product-dialog";
 import { SupplierProductList } from "./supplier-product-list";
 import { canReadSupplierProductWorkspace, getPriceWriteState, getProductWriteState, relationshipReadOnlyMessage, shouldLoadPriceLists } from "./supplier-product-rules";
@@ -36,6 +38,9 @@ export function SupplierProductWorkspace({
   canViewCostPrice: boolean;
   canManageCostPrice: boolean;
 }) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [relationships, setRelationships] = useState(page<TenantSupplierRelationship>());
   const [relationshipId, setRelationshipId] = useState("");
   const [relationshipPage, setRelationshipPage] = useState(1);
@@ -48,9 +53,12 @@ export function SupplierProductWorkspace({
   const [appliedKeyword, setAppliedKeyword] = useState("");
   const [loadingRelationships, setLoadingRelationships] = useState(true);
   const [loadingProducts, setLoadingProducts] = useState(false);
+  const [skuWorkspaceVisible, setSkuWorkspaceVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const relationshipRequests = useRef(createLatestRequestGate());
   const productRequests = useRef(createLatestRequestGate());
+  const requestedRelationshipId = searchParams.get("tenantSupplierId");
+  const search = searchParams.toString();
   const canReadCostPrice = canViewCostPrice || canManageCostPrice;
   const canReadWorkspace = canReadSupplierProductWorkspace({
     canViewProducts,
@@ -65,19 +73,55 @@ export function SupplierProductWorkspace({
     setLoadingRelationships(true);
     setError(null);
     try {
-      const data = await loadSupplierRelationships(appliedRelationshipKeyword, relationshipPage);
+      const [data, requestedRelationshipResult] = await Promise.all([
+        loadSupplierRelationships(appliedRelationshipKeyword, relationshipPage),
+        requestedRelationshipId
+          ? loadSupplierRelationship(requestedRelationshipId)
+            .then((value) => ({ value, unavailable: false }))
+            .catch((detailError: unknown) => ({
+              value: null,
+              unavailable: isSupplierResourceNotFound(detailError),
+              detailError,
+            }))
+          : Promise.resolve({ value: null, unavailable: false }),
+      ]);
       if (!relationshipRequests.current.isCurrent(request)) return;
+      const requestedRelationship = requestedRelationshipResult.value
+        ?? data.list.find(({ id }) => id === requestedRelationshipId)
+        ?? null;
+      if (
+        "detailError" in requestedRelationshipResult
+        && !requestedRelationshipResult.unavailable
+        && !requestedRelationship
+      ) throw requestedRelationshipResult.detailError;
+      const requestedRelationshipUnavailable = Boolean(
+        requestedRelationshipId
+        && requestedRelationshipResult.unavailable
+        && !requestedRelationship,
+      );
+      const relationshipList = requestedRelationship
+        && !data.list.some(({ id }) => id === requestedRelationship.id)
+        ? [requestedRelationship, ...data.list]
+        : data.list;
       setRelationships({
         ...data,
-        list: data.list.map((item) => ({
+        list: relationshipList.map((item) => ({
           ...item,
           name: item.supplier.name,
           code: item.supplier.code,
         })),
       } as PageData<TenantSupplierRelationship>);
-      setRelationshipId((current) => data.list.some(({ id }) => id === current)
-        ? current
-        : data.list[0]?.id ?? "");
+      setRelationshipId((current) => requestedRelationship?.id
+        ?? (relationshipList.some(({ id }) => id === current)
+          ? current
+          : relationshipList[0]?.id ?? ""));
+      if (requestedRelationshipUnavailable) {
+        setError("链接中的合作供应商不可用，已显示当前可用列表。");
+        router.replace(
+          buildSupplierProductClearedScopeHref(pathname, search, "tenant"),
+          { scroll: false },
+        );
+      }
     } catch (caught) {
       if (relationshipRequests.current.isCurrent(request)) {
         setError(caught instanceof Error ? caught.message : "合作供应商加载失败");
@@ -87,7 +131,7 @@ export function SupplierProductWorkspace({
         setLoadingRelationships(false);
       }
     }
-  }, [appliedRelationshipKeyword, canReadWorkspace, relationshipPage]);
+  }, [appliedRelationshipKeyword, canReadWorkspace, pathname, relationshipPage, requestedRelationshipId, router, search]);
 
   useEffect(() => {
     void loadRelationships();
@@ -103,6 +147,7 @@ export function SupplierProductWorkspace({
     setProductPage(1);
     setProducts(page<never>() as SupplierProductPage);
     setAvailableSkus([]);
+    setSkuWorkspaceVisible(false);
   }, [relationshipId]);
 
   const loadProducts = useCallback(async () => {
@@ -160,10 +205,14 @@ export function SupplierProductWorkspace({
         onPageChange={setRelationshipPage}
         onChange={(value) => {
           productRequests.current.invalidate();
-          setRelationshipId(value);
-          setProductPage(1);
-          setProducts(page<never>() as SupplierProductPage);
-          setAvailableSkus([]);
+          router.replace(
+            buildSupplierProductScopeHref(
+              pathname,
+              search,
+              { kind: "tenant", tenantSupplierId: value },
+            ),
+            { scroll: false },
+          );
         }}
       />
       {error ? <StatusAlert>{error}</StatusAlert> : null}
@@ -183,21 +232,23 @@ export function SupplierProductWorkspace({
           </TabsList>
           <TabsContent value="products" className="mt-0">
             <Card className="overflow-hidden shadow-none">
-              <CardHeader className="border-b bg-muted/20 p-3">
-                <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-                  <div className="flex flex-1 gap-2">
-                    <Input aria-label="搜索供应商商品" className="md:max-w-sm" value={keyword} placeholder="搜索商品名称或编码" onChange={(event) => setKeyword(event.target.value)} />
-                    <Button type="button" variant="outline" disabled={loadingProducts} onClick={() => {
-                      setProductPage(1);
-                      setAppliedKeyword(keyword.trim());
-                    }}><Search data-icon="inline-start" />搜索商品</Button>
+              {!skuWorkspaceVisible ? (
+                <CardHeader className="border-b bg-muted/20 p-3">
+                  <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+                    <div className="flex flex-1 gap-2">
+                      <Input aria-label="搜索供应商商品" className="md:max-w-sm" value={keyword} placeholder="搜索商品名称或编码" onChange={(event) => setKeyword(event.target.value)} />
+                      <Button type="button" variant="outline" disabled={loadingProducts} onClick={() => {
+                        setProductPage(1);
+                        setAppliedKeyword(keyword.trim());
+                      }}><Search data-icon="inline-start" />搜索商品</Button>
+                    </div>
+                    {writeState.writable ? <SupplierProductDialog scope={scope} disabled={loadingProducts} onSaved={loadProducts} /> : null}
                   </div>
-                  {writeState.writable ? <SupplierProductDialog scope={scope} disabled={loadingProducts} onSaved={loadProducts} /> : null}
-                </div>
-              </CardHeader>
+                </CardHeader>
+              ) : null}
               <CardContent className="p-0">
-                <SupplierProductList key={relationshipId} scope={scope} relationship={relationship} products={products} loading={loadingProducts} canManage={canManageProducts} onRefresh={loadProducts} onAvailableSkusChange={setAvailableSkus} />
-                <Paginator page={productPage} totalPages={totalPages} total={products.pagination.total} loading={loadingProducts} onPageChange={setProductPage} />
+                <SupplierProductList key={relationshipId} scope={scope} relationship={relationship} products={products} loading={loadingProducts} canManage={canManageProducts} onRefresh={loadProducts} onAvailableSkusChange={setAvailableSkus} onSkuWorkspaceChange={setSkuWorkspaceVisible} />
+                {!skuWorkspaceVisible ? <Paginator page={productPage} totalPages={totalPages} total={products.pagination.total} loading={loadingProducts} onPageChange={setProductPage} /> : null}
               </CardContent>
             </Card>
           </TabsContent>
