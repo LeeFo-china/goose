@@ -351,6 +351,47 @@ describe("standard new-tenant organization template migration", () => {
     );
   });
 
+  test("centralizes the locked active employee phone precheck", () => {
+    const source = sql();
+    const helperName = "lock_and_check_active_employee_phone";
+    const helper = extractFunction(source, helperName);
+    const direct = normalizeSql(extractFunction(
+      source,
+      "create_tenant_with_default_template",
+    ));
+    const approval = normalizeSql(extractFunction(
+      source,
+      "approve_tenant_onboarding_application",
+    ));
+
+    expect(helper).not.toBe("");
+    expect(helper).toMatch(
+      /\bsecurity\s+definer\s+set\s+search_path\s*=\s*pg_catalog\s*,\s*public\s*,\s*auth\s+as\s+\$\$/i,
+    );
+    expect(collectFunctionAcl(source, helperName)).toEqual(expectedFunctionAcl);
+
+    const normalizedHelper = normalizeSql(helper);
+    expect(normalizedHelper).toMatch(
+      /perform public\.lock_tenant_onboarding_employee_phones\(\s*array\[v_phone\]::text\[\]\s*\)/,
+    );
+    expect(normalizedHelper).toMatch(
+      /return exists \( select 1 from public\.employees as employee where employee\.status = 'active' and employee\.phone is not null and pg_catalog\.btrim\(employee\.phone\) <> '' and pg_catalog\.btrim\(employee\.phone\) = v_phone \);/,
+    );
+
+    for (const body of [direct, approval]) {
+      expect(body.match(/public\.lock_and_check_active_employee_phone\(/g))
+        .toHaveLength(1);
+      expect(body).not.toMatch(
+        /from public\.employees as employee where employee\.status = 'active' and employee\.phone is not null/,
+      );
+      expect(body).not.toContain(
+        "public.lock_tenant_onboarding_employee_phones(array[",
+      );
+    }
+    expect(direct).toContain("message = 'tenant_admin_phone_exists'");
+    expect(approval).toContain("'status', 'admin_phone_exists'");
+  });
+
   test("freezes the 2026.08.30 department and post fixtures explicitly", () => {
     const source = readFileSync(fixture, "utf8");
 

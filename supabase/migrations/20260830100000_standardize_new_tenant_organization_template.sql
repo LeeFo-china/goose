@@ -52,6 +52,47 @@ REVOKE ALL ON FUNCTION public.lock_tenant_onboarding_employee_phones(text[])
 REVOKE ALL ON FUNCTION public.lock_tenant_onboarding_employee_phones(text[])
   FROM service_role;
 
+CREATE OR REPLACE FUNCTION public.lock_and_check_active_employee_phone(
+  p_phone text
+)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public, auth
+AS $$
+DECLARE
+  v_phone text := NULLIF(pg_catalog.btrim(COALESCE(p_phone, '')), '');
+BEGIN
+  IF v_phone IS NULL THEN
+    RETURN false;
+  END IF;
+
+  PERFORM public.lock_tenant_onboarding_employee_phones(
+    ARRAY[v_phone]::text[]
+  );
+
+  RETURN EXISTS (
+    SELECT 1
+    FROM public.employees AS employee
+    WHERE employee.status = 'active'
+      AND employee.phone IS NOT NULL
+      AND pg_catalog.btrim(employee.phone) <> ''
+      AND pg_catalog.btrim(employee.phone) = v_phone
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.lock_and_check_active_employee_phone(text)
+  FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.lock_and_check_active_employee_phone(text)
+  FROM anon;
+REVOKE ALL ON FUNCTION public.lock_and_check_active_employee_phone(text)
+  FROM authenticated;
+REVOKE ALL ON FUNCTION public.lock_and_check_active_employee_phone(text)
+  FROM service_role;
+GRANT EXECUTE ON FUNCTION public.lock_and_check_active_employee_phone(text)
+  TO service_role;
+
 CREATE OR REPLACE FUNCTION public.guard_platform_employee_phone()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -1482,23 +1523,12 @@ BEGIN
       MESSAGE = 'TENANT_INITIALIZATION_INPUT_INVALID';
   END IF;
 
-  IF v_admin_phone IS NOT NULL THEN
-    PERFORM public.lock_tenant_onboarding_employee_phones(
-      ARRAY[v_admin_phone]::text[]
-    );
-
-    PERFORM employee.id
-    FROM public.employees AS employee
-    WHERE employee.status = 'active'
-      AND employee.phone IS NOT NULL
-      AND pg_catalog.btrim(employee.phone) <> ''
-      AND pg_catalog.btrim(employee.phone) = v_admin_phone
-    LIMIT 1;
-    IF FOUND THEN
-      RAISE EXCEPTION USING
-        ERRCODE = '23505',
-        MESSAGE = 'TENANT_ADMIN_PHONE_EXISTS';
-    END IF;
+  IF v_admin_phone IS NOT NULL
+    AND public.lock_and_check_active_employee_phone(v_admin_phone)
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '23505',
+      MESSAGE = 'TENANT_ADMIN_PHONE_EXISTS';
   END IF;
 
   PERFORM tenant.id
@@ -1970,9 +2000,9 @@ BEGIN
       0
     )
   );
-  PERFORM public.lock_tenant_onboarding_employee_phones(
-    ARRAY[v_application.admin_phone]::text[]
-  );
+  IF public.lock_and_check_active_employee_phone(v_application.admin_phone) THEN
+    RETURN pg_catalog.jsonb_build_object('status', 'admin_phone_exists');
+  END IF;
 
   PERFORM tenant.id
   FROM public.tenants AS tenant
@@ -1982,18 +2012,6 @@ BEGIN
   FOR SHARE;
   IF FOUND THEN
     RETURN pg_catalog.jsonb_build_object('status', 'subject_exists');
-  END IF;
-
-  PERFORM employee.id
-  FROM public.employees AS employee
-  WHERE employee.status = 'active'
-    AND employee.phone IS NOT NULL
-    AND pg_catalog.btrim(employee.phone) <> ''
-    AND pg_catalog.btrim(employee.phone) =
-      pg_catalog.btrim(v_application.admin_phone)
-  LIMIT 1;
-  IF FOUND THEN
-    RETURN pg_catalog.jsonb_build_object('status', 'admin_phone_exists');
   END IF;
 
   PERFORM tenant.id
