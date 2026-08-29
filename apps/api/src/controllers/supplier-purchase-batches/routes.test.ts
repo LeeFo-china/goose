@@ -208,6 +208,12 @@ describe("SupplierPurchaseBatchesController", () => {
       statusCode: 400,
       code: "VALIDATION_ERROR",
     });
+    await expect(value.listProjectOptions({
+      query: { timezone: "UTC" },
+    } as never)).rejects.toMatchObject({
+      statusCode: 400,
+      code: "VALIDATION_ERROR",
+    });
   });
 
   test("passes validated mutations and idempotency keys", async () => {
