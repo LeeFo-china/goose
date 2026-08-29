@@ -82,3 +82,53 @@ Workflow 对普通和显式事务 migration 保持原路径。对带 marker 的�
    `ASC NULLS LAST`、`DESC NULLS FIRST`、`DESC NULLS FIRST`）。
 4. 140500 的索引会被 141000 作为唯一约束接管并重命名；应验证约束及其底层
    六列 unique btree 定义，不能再按 preflight 临时索引名判断缺失。
+
+## 开发库项目选项 EXPLAIN 强制门
+
+仅在 development migration history 已对齐且 API readiness 成功后运行。脚本只接受
+显式数据库 URL 和 `development-read-only` 确认；它先开启事务并执行
+`SET TRANSACTION READ ONLY`，随后才允许任何基数查询或
+`EXPLAIN (ANALYZE, BUFFERS, SETTINGS, FORMAT JSON)`。禁止把生产库 URL 传给此命令，
+禁止使用 INSERT、UPDATE、DELETE、DDL、独立 ANALYZE 或 seed。
+
+从仓库根目录准备下列环境变量，不要打印或归档变量值：
+
+```bash
+cd apps/api
+SUPPLIER_PURCHASE_PROJECT_OPTIONS_EXPLAIN_CONFIRM=development-read-only \
+SUPPLIER_PURCHASE_PROJECT_OPTIONS_EXPLAIN_DB_URL="${SUPABASE_DB_DIRECT_URL}" \
+SUPPLIER_PURCHASE_PROJECT_OPTIONS_EXPLAIN_TENANT_ID="${EXPLAIN_TENANT_ID}" \
+SUPPLIER_PURCHASE_PROJECT_OPTIONS_EXPLAIN_UPDATED_AT_FROM="${EXPLAIN_UPDATED_AT_FROM}" \
+SUPPLIER_PURCHASE_PROJECT_OPTIONS_EXPLAIN_UPDATED_AT_TO="${EXPLAIN_UPDATED_AT_TO}" \
+SUPPLIER_PURCHASE_PROJECT_OPTIONS_EXPLAIN_KEYWORD="${EXPLAIN_KEYWORD}" \
+SUPPLIER_PURCHASE_PROJECT_OPTIONS_EXPLAIN_VISIBLE_PROJECT_IDS="${EXPLAIN_VISIBLE_PROJECT_IDS}" \
+SUPPLIER_PURCHASE_PROJECT_OPTIONS_EXPLAIN_PAGE_SIZE=100 \
+bun run supplier:purchase-project-options:explain
+```
+
+时间范围必须提供 UTC ISO 格式的
+`SUPPLIER_PURCHASE_PROJECT_OPTIONS_EXPLAIN_UPDATED_AT_FROM`，并在闭区间的
+`SUPPLIER_PURCHASE_PROJECT_OPTIONS_EXPLAIN_UPDATED_AT_TO` 与半开区间的
+`SUPPLIER_PURCHASE_PROJECT_OPTIONS_EXPLAIN_UPDATED_AT_BEFORE` 中二选一。关键词必须为
+1 到 100 个非空字符；`SUPPLIER_PURCHASE_PROJECT_OPTIONS_EXPLAIN_VISIBLE_PROJECT_IDS`
+为可选的逗号分隔 UUID，最多 100 个；page size 为 1 到 100，默认 20。
+
+脚本固定覆盖以下计划：
+
+- `tenant_time_page`：租户与时间交集的 `updated_at DESC, id DESC` 有界页；
+- `tenant_time_count`：同一租户与时间交集的精确 count；
+- `tenant_time_keyword_page`：租户、时间、名称关键词交集的有界页；
+- `tenant_time_keyword_count`：同一关键词交集的精确 count；
+- `bounded_visible_page`：提供可见 ID 时，再与同一时间和关键词相交的有界页。
+
+开发门阈值是 planning 50ms、execution 250ms、shared read blocks 20,000、temp
+read/write blocks 必须为 0。租户项目基数达到 1,000 时，`tenant_time_page` 必须使用
+`projects_tenant_updated_id_purchase_batch_idx` 且不能出现显式 Sort；两个关键词计划
+必须使用该复合索引或 `projects_name_purchase_batch_trgm_idx`。低于 1,000 时 planner
+可自行选择索引，但时间、buffer 和 temp 阈值仍强制执行。
+
+只归档脚本的 JSON 摘要字段：`explainQueryCount`、`queryNames`、`planningMs`、
+`executionMs`、`indexNames`、`nodeTypes`、`sharedHitBlocks`、`sharedReadBlocks`、
+`tempReadBlocks`、`tempWrittenBlocks`、`cardinalityBucket`、`visibleProjectCount` 和固定
+`thresholds`。不得归档数据库 URL、tenant/project UUID、关键词、查询参数、原始计划或
+结果行。所有计划通过后，才可继续 authenticated dev smoke 和 Orange 交接。

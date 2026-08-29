@@ -25,6 +25,8 @@
 - Create `apps/api/src/services/supplier-purchase-batch-project-option-index-migration-contract.test.ts`: migration contract.
 - Modify `scripts/release-orchestration-contract.test.ts`: release parser integration contract.
 - Modify `docs/runbooks/supplier-purchase-batch-nontransactional-migrations.md`: four-migration release and recovery procedure.
+- Create `apps/api/src/scripts/supplier-purchase-project-options-explain-*.ts`: read-only dev EXPLAIN gate and focused tests.
+- Modify `apps/api/package.json`: runnable project-option EXPLAIN script.
 
 ## Task 1: Lock the HTTP query contract
 
@@ -105,8 +107,8 @@ await expect(value.listProjectOptions({
 - [ ] **Step 3: Run the focused tests and verify RED**
 
 ```bash
-bun test apps/api/src/schema/supplier-purchase-batches.test.ts \
-  apps/api/src/controllers/supplier-purchase-batches/routes.test.ts
+cd apps/api && bun test src/schema/supplier-purchase-batches.test.ts \
+  src/controllers/supplier-purchase-batches/routes.test.ts
 ```
 
 Expected: FAIL because strict project-option parsing rejects both new fields.
@@ -195,7 +197,7 @@ describe("supplier purchase batch project option window", () => {
 - [ ] **Step 2: Run the test and verify RED**
 
 ```bash
-bun test apps/api/src/services/supplier-purchase-batch-project-option-window.test.ts
+cd apps/api && bun test src/services/supplier-purchase-batch-project-option-window.test.ts
 ```
 
 Expected: FAIL because the helper does not exist.
@@ -210,11 +212,17 @@ import type {
 type UpdatedWindow = NonNullable<
   SupplierPurchaseBatchProjectOptionQuery["updatedWindow"]
 >;
-export type SupplierPurchaseBatchProjectOptionUpdatedAtRange = {
-  updated_at_from: string;
-  updated_at_to?: string;
-  updated_at_before?: string;
-};
+export type SupplierPurchaseBatchProjectOptionUpdatedAtRange =
+  | {
+    updated_at_from: string;
+    updated_at_to: string;
+    updated_at_before?: never;
+  }
+  | {
+    updated_at_from: string;
+    updated_at_before: string;
+    updated_at_to?: never;
+  };
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const SHANGHAI_UTC_OFFSET_MS = 8 * 60 * 60 * 1000;
@@ -296,7 +304,7 @@ Keep the assertions for `requireView`, `requireManage`, and `assertProjectUpdate
 - [ ] **Step 2: Run the service test and verify RED**
 
 ```bash
-bun test apps/api/src/services/supplier-purchase-batches.test.ts
+cd apps/api && bun test src/services/supplier-purchase-batches.test.ts
 ```
 
 Expected: FAIL because the service does not pass UTC boundaries.
@@ -342,8 +350,8 @@ This preserves authorization order and only reads the injected clock when a wind
 - [ ] **Step 4: Run service and boundary tests**
 
 ```bash
-bun test apps/api/src/services/supplier-purchase-batches.test.ts \
-  apps/api/src/services/supplier-purchase-batch-project-option-window.test.ts
+(cd apps/api && bun test src/services/supplier-purchase-batches.test.ts \
+  src/services/supplier-purchase-batch-project-option-window.test.ts)
 bun run api:check-file-size
 ```
 
@@ -480,7 +488,7 @@ test("uses a half-open month and preserves unfiltered order", async () => {
 - [ ] **Step 2: Run the new repository test and verify RED**
 
 ```bash
-bun test apps/api/src/repositories/supplier-purchase-batch-project-options.test.ts
+cd apps/api && bun test src/repositories/supplier-purchase-batch-project-options.test.ts
 ```
 
 Expected: FAIL because repository input and query methods do not support time fields.
@@ -488,14 +496,27 @@ Expected: FAIL because repository input and query methods do not support time fi
 - [ ] **Step 3: Extend repository types**
 
 ```ts
+type BatchProjectOptionTimeRange =
+  | {
+    updated_at_from?: never;
+    updated_at_to?: never;
+    updated_at_before?: never;
+  }
+  | {
+    updated_at_from: string;
+    updated_at_to: string;
+    updated_at_before?: never;
+  }
+  | {
+    updated_at_from: string;
+    updated_at_before: string;
+    updated_at_to?: never;
+  };
 export type BatchProjectOptionInput = PageInput & {
   tenant_id: string;
   visible_project_ids: string[] | null;
   keyword?: string;
-  updated_at_from?: string;
-  updated_at_to?: string;
-  updated_at_before?: string;
-};
+} & BatchProjectOptionTimeRange;
 ```
 
 Add these installed Supabase builder methods to local `Query`:
@@ -535,8 +556,8 @@ Keep `select("id,name,status", { count: "exact" })`, scope, keyword escaping, em
 - [ ] **Step 5: Run repository tests and verify GREEN**
 
 ```bash
-bun test apps/api/src/repositories/supplier-purchase-batch-project-options.test.ts \
-  apps/api/src/repositories/supplier-purchase-batches.test.ts
+cd apps/api && bun test src/repositories/supplier-purchase-batch-project-options.test.ts \
+  src/repositories/supplier-purchase-batches.test.ts
 ```
 
 Expected: new and existing repository contracts PASS.
@@ -588,7 +609,7 @@ describe("supplier purchase batch project option index migration", () => {
 - [ ] **Step 2: Run the test and verify RED**
 
 ```bash
-bun test apps/api/src/services/supplier-purchase-batch-project-option-index-migration-contract.test.ts
+cd apps/api && bun test src/services/supplier-purchase-batch-project-option-index-migration-contract.test.ts
 ```
 
 Expected: FAIL because the migration does not exist.
@@ -621,8 +642,8 @@ RESET lock_timeout;
 - [ ] **Step 4: Verify the migration and release parser**
 
 ```bash
-bun test apps/api/src/services/supplier-purchase-batch-project-option-index-migration-contract.test.ts \
-  scripts/release-orchestration-contract.test.ts
+cd apps/api && bun test src/services/supplier-purchase-batch-project-option-index-migration-contract.test.ts
+cd ../.. && bun test scripts/release-orchestration-contract.test.ts
 ```
 
 Expected: PASS; the release contract loads the actual migration, exercises the
@@ -643,19 +664,24 @@ git commit -m "perf(supplier): 索引采购项目更新时间筛选"
 ## Task 6: Verify, review, merge, deploy dev, and hand off
 
 **Files:**
-- Verify all files from Tasks 1-5.
+- Verify all files from Tasks 1-5 and the focused read-only EXPLAIN gate.
 - Do not modify `/Users/leefo/Public/work/orange`.
 
 - [ ] **Step 1: Run the complete focused regression set**
 
 ```bash
-bun test apps/api/src/schema/supplier-purchase-batches.test.ts \
-  apps/api/src/controllers/supplier-purchase-batches/routes.test.ts \
-  apps/api/src/services/supplier-purchase-batch-project-option-window.test.ts \
-  apps/api/src/services/supplier-purchase-batches.test.ts \
-  apps/api/src/repositories/supplier-purchase-batch-project-options.test.ts \
-  apps/api/src/repositories/supplier-purchase-batches.test.ts \
-  apps/api/src/services/supplier-purchase-batch-project-option-index-migration-contract.test.ts
+cd apps/api && bun test src/schema/supplier-purchase-batches.test.ts \
+  src/controllers/supplier-purchase-batches/routes.test.ts \
+  src/services/supplier-purchase-batch-project-option-window.test.ts \
+  src/services/supplier-purchase-batches.test.ts \
+  src/repositories/supplier-purchase-batch-project-options.test.ts \
+  src/repositories/supplier-purchase-batches.test.ts \
+  src/services/supplier-purchase-batch-project-option-index-migration-contract.test.ts \
+  src/scripts/supplier-purchase-project-options-explain-config.test.ts \
+  src/scripts/supplier-purchase-project-options-explain-evidence.test.ts \
+  src/scripts/supplier-purchase-project-options-explain.test.ts \
+  src/scripts/supplier-purchase-project-options-explain-docs-contract.test.ts
+cd ../.. && bun test scripts/release-orchestration-contract.test.ts
 ```
 
 Expected: all focused tests PASS with zero failures.
@@ -735,7 +761,30 @@ pnpm dlx supabase@2.99.0 migration list --db-url "${SUPABASE_DB_DIRECT_URL}"
 
 Expected: migration `20260829170000` appears in both Local and Remote columns.
 
-- [ ] **Step 8: Run authenticated dev smoke**
+- [ ] **Step 8: Run the mandatory read-only dev EXPLAIN gate**
+
+After migration history and API readiness succeed, run the exact environment contract from
+`docs/runbooks/supplier-purchase-batch-nontransactional-migrations.md`:
+
+```bash
+cd apps/api
+SUPPLIER_PURCHASE_PROJECT_OPTIONS_EXPLAIN_CONFIRM=development-read-only \
+SUPPLIER_PURCHASE_PROJECT_OPTIONS_EXPLAIN_DB_URL="${SUPABASE_DB_DIRECT_URL}" \
+SUPPLIER_PURCHASE_PROJECT_OPTIONS_EXPLAIN_TENANT_ID="${EXPLAIN_TENANT_ID}" \
+SUPPLIER_PURCHASE_PROJECT_OPTIONS_EXPLAIN_UPDATED_AT_FROM="${EXPLAIN_UPDATED_AT_FROM}" \
+SUPPLIER_PURCHASE_PROJECT_OPTIONS_EXPLAIN_UPDATED_AT_TO="${EXPLAIN_UPDATED_AT_TO}" \
+SUPPLIER_PURCHASE_PROJECT_OPTIONS_EXPLAIN_KEYWORD="${EXPLAIN_KEYWORD}" \
+SUPPLIER_PURCHASE_PROJECT_OPTIONS_EXPLAIN_VISIBLE_PROJECT_IDS="${EXPLAIN_VISIBLE_PROJECT_IDS}" \
+SUPPLIER_PURCHASE_PROJECT_OPTIONS_EXPLAIN_PAGE_SIZE=100 \
+bun run supplier:purchase-project-options:explain
+```
+
+Archive only the redacted query names/count, timings, index/node names, buffer counts,
+cardinality bucket, visible count, and thresholds. All plans must have planning <=50ms,
+execution <=250ms, shared reads <=20,000 blocks, and zero temp blocks. This gate is mandatory
+before authenticated smoke and Orange handoff; it must not seed or mutate dev data.
+
+- [ ] **Step 9: Run the full authenticated dev smoke acceptance matrix**
 
 Load an approved employee token into `GOOES_DEV_EMPLOYEE_TOKEN` without printing it, then call:
 
@@ -751,9 +800,24 @@ curl -fsS -D /tmp/gooes-project-options-month.headers \
   "https://api-dev.goodcms.cn/supplier-purchase-batch-project-options?page=1&pageSize=20&updatedWindow=current_month&timezone=Asia%2FShanghai"
 ```
 
-Also send one unknown window and one invalid timezone without `-f`; both must return HTTP 400 / `VALIDATION_ERROR`. Capture only masked project IDs/names, counts, status codes, `x-gooes-revision`, and Request-ID. Remove the temporary header files after extracting non-sensitive evidence.
+Complete and record every acceptance case below; use literal labels in the evidence checklist so
+none can be silently collapsed into another case:
 
-- [ ] **Step 9: Produce the Orange handoff**
+- `unfiltered`;
+- `last_7_days`;
+- `current_month`;
+- `keyword intersection` with each time window;
+- `empty filtered page`;
+- `multi-page no duplicate/missing stable order` using `updated_at DESC, id DESC`;
+- `denied project scope` with no out-of-scope rows;
+- `timezone-only no-op` with unchanged unfiltered semantics;
+- `invalid window` returning HTTP 400 / `VALIDATION_ERROR`;
+- `invalid timezone` returning HTTP 400 / `VALIDATION_ERROR`.
+
+Capture only masked project IDs/names, counts, status codes, `x-gooes-revision`, and Request-ID.
+Remove temporary header files after extracting non-sensitive evidence.
+
+- [ ] **Step 10: Produce the Orange handoff**
 
 Report the final main commit/dev revision; final parameters; closed last-7-days and half-open Shanghai month boundaries; unchanged permissions, scope, response, pagination, and unfiltered order; masked success/error Request-IDs; and samples from these three existing dev groups:
 

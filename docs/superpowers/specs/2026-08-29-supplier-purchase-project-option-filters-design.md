@@ -61,7 +61,7 @@ GET /supplier-purchase-batch-project-options
 
 ```ts
 {
-  list: Array<{ id: string; name: string; status: string }>;
+  list: Array<{ id: string; name: string; status: string | null }>;
   pagination: {
     page: number;
     pageSize: number;
@@ -148,6 +148,15 @@ NULL 顺序绕过 `IF NOT EXISTS` 后登记 history。migration 设置有限的 
 `statement_timeout`。发布前验证索引定义、有效性和查询计划；发布后使用
 `supabase migration list` 验证 Local/Remote 对齐。
 
+开发库 migration 和 API readiness 完成后，必须运行 API package 脚本
+`supplier:purchase-project-options:explain`，在显式只读事务中保存时间页、时间精确
+count、时间与关键词交集页/精确 count，以及可选可见项目范围页的脱敏运行时证据。
+每个计划必须满足 planning 不超过 50ms、execution 不超过 250ms、shared read blocks
+不超过 20,000 且不使用 temp blocks。租户项目数达到 1,000 时，时间页必须使用
+`projects_tenant_updated_id_purchase_batch_idx` 且无显式 Sort；关键词计划必须使用该
+复合索引或 `projects_name_purchase_batch_trgm_idx`。未取得这份 dev EXPLAIN 证据时，
+不得进入 Orange 交接。
+
 该 migration 是 forward-only：先回滚/停用依赖时间排序的 API revision，保留上述
 additive index 是安全的，且不会改变 API 回滚后的查询语义。若日后确需移除索引，必须在
 release tooling 支持 expected-absence/drop contract 后，以单独审查的带时间戳 migration
@@ -173,8 +182,9 @@ release tooling 支持 expected-absence/drop contract 后，以单独审查的�
   权限与项目范围调用保持不变。
 - Repository：验证 PostgREST 请求在分页前包含租户、可见范围、关键词与时间条件；验证
   无窗口和有窗口的不同稳定排序；验证精确 count 和空范围短路。
-- Migration：静态契约、索引元数据以及 Local/Remote 状态检查；必要时用
-  `EXPLAIN (ANALYZE, BUFFERS)` 核对实际计划。
+- Migration：静态契约、索引元数据以及 Local/Remote 状态检查；dev 必须通过
+  `supplier:purchase-project-options:explain` 的
+  `EXPLAIN (ANALYZE, BUFFERS, SETTINGS, FORMAT JSON)` 运行时门。
 
 最小验证顺序为相关 Bun 测试、API 类型检查/构建、migration 检查、dev 接口 smoke。
 

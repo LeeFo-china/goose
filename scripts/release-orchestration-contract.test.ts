@@ -1476,6 +1476,18 @@ describe("production migration precheck workflow", () => {
       "indislive",
       "pg_index.indoption",
       "asc_nulls_last,desc_nulls_first,desc_nulls_first",
+      "supplier:purchase-project-options:explain",
+      "SUPPLIER_PURCHASE_PROJECT_OPTIONS_EXPLAIN_CONFIRM",
+      "SUPPLIER_PURCHASE_PROJECT_OPTIONS_EXPLAIN_DB_URL",
+      "tenant_time_page",
+      "tenant_time_count",
+      "tenant_time_keyword_page",
+      "tenant_time_keyword_count",
+      "bounded_visible_page",
+      "planning 50ms",
+      "execution 250ms",
+      "shared read blocks 20,000",
+      "temp",
     ]) expect(supplierBatchMigrationRunbook).toContain(fragment);
     expect(supplierBatchMigrationRunbook).toContain("禁止");
   });
