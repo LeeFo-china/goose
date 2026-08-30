@@ -8,6 +8,7 @@ import { CustomerWorkflowActionConfig } from "./workflow-business-actions";
 const visibleWorkflowKeyPattern = /[A-Za-z_]/;
 
 const subjectTypeLabels: Record<string, string> = {
+  manual: "手动",
   customer: "客户",
   project: "项目",
   expense_request: "费用申请",

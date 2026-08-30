@@ -20,6 +20,10 @@ import {
   fetchWorkflowRuntimeInstances,
 } from "./workflow-requests";
 import {
+  workflowNodeKeyLabel,
+  workflowSubjectTypeLabel,
+} from "./workflow-display-labels";
+import {
   getWorkflowRuntimeVersionState,
   WORKFLOW_VERSION_EFFECT_COPY,
 } from "./workflow-version-semantics";
@@ -43,15 +47,6 @@ const statusVariants: Record<
   completed: "secondary",
   canceled: "outline",
   failed: "danger",
-};
-
-const subjectLabels: Record<WorkflowRuntimeInstance["subject_type"], string> = {
-  manual: "手动",
-  customer: "客户",
-  project: "项目",
-  expense_request: "费用",
-  procedure: "工序",
-  supplier_purchase_batch: "采购批次",
 };
 
 function formatDateTime(value: string | null | undefined) {
@@ -205,7 +200,7 @@ export function WorkflowRuntimePanel({
                   <TableRow key={instance.id}>
                     <TableCell>
                       <div className="font-medium">
-                        {subjectLabels[instance.subject_type]}
+                        {workflowSubjectTypeLabel(instance.subject_type)}
                       </div>
                       <div className="max-w-[240px] truncate text-xs text-muted-foreground">
                         {instance.subject_id}
@@ -229,7 +224,7 @@ export function WorkflowRuntimePanel({
                       </div>
                     </TableCell>
                     <TableCell>
-                      {instance.current_node_key || "-"}
+                      {workflowNodeKeyLabel(instance.current_node_key, "-")}
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
                       {formatDateTime(instance.started_at)}

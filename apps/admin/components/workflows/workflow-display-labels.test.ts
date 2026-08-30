@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import {
   workflowActionLabel,
   workflowActionDisplayLabel,
@@ -64,10 +65,26 @@ describe("workflow display labels", () => {
   });
 
   test("maps supplier purchase batch workflow subject and node keys", () => {
+    expect(workflowSubjectTypeLabel("manual")).toBe("手动");
     expect(workflowSubjectTypeLabel("supplier_purchase_batch")).toBe("采购批次");
     expect(workflowNodeKeyLabel("purchase_review")).toBe("采购审批");
     expect(workflowNodeKeyLabel("finance_review")).toBe("财务审批");
     expect(workflowNodeKeyLabel("approved_end")).toBe("审批通过");
     expect(workflowNodeKeyLabel("rejected_end")).toBe("审批驳回");
+  });
+
+  test("uses shared Chinese labels in the runtime panel", () => {
+    const runtimePanelSource = readFileSync(
+      new URL("./workflow-runtime-panel.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(runtimePanelSource).toContain(
+      "workflowSubjectTypeLabel(instance.subject_type)",
+    );
+    expect(runtimePanelSource).toContain(
+      'workflowNodeKeyLabel(instance.current_node_key, "-")',
+    );
+    expect(runtimePanelSource).not.toContain("const subjectLabels");
   });
 });
