@@ -108,6 +108,7 @@ export type AvailableAuditHostsResult = {
 export type SubmitVersionAuditInput = AuthorizerRequestInput & {
   readonly hostNames: readonly string[];
   readonly auditNote: string;
+  readonly auditWay?: 1;
 };
 export type SafeDouyinVersionStage = {
   readonly version: string;
@@ -206,7 +207,11 @@ export class DouyinMiniappReleaseClient implements DouyinMiniappReleaseGateway {
       const body = await this.transport.request(VERSION_AUDIT_URL, {
         method: "POST",
         headers: { "access-token": accessToken, "content-type": "application/json" },
-        body: JSON.stringify({ host_names: hostNames.data, audit_note: input.auditNote }),
+        body: JSON.stringify({
+          host_names: hostNames.data,
+          audit_note: input.auditNote,
+          ...(input.auditWay === 1 ? { audit_way: 1 } : {}),
+        }),
       });
       const parsed = this.parseSuccess(body, ReleaseOperationSuccessSchema);
       return { logId: parsed.log_id };
