@@ -93,6 +93,17 @@ describe("SupplierPurchaseBatchWorkflowRepository", () => {
       code: "SUPPLIER_PURCHASE_BATCH_WORKFLOW_MISSING",
     });
 
+    const noApprover = new SupplierPurchaseBatchWorkflowRepository(() => ({
+      async rpc() {
+        return { data: null,
+          error: { message: "SUPPLIER_PURCHASE_BATCH_NO_APPROVER" } };
+      },
+    }));
+    await expect(noApprover.submit(context)).rejects.toMatchObject({
+      statusCode: 409,
+      code: "SUPPLIER_PURCHASE_BATCH_NO_APPROVER",
+    });
+
     const malformed = new SupplierPurchaseBatchWorkflowRepository(() => ({
       async rpc() {
         return { data: { status: "submitted", idempotent: false, batch,

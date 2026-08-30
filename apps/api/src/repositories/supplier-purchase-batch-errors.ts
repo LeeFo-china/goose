@@ -53,7 +53,7 @@ export const SUPPLIER_PURCHASE_BATCH_ERRORS = {
   SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT: {
     statusCode: 409, message: "采购批次审批流程状态冲突，请刷新后重试",
   },
-  SUPPLIER_PURCHASE_BATCH_WORKFLOW_NO_APPROVER: {
+  SUPPLIER_PURCHASE_BATCH_NO_APPROVER: {
     statusCode: 409, message: "采购批次审批流程缺少可用审批人",
   },
 } as const;

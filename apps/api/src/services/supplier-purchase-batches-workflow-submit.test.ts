@@ -89,7 +89,7 @@ describe("SupplierPurchaseBatchesService workflow submit rollout", () => {
       throw Errors.business(
         409,
         "采购批次审批流程缺少可用审批人",
-        "SUPPLIER_PURCHASE_BATCH_WORKFLOW_NO_APPROVER",
+        "SUPPLIER_PURCHASE_BATCH_NO_APPROVER",
       );
     });
 
@@ -99,7 +99,7 @@ describe("SupplierPurchaseBatchesService workflow submit rollout", () => {
       { expected_version: 1 },
       "batch:workflow-failure",
     )).rejects.toMatchObject({
-      code: "SUPPLIER_PURCHASE_BATCH_WORKFLOW_NO_APPROVER",
+      code: "SUPPLIER_PURCHASE_BATCH_NO_APPROVER",
     });
     expect(legacySubmit).not.toHaveBeenCalled();
   });
