@@ -3,10 +3,12 @@ import type { SupplierPurchaseBatchDetail } from
 import type { Page } from "@/repositories/supplier-purchase-batches";
 import {
   workflowTaskRepository,
-  type WorkflowTaskWithInstanceRow,
+  type WorkflowTaskActionRow,
 } from "@/repositories/workflow-tasks";
-import type { WorkflowSubjectStateRow } from
-  "@/repositories/workflow-subject-states";
+import {
+  workflowSubjectStateRepository,
+  type WorkflowSubjectStateCompactRow,
+} from "@/repositories/workflow-subject-states";
 import type { AuthContext } from "@/services/authorization";
 import {
   deriveSupplierPurchaseBatchActions,
@@ -15,8 +17,6 @@ import {
   buildWorkflowTaskActionsForTask,
   type WorkflowTaskActionPayload,
 } from "@/services/workflow-task-actions";
-import { workflowSubjectStateService } from
-  "@/services/workflow-subject-state";
 import { workflowSubjectsService } from "@/services/workflow-subjects";
 
 export type SupplierPurchaseBatchWorkflowReadPort = {
@@ -24,17 +24,20 @@ export type SupplierPurchaseBatchWorkflowReadPort = {
     tenantId: string;
     subjectType: "supplier_purchase_batch";
     subjectIds: string[];
-  }): Promise<WorkflowSubjectStateRow[]>;
-  listPendingTasks(input: {
+  }): Promise<WorkflowSubjectStateCompactRow[]>;
+  listAccessiblePendingTasks(input: {
     tenantId: string;
     subjectType: "supplier_purchase_batch";
     subjectIds: string[];
+    employeeId: string;
+    roleCodes: string[];
+    permissionCodes: string[];
     limit: number;
-  }): Promise<WorkflowTaskWithInstanceRow[]>;
+  }): Promise<WorkflowTaskActionRow[]>;
   buildTaskActions(input: {
     tenantId: string;
     subjectType: "supplier_purchase_batch";
-    task: WorkflowTaskWithInstanceRow;
+    task: WorkflowTaskActionRow;
   }): Promise<WorkflowTaskActionPayload[]>;
   getState(
     auth: AuthContext,
@@ -63,9 +66,9 @@ export class SupplierPurchaseBatchWorkflowProjectionService {
   ) {
     this.workflowRead = dependencies.workflowRead ?? {
       listSubjectStates: (input) =>
-        workflowSubjectStateService.listSubjectStates(input),
-      listPendingTasks: (input) =>
-        workflowTaskRepository.listPendingBySubjectIds(input),
+        workflowSubjectStateRepository.listCompactBySubjectIds(input),
+      listAccessiblePendingTasks: (input) =>
+        workflowTaskRepository.listAccessiblePendingBySubjectIds(input),
       buildTaskActions: (input) => buildWorkflowTaskActionsForTask(input),
       getState: (auth, params, options) =>
         workflowSubjectsService.getState(auth, params, options),
@@ -160,10 +163,13 @@ export class SupplierPurchaseBatchWorkflowProjectionService {
     batches: SupplierPurchaseBatchDetail[];
   }): Promise<Map<string, WorkflowTaskActionPayload[]>> {
     const batchById = new Map(input.batches.map((batch) => [batch.id, batch]));
-    const tasks = await this.workflowRead.listPendingTasks({
+    const tasks = await this.workflowRead.listAccessiblePendingTasks({
       tenantId: input.scope.tenantId,
       subjectType: "supplier_purchase_batch",
       subjectIds: input.batches.map(({ id }) => id),
+      employeeId: input.scope.employeeId,
+      roleCodes: input.auth.roleCodes,
+      permissionCodes: input.auth.permissions.map(({ code }) => code),
       limit: 100,
     });
     const actionsByBatchId = new Map<string, WorkflowTaskActionPayload[]>();
@@ -216,7 +222,7 @@ function deriveWorkflowActions(input: {
 }
 
 function compactWorkflowState(
-  state: WorkflowSubjectStateRow,
+  state: WorkflowSubjectStateCompactRow,
   actions: WorkflowTaskActionPayload[],
 ) {
   return {
@@ -238,7 +244,7 @@ function stateAllowsWithdraw(value: unknown): boolean {
 
 function taskIsAccessible(input: {
   auth: AuthContext;
-  task: WorkflowTaskWithInstanceRow;
+  task: WorkflowTaskActionRow;
   createdByEmployeeId: string;
   submittedByEmployeeId: string | null;
 }): boolean {
@@ -263,7 +269,7 @@ function taskIsAccessible(input: {
       permissionCodes.has(task.assignee_permission_code));
 }
 
-function requiredPermissions(task: WorkflowTaskWithInstanceRow): string[] {
+function requiredPermissions(task: WorkflowTaskActionRow): string[] {
   const config = asRecord(asRecord(task.instance?.current_node_snapshot)?.config);
   const configured = Array.isArray(config?.required_permissions)
     ? config.required_permissions.filter((value): value is string =>

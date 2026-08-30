@@ -296,6 +296,52 @@ describe("workflowTaskRepository", () => {
     expect(result[0]?.id).toBe("task-1");
   });
 
+  test("filters subject batch tasks by assignee before applying the direct SQL limit", async () => {
+    orCalls.length = 0;
+    rpcCalls.length = 0;
+    directSqlQueries.length = 0;
+    directSql = createDirectSqlMock([directWorkflowTaskRow()]);
+    const { workflowTaskRepository } = await import("./workflow-tasks");
+
+    const result = await workflowTaskRepository
+      .listAccessiblePendingBySubjectIds({
+        tenantId: "tenant-1",
+        subjectType: "supplier_purchase_batch",
+        subjectIds: ["batch-1", "batch-2"],
+        employeeId: "employee-1",
+        roleCodes: ["purchase_reviewer"],
+        permissionCodes: ["supplier.purchase-requisition.approve"],
+        limit: 100,
+      });
+
+    const query = directSqlQueries[0];
+    const sqlText = query?.strings.join(" ? ") ?? "";
+    expect(sqlText.indexOf("instance.subject_type =")).toBeGreaterThan(-1);
+    expect(sqlText.indexOf("instance.subject_id IN")).toBeGreaterThan(
+      sqlText.indexOf("instance.subject_type ="),
+    );
+    expect(sqlText.indexOf("instance.status = 'running'"))
+      .toBeGreaterThan(sqlText.indexOf("instance.subject_id IN"));
+    expect(sqlText.indexOf("instance.current_node_key = task.node_key"))
+      .toBeGreaterThan(sqlText.indexOf("instance.status = 'running'"));
+    expect(sqlText.indexOf("AND ("))
+      .toBeGreaterThan(
+        sqlText.indexOf("instance.current_node_key = task.node_key"),
+      );
+    expect(sqlText.indexOf("ORDER BY"))
+      .toBeGreaterThan(sqlText.indexOf("AND ("));
+    expect(sqlText.indexOf("LIMIT"))
+      .toBeGreaterThan(sqlText.indexOf("ORDER BY"));
+    expect(query?.values).toContain("supplier_purchase_batch");
+    expect(JSON.stringify(query?.values)).toContain(
+      JSON.stringify(["batch-1", "batch-2"]),
+    );
+    expect(query?.values).toContain(100);
+    expect(sqlText).not.toContain("JOIN public.employees");
+    expect(sqlText).not.toContain("completed_by");
+    expect(result[0]?.id).toBe("task-1");
+  });
+
   test("uses RPC fallback instead of long PostgREST filters when direct SQL is unavailable", async () => {
     orCalls.length = 0;
     eqCalls.length = 0;
@@ -373,6 +419,38 @@ describe("workflowTaskRepository", () => {
       }),
     }]);
     expect(result[0]?.id).toBe("task-1");
+  });
+
+  test("uses the bounded subject-id RPC fallback with assignee scope", async () => {
+    orCalls.length = 0;
+    rpcCalls.length = 0;
+    directSqlQueries.length = 0;
+    directSql = null;
+    const { workflowTaskRepository } = await import("./workflow-tasks");
+
+    await workflowTaskRepository.listAccessiblePendingBySubjectIds({
+      tenantId: "tenant-1",
+      subjectType: "supplier_purchase_batch",
+      subjectIds: ["batch-1", "batch-2"],
+      employeeId: "employee-1",
+      roleCodes: ["purchase_reviewer"],
+      permissionCodes: ["supplier.purchase-requisition.approve"],
+      limit: 100,
+    });
+
+    expect(orCalls).toHaveLength(0);
+    expect(rpcCalls).toEqual([{
+      name: "list_accessible_workflow_tasks_by_subject_ids",
+      params: {
+        p_tenant_id: "tenant-1",
+        p_subject_type: "supplier_purchase_batch",
+        p_subject_ids: ["batch-1", "batch-2"],
+        p_employee_id: "employee-1",
+        p_role_codes: ["purchase_reviewer"],
+        p_permission_codes: ["supplier.purchase-requisition.approve"],
+        p_limit: 100,
+      },
+    }]);
   });
 
   test("does not permanently disable direct SQL after a transient failure", async () => {

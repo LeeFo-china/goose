@@ -1,9 +1,12 @@
-import { getDirectPostgresSql } from "@/utils/postgres-direct";
+import type { WorkflowSubjectType } from "@gooes/domain";
+
 import type {
+  WorkflowTaskActionRow,
   WorkflowTaskListInput,
   WorkflowTaskListResult,
   WorkflowTaskWithInstanceRow,
 } from "@/repositories/workflow-tasks";
+import { getDirectPostgresSql } from "@/utils/postgres-direct";
 
 type WorkflowTaskAssigneeInput = Pick<
   WorkflowTaskListInput,
@@ -189,6 +192,57 @@ export async function listAccessiblePendingByProjectIdsViaDirectSql(input: {
   `;
 
   return toWorkflowTaskRows(rows);
+}
+
+export async function listAccessiblePendingBySubjectIdsViaDirectSql(input: {
+  tenantId: string;
+  subjectType: WorkflowSubjectType;
+  subjectIds: string[];
+  employeeId?: string | null;
+  roleCodes?: string[];
+  permissionCodes?: string[];
+  limit: number;
+  sql: NonNullable<ReturnType<typeof getDirectPostgresSql>>;
+}): Promise<WorkflowTaskActionRow[]> {
+  const assigneePredicate = buildDirectAssigneePredicate(input.sql, input);
+  const rows = await input.sql<WorkflowTaskActionRow[]>`
+    SELECT
+      task.id,
+      task.instance_id,
+      task.instance_node_id,
+      task.node_id,
+      task.node_key,
+      task.node_type,
+      task.title,
+      task.status,
+      task.assignee_employee_id,
+      task.assignee_role_code,
+      task.assignee_permission_code,
+      task.created_at::text AS created_at,
+      jsonb_build_object(
+        'id', instance.id,
+        'subject_type', instance.subject_type,
+        'subject_id', instance.subject_id,
+        'status', instance.status,
+        'current_node_key', instance.current_node_key,
+        'current_node_snapshot', instance.current_node_snapshot
+      ) AS instance
+    FROM public.workflow_tasks AS task
+    JOIN public.workflow_instances AS instance
+      ON instance.id = task.instance_id
+      AND instance.tenant_id = task.tenant_id
+    WHERE task.tenant_id = ${input.tenantId}::uuid
+      AND task.status = 'pending'
+      AND instance.subject_type = ${input.subjectType}
+      AND instance.subject_id IN ${input.sql(input.subjectIds)}
+      AND instance.status = 'running'
+      AND instance.current_node_key = task.node_key
+      AND (${assigneePredicate})
+    ORDER BY task.created_at ASC, task.id ASC
+    LIMIT ${input.limit}
+  `;
+
+  return rows;
 }
 
 function buildDirectAssigneePredicate(

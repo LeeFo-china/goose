@@ -73,12 +73,11 @@ export function deriveSupplierPurchaseBatchActions(
   input: SupplierPurchaseBatchActionInput,
 ): SupplierPurchaseBatchActions {
   const hasActor = Boolean(input.actorEmployeeId);
-  const canManageDraft = hasActor && (
-    input.status === "draft" || (
-      input.status === "rejected" &&
-      input.actorEmployeeId === input.createdByEmployeeId
-    )
-  ) &&
+  const canEditRejected = input.workflowEnabled === true &&
+    input.status === "rejected" &&
+    input.actorEmployeeId === input.submittedByEmployeeId;
+  const canManageDraft = hasActor &&
+    (input.status === "draft" || canEditRejected) &&
     input.canUpdateProject && hasPermission(
       input.permissions,
       "supplier.purchase-requisition.manage",

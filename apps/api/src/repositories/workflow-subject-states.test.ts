@@ -6,6 +6,7 @@ type InCall = readonly [string, unknown[]];
 const eqCalls: EqCall[] = [];
 const inCalls: InCall[] = [];
 const orderCalls: Array<readonly [string, unknown]> = [];
+const selectCalls: string[] = [];
 let runningSingleData: Record<string, unknown> | null = runtimeInstance("instance-running", "running");
 let completedSingleData: Record<string, unknown> | null = runtimeInstance(
   "instance-completed",
@@ -21,7 +22,8 @@ let completedListData: Array<Record<string, unknown>> = [
 class WorkflowInstancesQuery {
   private status: unknown = null;
 
-  select() {
+  select(columns = "") {
+    selectCalls.push(columns);
     return this;
   }
 
@@ -161,6 +163,32 @@ describe("workflowSubjectStateRepository", () => {
     expect(eqCalls).toContainEqual(["status", "running"]);
     expect(eqCalls).toContainEqual(["status", "completed"]);
     expect(inCalls).toContainEqual(["subject_id", ["project-1", "project-2"]]);
+  });
+
+  test("uses a compact state projection for bounded batch list enrichment", async () => {
+    selectCalls.length = 0;
+    inCalls.length = 0;
+    const { workflowSubjectStateRepository } = await import(
+      "./workflow-subject-states"
+    );
+
+    await workflowSubjectStateRepository.listCompactBySubjectIds({
+      tenantId: "tenant-1",
+      subjectType: "supplier_purchase_batch",
+      subjectIds: ["batch-1", "batch-2"],
+    });
+
+    expect(selectCalls).toContain([
+      "subject_id",
+      "instance_id",
+      "instance_status",
+      "current_node_key",
+      "current_node_title",
+      "pending_task_count",
+    ].join(", "));
+    expect(selectCalls.some((columns) => columns.includes("definition:")))
+      .toBeFalse();
+    expect(inCalls).toContainEqual(["subject_id", ["batch-1", "batch-2"]]);
   });
 });
 

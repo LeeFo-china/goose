@@ -1,4 +1,5 @@
 import type {
+  WorkflowTaskActionRow,
   WorkflowTaskWithInstanceRow,
 } from "@/repositories/workflow-tasks";
 import type { ProcedureAssignmentRow } from "@/services/project-procedure-assignments";
@@ -57,7 +58,7 @@ export async function buildWorkflowTaskActionPayloads(input: {
 export async function buildWorkflowTaskActionsForTask(input: {
   tenantId: string;
   subjectType: WorkflowSubjectType;
-  task: WorkflowTaskWithInstanceRow;
+  task: WorkflowTaskActionRow;
   receivablesService?: WorkflowReceivableContextProvider;
   procedureAssignment?: ProcedureAssignmentRow | null;
 }): Promise<WorkflowTaskActionPayload[]> {
@@ -93,7 +94,7 @@ export async function buildWorkflowTaskActionsForTask(input: {
 async function buildReceivableContextForTask(input: {
   tenantId: string;
   subjectType: WorkflowSubjectType;
-  task: WorkflowTaskWithInstanceRow;
+  task: WorkflowTaskActionRow;
   receivablesService?: WorkflowReceivableContextProvider;
 }) {
   if (input.subjectType !== "project") return null;
@@ -131,7 +132,7 @@ function isPaymentCollectionSnapshot(value: unknown) {
 }
 
 function applyProcedureAssignmentActions(input: {
-  task: WorkflowTaskWithInstanceRow;
+  task: WorkflowTaskActionRow;
   actions: WorkflowTaskActionPayload[];
   procedureAssignment?: ProcedureAssignmentRow | null;
 }): WorkflowTaskActionPayload[] {

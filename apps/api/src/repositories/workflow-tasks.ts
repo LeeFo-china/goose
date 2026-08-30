@@ -3,6 +3,7 @@ import { SupabaseDB } from "@/utils/supabase";
 import {
   buildWorkflowTaskAssigneeScope,
   listAccessiblePendingByProjectIdsViaDirectSql,
+  listAccessiblePendingBySubjectIdsViaDirectSql,
   listAccessibleTasksViaDirectSql,
 } from "@/repositories/workflow-tasks-direct";
 import { workflowTable } from "@/repositories/workflows/client";
@@ -35,6 +36,12 @@ export type WorkflowTaskWithInstanceRow = WorkflowTaskRow & {
     avatar: string | null;
   } | null;
 };
+
+export type WorkflowTaskActionRow = Pick<WorkflowTaskWithInstanceRow,
+  "id" | "instance_id" | "instance_node_id" | "node_id" | "node_key" |
+  "node_type" | "title" | "status" | "assignee_employee_id" |
+  "assignee_role_code" | "assignee_permission_code" | "created_at" |
+  "instance">;
 
 export type WorkflowTransitionLogRow = {
   id: string;
@@ -84,6 +91,10 @@ type WorkflowTransitionLogListInput = {
 };
 
 type WorkflowTaskRpcRow = WorkflowTaskWithInstanceRow & {
+  total_count?: number | string | bigint | null;
+};
+
+type WorkflowTaskActionRpcRow = WorkflowTaskActionRow & {
   total_count?: number | string | bigint | null;
 };
 
@@ -238,9 +249,7 @@ class WorkflowTaskRepository {
   }): Promise<WorkflowTaskWithInstanceRow[]> {
     const projectIds = Array.from(new Set(input.projectIds));
     const assigneeFilter = this.buildAssigneeFilter(input);
-    if (projectIds.length === 0 || !assigneeFilter) {
-      return [];
-    }
+    if (projectIds.length === 0 || !assigneeFilter) return [];
 
     const limit = Math.min(input.limit ?? projectIds.length * 100, 10_000);
     const directSql = getDirectPostgresSql();
@@ -263,6 +272,33 @@ class WorkflowTaskRepository {
       projectIds,
       limit,
     });
+  }
+
+  async listAccessiblePendingBySubjectIds(input: {
+    tenantId: string;
+    subjectType: WorkflowSubjectType;
+    subjectIds: string[];
+    employeeId?: string | null;
+    roleCodes?: string[];
+    permissionCodes?: string[];
+    limit?: number;
+  }): Promise<WorkflowTaskActionRow[]> {
+    const subjectIds = Array.from(new Set(input.subjectIds)).slice(0, 100);
+    if (subjectIds.length === 0) return [];
+    const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
+    const scopedInput = { ...input, subjectIds, limit };
+    const directSql = getDirectPostgresSql();
+    if (directSql) {
+      try {
+        return await listAccessiblePendingBySubjectIdsViaDirectSql({
+          ...scopedInput,
+          sql: directSql,
+        });
+      } catch {
+        // Keep direct SQL eligible after a transient connection failure.
+      }
+    }
+    return this.listAccessiblePendingBySubjectIdsViaRpc(scopedInput);
   }
 
   async assignPendingTask(input: {
@@ -420,6 +456,35 @@ class WorkflowTaskRepository {
     return this.toWorkflowTaskRows((data ?? []) as WorkflowTaskRpcRow[]);
   }
 
+  private async listAccessiblePendingBySubjectIdsViaRpc(input: {
+    tenantId: string;
+    subjectType: WorkflowSubjectType;
+    subjectIds: string[];
+    employeeId?: string | null;
+    roleCodes?: string[];
+    permissionCodes?: string[];
+    limit: number;
+  }): Promise<WorkflowTaskActionRow[]> {
+    const scope = buildWorkflowTaskAssigneeScope(input);
+    const { data, error } = await this.rpcClient().rpc(
+      "list_accessible_workflow_tasks_by_subject_ids",
+      {
+        p_tenant_id: input.tenantId,
+        p_subject_type: input.subjectType,
+        p_subject_ids: input.subjectIds,
+        p_employee_id: scope.employeeId ?? null,
+        p_role_codes: scope.roleCodes,
+        p_permission_codes: scope.permissionCodes,
+        p_limit: input.limit,
+      },
+    );
+    if (error) throw Errors.dbError("批量查询可处理流程待办失败", error);
+    return ((data ?? []) as WorkflowTaskActionRpcRow[]).map((row) => {
+      const { total_count: _totalCount, ...task } = row;
+      return task;
+    });
+  }
+
   private toWorkflowTaskRows(rows: WorkflowTaskRpcRow[]): WorkflowTaskWithInstanceRow[] {
     return rows.map((row) => {
       const { total_count: _totalCount, ...task } = row;
@@ -427,17 +492,6 @@ class WorkflowTaskRepository {
     });
   }
 
-  private emptyList(page: number, pageSize: number): WorkflowTaskListResult {
-    return {
-      list: [],
-      pagination: {
-        page,
-        pageSize,
-        total: 0,
-        totalPages: 0,
-      },
-    };
-  }
 }
 
 export const workflowTaskRepository = new WorkflowTaskRepository();

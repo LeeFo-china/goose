@@ -111,7 +111,7 @@ function dependencies() {
       },
     },
   };
-  const listPendingTasks = mock(async () => [pendingTask]);
+  const listAccessiblePendingTasks = mock(async () => [pendingTask]);
   const buildTaskActions = mock(async () => [{
     key: "approve",
     label: "审批通过",
@@ -144,7 +144,7 @@ function dependencies() {
   return {
     page,
     listSubjectStates,
-    listPendingTasks,
+    listAccessiblePendingTasks,
     buildTaskActions,
     getState,
     pendingTask,
@@ -172,7 +172,7 @@ function dependencies() {
     },
     workflowRead: {
       listSubjectStates,
-      listPendingTasks,
+      listAccessiblePendingTasks,
       buildTaskActions,
       getState,
     },
@@ -190,16 +190,25 @@ describe("SupplierPurchaseBatchesService workflow read projection", () => {
     const result = await service.listBatches(auth, { page: 1, pageSize: 20 });
 
     expect(deps.listSubjectStates).toHaveBeenCalledTimes(1);
-    expect(deps.listPendingTasks).toHaveBeenCalledTimes(1);
+    expect(deps.listAccessiblePendingTasks).toHaveBeenCalledTimes(1);
     expect(deps.listSubjectStates).toHaveBeenCalledWith({
       tenantId: TENANT_ID,
       subjectType: "supplier_purchase_batch",
       subjectIds: [REVIEW_BATCH_ID, OWN_BATCH_ID],
     });
-    expect(deps.listPendingTasks).toHaveBeenCalledWith({
+    expect(deps.listAccessiblePendingTasks).toHaveBeenCalledWith({
       tenantId: TENANT_ID,
       subjectType: "supplier_purchase_batch",
       subjectIds: [REVIEW_BATCH_ID, OWN_BATCH_ID],
+      employeeId: EMPLOYEE_ID,
+      roleCodes: ["purchase_reviewer"],
+      permissionCodes: [
+        "supplier.purchase-requisition.view",
+        "supplier.purchase-requisition.manage",
+        "supplier.purchase-requisition.approve",
+        "project.read",
+        "project.update",
+      ],
       limit: 100,
     });
     expect(result.list[0]).toMatchObject({
@@ -223,7 +232,7 @@ describe("SupplierPurchaseBatchesService workflow read projection", () => {
 
   test("returns detail timeline without granting a fixed-permission bypass", async () => {
     const deps = dependencies();
-    deps.listPendingTasks.mockImplementation(async () => []);
+    deps.listAccessiblePendingTasks.mockImplementation(async () => []);
     const { SupplierPurchaseBatchesService } = await import(
       "./supplier-purchase-batches"
     );
@@ -249,7 +258,7 @@ describe("SupplierPurchaseBatchesService workflow read projection", () => {
 
   test("does not expose actions to a non-assignee", async () => {
     const deps = dependencies();
-    deps.listPendingTasks.mockImplementation(async () => [{
+    deps.listAccessiblePendingTasks.mockImplementation(async () => [{
       ...deps.pendingTask,
       assignee_employee_id: OTHER_EMPLOYEE_ID,
     }] as never);

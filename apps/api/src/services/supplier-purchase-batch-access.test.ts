@@ -279,6 +279,37 @@ describe("deriveSupplierPurchaseBatchActions workflow projection", () => {
       workflowCanWithdraw: false,
     })).toMatchObject({ can_edit: true, can_submit: false });
   });
+
+  test("opens rejected editing only to the workflow submitter while enabled", async () => {
+    const { deriveSupplierPurchaseBatchActions } = await import(
+      "./supplier-purchase-batch-access"
+    );
+    const base = {
+      status: "rejected" as const,
+      createdByEmployeeId: CREATOR_ID,
+      submittedByEmployeeId: EMPLOYEE_ID,
+      actorEmployeeId: EMPLOYEE_ID,
+      permissions: ["supplier.purchase-requisition.manage"],
+      canReadProject: true,
+      canUpdateProject: true,
+      workflowCanReview: false,
+      workflowCanWithdraw: false,
+    };
+
+    expect(deriveSupplierPurchaseBatchActions({
+      ...base,
+      workflowEnabled: true,
+    }).can_edit).toBeTrue();
+    expect(deriveSupplierPurchaseBatchActions({
+      ...base,
+      workflowEnabled: false,
+    }).can_edit).toBeFalse();
+    expect(deriveSupplierPurchaseBatchActions({
+      ...base,
+      actorEmployeeId: CREATOR_ID,
+      workflowEnabled: true,
+    }).can_edit).toBeFalse();
+  });
 });
 
 describe("deriveSupplierPurchaseBatchActions", () => {

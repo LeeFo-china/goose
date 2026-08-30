@@ -51,6 +51,16 @@ export type WorkflowSubjectStateRow = {
   }> | null;
 };
 
+export type WorkflowSubjectStateCompactRow = Pick<
+  WorkflowSubjectStateRow,
+  | "subject_id"
+  | "instance_id"
+  | "instance_status"
+  | "current_node_key"
+  | "current_node_title"
+  | "pending_task_count"
+>;
+
 export type WorkflowSubjectStateUpsertInput = {
   tenantId: string;
   subjectType: WorkflowSubjectType;
@@ -107,6 +117,9 @@ const WORKFLOW_SUBJECT_STATE_SELECT = [
   "updated_at",
   "definition:workflow_definitions(id, name)",
 ].join(", ");
+
+const WORKFLOW_SUBJECT_STATE_COMPACT_SELECT =
+  "subject_id, instance_id, instance_status, current_node_key, current_node_title, pending_task_count";
 
 const WORKFLOW_RUNTIME_PROJECTION_SELECT = [
   "id",
@@ -208,6 +221,24 @@ class WorkflowSubjectStateRepository {
     }
 
     return (data ?? []) as WorkflowSubjectStateRow[];
+  }
+
+  async listCompactBySubjectIds(input: {
+    tenantId: string;
+    subjectType: WorkflowSubjectType;
+    subjectIds: string[];
+  }): Promise<WorkflowSubjectStateCompactRow[]> {
+    const subjectIds = Array.from(new Set(input.subjectIds)).slice(0, 100);
+    if (subjectIds.length === 0) return [];
+    const { data, error } = await table("workflow_subject_states")
+      .select(WORKFLOW_SUBJECT_STATE_COMPACT_SELECT)
+      .eq("tenant_id", input.tenantId)
+      .eq("subject_type", input.subjectType)
+      .in("subject_id", subjectIds)
+      .order("updated_at", { ascending: false })
+      .limit(100);
+    if (error) throw Errors.dbError("批量查询流程对象状态失败", error);
+    return (data ?? []) as WorkflowSubjectStateCompactRow[];
   }
 
   async findLatestRuntimeInstance(input: {

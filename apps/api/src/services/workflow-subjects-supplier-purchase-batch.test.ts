@@ -118,6 +118,7 @@ mock.module("@/services/project-workflow-finance-reviewer", () => ({
 }));
 mock.module("@/services/workflow-task-actions", () => ({
   buildWorkflowTaskActionPayloads: mock(async () => []),
+  buildWorkflowTaskActionsForTask: mock(async () => []),
 }));
 mock.module("@/services/workflow-task-assignee", () => ({
   buildWorkflowTaskAssigneeMetadata: mock(() => ({})),
