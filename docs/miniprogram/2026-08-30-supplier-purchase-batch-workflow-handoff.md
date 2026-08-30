@@ -107,9 +107,13 @@ Authorization: Bearer <token>
 说明：
 
 - 上例是字段节选；真实详情还会返回 `timeline_nodes`。
-- `purchase_batch_workflow_enabled=false` 时详情响应会**省略** `workflow_state`；开关开启但
-  尚无 workflow runtime 时才返回 `workflow_state:null`。Orange 类型必须写成
-  `workflow_state?: WorkflowState | null`，同时兼容灰度期间的字段缺失和显式空值。
+- `purchase_batch_workflow_enabled=false` 时列表项和详情都会**省略** `workflow_state`；开关
+  开启但尚无 workflow state 时返回 `workflow_state:null`，所以两处类型都必须同时 optional
+  和 nullable。
+- `GET /supplier-purchase-batches` 的 `workflow_state` 是 compact projection，只包含
+  `instance_id/instance_status/current_node_key/current_node_title/pending_task_count/actions`；
+  `GET /supplier-purchase-batches/:id` 才返回含 `subject_type/subject_id/timeline_nodes` 等字段的
+  full projection。客户端不能把列表 state 当作详情 `WorkflowState` 使用。
 - `workflow_state.actions` 只返回当前登录员工真正可执行的任务动作；不可见时为空。
 - 顶层 `actions` 是页面按钮的唯一事实源。小程序不得按 status、权限码或提交人自行推导。
 - `approval_round` 每次驳回编辑/撤回后重新提交都会递增；客户端只展示或随详情刷新，
@@ -397,18 +401,53 @@ Orange 当前 `package.json`/`pnpm-lock.yaml` 和已安装包均指向 `@gooes/d
 `src/types/api/supplier_procurement.d.ts` 使用不依赖旧 domain union 的专用字面量类型：
 
 ```ts
-import type { WorkflowState } from '@/types/api/workflow_task';
+import type {
+  WorkflowAction,
+  WorkflowSubjectNode,
+} from '@/types/api/workflow_task';
+
+export type ProcurementWorkflowNodeKey =
+  | 'purchase_review'
+  | 'finance_review'
+  | 'approved_end'
+  | 'rejected_end';
+
+export type ProcurementWorkflowInstanceStatus =
+  | 'running'
+  | 'completed'
+  | 'canceled'
+  | 'failed';
 
 export type ProcurementWorkflowReviewStatus =
   | 'pending_approval'
   | 'ordered'
   | 'rejected';
 
+export interface ProcurementWorkflowListState {
+  instance_id: string | null;
+  instance_status: ProcurementWorkflowInstanceStatus | null;
+  current_node_key: ProcurementWorkflowNodeKey | null;
+  current_node_title: string | null;
+  pending_task_count: number;
+  actions: WorkflowAction[];
+}
+
+export interface ProcurementWorkflowDetailState
+  extends ProcurementWorkflowListState {
+  subject_type: 'supplier_purchase_batch';
+  subject_id: string;
+  current_group_key: string | null;
+  current_group_label: string | null;
+  current_group_order: number | null;
+  current_business_kind: string | null;
+  timeline_nodes: WorkflowSubjectNode[];
+}
+
 export interface ProcurementWorkflowReviewState {
   definition_id: string;
   instance_id: string;
-  instance_status: 'running' | 'completed' | 'canceled';
-  current_node_key: 'purchase_review' | 'finance_review' | null;
+  instance_status: Exclude<ProcurementWorkflowInstanceStatus, 'failed'>;
+  current_node_key: ProcurementWorkflowNodeKey | null;
   current_node_title: string | null;
   current_business_kind: string | null;
   pending_task_count: number;
@@ -420,9 +459,14 @@ export interface PurchaseBatchActions {
 }
 
 export interface PurchaseBatch {
-  // 保留已有字段；列表和详情都要兼容灰度字段缺失
+  // 保留已有字段；列表项只接收 compact projection
   approval_round?: number;
-  workflow_state?: WorkflowState | null;
+  workflow_state?: ProcurementWorkflowListState | null;
+}
+
+export interface PurchaseBatchDetail {
+  // 保留已有 project/actions；详情把继承字段收窄为 full projection
+  workflow_state?: ProcurementWorkflowDetailState | null;
 }
 
 export interface WorkflowReviewedProcurementCommand
@@ -448,14 +492,16 @@ export interface WorkflowWithdrawnProcurementCommand
 }
 ```
 
-`PurchaseBatchActions` 和 `PurchaseBatch` 可利用 interface merging 增补上述新字段；两个 workflow
-command 使用新名字，避免与现有 `ReviewedProcurementCommand.status` 的声明合并冲突。随后将
+`PurchaseBatchActions`、`PurchaseBatch` 和 `PurchaseBatchDetail` 可利用 interface merging 增补
+上述新字段；详情 state 继承 compact state，因此能合法收窄 `PurchaseBatch` 的同名可选字段。
+两个 workflow command 使用新名字，避免与现有 `ReviewedProcurementCommand.status` 的声明合并
+冲突。随后将
 `SupplierProcurementService.review` 和 `WorkflowTaskService.complete` 的返回泛型改成
 `WorkflowReviewedProcurementCommand`，withdraw wrapper 使用
-`WorkflowWithdrawnProcurementCommand`。`PurchaseBatchDetail` 继承 `PurchaseBatch` 后自然得到
-`workflow_state?: WorkflowState | null`；页面必须用 optional chaining，不能假定字段一定存在。
-若改为升级共享 domain，必须先发布含 `withdrawn` 的正式包并更新 Orange lockfile；即使升级，
-`pending_approval` 仍是本次 review 的中间结果，建议继续保留专用 review union。
+`WorkflowWithdrawnProcurementCommand`。列表只读 compact 字段；详情页用 full 字段并通过 optional
+chaining 兼容省略/null。若改为升级共享 domain，必须先发布含 `withdrawn` 的正式包并更新
+Orange lockfile；即使升级，`pending_approval` 仍是本次 review 的中间结果，建议继续保留专用
+review union。
 
 ## 9. 与既有采购能力的兼容说明
 
