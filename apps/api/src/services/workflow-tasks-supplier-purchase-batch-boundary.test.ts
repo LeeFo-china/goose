@@ -90,7 +90,7 @@ async function createRealBridge() {
   );
   return new WorkflowTaskSupplierPurchaseBatchBridge({
     repository: { completeTask: mock(async () => ({ status: "ordered" })) },
-    batchesRepository: { findBatch: mock(async () => null) },
+    batchesRepository: { findBatchAccessContext: mock(async () => null) },
     accessPolicy: {
       hasPermission: mock(() => true),
       canAccessProject: mock(async () => true),

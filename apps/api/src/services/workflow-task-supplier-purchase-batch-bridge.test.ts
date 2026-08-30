@@ -24,7 +24,7 @@ describe("WorkflowTaskSupplierPurchaseBatchBridge", () => {
     const canAccessProject = mock(async () => true);
     const bridge = new WorkflowTaskSupplierPurchaseBatchBridge({
       repository: { completeTask },
-      batchesRepository: { findBatch: mock(async () => batch()) },
+      batchesRepository: { findBatchAccessContext: mock(async () => batch()) },
       accessPolicy: {
         hasPermission: (auth, code) => auth.permissions.some((item) => item.code === code),
         canAccessProject,
@@ -59,7 +59,7 @@ describe("WorkflowTaskSupplierPurchaseBatchBridge", () => {
     const completeTask = mock(async () => ({ status: "rejected" }));
     const bridge = new WorkflowTaskSupplierPurchaseBatchBridge({
       repository: { completeTask },
-      batchesRepository: { findBatch: mock(async () => batch()) },
+      batchesRepository: { findBatchAccessContext: mock(async () => batch()) },
       accessPolicy: {
         hasPermission: () => true,
         canAccessProject: mock(async () => true),
@@ -82,7 +82,9 @@ describe("WorkflowTaskSupplierPurchaseBatchBridge", () => {
     const WorkflowTaskSupplierPurchaseBatchBridge = await bridgeClass();
     const completeTask = mock(async () => ({ status: "ordered" }));
     const canAccessProject = mock(async () => false);
-    const batchesRepository = { findBatch: mock(async () => batch()) };
+    const batchesRepository = {
+      findBatchAccessContext: mock(async () => batch()),
+    };
     const bridge = new WorkflowTaskSupplierPurchaseBatchBridge({
       repository: { completeTask }, batchesRepository,
       accessPolicy: { hasPermission: () => true, canAccessProject },
@@ -93,9 +95,9 @@ describe("WorkflowTaskSupplierPurchaseBatchBridge", () => {
     })).rejects.toMatchObject({ statusCode: 403, code: "FORBIDDEN" });
 
     canAccessProject.mockImplementation(async () => true);
-    batchesRepository.findBatch.mockImplementationOnce(async () => batch({
-      submitted_by_employee_id: EMPLOYEE_ID,
-    }));
+    batchesRepository.findBatchAccessContext.mockImplementationOnce(
+      async () => batch({ submitted_by_employee_id: EMPLOYEE_ID }),
+    );
     await expect(bridge.complete({
       authContext: auth(), task: task(), action: "approve", reason: null,
       output: {}, idempotencyKey: "review-2",
@@ -110,7 +112,7 @@ describe("WorkflowTaskSupplierPurchaseBatchBridge", () => {
     const completeTask = mock(async () => ({ status: "ordered" }));
     const bridge = new WorkflowTaskSupplierPurchaseBatchBridge({
       repository: { completeTask },
-      batchesRepository: { findBatch: mock(async () => batch()) },
+      batchesRepository: { findBatchAccessContext: mock(async () => batch()) },
       accessPolicy: { hasPermission: () => true, canAccessProject: mock(async () => true) },
     });
     expect(await bridge.complete({

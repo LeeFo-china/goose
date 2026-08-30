@@ -27,8 +27,8 @@ import { assertRuntimeNodeCompletionAllowed } from "@/services/workflow-runtime-
 import { workflowSubjectStateService } from "@/services/workflow-subject-state";
 import { buildWorkflowTaskActionsForTask } from "@/services/workflow-task-actions";
 import { buildWorkflowTaskAssigneeMetadata } from "@/services/workflow-task-assignee";
-import { completeSupplierPurchaseBatchWorkflowTask } from
-  "@/services/workflow-task-supplier-purchase-batch-completion";
+import { workflowTaskServiceDependencies, type WorkflowTaskServiceDependencies } from
+  "@/services/workflow-task-service-dependencies";
 import { workflowTaskCardContextService } from "@/services/workflow-task-card-context";
 import {
   listSupplierPurchaseBatchWorkflowTasks,
@@ -42,7 +42,9 @@ const PROJECT_PROCEDURE_PERMISSION_BY_ACTION: Record<string, string> = {
   complete_procedure: "project_procedure.complete",
 };
 
-class WorkflowTaskService {
+export class WorkflowTaskService {
+  constructor(private readonly dependencies: WorkflowTaskServiceDependencies =
+    workflowTaskServiceDependencies) {}
   async listTasks(authContext: AuthContext, query: WorkflowTaskListQuery) {
     const tenantId = this.assertTenantId(authContext);
     const supplierPurchaseBatchAccess = query.subject_type === undefined
@@ -116,7 +118,7 @@ class WorkflowTaskService {
     idempotencyKey: string | null = null,
   ) {
     const tenantId = this.assertTenantId(authContext);
-    const task = await workflowTaskRepository.findById({ tenantId, taskId });
+    const task = await this.dependencies.findTask({ tenantId, taskId });
     if (!task) {
       throw Errors.notFound("流程待办不存在");
     }
@@ -128,16 +130,18 @@ class WorkflowTaskService {
       reason: input.reason ?? null,
     };
     if (task.instance) {
-      const bridged = await completeSupplierPurchaseBatchWorkflowTask({
-        authContext, task: {
-          id: task.id, tenant_id: task.tenant_id, node_key: task.node_key,
-          instance: {
-            subject_type: task.instance.subject_type,
-            subject_id: task.instance.subject_id,
+      const bridged = await this.dependencies
+        .completeSupplierPurchaseBatchWorkflowTask({
+          authContext, task: {
+            id: task.id, tenant_id: task.tenant_id, node_key: task.node_key,
+            instance: {
+              subject_type: task.instance.subject_type,
+              subject_id: task.instance.subject_id,
+            },
           },
-        }, action: input.action, reason: input.reason ?? null,
-        output, idempotencyKey,
-      });
+          action: input.action, reason: input.reason ?? null,
+          output, idempotencyKey,
+        });
       if (bridged) return bridged;
     }
     if (task.status !== "pending") {

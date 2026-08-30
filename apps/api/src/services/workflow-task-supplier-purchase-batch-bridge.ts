@@ -3,9 +3,8 @@ import {
   supplierPurchaseBatchWorkflowRepository,
   type SupplierPurchaseBatchWorkflowReviewInput,
 } from "@/repositories/supplier-purchase-batch-workflow";
-import {
-  SupplierPurchaseBatchesRepository,
-} from "@/repositories/supplier-purchase-batches";
+import { SupplierPurchaseBatchAccessRepository } from
+  "@/repositories/supplier-purchase-batch-access";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 
@@ -38,7 +37,7 @@ type Dependencies = {
     ) => Promise<unknown>;
   };
   batchesRepository: {
-    findBatch: (tenantId: string, batchId: string) => Promise<{
+    findBatchAccessContext: (tenantId: string, batchId: string) => Promise<{
       tenant_id: string;
       project_id: string;
       submitted_by_employee_id: string | null;
@@ -53,7 +52,7 @@ type Dependencies = {
 export class WorkflowTaskSupplierPurchaseBatchBridge {
   constructor(private readonly dependencies: Dependencies = {
     repository: supplierPurchaseBatchWorkflowRepository,
-    batchesRepository: new SupplierPurchaseBatchesRepository(),
+    batchesRepository: new SupplierPurchaseBatchAccessRepository(),
     accessPolicy: accessPolicyService,
   }) {}
 
@@ -79,7 +78,7 @@ export class WorkflowTaskSupplierPurchaseBatchBridge {
 
     const permissionCode = NODE_PERMISSION[nodeKey];
     this.assertPermissions(input.authContext, permissionCode);
-    const batch = await this.dependencies.batchesRepository.findBatch(
+    const batch = await this.dependencies.batchesRepository.findBatchAccessContext(
       input.task.tenant_id,
       input.task.instance.subject_id,
     );
