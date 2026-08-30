@@ -33,6 +33,7 @@ const settings = {
   require_active_contract_for_new_order: false,
   ownership_reads_enabled: true, private_supplier_writes_enabled: true,
   private_catalog_writes_enabled: false, procurement_snapshot_v1_enabled: false,
+  purchase_batch_workflow_enabled: false,
   enabled_by_employee_id: ids.employee, enabled_at: now, version: 3,
   created_at: now, updated_at: now,
 };

@@ -43,6 +43,7 @@ function idempotencyKey(request) {
 
 function rolloutLevel(value) {
   if (!value.module_enabled) return 0;
+  if (value.purchase_batch_workflow_enabled) return 6;
   if (value.procurement_snapshot_v1_enabled) return 5;
   if (value.private_catalog_writes_enabled) return 4;
   if (value.private_supplier_writes_enabled) return 3;
@@ -58,6 +59,7 @@ function isCompletePayload(payload) {
     "private_supplier_writes_enabled",
     "private_catalog_writes_enabled",
     "procurement_snapshot_v1_enabled",
+    "purchase_batch_workflow_enabled",
     "expected_version",
   ].every((field) => Object.hasOwn(payload, field));
 }
@@ -149,6 +151,8 @@ async function patchSettings(request, response, url) {
     private_catalog_writes_enabled: payload.private_catalog_writes_enabled,
     procurement_snapshot_v1_enabled:
       payload.procurement_snapshot_v1_enabled,
+    purchase_batch_workflow_enabled:
+      payload.purchase_batch_workflow_enabled,
     enabled_by_employee_id: payload.module_enabled
       ? settings.enabled_by_employee_id ?? mockSupplierRolloutSession.employee.id
       : null,

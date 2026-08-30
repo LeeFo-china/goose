@@ -127,6 +127,7 @@ describe("PlatformSuppliersService regression boundaries", () => {
       private_supplier_writes_enabled: false,
       private_catalog_writes_enabled: false,
       procurement_snapshot_v1_enabled: false,
+      purchase_batch_workflow_enabled: false,
       expected_version: 1,
       idempotencyKey: "module-1",
     };
@@ -167,6 +168,7 @@ describe("PlatformSuppliersService regression boundaries", () => {
         private_supplier_writes_enabled: false,
         private_catalog_writes_enabled: false,
         procurement_snapshot_v1_enabled: false,
+        purchase_batch_workflow_enabled: false,
         expected_version: 1,
         reason: "合作策略调整",
         idempotencyKey: "module-disable-1",
@@ -186,6 +188,7 @@ describe("PlatformSuppliersService regression boundaries", () => {
             private_supplier_writes_enabled: false,
             private_catalog_writes_enabled: false,
             procurement_snapshot_v1_enabled: false,
+            purchase_batch_workflow_enabled: false,
           }),
         }),
       }),
@@ -206,6 +209,7 @@ describe("PlatformSuppliersService regression boundaries", () => {
         private_supplier_writes_enabled: true,
         private_catalog_writes_enabled: false,
         procurement_snapshot_v1_enabled: false,
+        purchase_batch_workflow_enabled: false,
         expected_version: 1,
         idempotencyKey: "rollout-jump-1",
       },
@@ -229,8 +233,34 @@ describe("PlatformSuppliersService regression boundaries", () => {
         private_supplier_writes_enabled: true,
         private_catalog_writes_enabled: false,
         procurement_snapshot_v1_enabled: false,
+        purchase_batch_workflow_enabled: false,
         expected_version: 0,
         idempotencyKey: "stale-invalid-rollout-1",
+      },
+    )).rejects.toMatchObject({
+      statusCode: 409,
+      code: "SUPPLIER_ROLLOUT_ORDER_INVALID",
+    });
+    expect(repository.getTenantSupplierSettings).not.toHaveBeenCalled();
+    expect(repository.setTenantSupplierSettings).not.toHaveBeenCalled();
+  });
+
+  test("rejects purchase workflow without procurement snapshot", async () => {
+    const { service, repository } = await createHarness();
+
+    await expect(service.setTenantSupplierSettings(
+      auth(["platform.supplier.manage"]),
+      {
+        tenantId: TENANT_ID,
+        module_enabled: true,
+        require_active_contract_for_new_order: false,
+        ownership_reads_enabled: true,
+        private_supplier_writes_enabled: true,
+        private_catalog_writes_enabled: true,
+        procurement_snapshot_v1_enabled: false,
+        purchase_batch_workflow_enabled: true,
+        expected_version: 0,
+        idempotencyKey: "stale-invalid-workflow-rollout-1",
       },
     )).rejects.toMatchObject({
       statusCode: 409,
@@ -259,6 +289,7 @@ describe("PlatformSuppliersService regression boundaries", () => {
         private_supplier_writes_enabled: false,
         private_catalog_writes_enabled: false,
         procurement_snapshot_v1_enabled: false,
+        purchase_batch_workflow_enabled: false,
         expected_version: 0,
         idempotencyKey: "stale-valid-rollout-1",
       },
@@ -314,6 +345,7 @@ const settings = {
   private_supplier_writes_enabled: false,
   private_catalog_writes_enabled: false,
   procurement_snapshot_v1_enabled: false,
+  purchase_batch_workflow_enabled: false,
   enabled_by_employee_id: null,
   enabled_at: null,
   version: 1,

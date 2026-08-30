@@ -7,15 +7,10 @@ import {
   parseSupabasePostgresContainer,
   resolveLocalSupabasePostgres,
   startPsqlSession,
+  supplierRolloutAclSql,
   waitForMarker,
   type PsqlSession,
 } from "./supplier-rollout-settings-database.test-helper";
-
-const rolloutSignature = [
-  "public.set_tenant_supplier_rollout_settings(",
-  "uuid,boolean,boolean,boolean,boolean,boolean,boolean,",
-  "integer,uuid,uuid,text,text)",
-].join("");
 
 function behaviorSql() {
   const tenantId = randomUUID();
@@ -32,28 +27,7 @@ VALUES ('${tenantId}', '供应商灰度数据库测试租户', '${slug}', 'activ
 INSERT INTO public.employees (id, name, status, tenant_id)
 VALUES ('${actorEmployeeId}', '供应商灰度数据库测试操作人', 'active', '${tenantId}');
 
-DO $acl$
-BEGIN
-  IF NOT pg_catalog.has_function_privilege(
-    'service_role',
-    '${rolloutSignature}',
-    'EXECUTE'
-  ) THEN
-    RAISE EXCEPTION 'service_role must execute rollout command';
-  END IF;
-  IF pg_catalog.has_function_privilege(
-    'authenticated',
-    '${rolloutSignature}',
-    'EXECUTE'
-  ) OR pg_catalog.has_function_privilege(
-    'anon',
-    '${rolloutSignature}',
-    'EXECUTE'
-  ) THEN
-    RAISE EXCEPTION 'rollout command ACL is wider than service_role';
-  END IF;
-END
-$acl$;
+${supplierRolloutAclSql()}
 
 SET LOCAL ROLE service_role;
 DO $behavior$
@@ -64,7 +38,7 @@ DECLARE
   v_result jsonb;
   v_version integer := 0;
 BEGIN
-  FOR v_level IN 1..5 LOOP
+  FOR v_level IN 1..6 LOOP
     v_result := public.set_tenant_supplier_rollout_settings(
       '${tenantId}',
       true,
@@ -73,6 +47,7 @@ BEGIN
       v_level >= 3,
       v_level >= 4,
       v_level >= 5,
+      v_level >= 6,
       v_version,
       '${actorUserId}',
       '${actorEmployeeId}',
@@ -92,12 +67,14 @@ BEGIN
         IS DISTINCT FROM (v_level >= 4)
       OR (v_result -> 'setting' ->> 'procurement_snapshot_v1_enabled')::boolean
         IS DISTINCT FROM (v_level >= 5)
+      OR (v_result -> 'setting' ->> 'purchase_batch_workflow_enabled')::boolean
+        IS DISTINCT FROM (v_level >= 6)
     THEN
       RAISE EXCEPTION 'invalid forward level % response: %', v_level, v_result;
     END IF;
   END LOOP;
 
-  FOR v_level IN REVERSE 4..0 LOOP
+  FOR v_level IN REVERSE 5..0 LOOP
     v_result := public.set_tenant_supplier_rollout_settings(
       '${tenantId}',
       v_level >= 1,
@@ -105,6 +82,7 @@ BEGIN
       v_level >= 2,
       v_level >= 3,
       v_level >= 4,
+      v_level >= 5,
       false,
       v_version,
       '${actorUserId}',
@@ -125,19 +103,21 @@ BEGIN
       OR (v_result -> 'setting' ->> 'private_catalog_writes_enabled')::boolean
         IS DISTINCT FROM (v_level >= 4)
       OR (v_result -> 'setting' ->> 'procurement_snapshot_v1_enabled')::boolean
+        IS DISTINCT FROM (v_level >= 5)
+      OR (v_result -> 'setting' ->> 'purchase_batch_workflow_enabled')::boolean
         IS DISTINCT FROM false
     THEN
       RAISE EXCEPTION 'invalid reverse level % response: %', v_level, v_result;
     END IF;
   END LOOP;
 
-  IF v_version <> 10 THEN
-    RAISE EXCEPTION 'expected sequence version 10, got %', v_version;
+  IF v_version <> 12 THEN
+    RAISE EXCEPTION 'expected sequence version 12, got %', v_version;
   END IF;
 
   BEGIN
     PERFORM public.set_tenant_supplier_rollout_settings(
-      '${tenantId}', true, false, true, false, false, false,
+      '${tenantId}', true, false, true, false, false, false, false,
       v_version, '${actorUserId}', '${actorEmployeeId}',
       'jump-level-zero-to-two', NULL
     );
@@ -152,7 +132,7 @@ BEGIN
   END;
 
   v_result := public.set_tenant_supplier_rollout_settings(
-    '${tenantId}', true, false, false, false, false, false,
+    '${tenantId}', true, false, false, false, false, false, false,
     v_version - 1, '${actorUserId}', '${actorEmployeeId}',
     'stale-before-enable', NULL
   );
@@ -164,7 +144,7 @@ BEGIN
   END IF;
 
   v_result := public.set_tenant_supplier_rollout_settings(
-    '${tenantId}', true, false, false, false, false, false,
+    '${tenantId}', true, false, false, false, false, false, false,
     v_version, '${actorUserId}', '${actorEmployeeId}',
     'idempotent-enable', NULL
   );
@@ -176,7 +156,7 @@ BEGIN
   END IF;
 
   v_result := public.set_tenant_supplier_rollout_settings(
-    '${tenantId}', true, false, false, false, false, false,
+    '${tenantId}', true, false, false, false, false, false, false,
     v_version - 1, '${actorUserId}', '${actorEmployeeId}',
     'idempotent-enable', NULL
   );
@@ -195,14 +175,16 @@ BEGIN
     AND event.resource_id = '${tenantId}'
     AND event.command = 'set_tenant_supplier_rollout_settings'
     AND event.result_version = v_version
-    AND event.from_state -> '_request' ->> 'expected_version' = '10';
+    AND event.from_state -> '_request' ->> 'expected_version' = '12'
+    AND event.from_state -> '_request' ->>
+      'purchase_batch_workflow_enabled' = 'false';
   IF v_event_count <> 1 THEN
     RAISE EXCEPTION 'idempotent replay wrote % events', v_event_count;
   END IF;
 
   BEGIN
     PERFORM public.set_tenant_supplier_rollout_settings(
-      '${tenantId}', true, true, false, false, false, false,
+      '${tenantId}', true, true, false, false, false, false, false,
       v_version - 1, '${actorUserId}', '${actorEmployeeId}',
       'idempotent-enable', NULL
     );
@@ -217,7 +199,7 @@ BEGIN
   END;
 
   v_result := public.set_tenant_supplier_rollout_settings(
-    '${tenantId}', true, false, false, false, false, false,
+    '${tenantId}', true, false, false, false, false, false, false,
     v_version - 1, '${actorUserId}', '${actorEmployeeId}',
     'optimistic-lock-loser', NULL
   );
@@ -228,7 +210,7 @@ BEGIN
   END IF;
 
   v_result := public.set_tenant_supplier_rollout_settings(
-    '${tenantId}', true, false, true, false, false, false,
+    '${tenantId}', true, false, true, false, false, false, false,
     v_version, '${actorUserId}', '${actorEmployeeId}',
     'enable-ownership-for-legacy-check', NULL
   );
@@ -259,8 +241,8 @@ BEGIN
   FROM public.supplier_command_events AS event
   WHERE event.actor_user_id = '${actorUserId}'
     AND event.command = 'set_tenant_supplier_rollout_settings';
-  IF v_event_count <> 12 THEN
-    RAISE EXCEPTION 'expected 12 committed rollout events, got %', v_event_count;
+  IF v_event_count <> 14 THEN
+    RAISE EXCEPTION 'expected 14 committed rollout events, got %', v_event_count;
   END IF;
 END
 $behavior$;
@@ -375,6 +357,20 @@ describe("supplier rollout local PostgreSQL helper", () => {
       "命令阶段 docker exec psql 超过 15 秒，已终止；本地数据库行为验证未完成",
     );
     expect((timeoutError as Error).message).not.toContain(simulatedSecret);
+  });
+
+  test("guards the exact retired and current overload ACL catalog state", () => {
+    const aclSql = supplierRolloutAclSql();
+    expect(aclSql).toContain(
+      "to_regprocedure('public.set_tenant_supplier_rollout_settings(uuid,boolean,boolean,boolean,boolean,boolean,boolean,integer,uuid,uuid,text,text)') IS NOT NULL",
+    );
+    expect(aclSql).toContain(
+      "to_regprocedure('public.set_tenant_supplier_rollout_settings(uuid,boolean,boolean,boolean,boolean,boolean,boolean,boolean,integer,uuid,uuid,text,text)') IS NULL",
+    );
+    expect(aclSql).toContain("pg_catalog.aclexplode");
+    expect(aclSql).toContain("permission.grantee <> procedure_definition.proowner");
+    expect(aclSql).toContain("OR permission.is_grantable");
+    expect(aclSql).toContain("role_definition.rolname = 'service_role'");
   });
 
   const localPostgres = resolveLocalSupabasePostgres();

@@ -8,6 +8,7 @@ export type PlatformModuleIntent = {
   privateSupplierWritesEnabled?: boolean;
   privateCatalogWritesEnabled?: boolean;
   procurementSnapshotV1Enabled?: boolean;
+  purchaseBatchWorkflowEnabled?: boolean;
   reason?: string;
 };
 
@@ -47,6 +48,9 @@ export async function updatePlatformTenantSupplierModule({
         procurement_snapshot_v1_enabled:
           intent.procurementSnapshotV1Enabled ??
           current.procurement_snapshot_v1_enabled,
+        purchase_batch_workflow_enabled:
+          intent.purchaseBatchWorkflowEnabled ??
+          current.purchase_batch_workflow_enabled,
         expected_version: current.version,
         ...(intent.reason ? { reason: intent.reason } : {}),
       }),

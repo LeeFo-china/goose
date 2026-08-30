@@ -44,6 +44,7 @@ function settings(
     private_supplier_writes_enabled: false,
     private_catalog_writes_enabled: false,
     procurement_snapshot_v1_enabled: false,
+    purchase_batch_workflow_enabled: false,
     enabled_by_employee_id: null,
     enabled_at: null,
     version: 0,
@@ -180,6 +181,7 @@ describe("供应商设置运行时交互", () => {
       private_supplier_writes_enabled: false,
       private_catalog_writes_enabled: false,
       procurement_snapshot_v1_enabled: false,
+      purchase_batch_workflow_enabled: false,
       expected_version: 0,
     });
     expect(new Headers(calls[0]?.init?.headers).get("Idempotency-Key")).toBe(
@@ -215,6 +217,7 @@ describe("供应商设置运行时交互", () => {
       private_supplier_writes_enabled: false,
       private_catalog_writes_enabled: false,
       procurement_snapshot_v1_enabled: false,
+      purchase_batch_workflow_enabled: false,
       expected_version: 4,
       reason: "合同结清后停用",
     });
@@ -277,11 +280,40 @@ describe("供应商设置运行时交互", () => {
       private_supplier_writes_enabled: false,
       private_catalog_writes_enabled: false,
       procurement_snapshot_v1_enabled: false,
+      purchase_batch_workflow_enabled: false,
       expected_version: 2,
     });
     expect(new Headers(calls[0]?.init?.headers).get("Idempotency-Key")).toBe(
       "rollout-ownership-1",
     );
+  });
+
+  test("采购 workflow 意图只变更最后一级并发送完整状态", async () => {
+    let body: Record<string, unknown> = {};
+    globalThis.fetch = (async (_input, init) => {
+      body = JSON.parse(String(init?.body));
+      return jsonResponse({ success: true, data: settings() });
+    }) as typeof fetch;
+
+    await updatePlatformTenantSupplierModule({
+      tenantId: "tenant-1",
+      current: settings({
+        module_enabled: true,
+        ownership_reads_enabled: true,
+        private_supplier_writes_enabled: true,
+        private_catalog_writes_enabled: true,
+        procurement_snapshot_v1_enabled: true,
+        version: 5,
+      }),
+      intent: { moduleEnabled: true, purchaseBatchWorkflowEnabled: true },
+      idempotencyKey: "rollout-purchase-workflow-1",
+    });
+
+    expect(body).toMatchObject({
+      procurement_snapshot_v1_enabled: true,
+      purchase_batch_workflow_enabled: true,
+      expected_version: 5,
+    });
   });
 
   test("租户合同策略只发送策略值和乐观锁版本", async () => {
@@ -366,6 +398,7 @@ describe("供应商设置运行时交互", () => {
         private_supplier_writes_enabled: false,
         private_catalog_writes_enabled: false,
         procurement_snapshot_v1_enabled: false,
+        purchase_batch_workflow_enabled: false,
         expected_version: 2,
         reason: "停止供应商采购",
       },
@@ -376,6 +409,7 @@ describe("供应商设置运行时交互", () => {
         private_supplier_writes_enabled: false,
         private_catalog_writes_enabled: false,
         procurement_snapshot_v1_enabled: false,
+        purchase_batch_workflow_enabled: false,
         expected_version: 3,
         reason: "停止供应商采购",
       },

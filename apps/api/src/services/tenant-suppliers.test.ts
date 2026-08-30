@@ -126,6 +126,7 @@ describe("TenantSuppliersService tenant and permission boundaries", () => {
         private_supplier_writes_enabled: true,
         private_catalog_writes_enabled: true,
         procurement_snapshot_v1_enabled: true,
+        purchase_batch_workflow_enabled: false,
       })),
     });
 
@@ -136,6 +137,7 @@ describe("TenantSuppliersService tenant and permission boundaries", () => {
         private_supplier_writes_enabled: false,
         private_catalog_writes_enabled: false,
         procurement_snapshot_v1_enabled: false,
+        purchase_batch_workflow_enabled: false,
       });
   });
 });

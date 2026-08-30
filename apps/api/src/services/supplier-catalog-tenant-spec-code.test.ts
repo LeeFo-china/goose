@@ -36,6 +36,7 @@ describe("SupplierCatalogTenantService spec code generation", () => {
         private_supplier_writes_enabled: true,
         private_catalog_writes_enabled: true,
         procurement_snapshot_v1_enabled: false,
+        purchase_batch_workflow_enabled: false,
       })) },
       accessPolicy: {
         assertTenantContext: mock(() => TENANT_ID),

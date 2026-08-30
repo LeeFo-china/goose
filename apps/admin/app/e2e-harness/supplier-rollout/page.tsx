@@ -15,6 +15,7 @@ function initialSettings(level: number): TenantSupplierSettings {
     private_supplier_writes_enabled: level >= 3,
     private_catalog_writes_enabled: level >= 4,
     procurement_snapshot_v1_enabled: level >= 5,
+    purchase_batch_workflow_enabled: level >= 6,
     enabled_by_employee_id: level >= 1
       ? "91000000-0000-4000-8000-000000000002"
       : null,
@@ -28,7 +29,7 @@ function initialSettings(level: number): TenantSupplierSettings {
 function rolloutLevel(value: string | string[] | undefined): number {
   const raw = Array.isArray(value) ? value[0] : value;
   const parsed = Number(raw ?? "0");
-  return Number.isInteger(parsed) && parsed >= 0 && parsed <= 5 ? parsed : 0;
+  return Number.isInteger(parsed) && parsed >= 0 && parsed <= 6 ? parsed : 0;
 }
 
 export default async function SupplierRolloutTestHarness({

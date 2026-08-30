@@ -34,6 +34,84 @@ type CommandRunner = (
   input?: string,
 ) => CommandResult;
 
+const oldRolloutSignature = [
+  "public.set_tenant_supplier_rollout_settings(",
+  "uuid,boolean,boolean,boolean,boolean,boolean,boolean,",
+  "integer,uuid,uuid,text,text)",
+].join("");
+
+const newRolloutSignature = [
+  "public.set_tenant_supplier_rollout_settings(",
+  "uuid,boolean,boolean,boolean,boolean,boolean,boolean,boolean,",
+  "integer,uuid,uuid,text,text)",
+].join("");
+
+export function supplierRolloutAclSql(): string {
+  return `DO $acl$
+BEGIN
+  IF pg_catalog.to_regprocedure('${oldRolloutSignature}') IS NOT NULL THEN
+    RAISE EXCEPTION 'old rollout command overload must not exist';
+  END IF;
+  IF pg_catalog.to_regprocedure('${newRolloutSignature}') IS NULL THEN
+    RAISE EXCEPTION 'new rollout command overload must exist';
+  END IF;
+  IF NOT pg_catalog.has_function_privilege(
+    'service_role', '${newRolloutSignature}', 'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'service_role must execute rollout command';
+  END IF;
+  IF pg_catalog.has_function_privilege(
+    'authenticated', '${newRolloutSignature}', 'EXECUTE'
+  ) OR pg_catalog.has_function_privilege(
+    'anon', '${newRolloutSignature}', 'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'rollout command ACL is wider than service_role';
+  END IF;
+  IF EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_proc AS procedure_definition
+    CROSS JOIN LATERAL pg_catalog.aclexplode(coalesce(
+      procedure_definition.proacl,
+      pg_catalog.acldefault('f', procedure_definition.proowner)
+    )) AS permission
+    WHERE procedure_definition.oid =
+      pg_catalog.to_regprocedure('${newRolloutSignature}')
+      AND permission.privilege_type = 'EXECUTE'
+      AND permission.grantee <> procedure_definition.proowner
+      AND (
+        permission.grantee <> (
+          SELECT role_definition.oid
+          FROM pg_catalog.pg_roles AS role_definition
+          WHERE role_definition.rolname = 'service_role'
+        )
+        OR permission.is_grantable
+      )
+  ) THEN
+    RAISE EXCEPTION 'rollout command ACL has an unexpected execute grantee';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_proc AS procedure_definition
+    CROSS JOIN LATERAL pg_catalog.aclexplode(coalesce(
+      procedure_definition.proacl,
+      pg_catalog.acldefault('f', procedure_definition.proowner)
+    )) AS permission
+    WHERE procedure_definition.oid =
+      pg_catalog.to_regprocedure('${newRolloutSignature}')
+      AND permission.privilege_type = 'EXECUTE'
+      AND NOT permission.is_grantable
+      AND permission.grantee = (
+        SELECT role_definition.oid
+        FROM pg_catalog.pg_roles AS role_definition
+        WHERE role_definition.rolname = 'service_role'
+      )
+  ) THEN
+    RAISE EXCEPTION 'service_role must hold the exact execute grant';
+  END IF;
+END
+$acl$;`;
+}
+
 const defaultRunner: CommandRunner = (command, args, input) => {
   const result = spawnSync(command, [...args], {
     cwd: fileURLToPath(new URL("../../../../", import.meta.url)),
@@ -278,7 +356,7 @@ SET statement_timeout = '20s';
 BEGIN;
 SET LOCAL ROLE service_role;
 SELECT public.set_tenant_supplier_rollout_settings(
-  '${tenantId}', true, false, false, false, false, false,
+  '${tenantId}', true, false, false, false, false, false, false,
   0, '${actorUserId}', '${actorEmployeeId}',
   'concurrent-writer-a-${tenantId}', NULL
 );
@@ -296,7 +374,7 @@ DECLARE
   v_result jsonb;
 BEGIN
   v_result := public.set_tenant_supplier_rollout_settings(
-    '${tenantId}', true, false, false, false, false, false,
+    '${tenantId}', true, false, false, false, false, false, false,
     0, '${actorUserId}', '${actorEmployeeId}',
     'concurrent-writer-b-${tenantId}', NULL
   );
@@ -324,7 +402,8 @@ BEGIN
     AND NOT setting.ownership_reads_enabled
     AND NOT setting.private_supplier_writes_enabled
     AND NOT setting.private_catalog_writes_enabled
-    AND NOT setting.procurement_snapshot_v1_enabled;
+    AND NOT setting.procurement_snapshot_v1_enabled
+    AND NOT setting.purchase_batch_workflow_enabled;
   IF v_version IS DISTINCT FROM 1 THEN
     RAISE EXCEPTION 'expected final settings version 1';
   END IF;

@@ -109,6 +109,7 @@ export const settings = {
   private_supplier_writes_enabled: false,
   private_catalog_writes_enabled: false,
   procurement_snapshot_v1_enabled: false,
+  purchase_batch_workflow_enabled: false,
   enabled_by_employee_id: null,
   enabled_at: null,
   version: 1,
@@ -135,6 +136,7 @@ export const settingsRequest = {
   private_supplier_writes_enabled: false,
   private_catalog_writes_enabled: false,
   procurement_snapshot_v1_enabled: false,
+  purchase_batch_workflow_enabled: false,
   expected_version: 1,
   idempotencyKey: "replay-1",
 };

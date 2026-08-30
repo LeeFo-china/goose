@@ -33,6 +33,7 @@ describe("TenantSuppliersRepository queries", () => {
       private_supplier_writes_enabled: false,
       private_catalog_writes_enabled: false,
       procurement_snapshot_v1_enabled: false,
+      purchase_batch_workflow_enabled: false,
     });
     const url = new URL(requests[0]?.url ?? "http://invalid");
     for (const flag of [
@@ -40,6 +41,7 @@ describe("TenantSuppliersRepository queries", () => {
       "private_supplier_writes_enabled",
       "private_catalog_writes_enabled",
       "procurement_snapshot_v1_enabled",
+      "purchase_batch_workflow_enabled",
     ]) {
       expect(url.searchParams.get("select")).toContain(flag);
     }

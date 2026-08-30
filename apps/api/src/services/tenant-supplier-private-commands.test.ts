@@ -228,6 +228,7 @@ const settings = {
   private_supplier_writes_enabled: true,
   private_catalog_writes_enabled: false,
   procurement_snapshot_v1_enabled: false,
+  purchase_batch_workflow_enabled: false,
   enabled_by_employee_id: EMPLOYEE_ID,
   enabled_at: "2026-08-13T00:00:00Z",
   version: 1,

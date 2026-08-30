@@ -73,6 +73,7 @@ type SettingsRequest = {
   private_supplier_writes_enabled: boolean;
   private_catalog_writes_enabled: boolean;
   procurement_snapshot_v1_enabled: boolean;
+  purchase_batch_workflow_enabled: boolean;
   expected_version: number; reason?: string; idempotencyKey: string;
 };
 export class PlatformSuppliersService {
@@ -318,6 +319,7 @@ export class PlatformSuppliersService {
         private_supplier_writes_enabled: false,
         private_catalog_writes_enabled: false,
         procurement_snapshot_v1_enabled: false,
+        purchase_batch_workflow_enabled: false,
       }, input);
     }
     const result = await this.mapIdempotencyError(() =>
@@ -329,6 +331,8 @@ export class PlatformSuppliersService {
         private_supplier_writes_enabled: input.private_supplier_writes_enabled,
         private_catalog_writes_enabled: input.private_catalog_writes_enabled,
         procurement_snapshot_v1_enabled: input.procurement_snapshot_v1_enabled,
+        purchase_batch_workflow_enabled:
+          input.purchase_batch_workflow_enabled,
         expected_version: input.expected_version, actor_user_id: actor.authUserId,
         actor_employee_id: actor.employeeId,
         idempotency_key: input.idempotencyKey,

@@ -16,6 +16,7 @@ const setting = {
   private_supplier_writes_enabled: false,
   private_catalog_writes_enabled: false,
   procurement_snapshot_v1_enabled: false,
+  purchase_batch_workflow_enabled: false,
   enabled_by_employee_id: null,
   enabled_at: null,
   version: 2,
@@ -40,6 +41,7 @@ describe("PlatformSuppliersRepository settings command", () => {
       private_supplier_writes_enabled: false,
       private_catalog_writes_enabled: false,
       procurement_snapshot_v1_enabled: false,
+      purchase_batch_workflow_enabled: false,
     });
     const selectedColumns = String(select.mock.calls[0]?.[0]);
     for (const flag of [
@@ -47,6 +49,7 @@ describe("PlatformSuppliersRepository settings command", () => {
       "private_supplier_writes_enabled",
       "private_catalog_writes_enabled",
       "procurement_snapshot_v1_enabled",
+      "purchase_batch_workflow_enabled",
     ]) {
       expect(selectedColumns).toContain(flag);
     }
@@ -77,6 +80,7 @@ describe("PlatformSuppliersRepository settings command", () => {
       private_supplier_writes_enabled: false,
       private_catalog_writes_enabled: false,
       procurement_snapshot_v1_enabled: false,
+      purchase_batch_workflow_enabled: false,
       expected_version: 1,
       reason: "合作策略调整",
       actor_user_id: ACTOR_USER_ID,
@@ -92,6 +96,7 @@ describe("PlatformSuppliersRepository settings command", () => {
       p_private_supplier_writes_enabled: false,
       p_private_catalog_writes_enabled: false,
       p_procurement_snapshot_v1_enabled: false,
+      p_purchase_batch_workflow_enabled: false,
       p_expected_version: 1,
       p_actor_user_id: ACTOR_USER_ID,
       p_actor_employee_id: ACTOR_EMPLOYEE_ID,
@@ -107,6 +112,7 @@ describe("PlatformSuppliersRepository settings command", () => {
       private_supplier_writes_enabled: false,
       private_catalog_writes_enabled: false,
       procurement_snapshot_v1_enabled: false,
+      purchase_batch_workflow_enabled: false,
       expected_version: 2,
       actor_user_id: ACTOR_USER_ID,
       actor_employee_id: ACTOR_EMPLOYEE_ID,
@@ -121,6 +127,7 @@ describe("PlatformSuppliersRepository settings command", () => {
       p_private_supplier_writes_enabled: false,
       p_private_catalog_writes_enabled: false,
       p_procurement_snapshot_v1_enabled: false,
+      p_purchase_batch_workflow_enabled: false,
       p_expected_version: 2,
       p_actor_user_id: ACTOR_USER_ID,
       p_actor_employee_id: ACTOR_EMPLOYEE_ID,

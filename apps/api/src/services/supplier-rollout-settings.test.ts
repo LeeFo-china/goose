@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import * as rolloutSettings from "./supplier-rollout-settings";
 import {
   assertSupplierRolloutDependencies,
   assertSupplierRolloutTransition,
@@ -12,6 +13,7 @@ const disabled = {
   private_supplier_writes_enabled: false,
   private_catalog_writes_enabled: false,
   procurement_snapshot_v1_enabled: false,
+  purchase_batch_workflow_enabled: false,
 };
 
 describe("supplier rollout settings", () => {
@@ -39,6 +41,15 @@ describe("supplier rollout settings", () => {
         private_supplier_writes_enabled: true,
         private_catalog_writes_enabled: true,
         procurement_snapshot_v1_enabled: true,
+        purchase_batch_workflow_enabled: false,
+      },
+      {
+        module_enabled: true,
+        ownership_reads_enabled: true,
+        private_supplier_writes_enabled: true,
+        private_catalog_writes_enabled: true,
+        procurement_snapshot_v1_enabled: true,
+        purchase_batch_workflow_enabled: true,
       },
     ];
 
@@ -67,6 +78,14 @@ describe("supplier rollout settings", () => {
     for (const target of [
       { ...disabled, module_enabled: true, private_supplier_writes_enabled: true },
       { ...disabled, ownership_reads_enabled: true },
+      {
+        ...disabled,
+        module_enabled: true,
+        ownership_reads_enabled: true,
+        private_supplier_writes_enabled: true,
+        private_catalog_writes_enabled: true,
+        purchase_batch_workflow_enabled: true,
+      },
     ]) {
       expect(() => assertSupplierRolloutDependencies(target))
         .toThrow("供应商灰度开关必须按顺序逐步调整");
@@ -95,6 +114,7 @@ describe("supplier rollout settings", () => {
       private_supplier_writes_enabled: true,
       private_catalog_writes_enabled: true,
       procurement_snapshot_v1_enabled: true,
+      purchase_batch_workflow_enabled: true,
     })).toEqual(disabled);
 
     expect(effectiveSupplierRolloutSettings({
@@ -104,10 +124,47 @@ describe("supplier rollout settings", () => {
       private_supplier_writes_enabled: false,
       private_catalog_writes_enabled: true,
       procurement_snapshot_v1_enabled: true,
+      purchase_batch_workflow_enabled: true,
     })).toEqual({
       ...disabled,
       module_enabled: true,
       ownership_reads_enabled: true,
     });
+  });
+
+  test("keeps procurement snapshot and purchase workflow gates independent", () => {
+    const snapshotGate = (
+      rolloutSettings as unknown as {
+        isProcurementSnapshotEnabled?: (
+          settings: typeof disabled,
+        ) => boolean;
+      }
+    ).isProcurementSnapshotEnabled;
+    const workflowGate = (
+      rolloutSettings as unknown as {
+        isPurchaseBatchWorkflowEnabled?: (
+          settings: typeof disabled,
+        ) => boolean;
+      }
+    ).isPurchaseBatchWorkflowEnabled;
+
+    expect(typeof snapshotGate).toBe("function");
+    expect(typeof workflowGate).toBe("function");
+    if (!snapshotGate || !workflowGate) return;
+
+    const snapshotOnly = {
+      ...disabled,
+      module_enabled: true,
+      ownership_reads_enabled: true,
+      private_supplier_writes_enabled: true,
+      private_catalog_writes_enabled: true,
+      procurement_snapshot_v1_enabled: true,
+    };
+    expect(snapshotGate(snapshotOnly)).toBe(true);
+    expect(workflowGate(snapshotOnly)).toBe(false);
+    expect(workflowGate({
+      ...snapshotOnly,
+      purchase_batch_workflow_enabled: true,
+    })).toBe(true);
   });
 });

@@ -5,6 +5,7 @@ export const SUPPLIER_ROLLOUT_FLAGS = [
   "private_supplier_writes_enabled",
   "private_catalog_writes_enabled",
   "procurement_snapshot_v1_enabled",
+  "purchase_batch_workflow_enabled",
 ] as const;
 
 export type SupplierRolloutFlag = typeof SUPPLIER_ROLLOUT_FLAGS[number];

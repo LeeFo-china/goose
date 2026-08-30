@@ -13,6 +13,7 @@ const initialSettings = {
   private_supplier_writes_enabled: false,
   private_catalog_writes_enabled: false,
   procurement_snapshot_v1_enabled: false,
+  purchase_batch_workflow_enabled: false,
   expected_version: 0,
 };
 
@@ -55,12 +56,13 @@ describe("platform tenant supplier settings command", () => {
     }
   });
 
-  test("requires all four rollout flags in every settings command", () => {
+  test("requires all five rollout flags in every settings command", () => {
     for (const field of [
       "ownership_reads_enabled",
       "private_supplier_writes_enabled",
       "private_catalog_writes_enabled",
       "procurement_snapshot_v1_enabled",
+      "purchase_batch_workflow_enabled",
     ] as const) {
       const { [field]: _omitted, ...input } = initialSettings;
       expect(PlatformTenantSupplierSettingsCommandSchema.safeParse(input).success)

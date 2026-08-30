@@ -48,8 +48,8 @@ const enabledSettings = {
   module_enabled: true,
   ownership_reads_enabled: true,
   private_supplier_writes_enabled: true,
-  private_catalog_writes_enabled: true,
-  procurement_snapshot_v1_enabled: false,
+  private_catalog_writes_enabled: true, procurement_snapshot_v1_enabled: false,
+  purchase_batch_workflow_enabled: false,
 };
 
 async function setup(settings = enabledSettings) {

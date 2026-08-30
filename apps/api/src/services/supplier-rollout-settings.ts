@@ -6,6 +6,7 @@ export type SupplierRolloutState = {
   private_supplier_writes_enabled: boolean;
   private_catalog_writes_enabled: boolean;
   procurement_snapshot_v1_enabled: boolean;
+  purchase_batch_workflow_enabled: boolean;
 };
 
 const DISABLED_FLAGS = {
@@ -13,6 +14,7 @@ const DISABLED_FLAGS = {
   private_supplier_writes_enabled: false,
   private_catalog_writes_enabled: false,
   procurement_snapshot_v1_enabled: false,
+  purchase_batch_workflow_enabled: false,
 } as const;
 
 export function effectiveSupplierRolloutSettings<
@@ -27,6 +29,8 @@ export function effectiveSupplierRolloutSettings<
     settings.private_catalog_writes_enabled;
   const procurementSnapshotEnabled = privateCatalogWritesEnabled &&
     settings.procurement_snapshot_v1_enabled;
+  const purchaseBatchWorkflowEnabled = procurementSnapshotEnabled &&
+    settings.purchase_batch_workflow_enabled;
 
   return {
     ...settings,
@@ -35,8 +39,23 @@ export function effectiveSupplierRolloutSettings<
       private_supplier_writes_enabled: privateSupplierWritesEnabled,
       private_catalog_writes_enabled: privateCatalogWritesEnabled,
       procurement_snapshot_v1_enabled: procurementSnapshotEnabled,
+      purchase_batch_workflow_enabled: purchaseBatchWorkflowEnabled,
     }),
   };
+}
+
+export function isProcurementSnapshotEnabled(
+  settings: SupplierRolloutState,
+): boolean {
+  return effectiveSupplierRolloutSettings(settings)
+    .procurement_snapshot_v1_enabled;
+}
+
+export function isPurchaseBatchWorkflowEnabled(
+  settings: SupplierRolloutState,
+): boolean {
+  return effectiveSupplierRolloutSettings(settings)
+    .purchase_batch_workflow_enabled;
 }
 
 export function assertSupplierRolloutTransition(
@@ -74,6 +93,7 @@ function throwSupplierRolloutOrderInvalid(): never {
 
 function rolloutLevel(settings: SupplierRolloutState): number {
   if (!settings.module_enabled) return 0;
+  if (settings.purchase_batch_workflow_enabled) return 6;
   if (settings.procurement_snapshot_v1_enabled) return 5;
   if (settings.private_catalog_writes_enabled) return 4;
   if (settings.private_supplier_writes_enabled) return 3;

@@ -22,6 +22,7 @@ describe("TenantSuppliersService private supplier creation", () => {
         private_supplier_writes_enabled: true,
         private_catalog_writes_enabled: false,
         procurement_snapshot_v1_enabled: false,
+        purchase_batch_workflow_enabled: false,
       })),
       allocateInternalCode: mock(async () => ({
         allocation_id: allocationId,

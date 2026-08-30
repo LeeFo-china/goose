@@ -8,6 +8,7 @@ const rolloutNames = [
   "私有供应商写入",
   "私有目录写入",
   "采购单快照 V1",
+  "采购批次 Workflow",
 ] as const;
 
 type RolloutName = typeof rolloutNames[number];
@@ -28,6 +29,7 @@ type MockState = {
     private_supplier_writes_enabled: boolean;
     private_catalog_writes_enabled: boolean;
     procurement_snapshot_v1_enabled: boolean;
+    purchase_batch_workflow_enabled: boolean;
   };
   mutations: MutationJournalEntry[];
   settingsReadCount: number;
@@ -129,20 +131,32 @@ test.describe("租户供应商灰度确定性交互", () => {
     await controls["采购单快照 V1"].click();
     await expect(controls["采购单快照 V1"]).toBeChecked();
     await expectVersion(request, 5);
-    await expectToggleWindow(controls, ["采购单快照 V1"]);
+    await expectToggleWindow(controls, [
+      "采购单快照 V1",
+      "采购批次 Workflow",
+    ]);
+
+    await controls["采购批次 Workflow"].click();
+    await expect(controls["采购批次 Workflow"]).toBeChecked();
+    await expectVersion(request, 6);
+    await expectToggleWindow(controls, ["采购批次 Workflow"]);
+
+    await controls["采购批次 Workflow"].click();
+    await expect(controls["采购批次 Workflow"]).not.toBeChecked();
+    await expectVersion(request, 7);
 
     await controls["采购单快照 V1"].click();
     await expect(controls["采购单快照 V1"]).not.toBeChecked();
-    await expectVersion(request, 6);
+    await expectVersion(request, 8);
     await controls["私有目录写入"].click();
     await expect(controls["私有目录写入"]).not.toBeChecked();
-    await expectVersion(request, 7);
+    await expectVersion(request, 9);
     await controls["私有供应商写入"].click();
     await expect(controls["私有供应商写入"]).not.toBeChecked();
-    await expectVersion(request, 8);
+    await expectVersion(request, 10);
     await controls["所有权读取"].click();
     await expect(controls["所有权读取"]).not.toBeChecked();
-    await expectVersion(request, 9);
+    await expectVersion(request, 11);
     await expectToggleWindow(controls, ["所有权读取"]);
 
     const beforeReasonValidation = (await readState(request)).mutations.length;
@@ -154,14 +168,14 @@ test.describe("租户供应商灰度确定性交互", () => {
 
     await page.getByLabel("停用原因").fill("E2E 验证灰度逆序停用");
     await stopButton.click();
-    await expectVersion(request, 10);
+    await expectVersion(request, 12);
     await expect(page.getByRole("button", { name: "启用供应商模块" }))
       .toBeVisible();
 
     const state = await readState(request);
-    expect(state.mutations).toHaveLength(10);
+    expect(state.mutations).toHaveLength(12);
     expect(state.mutations.map(({ payload }) => payload.expected_version))
-      .toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+      .toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
     for (const mutation of state.mutations) {
       expect(mutation).toMatchObject({
         method: "PATCH",
@@ -176,6 +190,7 @@ test.describe("租户供应商灰度确定性交互", () => {
         "private_supplier_writes_enabled",
         "private_catalog_writes_enabled",
         "procurement_snapshot_v1_enabled",
+        "purchase_batch_workflow_enabled",
         "expected_version",
       ]) {
         expect(mutation.payload).toHaveProperty(field);
@@ -184,7 +199,7 @@ test.describe("租户供应商灰度确定性交互", () => {
     expect(state.mutations.at(-1)?.payload).toMatchObject({
       module_enabled: false,
       reason: "E2E 验证灰度逆序停用",
-      expected_version: 9,
+      expected_version: 11,
     });
   });
 
@@ -244,8 +259,8 @@ test.describe("租户供应商灰度确定性交互", () => {
     );
   });
 
-  test("只读账号能查看四个开关但不能操作", async ({ page, request }) => {
-    await page.goto("/e2e-harness/supplier-rollout?level=5&readonly=1", {
+  test("只读账号能查看六个开关但不能操作", async ({ page, request }) => {
+    await page.goto("/e2e-harness/supplier-rollout?level=6&readonly=1", {
       waitUntil: "networkidle",
     });
     const controls = switches(page);
