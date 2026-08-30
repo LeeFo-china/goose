@@ -149,6 +149,8 @@ BEGIN
   IF v_batch.version <> p_expected_version OR v_batch.status <> 'pending_approval' THEN
     RAISE EXCEPTION 'SUPPLIER_PURCHASE_BATCH_STATE_CONFLICT' USING ERRCODE = 'P0001';
   END IF;
+  -- Test double models production review ordering: project budget advisory,
+  -- then deterministic commitment rows, before purchase mutation.
   PERFORM pg_advisory_xact_lock(hashtextextended(
     'test-project-budget:' || p_tenant_id::text || ':' || v_batch.project_id::text,
     6720240826142000
@@ -157,12 +159,25 @@ BEGIN
   WHERE tenant_id = p_tenant_id AND project_id = v_batch.project_id
   ORDER BY id FOR UPDATE;
   UPDATE public.supplier_purchase_batches
-  SET status = CASE p_action WHEN 'approve' THEN 'ordered' ELSE 'rejected' END,
+  SET status = CASE
+      WHEN p_remark = 'fixture-revision-required' THEN 'draft'
+      WHEN p_action = 'approve' THEN 'ordered'
+      ELSE 'rejected'
+    END,
     version = version + 1
   WHERE id = p_batch_id RETURNING * INTO v_batch;
   v_result := jsonb_build_object(
-    'status', v_batch.status, 'batch', to_jsonb(v_batch),
-    'version', v_batch.version
+    'status', CASE
+      WHEN p_remark = 'fixture-revision-required' THEN 'revision_required'
+      ELSE v_batch.status
+    END,
+    'batch', to_jsonb(v_batch),
+    'version', v_batch.version,
+    'error_code', CASE
+      WHEN p_remark = 'fixture-revision-required'
+        THEN 'SUPPLIER_PURCHASE_BATCH_REVISION_REQUIRED'
+      ELSE NULL
+    END
   );
   RETURN public.record_supplier_purchase_batch_command_result(
     p_tenant_id, p_batch_id, 'review', p_idempotency_key, v_fingerprint,

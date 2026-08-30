@@ -4,6 +4,10 @@ const migration = new URL(
   "../../../../supabase/migrations/20260830114000_create_supplier_purchase_batch_workflow_review.sql",
   import.meta.url,
 );
+const concurrencyScript = new URL(
+  "../../../../supabase/tests/supplier_purchase_batch_workflow_review_concurrency.sh",
+  import.meta.url,
+);
 
 async function source() {
   return Bun.file(migration).text();
@@ -149,11 +153,44 @@ describe("supplier purchase batch workflow review migration contract", () => {
     expect(body).not.toContain("result = v_result");
   });
 
+  test("adopts legacy results only for workflow branches that delegate review", async () => {
+    const migration = await source();
+    const body = functionBody(migration);
+    expect(body).toContain(
+      "IF v_adopted_legacy_event\n    AND v_action = 'approve'\n    AND NOT (",
+    );
+    expect(body).toContain(
+      "v_task.node_key = 'purchase_review'\n        AND COALESCE(v_instance.context->>'budget_status', '') =\n          'within_budget'",
+    );
+    expect(body).toContain(
+      "'within_budget'\n        AND v_batch.budget_status = 'within_budget'",
+    );
+    expect(body).toContain(
+      "v_task.node_key = 'finance_review'\n        AND COALESCE(v_instance.context->>'budget_status', '') =\n          'over_budget'",
+    );
+    expect(body).toContain(
+      "'over_budget'\n        AND v_batch.budget_status = 'over_budget'",
+    );
+    expect(migration).toContain("Task 10 must ship in the same release");
+  });
+
   test("synchronizes subject state and emits workflow plus purchase audit", async () => {
     const body = functionBody(await source());
     expect(body).toContain("INSERT INTO public.workflow_subject_states");
     expect(body).toContain("INSERT INTO public.workflow_transition_logs");
     expect(body).toContain("public.record_supplier_purchase_batch_command_result(");
     expect(body).toContain("UPDATE public.supplier_purchase_batch_command_events AS event");
+  });
+
+  test("coordinates concurrency cases through observable bounded lock handshakes", async () => {
+    const script = await Bun.file(concurrencyScript).text();
+    expect(script).not.toContain("sleep 0.2");
+    expect(script).not.toContain("select pg_sleep(1)");
+    expect(script).toContain("application_name");
+    expect(script).toContain("pg_stat_activity");
+    expect(script).toContain("pg_blocking_pids");
+    expect(script).toContain("wait_for_blocked_by");
+    expect(script).toContain("WAIT_ATTEMPTS");
+    expect(script).toContain("models the production lock order");
   });
 });

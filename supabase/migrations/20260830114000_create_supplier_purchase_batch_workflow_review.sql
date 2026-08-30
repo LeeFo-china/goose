@@ -298,6 +298,23 @@ BEGIN
       ERRCODE = 'P0001',
       MESSAGE = 'SUPPLIER_PURCHASE_BATCH_APPROVAL_ROUND_STALE';
   END IF;
+  IF v_adopted_legacy_event
+    AND v_action = 'approve'
+    AND NOT (
+      (v_task.node_key = 'purchase_review'
+        AND COALESCE(v_instance.context->>'budget_status', '') =
+          'within_budget'
+        AND v_batch.budget_status = 'within_budget')
+      OR (v_task.node_key = 'finance_review'
+        AND COALESCE(v_instance.context->>'budget_status', '') =
+          'over_budget'
+        AND v_batch.budget_status = 'over_budget')
+    )
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT';
+  END IF;
   IF v_adopted_legacy_event AND (
     v_batch.version <> v_expected_batch_version + 1
     OR CASE v_review_result->>'status'
@@ -626,6 +643,9 @@ BEGIN
     AND batch.tenant_id = p_tenant_id;
 
   IF v_review_result IS NULL THEN
+    -- Task 10 must ship in the same release. Until raw legacy /review is
+    -- routed away, its same-key call intentionally conflicts with this
+    -- workflow-only over-budget event instead of replaying a mixed envelope.
     v_result := pg_catalog.jsonb_build_object(
       'status', 'pending_approval',
       'batch', public.supplier_purchase_batch_to_jsonb(v_batch),
