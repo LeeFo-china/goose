@@ -53,6 +53,28 @@ class QueryMock {
     return this;
   }
 
+  is(column: string, value: unknown) {
+    this.call.equalFilters.push([column, value]);
+    return this;
+  }
+
+  order() {
+    return this;
+  }
+
+  then<TResult1 = { data: unknown[]; error: null }>(
+    onfulfilled?: (
+      (value: { data: unknown[]; error: null }) =>
+        TResult1 | PromiseLike<TResult1>
+    ) | null,
+  ): Promise<TResult1 | { data: unknown[]; error: null }> {
+    const result = {
+      data: rowsByTable[this.table] ?? [],
+      error: null,
+    };
+    return Promise.resolve(result).then(onfulfilled ?? undefined);
+  }
+
   async limit(limit: number) {
     this.call.limit = limit;
     return { data: rowsByTable[this.table] ?? [], error: null };

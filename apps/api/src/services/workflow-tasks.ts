@@ -28,6 +28,10 @@ import { workflowSubjectStateService } from "@/services/workflow-subject-state";
 import { buildWorkflowTaskActionsForTask } from "@/services/workflow-task-actions";
 import { buildWorkflowTaskAssigneeMetadata } from "@/services/workflow-task-assignee";
 import { workflowTaskCardContextService } from "@/services/workflow-task-card-context";
+import {
+  listSupplierPurchaseBatchWorkflowTasks,
+  resolveSupplierPurchaseBatchTaskAccess,
+} from "@/services/workflow-task-supplier-purchase-batch-access";
 import { assertGenericWorkflowMutationAllowed } from "@/services/workflow-supplier-purchase-batch-boundary";
 
 const PROJECT_PROCEDURE_PERMISSION_BY_ACTION: Record<string, string> = {
@@ -39,21 +43,30 @@ const PROJECT_PROCEDURE_PERMISSION_BY_ACTION: Record<string, string> = {
 class WorkflowTaskService {
   async listTasks(authContext: AuthContext, query: WorkflowTaskListQuery) {
     const tenantId = this.assertTenantId(authContext);
-    const tasks = await workflowTaskRepository.listAccessibleTasks({
-      tenantId,
-      employeeId: authContext.employeeId,
-      roleCodes: authContext.roleCodes,
-      permissionCodes: authContext.permissions.map((permission) => permission.code),
-      page: query.page,
-      pageSize: query.pageSize,
-      status: query.status,
-      subjectType: query.subject_type,
-      subjectId: query.subject_id?.trim() || undefined,
-    });
-    const procedureAssignments = await this.loadProcedureAssignmentsForTasks(
-      tenantId,
-      tasks.list,
-    );
+    const supplierPurchaseBatchAccess = query.subject_type === undefined
+      ? await resolveSupplierPurchaseBatchTaskAccess(authContext)
+      : undefined;
+    const tasks = query.subject_type === "supplier_purchase_batch"
+      ? await listSupplierPurchaseBatchWorkflowTasks({
+        authContext,
+        tenantId,
+        query,
+      })
+      : await workflowTaskRepository.listAccessibleTasks({
+        tenantId,
+        employeeId: authContext.employeeId,
+        roleCodes: authContext.roleCodes,
+        permissionCodes: authContext.permissions.map((permission) => permission.code),
+        page: query.page,
+        pageSize: query.pageSize,
+        status: query.status,
+        subjectType: query.subject_type,
+        subjectId: query.subject_id?.trim() || undefined,
+        supplierPurchaseBatchAccess,
+      });
+    const procedureAssignments = tasks.list.length === 0
+      ? new Map<string, ProcedureAssignmentRow>()
+      : await this.loadProcedureAssignmentsForTasks(tenantId, tasks.list);
 
     const enrichedTasks = await Promise.all(tasks.list.map(async (task) => {
       const assignee = buildWorkflowTaskAssigneeMetadata(task);
@@ -74,8 +87,9 @@ class WorkflowTaskService {
         actions,
       };
     }));
-    const cardContextByTaskId =
-      await workflowTaskCardContextService.buildTaskCardContextMap({
+    const cardContextByTaskId = enrichedTasks.length === 0
+      ? new Map()
+      : await workflowTaskCardContextService.buildTaskCardContextMap({
         tenantId,
         items: enrichedTasks,
       });

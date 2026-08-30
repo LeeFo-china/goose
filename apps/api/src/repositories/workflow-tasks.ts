@@ -6,6 +6,12 @@ import {
   listAccessiblePendingBySubjectIdsViaDirectSql,
   listAccessibleTasksViaDirectSql,
 } from "@/repositories/workflow-tasks-direct";
+import {
+  listAccessibleSupplierPurchaseBatchTasks,
+  listAccessibleTasksWithSupplierScopeViaRpc,
+  type SupplierPurchaseBatchWorkflowTaskListInput,
+} from "@/repositories/workflow-task-supplier-purchase-batch-access";
+import { WORKFLOW_TASK_SELECT } from "@/repositories/workflow-task-select";
 import { workflowTable } from "@/repositories/workflows/client";
 import { getDirectPostgresSql } from "@/utils/postgres-direct";
 import type {
@@ -71,6 +77,10 @@ export type WorkflowTaskListInput = {
   subjectType?: WorkflowSubjectType;
   subjectId?: string;
   instanceId?: string;
+  supplierPurchaseBatchAccess?: {
+    employeeId: string;
+    visibleProjectIds: string[] | null;
+  } | null;
 };
 
 export type WorkflowTaskListResult = {
@@ -104,34 +114,6 @@ type UntypedRpcClient = {
     params: Record<string, unknown>,
   ) => Promise<{ data: unknown; error: unknown }>;
 };
-
-const WORKFLOW_TASK_SELECT = [
-  "id",
-  "tenant_id",
-  "instance_id",
-  "instance_node_id",
-  "definition_id",
-  "version_id",
-  "node_id",
-  "node_key",
-  "node_type",
-  "title",
-  "status",
-  "assignee_employee_id",
-  "assignee_role_code",
-  "assignee_permission_code",
-  "assignee_employee:employees!workflow_tasks_assignee_employee_id_fkey(id, name, avatar)",
-  "due_at",
-  "completed_by",
-  "completed_at",
-  "created_at",
-  "updated_at",
-  [
-    "instance:workflow_instances!inner(",
-    "id, subject_type, subject_id, status, current_node_key, current_node_snapshot",
-    ")",
-  ].join(""),
-].join(", ");
 
 const WORKFLOW_TRANSITION_LOG_SELECT = [
   "id",
@@ -174,7 +156,19 @@ class WorkflowTaskRepository {
       }
     }
 
-    return this.listAccessibleTasksViaRpc(input, page, pageSize);
+    return input.supplierPurchaseBatchAccess === undefined
+      ? this.listAccessibleTasksViaRpc(input, page, pageSize)
+      : listAccessibleTasksWithSupplierScopeViaRpc({
+        taskInput: input,
+        page,
+        pageSize,
+      });
+  }
+
+  async listAccessibleSupplierPurchaseBatchTasks(
+    input: SupplierPurchaseBatchWorkflowTaskListInput,
+  ): Promise<WorkflowTaskListResult> {
+    return listAccessibleSupplierPurchaseBatchTasks(input);
   }
 
   async findById(input: {

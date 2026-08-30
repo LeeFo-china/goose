@@ -117,17 +117,28 @@ mock.module("@/services/workflow-subject-state", () => ({
   workflowSubjectStateService: {},
 }));
 mock.module("@/services/workflow-task-customer-bridge", () => ({
-  workflowTaskCustomerBridge: {},
+  workflowTaskCustomerBridge: { complete: mock(async () => null) },
 }));
 mock.module("@/services/workflow-task-expense-bridge", () => ({
-  workflowTaskExpenseBridge: {},
+  workflowTaskExpenseBridge: { complete: mock(async () => null) },
 }));
 mock.module("@/services/workflow-task-payment-bridge", () => ({
-  workflowTaskPaymentBridge: {},
+  workflowTaskPaymentBridge: { complete: mock(async () => null) },
 }));
 mock.module("@/services/workflow-task-project-bridge", () => ({
   shouldRequireProjectWorkflowRebuild: mock(() => false),
-  workflowTaskProjectBridge: {},
+  workflowTaskProjectBridge: { complete: mock(async () => null) },
+}));
+mock.module("@/repositories/workflow-task-card-context", () => ({
+  workflowTaskCardContextRepository: {
+    listProjectSummariesByIds: mock(async () => []),
+    listCustomerSummariesByIds: mock(async () => []),
+    listExpenseRequestSummariesByIds: mock(async () => []),
+    listProjectReceivableSummaries: mock(async () => []),
+    listProjectAcceptanceSummariesByProjectIds: mock(async () => []),
+    listSupplierPurchaseBatchSummariesByIds: mock(async () => []),
+    listEmployeeSummariesByIds: mock(async () => []),
+  },
 }));
 
 describe("workflowTaskService procedure actions", () => {
