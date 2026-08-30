@@ -219,6 +219,68 @@ describe("SupplierPurchaseBatchAccessService", () => {
   });
 });
 
+describe("deriveSupplierPurchaseBatchActions workflow projection", () => {
+  test("uses workflow task access instead of fixed approval permission", async () => {
+    const { deriveSupplierPurchaseBatchActions } = await import(
+      "./supplier-purchase-batch-access"
+    );
+    const base = {
+      status: "pending_approval" as const,
+      createdByEmployeeId: CREATOR_ID,
+      submittedByEmployeeId: CREATOR_ID,
+      actorEmployeeId: EMPLOYEE_ID,
+      permissions: ["supplier.purchase-requisition.approve"],
+      canReadProject: true,
+      canUpdateProject: false,
+      workflowEnabled: true,
+      workflowCanWithdraw: false,
+    };
+
+    expect(deriveSupplierPurchaseBatchActions({
+      ...base,
+      workflowCanReview: false,
+    }).can_review).toBeFalse();
+    expect(deriveSupplierPurchaseBatchActions({
+      ...base,
+      permissions: [],
+      workflowCanReview: true,
+    }).can_review).toBeTrue();
+  });
+
+  test("lets the workflow applicant withdraw and edit a rejection", async () => {
+    const { deriveSupplierPurchaseBatchActions } = await import(
+      "./supplier-purchase-batch-access"
+    );
+    const permissions = ["supplier.purchase-requisition.manage"];
+
+    expect(deriveSupplierPurchaseBatchActions({
+      status: "pending_approval",
+      createdByEmployeeId: EMPLOYEE_ID,
+      submittedByEmployeeId: EMPLOYEE_ID,
+      actorEmployeeId: EMPLOYEE_ID,
+      permissions,
+      canReadProject: true,
+      canUpdateProject: true,
+      workflowEnabled: true,
+      workflowCanReview: false,
+      workflowCanWithdraw: true,
+    }).can_withdraw).toBeTrue();
+
+    expect(deriveSupplierPurchaseBatchActions({
+      status: "rejected",
+      createdByEmployeeId: EMPLOYEE_ID,
+      submittedByEmployeeId: EMPLOYEE_ID,
+      actorEmployeeId: EMPLOYEE_ID,
+      permissions,
+      canReadProject: true,
+      canUpdateProject: true,
+      workflowEnabled: true,
+      workflowCanReview: false,
+      workflowCanWithdraw: false,
+    })).toMatchObject({ can_edit: true, can_submit: false });
+  });
+});
+
 describe("deriveSupplierPurchaseBatchActions", () => {
   test("enables draft mutations and independently gated master-data actions", async () => {
     const { deriveSupplierPurchaseBatchActions } = await import(
@@ -244,6 +306,7 @@ describe("deriveSupplierPurchaseBatchActions", () => {
       can_edit: true,
       can_submit: true,
       can_review: false,
+      can_withdraw: false,
       can_cancel: true,
       can_create_supplier: true,
       can_create_catalog: true,
@@ -374,6 +437,7 @@ describe("deriveSupplierPurchaseBatchActions", () => {
         can_edit: false,
         can_submit: false,
         can_review: false,
+        can_withdraw: false,
         can_cancel: false,
         can_create_supplier: false,
         can_create_catalog: false,

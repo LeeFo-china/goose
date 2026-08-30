@@ -128,7 +128,7 @@ class WorkflowSubjectsService {
         options.workflowProgress.timeline_nodes,
         actions,
       )
-      : await this.loadProjectTimelineNodes({
+      : await this.loadTimelineNodes({
         tenantId,
         subjectType: params.subjectType,
         subjectId,
@@ -286,19 +286,20 @@ class WorkflowSubjectsService {
     }));
   }
 
-  private async loadProjectTimelineNodes(input: {
+  private async loadTimelineNodes(input: {
     tenantId: string;
     subjectType: string;
     subjectId: string;
     actions: WorkflowTaskActionPayload[];
     runtimeInstance?: WorkflowRuntimeProjectionRow | null;
   }): Promise<WorkflowTimelineNode[]> {
-    if (input.subjectType !== "project") return [];
+    if (input.subjectType !== "project" &&
+      input.subjectType !== "supplier_purchase_batch") return [];
 
     const runtimeInstance = input.runtimeInstance ??
       await workflowSubjectStateRepository.findLatestRuntimeInstance({
         tenantId: input.tenantId,
-        subjectType: "project",
+        subjectType: input.subjectType,
         subjectId: input.subjectId,
       });
 
@@ -319,11 +320,13 @@ class WorkflowSubjectsService {
         tenantId: input.tenantId,
         instanceId: runtimeInstance.id,
       }),
-      projectProcedureAssignmentService.listProjectAssignmentsForRuntime({
-        tenantId: input.tenantId,
-        projectId: input.subjectId,
-        workflowInstanceId: runtimeInstance.id,
-      }),
+      input.subjectType === "project"
+        ? projectProcedureAssignmentService.listProjectAssignmentsForRuntime({
+          tenantId: input.tenantId,
+          projectId: input.subjectId,
+          workflowInstanceId: runtimeInstance.id,
+        })
+        : Promise.resolve([]),
     ]);
 
     const workflowGraph = graph
@@ -333,14 +336,18 @@ class WorkflowSubjectsService {
         edges: graph.edges,
       }
       : null;
-    const enrichedGraph = await enrichWorkflowGraphWithFinanceReviewersForTenant({
-      tenantId: input.tenantId,
-      graph: workflowGraph,
-    });
-    const completedNodeActors = await buildFinanceConfirmationActorsForTenant({
-      tenantId: input.tenantId,
-      runtimeNodes,
-    });
+    const enrichedGraph = input.subjectType === "project"
+      ? await enrichWorkflowGraphWithFinanceReviewersForTenant({
+        tenantId: input.tenantId,
+        graph: workflowGraph,
+      })
+      : workflowGraph;
+    const completedNodeActors = input.subjectType === "project"
+      ? await buildFinanceConfirmationActorsForTenant({
+        tenantId: input.tenantId,
+        runtimeNodes,
+      })
+      : [];
 
     return buildWorkflowTimelineNodes({
       graph: enrichedGraph,

@@ -42,6 +42,7 @@ export type SupplierPurchaseBatchActions = {
   can_edit: boolean;
   can_submit: boolean;
   can_review: boolean;
+  can_withdraw: boolean;
   can_cancel: boolean;
   can_create_supplier: boolean;
   can_create_catalog: boolean;
@@ -56,6 +57,9 @@ export type SupplierPurchaseBatchActionInput = {
   permissions: readonly string[];
   canReadProject: boolean;
   canUpdateProject: boolean;
+  workflowEnabled?: boolean;
+  workflowCanReview?: boolean;
+  workflowCanWithdraw?: boolean;
 };
 
 function hasPermission(
@@ -69,16 +73,31 @@ export function deriveSupplierPurchaseBatchActions(
   input: SupplierPurchaseBatchActionInput,
 ): SupplierPurchaseBatchActions {
   const hasActor = Boolean(input.actorEmployeeId);
-  const canManageDraft = hasActor && input.status === "draft" &&
+  const canManageDraft = hasActor && (
+    input.status === "draft" || (
+      input.status === "rejected" &&
+      input.actorEmployeeId === input.createdByEmployeeId
+    )
+  ) &&
     input.canUpdateProject && hasPermission(
       input.permissions,
       "supplier.purchase-requisition.manage",
     );
-  const canReview = hasActor && input.status === "pending_approval" &&
+  const canReviewBoundary = hasActor && input.status === "pending_approval" &&
     input.canReadProject &&
     input.actorEmployeeId !== input.createdByEmployeeId &&
-    input.actorEmployeeId !== input.submittedByEmployeeId &&
-    hasPermission(input.permissions, "supplier.purchase-requisition.approve");
+    input.actorEmployeeId !== input.submittedByEmployeeId;
+  const canReview = canReviewBoundary && (input.workflowEnabled
+    ? input.workflowCanReview === true
+    : hasPermission(
+      input.permissions,
+      "supplier.purchase-requisition.approve",
+    ));
+  const canWithdraw = input.workflowEnabled === true &&
+    input.workflowCanWithdraw === true && hasActor &&
+    input.status === "pending_approval" && input.canUpdateProject &&
+    input.actorEmployeeId === input.submittedByEmployeeId &&
+    hasPermission(input.permissions, "supplier.purchase-requisition.manage");
   const canCancel = hasActor &&
     (input.status === "draft" || input.status === "pending_approval") &&
     input.canUpdateProject && hasPermission(
@@ -88,8 +107,9 @@ export function deriveSupplierPurchaseBatchActions(
 
   return {
     can_edit: canManageDraft,
-    can_submit: canManageDraft,
+    can_submit: canManageDraft && input.status === "draft",
     can_review: canReview,
+    can_withdraw: canWithdraw,
     can_cancel: canCancel,
     can_create_supplier: canManageDraft &&
       hasPermission(input.permissions, "supplier.master.manage"),

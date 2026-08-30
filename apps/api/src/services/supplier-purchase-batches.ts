@@ -25,6 +25,11 @@ import { resolveSupplierPurchaseBatchProjectOptionWindow } from
   "@/services/supplier-purchase-batch-project-option-window";
 import { supplierPurchaseBatchWorkflowRuntime } from
   "@/services/supplier-purchase-batch-workflow-runtime";
+import {
+  SupplierPurchaseBatchWorkflowProjectionService,
+  supplierPurchaseBatchWorkflowProjectionService,
+  type SupplierPurchaseBatchWorkflowProjectionDependencies,
+} from "@/services/supplier-purchase-batch-workflow-projection";
 
 type BatchAccessPort = Pick<
   typeof supplierPurchaseBatchAccessService,
@@ -61,6 +66,11 @@ export type SupplierPurchaseBatchesServiceDependencies = {
   access?: BatchAccessPort;
   repository?: BatchRepositoryPort;
   workflowRuntime?: BatchWorkflowRuntimePort;
+  workflowProjection?: Pick<
+    SupplierPurchaseBatchWorkflowProjectionService,
+    "enrichPage" | "enrichDetail"
+  >;
+  workflowRead?: SupplierPurchaseBatchWorkflowProjectionDependencies["workflowRead"];
   nowFactory?: () => Date;
 };
 
@@ -74,6 +84,10 @@ export class SupplierPurchaseBatchesService {
   private readonly access: BatchAccessPort;
   private readonly repository: BatchRepositoryPort;
   private readonly workflowRuntime: BatchWorkflowRuntimePort;
+  private readonly workflowProjection: Pick<
+    SupplierPurchaseBatchWorkflowProjectionService,
+    "enrichPage" | "enrichDetail"
+  >;
   private readonly nowFactory: () => Date;
 
   constructor(dependencies: SupplierPurchaseBatchesServiceDependencies = {}) {
@@ -82,6 +96,12 @@ export class SupplierPurchaseBatchesService {
       supplierPurchaseBatchesRepository;
     this.workflowRuntime = dependencies.workflowRuntime ??
       supplierPurchaseBatchWorkflowRuntime;
+    this.workflowProjection = dependencies.workflowProjection ??
+      (dependencies.workflowRead
+        ? new SupplierPurchaseBatchWorkflowProjectionService({
+          workflowRead: dependencies.workflowRead,
+        })
+        : supplierPurchaseBatchWorkflowProjectionService);
     this.nowFactory = dependencies.nowFactory ?? (() => new Date());
   }
 
@@ -91,7 +111,7 @@ export class SupplierPurchaseBatchesService {
   ) {
     const scope = await this.access.requireView(auth);
     const visibleProjectIds = await this.access.getVisibleProjectIds(auth);
-    return this.repository.listBatches({
+    const page = await this.repository.listBatches({
       tenant_id: scope.tenantId,
       visible_project_ids: visibleProjectIds,
       page: query.page,
@@ -99,6 +119,18 @@ export class SupplierPurchaseBatchesService {
       ...(query.keyword ? { keyword: query.keyword } : {}),
       ...(query.status ? { status: query.status } : {}),
       ...(query.projectId ? { project_id: query.projectId } : {}),
+    });
+    if (!await this.workflowRuntime.isEnabled(scope.tenantId)) return page;
+    const updateProjectIds = auth.permissions.some(({ code }) =>
+        code === "project.update"
+      )
+      ? await this.access.getVisibleProjectUpdateIds(auth)
+      : [];
+    return this.workflowProjection.enrichPage({
+      auth,
+      scope,
+      page,
+      updateProjectIds,
     });
   }
 
@@ -114,6 +146,17 @@ export class SupplierPurchaseBatchesService {
     const updateProjectIds = permissions.includes("project.update")
       ? await this.access.getVisibleProjectUpdateIds(auth)
       : [];
+    const workflowEnabled = await this.workflowRuntime.isEnabled(
+      scope.tenantId,
+    );
+    if (workflowEnabled) {
+      return this.workflowProjection.enrichDetail({
+        auth,
+        scope,
+        batch,
+        updateProjectIds,
+      });
+    }
     return {
       ...batch,
       actions: deriveSupplierPurchaseBatchActions({

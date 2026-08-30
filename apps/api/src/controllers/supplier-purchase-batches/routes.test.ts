@@ -158,6 +158,33 @@ describe("SupplierPurchaseBatchesController", () => {
     } as never)).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
   });
 
+  test("preserves workflow state and withdraw actions from the service", async () => {
+    const value = await controller();
+    const workflowPage = {
+      list: [{
+        id: BATCH_ID,
+        workflow_state: {
+          instance_id: "69000000-0000-4000-8000-000000000008",
+          instance_status: "running",
+          current_node_key: "purchase_review",
+          current_node_title: "采购审批",
+          pending_task_count: 1,
+          actions: [],
+        },
+        actions: { can_review: false, can_withdraw: true },
+      }],
+      pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+    };
+    listBatches.mockImplementationOnce(async () => workflowPage as never);
+
+    const response = await value.listBatches({ query: {} } as never);
+
+    expect(response as unknown).toEqual({
+      data: workflowPage,
+      message: "success",
+    });
+  });
+
   test("parses and wraps the three auxiliary pages", async () => {
     const value = await controller();
 
