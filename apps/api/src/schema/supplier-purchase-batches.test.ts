@@ -319,31 +319,26 @@ describe("supplier purchase batch command schemas", () => {
     }
   });
 
-  test("withdraw accepts a nonnegative version and an optional bounded reason", () => {
+  test("withdraw requires a positive version and a nonblank optional reason", () => {
     expect(SupplierPurchaseBatchWithdrawSchema.parse({
-      expected_version: 0,
-    })).toEqual({ expected_version: 0 });
+      expected_version: 1,
+    })).toEqual({ expected_version: 1 });
     expect(SupplierPurchaseBatchWithdrawSchema.parse({
       expected_version: 2,
       reason: "  采购负责人撤回  ",
     })).toEqual({ expected_version: 2, reason: "采购负责人撤回" });
-    expect(SupplierPurchaseBatchWithdrawSchema.parse({
-      expected_version: 2,
-      reason: "",
-    })).toEqual({ expected_version: 2, reason: "" });
-    expect(SupplierPurchaseBatchWithdrawSchema.parse({
-      expected_version: 2,
-      reason: "   ",
-    })).toEqual({ expected_version: 2, reason: "" });
     const maxReason = "a".repeat(500);
     expect(SupplierPurchaseBatchWithdrawSchema.parse({
       expected_version: 2,
       reason: `  ${maxReason}  `,
     })).toEqual({ expected_version: 2, reason: maxReason });
     for (const input of [
+      { expected_version: 0 },
       { expected_version: -1 },
       { expected_version: 1.5 },
       { expected_version: "1" },
+      { expected_version: 1, reason: "" },
+      { expected_version: 1, reason: "   " },
       { expected_version: 1, reason: "a".repeat(501) },
       { expected_version: 1, unknown: true },
     ]) {
