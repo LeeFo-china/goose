@@ -25918,6 +25918,34 @@ export type Database = {
         Args: { p_applyment: Json; p_audit_metadata: Json }
         Returns: string
       }
+      create_tenant_with_default_template: {
+        Args: {
+          p_address?: string
+          p_address_adcode?: string
+          p_address_city?: string
+          p_address_confidence?: number
+          p_address_confirmed_at?: string
+          p_address_district?: string
+          p_address_latitude?: number
+          p_address_longitude?: number
+          p_address_poi_id?: string
+          p_address_province?: string
+          p_address_source?: string
+          p_address_title?: string
+          p_admin_auth_user_id?: string
+          p_admin_department_code?: string
+          p_admin_name?: string
+          p_admin_phone?: string
+          p_admin_post_code?: string
+          p_contact_name?: string
+          p_contact_phone?: string
+          p_name: string
+          p_operator_employee_id?: string
+          p_slug: string
+          p_status?: string
+        }
+        Returns: Json
+      }
       delete_supplier_price_list_item: {
         Args: {
           p_actor_employee_id: string
@@ -27004,6 +27032,10 @@ export type Database = {
           tenant_status: string
           user_id: string
         }[]
+      }
+      lock_and_check_active_employee_phone: {
+        Args: { p_phone: string }
+        Returns: boolean
       }
       lock_project_cost_budget_scope: {
         Args: { p_project_id: string; p_tenant_id: string }

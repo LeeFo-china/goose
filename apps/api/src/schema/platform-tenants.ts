@@ -85,7 +85,7 @@ export const CreatePlatformTenantSchema = z.object({
     name: z.string().trim().min(1, "请输入管理员姓名").max(50, "管理员姓名不能超过 50 个字符"),
     phone: z.string().trim().regex(/^1[3-9]\d{9}$/, "管理员手机号格式不正确"),
     auth_user_id: z.uuid("无效的管理员用户 ID").optional(),
-    department_code: z.enum(DEPARTMENT_CODE_VALUES).optional().default("ADMIN"),
+    department_code: z.enum(DEPARTMENT_CODE_VALUES).optional().default("EXEC_OFFICE"),
     post_code: z.enum(EMPLOYEE_POST_CODE_VALUES).optional().default("SYSTEM_ADMIN"),
   }).optional(),
 });

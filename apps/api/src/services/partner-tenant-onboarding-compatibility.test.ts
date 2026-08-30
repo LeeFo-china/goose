@@ -93,19 +93,20 @@ const tenant = {
   address_confirmed_at: "2026-07-14T10:00:00.000Z",
   contact_name: "王总",
   contact_phone: "13900139000",
+  unified_social_credit_code: null,
   created_at: "2026-07-14T10:00:00.000Z",
   updated_at: "2026-07-14T10:00:00.000Z",
 } satisfies PlatformTenantRecord;
 
 const initialization = {
   template_code: "default_decoration_company",
-  template_version: "2026.05.10",
-  departments_count: 4,
-  posts_count: 8,
-  roles_count: 3,
+  template_version: "2026.08.30",
+  departments_count: 42,
+  posts_count: 48,
+  roles_count: 11,
   admin_employee_id: "00000000-0000-4000-8000-000000000601",
   admin_role_id: "00000000-0000-4000-8000-000000000701",
-} satisfies PlatformTenantInitializationResult;
+} as const satisfies PlatformTenantInitializationResult;
 
 const binding = {
   id: "00000000-0000-4000-8000-000000000401",
@@ -146,8 +147,7 @@ const partnerRepository = {
 const tenantRepository = {
   findBySlug: mock(async () => null as PlatformTenantRecord | null),
   findEmployeesByPhone: mock(async () => []),
-  create: mock(async () => tenant),
-  initializeDefaultData: mock(async () => initialization),
+  createWithDefaultTemplate: mock(async () => ({ tenant, initialization })),
 };
 
 const smsService = {
@@ -203,7 +203,17 @@ describe("legacy partner tenant onboarding compatibility", () => {
     });
     expect(result).not.toHaveProperty("application");
     expect(result).not.toHaveProperty("status", "submitted");
-    expect(tenantRepository.initializeDefaultData).toHaveBeenCalled();
+    expect(tenantRepository.createWithDefaultTemplate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        admin: expect.objectContaining({
+          department_code: "EXEC_OFFICE",
+          post_code: "SYSTEM_ADMIN",
+        }),
+      }),
+      { operatorEmployeeId: null },
+    );
+    expect("create" in tenantRepository).toBe(false);
+    expect("initializeDefaultData" in tenantRepository).toBe(false);
   });
 
   test("keeps the legacy response during the scheduled compatibility window", async () => {
@@ -219,7 +229,7 @@ describe("legacy partner tenant onboarding compatibility", () => {
       created: true,
       auth: null,
     });
-    expect(tenantRepository.create).toHaveBeenCalled();
+    expect(tenantRepository.createWithDefaultTemplate).toHaveBeenCalledTimes(1);
   });
 
   test("rejects a scheduled cutoff more than 14 days after full mini-program availability", async () => {
@@ -264,8 +274,7 @@ describe("legacy partner tenant onboarding compatibility", () => {
     });
 
     expect(smsService.findValidPending).not.toHaveBeenCalled();
-    expect(tenantRepository.create).not.toHaveBeenCalled();
-    expect(tenantRepository.initializeDefaultData).not.toHaveBeenCalled();
+    expect(tenantRepository.createWithDefaultTemplate).not.toHaveBeenCalled();
     expect(partnerRepository.createTenantBinding).not.toHaveBeenCalled();
   });
 

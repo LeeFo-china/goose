@@ -1,5 +1,5 @@
 import { Errors, EMPTY_USAGE } from "./shared";
-import type { CreatePlatformTenantInput, PlatformTenantListQuery, PlatformTenantRecord, PlatformTenantStatus, UpdatePlatformTenantInput } from "./shared";
+import type { PlatformTenantListQuery, PlatformTenantRecord, PlatformTenantStatus, UpdatePlatformTenantInput } from "./shared";
 
 const TENANT_ADDRESS_FIELDS = [
   "address",
@@ -17,7 +17,7 @@ const TENANT_ADDRESS_FIELDS = [
 ] as const;
 
 function toTenantAddressPatch(
-  input: CreatePlatformTenantInput | UpdatePlatformTenantInput,
+  input: UpdatePlatformTenantInput,
   options: { onlyProvided?: boolean } = {},
 ) {
   const patch: Partial<Record<
@@ -102,26 +102,6 @@ export async function findBySlug(this: any, slug: string) {
   }
 
   return (data || null) as PlatformTenantRecord | null;
-}
-
-export async function create(this: any, input: CreatePlatformTenantInput) {
-  const { data, error } = await this.from("tenants")
-    .insert({
-      name: input.name,
-      slug: input.slug,
-      status: input.status,
-      ...toTenantAddressPatch(input),
-      contact_name: input.contact_name ?? null,
-      contact_phone: input.contact_phone ?? null,
-    })
-    .select("*")
-    .single();
-
-  if (error) {
-    throw Errors.dbError("创建租户失败", error);
-  }
-
-  return data as PlatformTenantRecord;
 }
 
 export async function update(this: any, id: string, input: UpdatePlatformTenantInput) {
