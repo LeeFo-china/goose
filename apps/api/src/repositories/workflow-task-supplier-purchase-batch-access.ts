@@ -1,7 +1,9 @@
 import { Errors } from "@/errors/error-factory";
 import {
-  buildWorkflowTaskAssigneeScope,
   listAccessibleSupplierPurchaseBatchTasksViaDirectSql,
+} from "@/repositories/workflow-task-supplier-purchase-batch-direct";
+import {
+  buildWorkflowTaskAssigneeScope,
 } from "@/repositories/workflow-tasks-direct";
 import type {
   WorkflowTaskListInput,
@@ -30,12 +32,32 @@ type UntypedRpcClient = {
   ) => Promise<{ data: unknown; error: unknown }>;
 };
 
+const MAX_VISIBLE_PROJECT_IDS = 10_000;
+
+export function normalizeSupplierPurchaseBatchAccess<
+  T extends WorkflowTaskListInput,
+>(input: T): T {
+  const access = input.supplierPurchaseBatchAccess;
+  if (access === undefined || access === null) return input;
+  return {
+    ...input,
+    supplierPurchaseBatchAccess: {
+      ...access,
+      visibleProjectIds: normalizeVisibleProjectIds(access.visibleProjectIds),
+    },
+  };
+}
+
 export async function listAccessibleSupplierPurchaseBatchTasks(
   input: SupplierPurchaseBatchWorkflowTaskListInput,
 ): Promise<WorkflowTaskListResult> {
-  const page = input.page ?? 1;
-  const pageSize = Math.min(input.pageSize ?? 20, 100);
-  if (input.visibleProjectIds?.length === 0) {
+  const normalizedInput = {
+    ...input,
+    visibleProjectIds: normalizeVisibleProjectIds(input.visibleProjectIds),
+  };
+  const page = normalizedInput.page ?? 1;
+  const pageSize = Math.min(normalizedInput.pageSize ?? 20, 100);
+  if (normalizedInput.visibleProjectIds?.length === 0) {
     return emptyPage(page, pageSize);
   }
 
@@ -44,7 +66,7 @@ export async function listAccessibleSupplierPurchaseBatchTasks(
   if (directSql) {
     try {
       return await listAccessibleSupplierPurchaseBatchTasksViaDirectSql({
-        input,
+        input: normalizedInput,
         page,
         pageSize,
         offset,
@@ -56,17 +78,17 @@ export async function listAccessibleSupplierPurchaseBatchTasks(
     }
   }
 
-  const scope = buildWorkflowTaskAssigneeScope(input);
+  const scope = buildWorkflowTaskAssigneeScope(normalizedInput);
   const { data, error } = await rpcClient().rpc(
     "list_accessible_supplier_purchase_batch_workflow_tasks",
     {
-      p_tenant_id: input.tenantId,
+      p_tenant_id: normalizedInput.tenantId,
       p_employee_id: scope.employeeId,
       p_role_codes: scope.roleCodes,
       p_permission_codes: scope.permissionCodes,
-      p_visible_project_ids: input.visibleProjectIds,
-      p_status: input.status ?? "pending",
-      p_subject_id: input.subjectId ?? null,
+      p_visible_project_ids: normalizedInput.visibleProjectIds,
+      p_status: normalizedInput.status ?? "pending",
+      p_subject_id: normalizedInput.subjectId ?? null,
       p_page: page,
       p_page_size: pageSize,
     },
@@ -117,7 +139,9 @@ function toTaskPage(
   const rows = (data ?? []) as WorkflowTaskRpcRow[];
   const total = Number(rows[0]?.total_count ?? 0);
   return {
-    list: rows.map(({ total_count: _totalCount, ...task }) => task),
+    list: rows
+      .filter((row) => Boolean(row.id))
+      .map(({ total_count: _totalCount, ...task }) => task),
     pagination: {
       page,
       pageSize,
@@ -125,6 +149,15 @@ function toTaskPage(
       totalPages: total ? Math.ceil(total / pageSize) : 0,
     },
   };
+}
+
+function normalizeVisibleProjectIds(ids: string[] | null): string[] | null {
+  if (ids === null) return null;
+  const uniqueIds = Array.from(new Set(ids));
+  if (uniqueIds.length > MAX_VISIBLE_PROJECT_IDS) {
+    throw Errors.badRequest("可见项目数量不能超过 10000 个");
+  }
+  return uniqueIds;
 }
 
 function emptyPage(page: number, pageSize: number): WorkflowTaskListResult {

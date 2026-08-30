@@ -9,6 +9,7 @@ type DirectSqlMock = ((
 const directSqlQueries: SqlFragment[] = [];
 const rpcCalls: Array<{ name: string; params: Record<string, unknown> }> = [];
 let directSql: DirectSqlMock | null = null;
+let rpcRows: unknown[] = [];
 
 function createDirectSqlMock(rows: unknown[]): DirectSqlMock {
   return ((first: TemplateStringsArray | unknown[], ...values: unknown[]) => {
@@ -17,6 +18,21 @@ function createDirectSqlMock(rows: unknown[]): DirectSqlMock {
       if (fragment.strings.join(" ").includes("FROM public.workflow_tasks")) {
         directSqlQueries.push(fragment);
         return Promise.resolve(rows);
+      }
+      return fragment;
+    }
+    return { strings: ["IN"], values: [first] };
+  }) as DirectSqlMock;
+}
+
+function createQueuedDirectSqlMock(rowSets: unknown[][]): DirectSqlMock {
+  const queuedRows = [...rowSets];
+  return ((first: TemplateStringsArray | unknown[], ...values: unknown[]) => {
+    if ("raw" in first) {
+      const fragment = { strings: Array.from(first), values };
+      if (fragment.strings.join(" ").includes("FROM public.workflow_tasks")) {
+        directSqlQueries.push(fragment);
+        return Promise.resolve(queuedRows.shift() ?? []);
       }
       return fragment;
     }
@@ -67,7 +83,7 @@ mock.module("@/utils/supabase", () => ({
       from: mock(() => ({})),
       rpc: async (name: string, params: Record<string, unknown>) => {
         rpcCalls.push({ name, params });
-        return { data: [taskRow()], error: null };
+        return { data: rpcRows, error: null };
       },
     }),
   },
@@ -78,6 +94,7 @@ describe("supplier purchase batch workflow task access repository", () => {
     directSqlQueries.length = 0;
     rpcCalls.length = 0;
     directSql = null;
+    rpcRows = [taskRow()];
   });
 
   test("filters supplier tasks before direct count and pagination", async () => {
@@ -100,13 +117,18 @@ describe("supplier purchase batch workflow task access repository", () => {
     const query = directSqlQueries[0];
     const sqlText = query?.strings.join(" ? ") ?? "";
     const serialized = JSON.stringify(query);
-    expect(sqlText).toContain("JOIN public.supplier_purchase_batches AS batch");
-    expect(sqlText).toContain("batch.tenant_id = task.tenant_id");
+    expect(serialized).toContain("JOIN public.supplier_purchase_batches AS batch");
+    expect(serialized).toContain("batch.tenant_id = task.tenant_id");
     expect(serialized).toContain("instance.subject_id =");
     expect(serialized).toContain("instance.status = 'running'");
     expect(serialized).toContain("instance.current_node_key = task.node_key");
+    expect(serialized).toContain(
+      "ORDER BY task.updated_at DESC, task.id DESC",
+    );
     expect(serialized).toContain("batch.project_id IN");
-    expect(sqlText).toContain("batch.submitted_by_employee_id IS DISTINCT FROM");
+    expect(serialized).toContain(
+      "batch.submitted_by_employee_id IS DISTINCT FROM",
+    );
     expect(sqlText.indexOf("ORDER BY task.updated_at DESC, task.id DESC"))
       .toBeLessThan(sqlText.indexOf("OFFSET"));
     expect(sqlText.indexOf("OFFSET")).toBeLessThan(sqlText.indexOf("LIMIT"));
@@ -256,5 +278,173 @@ describe("supplier purchase batch workflow task access repository", () => {
         p_page_size: 20,
       }),
     }]);
+  });
+
+  test("keeps the explicit direct total on a real out-of-range page", async () => {
+    directSql = createQueuedDirectSqlMock([[], [{ total_count: 1 }]]);
+    const { workflowTaskRepository } = await import("./workflow-tasks");
+
+    const result = await workflowTaskRepository
+      .listAccessibleSupplierPurchaseBatchTasks({
+        tenantId: "tenant-1",
+        employeeId: "employee-1",
+        visibleProjectIds: ["project-1"],
+        page: 3,
+        pageSize: 1,
+      });
+
+    expect(result).toEqual({
+      list: [],
+      pagination: { page: 3, pageSize: 1, total: 1, totalPages: 1 },
+    });
+    expect(directSqlQueries).toHaveLength(2);
+    expect(JSON.stringify(directSqlQueries[1])).toContain("count(*)");
+  });
+
+  test("keeps the mixed direct total on a real out-of-range page", async () => {
+    directSql = createQueuedDirectSqlMock([[], [{ total_count: 1 }]]);
+    const { workflowTaskRepository } = await import("./workflow-tasks");
+
+    const result = await workflowTaskRepository.listAccessibleTasks({
+      tenantId: "tenant-1",
+      employeeId: "employee-1",
+      page: 3,
+      pageSize: 1,
+      supplierPurchaseBatchAccess: {
+        employeeId: "employee-1",
+        visibleProjectIds: ["project-1"],
+      },
+    });
+
+    expect(result).toEqual({
+      list: [],
+      pagination: { page: 3, pageSize: 1, total: 1, totalPages: 1 },
+    });
+    expect(directSqlQueries).toHaveLength(2);
+  });
+
+  test("filters explicit and mixed RPC total sentinels from empty pages", async () => {
+    rpcRows = [{ id: null, total_count: 1 }];
+    const { workflowTaskRepository } = await import("./workflow-tasks");
+
+    const explicit = await workflowTaskRepository
+      .listAccessibleSupplierPurchaseBatchTasks({
+        tenantId: "tenant-1",
+        employeeId: "employee-1",
+        visibleProjectIds: ["project-1"],
+        page: 3,
+        pageSize: 1,
+      });
+    const mixed = await workflowTaskRepository.listAccessibleTasks({
+      tenantId: "tenant-1",
+      employeeId: "employee-1",
+      page: 3,
+      pageSize: 1,
+      supplierPurchaseBatchAccess: {
+        employeeId: "employee-1",
+        visibleProjectIds: ["project-1"],
+      },
+    });
+
+    expect(explicit).toEqual({
+      list: [],
+      pagination: { page: 3, pageSize: 1, total: 1, totalPages: 1 },
+    });
+    expect(mixed).toEqual(explicit);
+  });
+
+  test("preserves legacy direct ordering outside supplier-scoped pages", async () => {
+    directSql = createDirectSqlMock([]);
+    const { workflowTaskRepository } = await import("./workflow-tasks");
+
+    await workflowTaskRepository.listAccessibleTasks({
+      tenantId: "tenant-1",
+      subjectType: "project",
+    });
+
+    const serialized = JSON.stringify(directSqlQueries[0]);
+    expect(serialized).toContain("ORDER BY task.updated_at DESC");
+    expect(serialized).not.toContain("task.id DESC");
+  });
+
+  test("deduplicates exactly 10000 visible projects for direct and RPC", async () => {
+    directSql = createDirectSqlMock([]);
+    const { workflowTaskRepository } = await import("./workflow-tasks");
+    const projectIds = Array.from({ length: 10_000 }, (_, index) =>
+      `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`
+    );
+
+    await workflowTaskRepository.listAccessibleSupplierPurchaseBatchTasks({
+      tenantId: "tenant-1",
+      employeeId: "employee-1",
+      visibleProjectIds: [...projectIds, projectIds[0]!],
+    });
+
+    expect(directSqlQueries).toHaveLength(1);
+    expect(JSON.stringify(directSqlQueries[0]).match(/00000000-0000-4000/g))
+      .toHaveLength(10_000);
+
+    directSql = null;
+    await workflowTaskRepository.listAccessibleSupplierPurchaseBatchTasks({
+      tenantId: "tenant-1",
+      employeeId: "employee-1",
+      visibleProjectIds: [...projectIds, projectIds[0]!],
+    });
+    expect(rpcCalls[0]?.params.p_visible_project_ids).toHaveLength(10_000);
+  });
+
+  test("rejects 10001 unique visible projects before direct or RPC access", async () => {
+    const { workflowTaskRepository } = await import("./workflow-tasks");
+    const visibleProjectIds = Array.from({ length: 10_001 }, (_, index) =>
+      `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`
+    );
+
+    for (const configuredDirectSql of [createDirectSqlMock([]), null]) {
+      directSql = configuredDirectSql;
+      await expect(workflowTaskRepository
+        .listAccessibleSupplierPurchaseBatchTasks({
+          tenantId: "tenant-1",
+          employeeId: "employee-1",
+          visibleProjectIds,
+        })).rejects.toMatchObject({
+          statusCode: 400,
+          code: "VALIDATION_ERROR",
+        });
+      await expect(workflowTaskRepository.listAccessibleTasks({
+        tenantId: "tenant-1",
+        employeeId: "employee-1",
+        supplierPurchaseBatchAccess: {
+          employeeId: "employee-1",
+          visibleProjectIds,
+        },
+      })).rejects.toMatchObject({
+        statusCode: 400,
+        code: "VALIDATION_ERROR",
+      });
+    }
+
+    expect(directSqlQueries).toHaveLength(0);
+    expect(rpcCalls).toHaveLength(0);
+  });
+
+  test("uses a guarded UUID cast for explicit and mixed batch joins", async () => {
+    directSql = createDirectSqlMock([]);
+    const { workflowTaskRepository } = await import("./workflow-tasks");
+
+    await workflowTaskRepository.listAccessibleSupplierPurchaseBatchTasks({
+      tenantId: "tenant-1",
+      employeeId: "employee-1",
+      visibleProjectIds: null,
+    });
+    await workflowTaskRepository.listAccessibleTasks({
+      tenantId: "tenant-1",
+      employeeId: "employee-1",
+      supplierPurchaseBatchAccess: null,
+    });
+
+    const serialized = JSON.stringify(directSqlQueries);
+    expect(serialized).toContain("batch.id = CASE");
+    expect(serialized).toContain("instance.subject_id::uuid");
+    expect(serialized).not.toContain("batch.id::text");
   });
 });

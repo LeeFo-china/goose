@@ -9,6 +9,7 @@ import {
 import {
   listAccessibleSupplierPurchaseBatchTasks,
   listAccessibleTasksWithSupplierScopeViaRpc,
+  normalizeSupplierPurchaseBatchAccess,
   type SupplierPurchaseBatchWorkflowTaskListInput,
 } from "@/repositories/workflow-task-supplier-purchase-batch-access";
 import { WORKFLOW_TASK_SELECT } from "@/repositories/workflow-task-select";
@@ -136,15 +137,16 @@ class WorkflowTaskRepository {
   async listAccessibleTasks(
     input: WorkflowTaskListInput,
   ): Promise<WorkflowTaskListResult> {
-    const page = input.page ?? 1;
-    const pageSize = Math.min(input.pageSize ?? 20, 100);
+    const scopedInput = normalizeSupplierPurchaseBatchAccess(input);
+    const page = scopedInput.page ?? 1;
+    const pageSize = Math.min(scopedInput.pageSize ?? 20, 100);
     const from = (page - 1) * pageSize;
 
     const directSql = getDirectPostgresSql();
     if (directSql) {
       try {
         return await listAccessibleTasksViaDirectSql({
-          input,
+          input: scopedInput,
           page,
           pageSize,
           offset: from,
@@ -156,10 +158,10 @@ class WorkflowTaskRepository {
       }
     }
 
-    return input.supplierPurchaseBatchAccess === undefined
-      ? this.listAccessibleTasksViaRpc(input, page, pageSize)
+    return scopedInput.supplierPurchaseBatchAccess === undefined
+      ? this.listAccessibleTasksViaRpc(scopedInput, page, pageSize)
       : listAccessibleTasksWithSupplierScopeViaRpc({
-        taskInput: input,
+        taskInput: scopedInput,
         page,
         pageSize,
       });
