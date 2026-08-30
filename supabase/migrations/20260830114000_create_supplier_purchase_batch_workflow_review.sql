@@ -298,30 +298,28 @@ BEGIN
       ERRCODE = 'P0001',
       MESSAGE = 'SUPPLIER_PURCHASE_BATCH_APPROVAL_ROUND_STALE';
   END IF;
-  IF v_adopted_legacy_event
-    AND v_action = 'approve'
-    AND NOT (
-      (v_task.node_key = 'purchase_review'
-        AND COALESCE(v_instance.context->>'budget_status', '') =
-          'within_budget'
-        AND v_batch.budget_status = 'within_budget')
-      OR (v_task.node_key = 'finance_review'
-        AND COALESCE(v_instance.context->>'budget_status', '') =
-          'over_budget'
-        AND v_batch.budget_status = 'over_budget')
-    )
-  THEN
-    RAISE EXCEPTION USING
-      ERRCODE = 'P0001',
-      MESSAGE = 'SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT';
-  END IF;
   IF v_adopted_legacy_event AND (
     v_batch.version <> v_expected_batch_version + 1
     OR CASE v_review_result->>'status'
-      WHEN 'ordered' THEN v_action <> 'approve' OR v_batch.status <> 'ordered'
-      WHEN 'rejected' THEN v_action <> 'reject' OR v_batch.status <> 'rejected'
+      WHEN 'ordered' THEN
+        v_action <> 'approve'
+        OR v_batch.status <> 'ordered'
+        OR NOT (
+          (v_task.node_key = 'purchase_review'
+            AND COALESCE(v_instance.context->>'budget_status', '') =
+              'within_budget'
+            AND v_batch.budget_status = 'within_budget')
+          OR (v_task.node_key = 'finance_review'
+            AND COALESCE(v_instance.context->>'budget_status', '') =
+              'over_budget'
+            AND v_batch.budget_status = 'over_budget')
+        )
       WHEN 'revision_required' THEN
-        v_action <> 'approve' OR v_batch.status <> 'draft'
+        v_action <> 'approve'
+        OR v_batch.status <> 'draft'
+        OR v_batch.budget_status <> 'unchecked'
+      WHEN 'rejected' THEN
+        v_action <> 'reject' OR v_batch.status <> 'rejected'
       ELSE true
     END
   ) THEN

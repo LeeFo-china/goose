@@ -275,6 +275,16 @@ BEGIN
     'approve', 'fixture-revision-required', false,
     v_user, v_actor, 'revision-adopt'
   );
+  IF NOT EXISTS (
+    SELECT 1 FROM public.supplier_purchase_batches
+    WHERE id = '81000000-0000-4000-8000-000000000019'
+      AND status = 'draft'
+      AND budget_status = 'unchecked'
+      AND version = 3
+      AND submitted_by_employee_id IS NULL
+  ) THEN
+    RAISE EXCEPTION 'purchase revision fixture did not model production state';
+  END IF;
   v_result := public.complete_supplier_purchase_batch_workflow_task(
     v_tenant, '81000000-0000-4000-8000-000000000019',
     '81000000-0000-4000-8000-000000000039', 'approve',
@@ -285,7 +295,95 @@ BEGIN
     OR v_result->'workflow_state'->>'instance_status' <> 'canceled'
     OR (v_result->'workflow_state'->>'pending_task_count')::integer <> 0
   THEN
-    RAISE EXCEPTION 'revision legacy adoption failed: %', v_result;
+    RAISE EXCEPTION 'purchase revision legacy adoption failed: %', v_result;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.supplier_purchase_batches
+    WHERE id = '81000000-0000-4000-8000-000000000019'
+      AND status = 'draft' AND budget_status = 'unchecked' AND version = 3
+  ) OR NOT EXISTS (
+    SELECT 1 FROM public.workflow_instances
+    WHERE id = '81000000-0000-4000-8000-000000000029'
+      AND status = 'canceled'
+  ) OR NOT EXISTS (
+    SELECT 1 FROM public.workflow_tasks
+    WHERE id = '81000000-0000-4000-8000-000000000039'
+      AND status = 'canceled' AND completed_by = v_actor
+  ) OR NOT EXISTS (
+    SELECT 1 FROM public.workflow_instance_nodes
+    WHERE instance_id = '81000000-0000-4000-8000-000000000029'
+      AND status = 'canceled' AND completed_by = v_actor
+  ) OR NOT EXISTS (
+    SELECT 1 FROM public.workflow_subject_states
+    WHERE instance_id = '81000000-0000-4000-8000-000000000029'
+      AND instance_status = 'canceled' AND pending_task_count = 0
+  ) OR NOT EXISTS (
+    SELECT 1 FROM public.workflow_transition_logs
+    WHERE instance_id = '81000000-0000-4000-8000-000000000029'
+      AND action = 'revision_required'
+  ) THEN
+    RAISE EXCEPTION 'purchase revision cancellation chain was incomplete';
+  END IF;
+
+  PERFORM public.test_seed_workflow_review(
+    '81000000-0000-4000-8000-000000000040',
+    '81000000-0000-4000-8000-000000000050',
+    '81000000-0000-4000-8000-000000000060',
+    v_tenant, v_project, v_submitter, 'over_budget', 'finance_review'
+  );
+  PERFORM public.review_supplier_purchase_batch(
+    '81000000-0000-4000-8000-000000000040', v_tenant, 2,
+    'approve', 'fixture-revision-required', true,
+    v_user, v_actor, 'finance-revision-adopt'
+  );
+  IF NOT EXISTS (
+    SELECT 1 FROM public.supplier_purchase_batches
+    WHERE id = '81000000-0000-4000-8000-000000000040'
+      AND status = 'draft'
+      AND budget_status = 'unchecked'
+      AND version = 3
+      AND submitted_by_employee_id IS NULL
+  ) THEN
+    RAISE EXCEPTION 'finance revision fixture did not model production state';
+  END IF;
+  v_result := public.complete_supplier_purchase_batch_workflow_task(
+    v_tenant, '81000000-0000-4000-8000-000000000040',
+    '81000000-0000-4000-8000-000000000060', 'approve',
+    'fixture-revision-required', '{}'::jsonb,
+    v_user, v_actor, 'finance-revision-adopt'
+  );
+  IF v_result->>'status' <> 'revision_required'
+    OR v_result->'workflow_state'->>'instance_status' <> 'canceled'
+    OR (v_result->'workflow_state'->>'pending_task_count')::integer <> 0
+  THEN
+    RAISE EXCEPTION 'finance revision legacy adoption failed: %', v_result;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.supplier_purchase_batches
+    WHERE id = '81000000-0000-4000-8000-000000000040'
+      AND status = 'draft' AND budget_status = 'unchecked' AND version = 3
+  ) OR NOT EXISTS (
+    SELECT 1 FROM public.workflow_instances
+    WHERE id = '81000000-0000-4000-8000-000000000050'
+      AND status = 'canceled'
+  ) OR NOT EXISTS (
+    SELECT 1 FROM public.workflow_tasks
+    WHERE id = '81000000-0000-4000-8000-000000000060'
+      AND status = 'canceled' AND completed_by = v_actor
+  ) OR NOT EXISTS (
+    SELECT 1 FROM public.workflow_instance_nodes
+    WHERE instance_id = '81000000-0000-4000-8000-000000000050'
+      AND status = 'canceled' AND completed_by = v_actor
+  ) OR NOT EXISTS (
+    SELECT 1 FROM public.workflow_subject_states
+    WHERE instance_id = '81000000-0000-4000-8000-000000000050'
+      AND instance_status = 'canceled' AND pending_task_count = 0
+  ) OR NOT EXISTS (
+    SELECT 1 FROM public.workflow_transition_logs
+    WHERE instance_id = '81000000-0000-4000-8000-000000000050'
+      AND action = 'revision_required'
+  ) THEN
+    RAISE EXCEPTION 'finance revision cancellation chain was incomplete';
   END IF;
 END
 $behavior$;

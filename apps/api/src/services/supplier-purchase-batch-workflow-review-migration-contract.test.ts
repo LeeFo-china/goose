@@ -153,23 +153,23 @@ describe("supplier purchase batch workflow review migration contract", () => {
     expect(body).not.toContain("result = v_result");
   });
 
-  test("adopts legacy results only for workflow branches that delegate review", async () => {
+  test("validates adopted legacy results by their persisted terminal state", async () => {
     const migration = await source();
     const body = functionBody(migration);
+    expect(body).toContain("CASE v_review_result->>'status'");
+    expect(body).toContain("WHEN 'ordered' THEN");
+    expect(body).toMatch(
+      /v_task\.node_key = 'purchase_review'[\s\S]*?v_instance\.context->>'budget_status'[\s\S]*?'within_budget'[\s\S]*?v_batch\.budget_status = 'within_budget'/,
+    );
+    expect(body).toMatch(
+      /v_task\.node_key = 'finance_review'[\s\S]*?v_instance\.context->>'budget_status'[\s\S]*?'over_budget'[\s\S]*?v_batch\.budget_status = 'over_budget'/,
+    );
+    expect(body).toContain("WHEN 'revision_required' THEN");
     expect(body).toContain(
-      "IF v_adopted_legacy_event\n    AND v_action = 'approve'\n    AND NOT (",
+      "v_action <> 'approve'\n        OR v_batch.status <> 'draft'\n        OR v_batch.budget_status <> 'unchecked'",
     );
     expect(body).toContain(
-      "v_task.node_key = 'purchase_review'\n        AND COALESCE(v_instance.context->>'budget_status', '') =\n          'within_budget'",
-    );
-    expect(body).toContain(
-      "'within_budget'\n        AND v_batch.budget_status = 'within_budget'",
-    );
-    expect(body).toContain(
-      "v_task.node_key = 'finance_review'\n        AND COALESCE(v_instance.context->>'budget_status', '') =\n          'over_budget'",
-    );
-    expect(body).toContain(
-      "'over_budget'\n        AND v_batch.budget_status = 'over_budget'",
+      "WHEN 'rejected' THEN\n        v_action <> 'reject' OR v_batch.status <> 'rejected'",
     );
     expect(migration).toContain("Task 10 must ship in the same release");
   });

@@ -164,6 +164,14 @@ BEGIN
       WHEN p_action = 'approve' THEN 'ordered'
       ELSE 'rejected'
     END,
+    budget_status = CASE
+      WHEN p_remark = 'fixture-revision-required' THEN 'unchecked'
+      ELSE budget_status
+    END,
+    submitted_by_employee_id = CASE
+      WHEN p_remark = 'fixture-revision-required' THEN NULL
+      ELSE submitted_by_employee_id
+    END,
     version = version + 1
   WHERE id = p_batch_id RETURNING * INTO v_batch;
   v_result := jsonb_build_object(
