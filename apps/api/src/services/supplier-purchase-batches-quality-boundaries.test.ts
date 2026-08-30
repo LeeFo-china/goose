@@ -67,6 +67,10 @@ async function fixture(input: {
     authUserId: USER_ID,
     employeeId: SUBMITTER_ID,
   };
+  const completeLegacyReview = mock(async () => null);
+  const replayExactLegacyReview = mock(async () => ({
+    matched: false as const,
+  }));
   const repository = {
     listBatches: mock(async () => emptyPage()),
     findBatch: mock(async () => batch()),
@@ -83,6 +87,7 @@ async function fixture(input: {
   };
   const service = new SupplierPurchaseBatchesService({
     access: {
+      requireActorScope: mock(async () => actorScope),
       requireView: mock(async () => actorScope),
       requireManage: mock(async () => actorScope),
       requireApprove: mock(async () => actorScope),
@@ -93,8 +98,21 @@ async function fixture(input: {
       assertProjectUpdate: mock(async () => undefined),
     },
     repository,
+    workflowRuntime: {
+      isEnabled: mock(async () => false),
+      submit: mock(async () => ({})),
+    },
+    workflowReviewBridge: {
+      completeLegacyReview,
+      replayExactLegacyReview,
+    },
   } as never);
-  return { repository, service };
+  return {
+    completeLegacyReview,
+    replayExactLegacyReview,
+    repository,
+    service,
+  };
 }
 
 function emptyPage() {
@@ -106,18 +124,26 @@ function emptyPage() {
 
 describe("SupplierPurchaseBatchesService quality boundaries", () => {
   test("detail actions do not let the submitter review", async () => {
-    const { service } = await fixture({
-      readScope: [PROJECT_ID],
-      updateScope: [],
-    });
+    const { completeLegacyReview, replayExactLegacyReview, service } =
+      await fixture({
+        readScope: [PROJECT_ID],
+        updateScope: [],
+      });
 
     const detail = await service.getBatch(auth(), BATCH_ID);
 
     expect(detail.actions.can_review).toBe(false);
+    expect(completeLegacyReview).not.toHaveBeenCalled();
+    expect(replayExactLegacyReview).not.toHaveBeenCalled();
   });
 
   test("empty project scopes return not-found without reading a batch", async () => {
-    const { repository, service } = await fixture({
+    const {
+      completeLegacyReview,
+      replayExactLegacyReview,
+      repository,
+      service,
+    } = await fixture({
       readScope: [],
       updateScope: [],
     });
@@ -170,10 +196,17 @@ describe("SupplierPurchaseBatchesService quality boundaries", () => {
       repository.cancel,
       repository.review,
     ]) expect(command).not.toHaveBeenCalled();
+    expect(completeLegacyReview).not.toHaveBeenCalled();
+    expect(replayExactLegacyReview).not.toHaveBeenCalled();
   });
 
   test("null project scope still loads an all-scope batch", async () => {
-    const { repository, service } = await fixture({
+    const {
+      completeLegacyReview,
+      replayExactLegacyReview,
+      repository,
+      service,
+    } = await fixture({
       readScope: null,
       updateScope: null,
     });
@@ -182,5 +215,7 @@ describe("SupplierPurchaseBatchesService quality boundaries", () => {
       id: BATCH_ID,
     });
     expect(repository.findBatch).toHaveBeenCalledWith(TENANT_ID, BATCH_ID);
+    expect(completeLegacyReview).not.toHaveBeenCalled();
+    expect(replayExactLegacyReview).not.toHaveBeenCalled();
   });
 });
