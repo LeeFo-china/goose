@@ -13,6 +13,7 @@ const NODE_PERMISSION = {
   purchase_review: "supplier.purchase-requisition.approve",
   finance_review: "finance.budget.manage",
 } as const;
+const MAX_IDEMPOTENCY_KEY_LENGTH = 120;
 
 type SupplierReviewNodeKey = keyof typeof NODE_PERMISSION;
 
@@ -67,7 +68,8 @@ export class WorkflowTaskSupplierPurchaseBatchBridge {
     if (action === "reject" && !reason) {
       throw Errors.badRequest("驳回采购批次必须填写原因");
     }
-    if (!input.idempotencyKey) {
+    const idempotencyKey = input.idempotencyKey?.trim();
+    if (!idempotencyKey || idempotencyKey.length > MAX_IDEMPOTENCY_KEY_LENGTH) {
       throw Errors.business(
         400,
         "缺少有效的 Idempotency-Key",
@@ -114,7 +116,7 @@ export class WorkflowTaskSupplierPurchaseBatchBridge {
       output: { ...input.output, reason },
       actorUserId: input.authContext.authUserId,
       actorEmployeeId: input.authContext.employeeId,
-      idempotencyKey: input.idempotencyKey,
+      idempotencyKey,
     });
   }
 

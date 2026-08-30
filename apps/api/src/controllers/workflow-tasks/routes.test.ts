@@ -47,7 +47,7 @@ describe("WorkflowTasksController", () => {
     ]);
   });
 
-  test("passes a normalized idempotency key into task completion", async () => {
+  test("passes the optional idempotency header through to task completion", async () => {
     const value = await controller();
     const response = await value.completeTask({
       params: { id: TASK_ID },
@@ -58,31 +58,32 @@ describe("WorkflowTasksController", () => {
       auth,
       TASK_ID,
       { action: "reject", reason: "数量有误", output: {} },
-      "supplier-review-1",
+      " supplier-review-1 ",
     );
     expect(response).toEqual({ data: { status: "ordered" }, message: "success" });
   });
 
-  test("keeps idempotency optional for non-supplier tasks but rejects malformed keys", async () => {
+  test("leaves missing empty and overlong headers to the task service", async () => {
     const value = await controller();
-    await value.completeTask({
-      params: { id: TASK_ID }, headers: {},
-      body: { action: "complete", output: {} },
-    } as never, {} as never);
-    expect(completeTask).toHaveBeenLastCalledWith(
-      auth,
-      TASK_ID,
-      { action: "complete", output: {} },
-      null,
-    );
-
-    await expect(value.completeTask({
-      params: { id: TASK_ID },
-      headers: { "idempotency-key": "x".repeat(121) },
-      body: { action: "complete", output: {} },
-    } as never, {} as never)).rejects.toMatchObject({
-      statusCode: 400,
-      code: "VALIDATION_ERROR",
-    });
+    const cases = [
+      { headers: {}, expected: null },
+      { headers: { "idempotency-key": "" }, expected: "" },
+      {
+        headers: { "idempotency-key": "x".repeat(121) },
+        expected: "x".repeat(121),
+      },
+    ];
+    for (const item of cases) {
+      await value.completeTask({
+        params: { id: TASK_ID }, headers: item.headers,
+        body: { action: "complete", output: {} },
+      } as never, {} as never);
+      expect(completeTask).toHaveBeenLastCalledWith(
+        auth,
+        TASK_ID,
+        { action: "complete", output: {} },
+        item.expected,
+      );
+    }
   });
 });

@@ -27,8 +27,8 @@ import { assertRuntimeNodeCompletionAllowed } from "@/services/workflow-runtime-
 import { workflowSubjectStateService } from "@/services/workflow-subject-state";
 import { buildWorkflowTaskActionsForTask } from "@/services/workflow-task-actions";
 import { buildWorkflowTaskAssigneeMetadata } from "@/services/workflow-task-assignee";
-import { workflowTaskSupplierPurchaseBatchBridge } from
-  "@/services/workflow-task-supplier-purchase-batch-bridge";
+import { completeSupplierPurchaseBatchWorkflowTask } from
+  "@/services/workflow-task-supplier-purchase-batch-completion";
 import { workflowTaskCardContextService } from "@/services/workflow-task-card-context";
 import {
   listSupplierPurchaseBatchWorkflowTasks,
@@ -127,19 +127,16 @@ class WorkflowTaskService {
       ...(input.output as JsonObject),
       reason: input.reason ?? null,
     };
-    if (task.instance?.subject_type === "supplier_purchase_batch") {
-      const bridged = await workflowTaskSupplierPurchaseBatchBridge.complete({
-        authContext,
-        task: {
-          id: task.id,
-          tenant_id: task.tenant_id,
-          node_key: task.node_key,
-          instance: { subject_id: task.instance.subject_id },
-        },
-        action: input.action,
-        reason: input.reason ?? null,
-        output,
-        idempotencyKey,
+    if (task.instance) {
+      const bridged = await completeSupplierPurchaseBatchWorkflowTask({
+        authContext, task: {
+          id: task.id, tenant_id: task.tenant_id, node_key: task.node_key,
+          instance: {
+            subject_type: task.instance.subject_type,
+            subject_id: task.instance.subject_id,
+          },
+        }, action: input.action, reason: input.reason ?? null,
+        output, idempotencyKey,
       });
       if (bridged) return bridged;
     }

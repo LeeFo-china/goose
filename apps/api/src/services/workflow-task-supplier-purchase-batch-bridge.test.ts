@@ -33,7 +33,7 @@ describe("WorkflowTaskSupplierPurchaseBatchBridge", () => {
 
     expect(await bridge.complete({
       authContext: auth(), task: task(), action: "approve", reason: null,
-      output: { comment: "同意" }, idempotencyKey: "review-1",
+      output: { comment: "同意" }, idempotencyKey: " review-1 ",
     })).toEqual({ status: "ordered" });
     expect(canAccessProject).toHaveBeenCalledWith(
       expect.objectContaining({ employeeId: EMPLOYEE_ID }),
@@ -65,10 +65,12 @@ describe("WorkflowTaskSupplierPurchaseBatchBridge", () => {
         canAccessProject: mock(async () => true),
       },
     });
-    await expect(bridge.complete({
-      authContext: auth(), task: task(), action: "approve", reason: null,
-      output: {}, idempotencyKey: null,
-    })).rejects.toMatchObject({ statusCode: 400, code: "VALIDATION_ERROR" });
+    for (const idempotencyKey of [null, "", "   ", "x".repeat(121)]) {
+      await expect(bridge.complete({
+        authContext: auth(), task: task(), action: "approve", reason: null,
+        output: {}, idempotencyKey,
+      })).rejects.toMatchObject({ statusCode: 400, code: "VALIDATION_ERROR" });
+    }
     await expect(bridge.complete({
       authContext: auth(), task: task(), action: "reject", reason: "  ",
       output: {}, idempotencyKey: "review-1",

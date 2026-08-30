@@ -438,21 +438,25 @@ describe("workflowTaskService", () => {
 
   test("falls back to generic runtime completion for customer design node", async () => {
     const { workflowTaskService } = await import("./workflow-tasks");
-    findById.mockImplementationOnce(async () => customerDesignTask as unknown as typeof paymentTask);
     completeRuntimeNode.mockClear();
 
-    const result = await workflowTaskService.completeTask(
-      authContext({
-        employeeId: "employee-1",
-        employeeName: "设计师",
-      }),
-      "task-customer-designing",
-      { action: "complete", reason: null, output: {} },
-    );
+    for (const idempotencyKey of [null, "", "x".repeat(121)]) {
+      findById.mockImplementationOnce(async () =>
+        customerDesignTask as unknown as typeof paymentTask
+      );
+      const result = await workflowTaskService.completeTask(
+        authContext({
+          employeeId: "employee-1",
+          employeeName: "设计师",
+        }),
+        "task-customer-designing",
+        { action: "complete", reason: null, output: {} },
+        idempotencyKey,
+      );
+      expect(result).toMatchObject({ result: { ok: true } });
+    }
 
-    expect(result).toMatchObject({
-      result: { ok: true },
-    });
+    expect(completeRuntimeNode).toHaveBeenCalledTimes(3);
     expect(completeRuntimeNode).toHaveBeenCalledWith(
       expect.objectContaining({
         tenantId: "tenant-1",

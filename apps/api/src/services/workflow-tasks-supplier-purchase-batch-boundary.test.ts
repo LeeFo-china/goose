@@ -1,5 +1,11 @@
 import { expect, mock, test } from "bun:test";
 import type { AuthContext } from "@/services/authorization";
+import { completeSupplierPurchaseBatchWorkflowTask } from
+  "@/services/workflow-task-supplier-purchase-batch-completion";
+
+process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
+process.env.SUPABASE_PUBLISH ??= "test-publish-key";
+process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
 const supplierTask = {
   id: "task-1",
@@ -30,127 +36,71 @@ const supplierTask = {
     current_node_snapshot: {},
   },
 };
-const completeRuntimeNode = mock(async () => ({ ok: true as const }));
-const assertRuntimeNodeCompletionAllowed = mock(async () => undefined);
-const completeSupplierPurchaseBatchBridge = mock(async () => ({
-  status: "ordered",
-  idempotent: false,
-}));
-const findById = mock(async () => supplierTask);
-
-mock.module("@/repositories/workflow-tasks", () => ({
-  workflowTaskRepository: {
-    findById,
-  },
-}));
-
-mock.module("@/repositories/workflows", () => ({
-  workflowRepository: {
-    getRuntimeInstanceById: mock(async () => ({
-      ...supplierTask.instance,
-      current_node_id: "node-1",
-      version_id: "version-1",
-    })),
-    getGraph: mock(async () => ({ definition: {}, nodes: [], edges: [] })),
-    completeRuntimeNode,
-  },
-}));
-
-mock.module("@/services/access-policy", () => ({
-  accessPolicyService: {
-    assertTenantId: mock(() => "tenant-1"),
-  },
-}));
-
-mock.module("@/services/workflow-runtime-guards", () => ({
-  assertRuntimeNodeCompletionAllowed,
-}));
-
-mock.module("@/services/workflow-task-supplier-purchase-batch-bridge", () => ({
-  workflowTaskSupplierPurchaseBatchBridge: {
-    complete: completeSupplierPurchaseBatchBridge,
-  },
-}));
-
-mock.module("@/services/workflow-subject-state", () => ({
-  workflowSubjectStateService: {
-    syncFromRuntimeInstance: mock(async () => null),
-  },
-}));
 
 test("routes supplier purchase batches through the atomic bridge", async () => {
-  const { workflowTaskService } = await import("./workflow-tasks");
-
-  const result = await workflowTaskService.completeTask(
-    authContext(),
-    "task-1",
-    {
-      action: "approve",
-      reason: null,
-      output: {
-        decision: "approved",
-        budget_status: "within_budget",
-      },
-    },
-    "supplier-review-1",
-  );
+  const complete = mock(async () => ({ status: "ordered", idempotent: false }));
+  const result = await completeSupplierPurchaseBatchWorkflowTask({
+    authContext: authContext(), task: supplierTask,
+    action: "approve", reason: null, output: {},
+    idempotencyKey: " supplier-review-1 ",
+  }, { complete });
 
   expect(result).toEqual({ status: "ordered", idempotent: false });
-  expect(completeSupplierPurchaseBatchBridge).toHaveBeenCalledWith(
-    expect.objectContaining({
-      task: expect.objectContaining({ id: "task-1" }),
-      action: "approve",
-      idempotencyKey: "supplier-review-1",
-    }),
-  );
-  expect(assertRuntimeNodeCompletionAllowed).not.toHaveBeenCalled();
-  expect(completeRuntimeNode).not.toHaveBeenCalled();
+  expect(complete).toHaveBeenCalledWith(expect.objectContaining({
+    task: expect.objectContaining({ id: "task-1" }),
+    action: "approve",
+    idempotencyKey: " supplier-review-1 ",
+  }));
+
+  const realBridge = await createRealBridge();
+  for (const idempotencyKey of [null, "", "   ", "x".repeat(121)]) {
+    await expect(completeSupplierPurchaseBatchWorkflowTask({
+      authContext: authContext(), task: supplierTask,
+      action: "approve", reason: null, output: {}, idempotencyKey,
+    }, realBridge)).rejects.toMatchObject({
+      statusCode: 400, code: "VALIDATION_ERROR",
+    });
+  }
 });
 
 test("lets the atomic RPC decide completed supplier task replays", async () => {
-  const { workflowTaskService } = await import("./workflow-tasks");
-  findById.mockImplementationOnce(async () => ({
+  const complete = mock(async () => ({ status: "ordered", idempotent: true }));
+  const completedTask = {
     ...supplierTask,
     status: "completed",
     instance: { ...supplierTask.instance, current_node_key: "approved_end" },
-  }));
-  completeSupplierPurchaseBatchBridge.mockImplementationOnce(async () => ({
-    status: "ordered",
-    idempotent: true,
-  }));
-
-  const result = await workflowTaskService.completeTask(
-    authContext(),
-    "task-1",
-    { action: "approve", reason: null, output: {} },
-    "supplier-review-1",
-  );
+  };
+  const result = await completeSupplierPurchaseBatchWorkflowTask({
+    authContext: authContext(), task: completedTask,
+    action: "approve", reason: null, output: {},
+    idempotencyKey: "supplier-review-1",
+  }, { complete });
 
   expect(result).toEqual({ status: "ordered", idempotent: true });
-  expect(completeSupplierPurchaseBatchBridge).toHaveBeenCalled();
-  expect(completeRuntimeNode).not.toHaveBeenCalled();
+  expect(complete).toHaveBeenCalled();
 });
+
+async function createRealBridge() {
+  const { WorkflowTaskSupplierPurchaseBatchBridge } = await import(
+    "./workflow-task-supplier-purchase-batch-bridge"
+  );
+  return new WorkflowTaskSupplierPurchaseBatchBridge({
+    repository: { completeTask: mock(async () => ({ status: "ordered" })) },
+    batchesRepository: { findBatch: mock(async () => null) },
+    accessPolicy: {
+      hasPermission: mock(() => true),
+      canAccessProject: mock(async () => true),
+    },
+  });
+}
 
 function authContext(): AuthContext {
   return {
-    authUserId: "auth-1",
-    employeeId: "employee-1",
-    tenantId: "tenant-1",
-    tenantStatus: "active",
-    isPlatformAdmin: false,
-    employeeName: "采购负责人",
-    employeeStatus: "active",
-    roleCodes: [],
-    roles: [],
-    permissions: [],
-    tenantName: null,
-    tenantSlug: null,
-    departmentId: null,
-    tenantDepartmentId: null,
-    departmentCode: null,
-    departmentName: null,
-    postId: null,
-    postName: null,
-    avatar: null,
+    authUserId: "auth-1", employeeId: "employee-1", tenantId: "tenant-1",
+    tenantStatus: "active", isPlatformAdmin: false, employeeName: "采购负责人",
+    employeeStatus: "active", roleCodes: [], roles: [], permissions: [],
+    tenantName: null, tenantSlug: null, departmentId: null,
+    tenantDepartmentId: null, departmentCode: null, departmentName: null,
+    postId: null, postName: null, avatar: null,
   };
 }
