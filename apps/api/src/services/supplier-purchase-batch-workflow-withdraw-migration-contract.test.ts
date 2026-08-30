@@ -163,6 +163,27 @@ describe("supplier purchase batch workflow withdraw migration contract", () => {
     expect(complete).toContain("SUPPLIER_IDEMPOTENCY_CONFLICT");
   });
 
+  test("serializes event replay, stale preflight, and v1 delegation behind the batch lock", async () => {
+    const complete = functionBody(
+      await source(),
+      "complete_supplier_purchase_batch_workflow_task",
+    );
+    const commandLock = complete.indexOf("'supplier-purchase-batch-command:'");
+    const batchLock = complete.indexOf("'supplier-purchase-batch-id:'");
+    const eventRead = complete.indexOf("INTO v_event");
+    const stale = complete.indexOf(
+      "SUPPLIER_PURCHASE_BATCH_APPROVAL_ROUND_STALE",
+    );
+    const delegate = complete.lastIndexOf(
+      "__gooes_complete_supplier_purchase_batch_workflow_task_v1",
+    );
+    expect(commandLock).toBeGreaterThan(0);
+    expect(batchLock).toBeGreaterThan(commandLock);
+    expect(eventRead).toBeGreaterThan(batchLock);
+    expect(stale).toBeGreaterThan(eventRead);
+    expect(delegate).toBeGreaterThan(stale);
+  });
+
   test("coordinates double withdrawal with observable bounded locks", async () => {
     const script = await Bun.file(concurrencyScript).text();
     expect(script).toContain("pg_blocking_pids");
@@ -187,5 +208,19 @@ describe("supplier purchase batch workflow withdraw migration contract", () => {
     expect(script).toContain("dropdb");
     expect(script).not.toContain("approval_round=2");
     expect(script).not.toContain("SET approval_round");
+  });
+
+  test("blocks an old task behind a real withdrawal and resubmission round update", async () => {
+    const script = await Bun.file(productionIntegrationScript).text();
+    for (const token of [
+      "task9_production_round_writer",
+      "task9_production_old_task_completion",
+      "task9_production_round_gate",
+      "pg_blocking_pids",
+      "withdraw_supplier_purchase_batch_workflow",
+      "submit_supplier_purchase_batch_with_workflow",
+      "SUPPLIER_PURCHASE_BATCH_APPROVAL_ROUND_STALE",
+    ]) expect(script).toContain(token);
+    expect(script).not.toContain("sleep 1");
   });
 });

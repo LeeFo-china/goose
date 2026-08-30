@@ -815,6 +815,13 @@ BEGIN
         p_batch_id::text || ':review:' || p_idempotency_key,
       6720240826142000
     ));
+    -- Match the delegated v1 lock order before event replay or stale
+    -- preflight so a completed withdrawal/resubmission is observed atomically.
+    -- v1 re-enters this transaction advisory lock when delegated below.
+    PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+      'supplier-purchase-batch-id:' || p_batch_id::text,
+      6720240826142000
+    ));
 
     SELECT event.*
     INTO v_event
