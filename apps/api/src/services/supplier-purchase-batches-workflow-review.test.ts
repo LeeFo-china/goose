@@ -16,6 +16,7 @@ const EMPLOYEE_ID = "b2000000-0000-4000-8000-000000000005";
 async function subject(
   workflowResult: unknown,
   batchOverrides: Record<string, unknown> = {},
+  workflowEnabled = true,
 ) {
   const { SupplierPurchaseBatchesService } = await import(
     "@/services/supplier-purchase-batches"
@@ -36,18 +37,24 @@ async function subject(
     workflowResult);
   const legacyReview = mock(async () => ({ status: "ordered" }));
   const requireFinanceBudgetManage = mock(() => undefined);
-  const requireView = mock(async () => ({
-    tenantId: TENANT_ID,
-    authUserId: USER_ID,
-    employeeId: EMPLOYEE_ID,
-  }));
-  const requireApprove = mock(async () => ({
-    tenantId: TENANT_ID,
-    authUserId: USER_ID,
-    employeeId: EMPLOYEE_ID,
-  }));
+  const scope = { tenantId: TENANT_ID, authUserId: USER_ID,
+    employeeId: EMPLOYEE_ID };
+  const requireActorScope = mock(async () => scope);
+  const requireView = mock(async (context: AuthContext) => {
+    if (!hasPermission(context, "supplier.purchase-requisition.view")) {
+      throw Errors.forbidden();
+    }
+    return scope;
+  });
+  const requireApprove = mock(async (context: AuthContext) => {
+    if (!hasPermission(context, "supplier.purchase-requisition.approve")) {
+      throw Errors.forbidden();
+    }
+    return scope;
+  });
   const service = new SupplierPurchaseBatchesService({
     access: {
+      requireActorScope,
       requireView,
       requireApprove,
       getVisibleProjectIds: mock(async () => [PROJECT_ID]),
@@ -56,7 +63,7 @@ async function subject(
     },
     repository: { findBatch: mock(async () => batch), review: legacyReview },
     workflowRuntime: {
-      isEnabled: mock(async () => true),
+      isEnabled: mock(async () => workflowEnabled),
       submit: mock(async () => ({ status: "submitted" })),
     },
     workflowReviewBridge: { completeLegacyReview },
@@ -66,6 +73,7 @@ async function subject(
     completeLegacyReview,
     legacyReview,
     requireFinanceBudgetManage,
+    requireActorScope,
     requireView,
     requireApprove,
     service,
@@ -97,16 +105,70 @@ describe("SupplierPurchaseBatchesService workflow review compatibility", () => {
       batch: current.batch,
       action: "approve",
       reason: "采购审批通过",
-      output: {
-        compat_source: "supplier_purchase_batch_review",
-        compat_expected_version: 2,
-      },
+      expectedVersion: 2,
+      output: {},
       idempotencyKey: "batch:workflow-review",
     });
     expect(current.legacyReview).not.toHaveBeenCalled();
     expect(current.requireFinanceBudgetManage).not.toHaveBeenCalled();
     expect(current.requireView).toHaveBeenCalledWith(auth());
     expect(current.requireApprove).not.toHaveBeenCalled();
+  });
+
+  test("keeps fixed review available to approve-only users when disabled", async () => {
+    const current = await subject({ status: "ordered" }, {}, false);
+    const approveOnly = auth([
+      "supplier.purchase-requisition.approve",
+      "project.read",
+    ]);
+
+    await expect(current.service.review(approveOnly, BATCH_ID, {
+      expected_version: 2,
+      action: "approve",
+    }, "batch:fixed-approve-only")).resolves.toMatchObject({
+      status: "ordered",
+    });
+    expect(current.requireActorScope).toHaveBeenCalledWith(approveOnly);
+    expect(current.requireApprove).toHaveBeenCalledWith(approveOnly);
+    expect(current.requireView).not.toHaveBeenCalled();
+    expect(current.legacyReview).toHaveBeenCalled();
+    expect(current.completeLegacyReview).not.toHaveBeenCalled();
+  });
+
+  test("requires view after the workflow flag is enabled", async () => {
+    const current = await subject({ status: "ordered" });
+    const approveOnly = auth([
+      "supplier.purchase-requisition.approve",
+      "project.read",
+    ]);
+
+    await expect(current.service.review(approveOnly, BATCH_ID, {
+      expected_version: 2,
+      action: "approve",
+    }, "batch:workflow-approve-only")).rejects.toMatchObject({
+      statusCode: 403,
+      code: "FORBIDDEN",
+    });
+    expect(current.requireActorScope).toHaveBeenCalledWith(approveOnly);
+    expect(current.requireApprove).not.toHaveBeenCalled();
+    expect(current.completeLegacyReview).not.toHaveBeenCalled();
+  });
+
+  test("lets a finance-only workflow assignee reach the bridge", async () => {
+    const current = await subject({ status: "ordered" });
+    const finance = auth([
+      "supplier.purchase-requisition.view",
+      "project.read",
+      "finance.budget.manage",
+    ]);
+
+    await expect(current.service.review(finance, BATCH_ID, {
+      expected_version: 2,
+      action: "approve",
+    }, "batch:workflow-finance")).resolves.toMatchObject({ status: "ordered" });
+    expect(current.requireView).toHaveBeenCalledWith(finance);
+    expect(current.requireApprove).not.toHaveBeenCalled();
+    expect(current.completeLegacyReview).toHaveBeenCalled();
   });
 
   test("never falls back when workflow resolution fails", async () => {
@@ -174,7 +236,11 @@ describe("SupplierPurchaseBatchesService workflow review compatibility", () => {
   });
 });
 
-function auth(): AuthContext {
+function auth(permissionCodes = [
+  "supplier.purchase-requisition.view",
+  "supplier.purchase-requisition.approve",
+  "project.read",
+]): AuthContext {
   return {
     authUserId: USER_ID,
     employeeId: EMPLOYEE_ID,
@@ -194,6 +260,10 @@ function auth(): AuthContext {
     avatar: null,
     roleCodes: [],
     roles: [],
-    permissions: [],
+    permissions: permissionCodes.map((code) => ({ code, scope: "all" })),
   };
+}
+
+function hasPermission(context: AuthContext, code: string): boolean {
+  return context.permissions.some((permission) => permission.code === code);
 }

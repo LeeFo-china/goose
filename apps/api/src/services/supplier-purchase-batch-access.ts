@@ -129,6 +129,10 @@ export class SupplierPurchaseBatchAccessService {
     this.repository = dependencies.repository ?? tenantSuppliersRepository;
   }
 
+  requireActorScope(auth: AuthContext): Promise<SupplierPurchaseBatchActorScope> {
+    return this.requireScope(auth);
+  }
+
   requireView(auth: AuthContext): Promise<SupplierPurchaseBatchActorScope> {
     return this.requireScope(auth, "supplier.purchase-requisition.view");
   }
@@ -163,10 +167,10 @@ export class SupplierPurchaseBatchAccessService {
 
   private async requireScope(
     auth: AuthContext,
-    permission: BatchPermission,
+    permission?: BatchPermission,
   ): Promise<SupplierPurchaseBatchActorScope> {
     const tenantId = this.accessPolicy.assertTenantContext(auth);
-    this.accessPolicy.assertPermission(auth, permission);
+    if (permission) this.accessPolicy.assertPermission(auth, permission);
     if (!auth.authUserId || !auth.employeeId) throw Errors.forbidden();
 
     const settings = await this.repository.getSettings(tenantId);

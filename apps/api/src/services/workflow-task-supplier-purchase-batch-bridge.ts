@@ -87,6 +87,7 @@ type LegacyReviewInput = {
   };
   action: string;
   reason: string | null;
+  expectedVersion: number;
   output: Record<string, unknown>;
   idempotencyKey: string | null;
 };
@@ -106,6 +107,22 @@ export class WorkflowTaskSupplierPurchaseBatchBridge {
   }
 
   async completeLegacyReview(input: LegacyReviewInput) {
+    if (!Number.isInteger(input.expectedVersion) || input.expectedVersion < 1) {
+      throw Errors.badRequest("采购批次审批版本无效");
+    }
+    const {
+      compat_source: _compatSource,
+      compat_expected_version: _compatExpectedVersion,
+      ...businessOutput
+    } = input.output;
+    input = {
+      ...input,
+      output: {
+        ...businessOutput,
+        compat_source: "supplier_purchase_batch_review",
+        compat_expected_version: input.expectedVersion,
+      },
+    };
     const exactEvents = await this.dependencies.lookupRepository
       .listReviewEvents({
         tenantId: input.batch.tenant_id,
@@ -260,7 +277,7 @@ export class WorkflowTaskSupplierPurchaseBatchBridge {
     instance: SupplierPurchaseBatchRunningWorkflowInstance,
   ) {
     this.assertTaskAssignee(input.authContext, task);
-    const result = await this.complete({
+    const result = await this.completeTrusted({
       authContext: input.authContext,
       task: {
         id: task.id,
@@ -282,6 +299,17 @@ export class WorkflowTaskSupplierPurchaseBatchBridge {
   }
 
   async complete(input: BridgeInput) {
+    if (hasReservedCompatibilityMetadata(input.output)) {
+      throw Errors.business(
+        400,
+        "output 包含保留的采购审批兼容字段",
+        "VALIDATION_ERROR",
+      );
+    }
+    return this.completeTrusted(input);
+  }
+
+  private async completeTrusted(input: BridgeInput) {
     const nodeKey = input.task.node_key as SupplierReviewNodeKey;
     if (!(nodeKey in NODE_PERMISSION)) return null;
     const action = input.action.trim();
@@ -439,6 +467,13 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : null;
+}
+
+function hasReservedCompatibilityMetadata(
+  output: Record<string, unknown>,
+): boolean {
+  return Object.hasOwn(output, "compat_source") ||
+    Object.hasOwn(output, "compat_expected_version");
 }
 
 export const workflowTaskSupplierPurchaseBatchBridge =

@@ -41,6 +41,7 @@ import {
 
 type BatchAccessPort = Pick<
   typeof supplierPurchaseBatchAccessService,
+  | "requireActorScope"
   | "requireView"
   | "requireManage"
   | "requireApprove"
@@ -354,31 +355,27 @@ export class SupplierPurchaseBatchesService {
     input: SupplierPurchaseBatchReviewInput,
     idempotencyKey: string,
   ) {
-    const viewScope = await this.access.requireView(auth);
+    const actorScope = await this.access.requireActorScope(auth);
+    const workflowEnabled = await this.workflowRuntime.isEnabled(
+      actorScope.tenantId,
+    );
+    const scope = workflowEnabled
+      ? await this.access.requireView(auth)
+      : await this.access.requireApprove(auth);
     const visibleProjectIds = await this.access.getVisibleProjectIds(auth);
     const batch = await this.requireBatchInScope(
-      viewScope.tenantId,
+      scope.tenantId,
       batchId,
       visibleProjectIds,
     );
     await this.access.assertProjectRead(auth, batch.project_id);
     assertSupplierPurchaseBatchReviewVersion(batch, input.expected_version);
 
-    if (await this.workflowRuntime.isEnabled(viewScope.tenantId)) {
-      return this.executeReview({
-        auth, scope: viewScope, batch, input, idempotencyKey,
-        workflowEnabled: true,
-      });
+    if (!workflowEnabled) {
+      assertLegacySupplierPurchaseBatchReviewSelf(batch, scope.employeeId);
     }
-
-    const approveScope = await this.access.requireApprove(auth);
-    assertLegacySupplierPurchaseBatchReviewSelf(
-      batch,
-      approveScope.employeeId,
-    );
     return this.executeReview({
-      auth, scope: approveScope, batch, input, idempotencyKey,
-      workflowEnabled: false,
+      auth, scope, batch, input, idempotencyKey, workflowEnabled,
     });
   }
 

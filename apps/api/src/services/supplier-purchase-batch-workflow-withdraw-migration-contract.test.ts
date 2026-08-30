@@ -192,6 +192,27 @@ describe("supplier purchase batch workflow withdraw migration contract", () => {
     );
   });
 
+  test("rejects invalid reserved compatibility metadata before first execution", async () => {
+    const complete = functionBody(
+      await source(),
+      "complete_supplier_purchase_batch_workflow_task",
+    );
+    const eventRead = complete.indexOf("INTO v_event");
+    const reservedValidation = complete.indexOf(
+      "v_current_output ? 'compat_source'",
+    );
+    const delegate = complete.lastIndexOf(
+      "__gooes_complete_supplier_purchase_batch_workflow_task_v1",
+    );
+    expect(eventRead).toBeGreaterThan(0);
+    expect(reservedValidation).toBeGreaterThan(eventRead);
+    expect(delegate).toBeGreaterThan(reservedValidation);
+    expect(complete).toContain("^[1-9][0-9]*$");
+    expect(complete).toContain(
+      "v_current_compat_version IS DISTINCT FROM v_task_batch_version",
+    );
+  });
+
   test("serializes event replay, stale preflight, and v1 delegation behind the batch lock", async () => {
     const complete = functionBody(
       await source(),
@@ -248,6 +269,9 @@ describe("supplier purchase batch workflow withdraw migration contract", () => {
     for (const token of [
       "production-compat-direct-first",
       "production-compat-legacy-first",
+      "production-compat-invalid-source",
+      "production-compat-invalid-version",
+      "production-compat-single-field",
       "compat_expected_version', 3",
       "SUPPLIER_IDEMPOTENCY_CONFLICT",
       "WORKFLOW_TASK_NOT_PENDING",

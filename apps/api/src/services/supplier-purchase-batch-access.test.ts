@@ -1,5 +1,4 @@
 import { describe, expect, mock, test } from "bun:test";
-
 import type { AuthContext } from "@/services/authorization";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
@@ -100,6 +99,9 @@ describe("SupplierPurchaseBatchAccessService", () => {
     });
     await service.requireManage(auth(["supplier.purchase-requisition.manage"]));
     await service.requireApprove(auth(["supplier.purchase-requisition.approve"]));
+    await expect(service.requireActorScope(auth([]))).resolves.toMatchObject({
+      tenantId: TENANT_ID, authUserId: USER_ID, employeeId: EMPLOYEE_ID,
+    });
     service.requireFinanceBudgetManage(auth(["finance.budget.manage"]));
     expect(() => service.requireFinanceBudgetManage(auth([]))).toThrow();
 
@@ -111,7 +113,7 @@ describe("SupplierPurchaseBatchAccessService", () => {
         "finance.budget.manage",
         "finance.budget.manage",
       ]);
-    expect(deps.repository.getSettings).toHaveBeenCalledTimes(3);
+    expect(deps.repository.getSettings).toHaveBeenCalledTimes(4);
   });
 
   test("fails closed for tenant, permission, actor, and module boundaries", async () => {
@@ -124,6 +126,7 @@ describe("SupplierPurchaseBatchAccessService", () => {
         context: auth(["supplier.purchase-requisition.view"], {
           tenantId: null,
         }),
+        actorOnly: true,
         code: "TENANT_CONTEXT_REQUIRED",
       },
       {
@@ -136,6 +139,7 @@ describe("SupplierPurchaseBatchAccessService", () => {
         context: auth(["supplier.purchase-requisition.view"], {
           employeeId: null,
         }),
+        actorOnly: true,
         code: "FORBIDDEN",
       },
       {
@@ -143,6 +147,7 @@ describe("SupplierPurchaseBatchAccessService", () => {
         context: auth(["supplier.purchase-requisition.view"], {
           authUserId: "",
         }),
+        actorOnly: true,
         code: "FORBIDDEN",
       },
       {
@@ -150,12 +155,16 @@ describe("SupplierPurchaseBatchAccessService", () => {
           moduleEnabled: false,
         })),
         context: auth(["supplier.purchase-requisition.view"]),
+        actorOnly: true,
         code: "SUPPLIER_MODULE_DISABLED",
       },
     ];
 
     for (const item of cases) {
-      await expect(item.service.requireView(item.context)).rejects.toMatchObject({
+      const result = item.actorOnly
+        ? item.service.requireActorScope(item.context)
+        : item.service.requireView(item.context);
+      await expect(result).rejects.toMatchObject({
         code: item.code,
       });
     }

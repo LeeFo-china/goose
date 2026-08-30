@@ -17,6 +17,7 @@ type ReviewDependencies = {
       batch: SupplierPurchaseBatchDetail;
       action: string;
       reason: string | null;
+      expectedVersion: number;
       output: Record<string, unknown>;
       idempotencyKey: string;
     }): Promise<unknown>;
@@ -80,10 +81,8 @@ export async function executeSupplierPurchaseBatchReview(input: {
       batch: input.batch,
       action: input.review.action,
       reason: input.review.remark ?? null,
-      output: {
-        compat_source: "supplier_purchase_batch_review",
-        compat_expected_version: input.review.expected_version,
-      },
+      expectedVersion: input.review.expected_version,
+      output: {},
       idempotencyKey: input.idempotencyKey,
     });
     return adaptWorkflowReviewResult(result);

@@ -1,5 +1,4 @@
 import { describe, expect, mock, test } from "bun:test";
-
 import { Errors } from "@/errors/error-factory";
 import type { AuthContext } from "@/services/authorization";
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
@@ -58,6 +57,7 @@ function dependencies(overrides: Record<string, unknown> = {}) {
     events,
     batch,
     access: {
+      requireActorScope: mock(async () => scope),
       requireView: mock(async () => scope),
       requireManage: mock(async () => scope),
       requireApprove: mock(async () => scope),

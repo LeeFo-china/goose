@@ -35,6 +35,60 @@ BEGIN
     AND instance.subject_type = 'supplier_purchase_batch'
     AND instance.subject_id = v_direct_first_batch::text
     AND instance.status = 'running' AND task.status = 'pending';
+  BEGIN
+    PERFORM public.complete_supplier_purchase_batch_workflow_task(
+      v_tenant, v_direct_first_batch, v_task, 'approve', NULL,
+      jsonb_build_object(
+        'compat_source', 'forged', 'compat_expected_version', 2,
+        'reason', NULL
+      ), v_review_user, v_reviewer, 'production-compat-invalid-source'
+    );
+    RAISE EXCEPTION 'bad compatibility source unexpectedly completed';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'SUPPLIER_IDEMPOTENCY_CONFLICT' THEN RAISE; END IF;
+  END;
+  BEGIN
+    PERFORM public.complete_supplier_purchase_batch_workflow_task(
+      v_tenant, v_direct_first_batch, v_task, 'approve', NULL,
+      jsonb_build_object(
+        'compat_source', 'supplier_purchase_batch_review',
+        'compat_expected_version', 3, 'reason', NULL
+      ), v_review_user, v_reviewer, 'production-compat-invalid-version'
+    );
+    RAISE EXCEPTION 'wrong compatibility version unexpectedly completed';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'SUPPLIER_IDEMPOTENCY_CONFLICT' THEN RAISE; END IF;
+  END;
+  BEGIN
+    PERFORM public.complete_supplier_purchase_batch_workflow_task(
+      v_tenant, v_direct_first_batch, v_task, 'approve', NULL,
+      jsonb_build_object(
+        'compat_source', 'supplier_purchase_batch_review', 'reason', NULL
+      ), v_review_user, v_reviewer, 'production-compat-single-field'
+    );
+    RAISE EXCEPTION 'single compatibility field unexpectedly completed';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'SUPPLIER_IDEMPOTENCY_CONFLICT' THEN RAISE; END IF;
+  END;
+  IF NOT EXISTS (
+      SELECT 1 FROM public.supplier_purchase_batches
+      WHERE id = v_direct_first_batch
+        AND status = 'pending_approval' AND version = 2
+    ) OR NOT EXISTS (
+      SELECT 1 FROM public.workflow_tasks
+      WHERE id = v_task AND status = 'pending'
+    ) OR EXISTS (
+      SELECT 1 FROM public.supplier_purchase_batch_command_events
+      WHERE purchase_batch_id = v_direct_first_batch
+        AND idempotency_key IN (
+          'production-compat-invalid-source',
+          'production-compat-invalid-version',
+          'production-compat-single-field'
+        )
+    )
+  THEN
+    RAISE EXCEPTION 'invalid compatibility metadata mutated production facts';
+  END IF;
   v_result := public.complete_supplier_purchase_batch_workflow_task(
     v_tenant, v_direct_first_batch, v_task, 'approve', NULL,
     jsonb_build_object('reason', NULL), v_review_user, v_reviewer,

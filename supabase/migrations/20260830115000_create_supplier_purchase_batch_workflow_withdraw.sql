@@ -799,6 +799,7 @@ SET search_path = pg_catalog, public
 AS $$
 DECLARE
   v_event public.supplier_purchase_batch_command_events%ROWTYPE;
+  v_event_found boolean;
   v_workflow_request jsonb;
   v_replay_request jsonb;
   v_stored_fingerprint text;
@@ -838,8 +839,62 @@ BEGIN
       AND event.command_type = 'review'
       AND event.idempotency_key = p_idempotency_key
     FOR UPDATE;
+    v_event_found := FOUND;
 
-    IF FOUND AND (
+    SELECT
+      CASE
+        WHEN COALESCE(instance.context->>'batch_version', '') ~ '^[0-9]+$'
+          THEN (instance.context->>'batch_version')::integer
+        ELSE NULL
+      END,
+      CASE
+        WHEN COALESCE(instance.context->>'approval_round', '') ~ '^[0-9]+$'
+          THEN (instance.context->>'approval_round')::integer
+        ELSE NULL
+      END,
+      batch.approval_round
+    INTO v_task_batch_version, v_instance_round, v_batch_round
+    FROM public.workflow_tasks AS task
+    JOIN public.workflow_instances AS instance
+      ON instance.id = task.instance_id
+     AND instance.tenant_id = task.tenant_id
+    JOIN public.supplier_purchase_batches AS batch
+      ON batch.id = p_batch_id
+     AND batch.tenant_id = task.tenant_id
+    WHERE task.id = p_task_id
+      AND task.tenant_id = p_tenant_id
+      AND instance.subject_type = 'supplier_purchase_batch'
+      AND instance.subject_id = p_batch_id::text;
+
+    v_current_output := COALESCE(p_output, '{}'::jsonb);
+    v_current_compat_version := CASE
+      WHEN pg_catalog.jsonb_typeof(
+        v_current_output->'compat_expected_version'
+      ) = 'number'
+        AND COALESCE(
+          v_current_output->>'compat_expected_version', ''
+        ) ~ '^[1-9][0-9]*$'
+      THEN (v_current_output->>'compat_expected_version')::integer
+      ELSE NULL
+    END;
+    IF (
+      v_current_output ? 'compat_source'
+      OR v_current_output ? 'compat_expected_version'
+    ) AND (
+      pg_catalog.jsonb_typeof(v_current_output) <> 'object'
+      OR (v_current_output ? 'compat_source') IS DISTINCT FROM
+        (v_current_output ? 'compat_expected_version')
+      OR v_current_output->>'compat_source' IS DISTINCT FROM
+        'supplier_purchase_batch_review'
+      OR v_current_compat_version IS DISTINCT FROM v_task_batch_version
+    )
+    THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
+    END IF;
+
+    IF v_event_found AND (
       v_event.request ? 'workflow_task_fingerprint'
       OR v_event.request ? 'task_id'
     ) THEN
@@ -882,26 +937,8 @@ BEGIN
         'actor_employee_id', p_actor_employee_id
       );
 
-      SELECT CASE
-        WHEN COALESCE(instance.context->>'batch_version', '') ~ '^[0-9]+$'
-          THEN (instance.context->>'batch_version')::integer
-        ELSE NULL
-      END
-      INTO v_task_batch_version
-      FROM public.workflow_tasks AS task
-      JOIN public.workflow_instances AS instance
-        ON instance.id = task.instance_id
-       AND instance.tenant_id = task.tenant_id
-      WHERE task.id = p_task_id
-        AND task.tenant_id = p_tenant_id
-        AND instance.subject_type = 'supplier_purchase_batch'
-        AND instance.subject_id = p_batch_id::text;
-
       v_stored_output := COALESCE(
         v_workflow_request->'output', '{}'::jsonb
-      );
-      v_current_output := COALESCE(
-        v_replay_request->'output', '{}'::jsonb
       );
       v_stored_compat_version := CASE
         WHEN pg_catalog.jsonb_typeof(
@@ -909,18 +946,8 @@ BEGIN
         ) = 'number'
           AND COALESCE(
             v_stored_output->>'compat_expected_version', ''
-          ) ~ '^[0-9]+$'
+          ) ~ '^[1-9][0-9]*$'
         THEN (v_stored_output->>'compat_expected_version')::integer
-        ELSE NULL
-      END;
-      v_current_compat_version := CASE
-        WHEN pg_catalog.jsonb_typeof(
-          v_current_output->'compat_expected_version'
-        ) = 'number'
-          AND COALESCE(
-            v_current_output->>'compat_expected_version', ''
-          ) ~ '^[0-9]+$'
-        THEN (v_current_output->>'compat_expected_version')::integer
         ELSE NULL
       END;
       IF v_task_batch_version IS NULL
@@ -973,33 +1000,13 @@ BEGIN
         v_event.request->'workflow_task_result',
         v_event.result
       ) || pg_catalog.jsonb_build_object('idempotent', true);
-    ELSIF FOUND THEN
+    ELSIF v_event_found THEN
       -- A pure legacy event retains the Task 8 adoption/replay behavior.
       RETURN public.__gooes_complete_supplier_purchase_batch_workflow_task_v1(
         p_tenant_id, p_batch_id, p_task_id, p_action, p_reason, p_output,
         p_actor_user_id, p_actor_employee_id, p_idempotency_key
       );
     ELSE
-      SELECT
-        CASE
-          WHEN COALESCE(instance.context->>'approval_round', '') ~ '^[0-9]+$'
-            THEN (instance.context->>'approval_round')::integer
-          ELSE NULL
-        END,
-        batch.approval_round
-      INTO v_instance_round, v_batch_round
-      FROM public.workflow_tasks AS task
-      JOIN public.workflow_instances AS instance
-        ON instance.id = task.instance_id
-       AND instance.tenant_id = task.tenant_id
-      JOIN public.supplier_purchase_batches AS batch
-        ON batch.id = p_batch_id
-       AND batch.tenant_id = task.tenant_id
-      WHERE task.id = p_task_id
-        AND task.tenant_id = p_tenant_id
-        AND instance.subject_type = 'supplier_purchase_batch'
-        AND instance.subject_id = p_batch_id::text;
-
       IF v_instance_round IS NOT NULL
         AND v_instance_round IS DISTINCT FROM v_batch_round
       THEN

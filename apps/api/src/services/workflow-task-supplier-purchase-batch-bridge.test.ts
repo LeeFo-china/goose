@@ -92,7 +92,6 @@ describe("WorkflowTaskSupplierPurchaseBatchBridge", () => {
       idempotencyKey: "review-1",
     });
   });
-
   test("requires idempotency and a reject reason", async () => {
     const WorkflowTaskSupplierPurchaseBatchBridge = await bridgeClass();
     const completeTask = mock(async () => ({ status: "rejected" }));
@@ -104,10 +103,15 @@ describe("WorkflowTaskSupplierPurchaseBatchBridge", () => {
         canAccessProject: mock(async () => true),
       },
     });
-    for (const idempotencyKey of [null, "", "   ", "x".repeat(121)]) {
+    for (const [idempotencyKey, output] of [
+      [null, {}], ["", {}], ["   ", {}], ["x".repeat(121), {}],
+      ["review-1", { compat_source: "supplier_purchase_batch_review" }],
+      ["review-1", { compat_expected_version: 2 }],
+      ["review-1", { compat_source: "x", compat_expected_version: 2 }],
+    ] as const) {
       await expect(bridge.complete({
         authContext: auth(), task: task(), action: "approve", reason: null,
-        output: {}, idempotencyKey,
+        output, idempotencyKey,
       })).rejects.toMatchObject({ statusCode: 400, code: "VALIDATION_ERROR" });
     }
     await expect(bridge.complete({
@@ -116,7 +120,6 @@ describe("WorkflowTaskSupplierPurchaseBatchBridge", () => {
     })).rejects.toMatchObject({ statusCode: 400 });
     expect(completeTask).not.toHaveBeenCalled();
   });
-
   test("fails closed for self review permission and project scope", async () => {
     const WorkflowTaskSupplierPurchaseBatchBridge = await bridgeClass();
     const completeTask = mock(async () => ({ status: "ordered" }));
@@ -132,7 +135,6 @@ describe("WorkflowTaskSupplierPurchaseBatchBridge", () => {
       authContext: auth(), task: task(), action: "approve", reason: null,
       output: {}, idempotencyKey: "review-1",
     })).rejects.toMatchObject({ statusCode: 403, code: "FORBIDDEN" });
-
     canAccessProject.mockImplementation(async () => true);
     batchesRepository.findBatchAccessContext.mockImplementationOnce(
       async () => batch({ submitted_by_employee_id: EMPLOYEE_ID }),
@@ -145,7 +147,6 @@ describe("WorkflowTaskSupplierPurchaseBatchBridge", () => {
     });
     expect(completeTask).not.toHaveBeenCalled();
   });
-
   test("leaves unrelated workflow tasks on the generic path", async () => {
     const WorkflowTaskSupplierPurchaseBatchBridge = await bridgeClass();
     const completeTask = mock(async () => ({ status: "ordered" }));
@@ -175,7 +176,12 @@ describe("WorkflowTaskSupplierPurchaseBatchBridge", () => {
       batch: batch({ approval_round: 3 }),
       action: "approve",
       reason: "同意",
-      output: { compat_source: "supplier_purchase_batch_review" },
+      expectedVersion: 2,
+      output: {
+        compat_source: "forged",
+        compat_expected_version: 999,
+        business: "kept",
+      },
       idempotencyKey: "legacy-review-1",
     });
 
@@ -191,6 +197,8 @@ describe("WorkflowTaskSupplierPurchaseBatchBridge", () => {
       reason: "同意",
       output: {
         compat_source: "supplier_purchase_batch_review",
+        compat_expected_version: 2,
+        business: "kept",
         reason: "同意",
       },
       actorUserId: USER_ID,
@@ -221,6 +229,7 @@ describe("WorkflowTaskSupplierPurchaseBatchBridge", () => {
 
       await expect(bridge.completeLegacyReview({
         authContext: auth(), batch: batch(), action: "approve", reason: null,
+        expectedVersion: 2,
         output: { compat_source: "supplier_purchase_batch_review" },
         idempotencyKey: "legacy-review-resolution",
       })).rejects.toMatchObject({ statusCode: 409, code });
@@ -235,7 +244,7 @@ describe("WorkflowTaskSupplierPurchaseBatchBridge", () => {
 
     await expect(bridge.completeLegacyReview({
       authContext: auth(), batch: batch({ approval_round: 4 }),
-      action: "approve", reason: null, output: {},
+      action: "approve", reason: null, expectedVersion: 2, output: {},
       idempotencyKey: "legacy-review-stale",
     })).rejects.toMatchObject({
       statusCode: 409,
@@ -250,7 +259,7 @@ describe("WorkflowTaskSupplierPurchaseBatchBridge", () => {
     );
     await expect(bridge.completeLegacyReview({
       authContext: auth(), batch: batch({ approval_round: 4 }),
-      action: "approve", reason: null, output: {},
+      action: "approve", reason: null, expectedVersion: 2, output: {},
       idempotencyKey: "legacy-review-assignee",
     })).rejects.toMatchObject({ statusCode: 403, code: "FORBIDDEN" });
     expect(deps.repository.completeTask).not.toHaveBeenCalled();
@@ -290,6 +299,7 @@ describe("WorkflowTaskSupplierPurchaseBatchBridge", () => {
 
       await expect(bridge.completeLegacyReview({
         authContext: auth(), batch: batch(), action, reason,
+        expectedVersion: 2,
         output: {
           compat_source: "supplier_purchase_batch_review",
           compat_expected_version: 2,
@@ -334,6 +344,7 @@ describe("WorkflowTaskSupplierPurchaseBatchBridge", () => {
 
     await expect(bridge.completeLegacyReview({
       authContext: auth(), batch: batch(), action: "approve", reason: null,
+      expectedVersion: 2,
       output: {
         compat_source: "supplier_purchase_batch_review",
         compat_expected_version: 2,
@@ -379,6 +390,7 @@ describe("WorkflowTaskSupplierPurchaseBatchBridge", () => {
 
     await expect(bridge.completeLegacyReview({
       authContext: auth(), batch: batch(), action: "approve", reason: null,
+      expectedVersion: 2,
       output: {
         compat_source: "supplier_purchase_batch_review",
         compat_expected_version: 2,
@@ -409,7 +421,7 @@ describe("WorkflowTaskSupplierPurchaseBatchBridge", () => {
 
     await expect(bridge.completeLegacyReview({
       authContext: finance, batch: batch(), action: "approve", reason: null,
-      output: {}, idempotencyKey: "finance-review",
+      expectedVersion: 2, output: {}, idempotencyKey: "finance-review",
     })).resolves.toMatchObject({ status: "ordered" });
 
     await expect(bridge.completeLegacyReview({
@@ -418,7 +430,7 @@ describe("WorkflowTaskSupplierPurchaseBatchBridge", () => {
         "project.read",
       ]),
       batch: batch(), action: "approve", reason: null,
-      output: {}, idempotencyKey: "finance-review-denied",
+      expectedVersion: 2, output: {}, idempotencyKey: "finance-review-denied",
     })).rejects.toMatchObject({ statusCode: 403, code: "FORBIDDEN" });
   });
 });
