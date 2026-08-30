@@ -1,4 +1,6 @@
 import { TenantBaseController } from "@/controllers/TenantBaseController";
+import { readSupplierIdempotencyKey } from
+  "@/controllers/supplier-command-http";
 import { Errors } from "@/errors/error-factory";
 import {
   WorkflowTaskCompleteSchema,
@@ -33,11 +35,13 @@ class WorkflowTasksController extends TenantBaseController {
 
     const bodyResult = WorkflowTaskCompleteSchema.safeParse(request.body || {});
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+    const idempotencyKey = readSupplierIdempotencyKey(request);
 
     const data = await workflowTaskService.completeTask(
       authContext,
       paramsResult.data.id,
       bodyResult.data,
+      idempotencyKey,
     );
     return ResponseHandler.success(data);
   }

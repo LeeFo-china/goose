@@ -7,6 +7,11 @@ import type { BatchCommandContext } from
   "@/repositories/supplier-purchase-batches";
 import { SupplierPurchaseBatchRecordSchema } from
   "@/repositories/supplier-purchase-batch-records";
+import {
+  SupplierPurchaseBatchBlockerSchema,
+  SupplierPurchaseBatchOrderSummarySchema,
+  SupplierPurchaseBatchRevisionErrorCodeSchema,
+} from "@/repositories/supplier-purchase-batch-command-records";
 import { SupabaseDB } from "@/utils/supabase";
 
 const WorkflowStateSchema = z.object({
@@ -45,9 +50,74 @@ const WorkflowSubmitResultSchema = z.object({
   }
 });
 
+const WorkflowReviewStateSchema = z.object({
+  definition_id: z.uuid(),
+  instance_id: z.uuid(),
+  instance_status: z.enum(["running", "completed", "canceled"]),
+  current_node_key: z.string().trim().min(1).nullable(),
+  current_node_title: z.string().trim().min(1).nullable(),
+  current_business_kind: z.string().trim().min(1).nullable(),
+  pending_task_count: z.number().int().nonnegative(),
+}).strict();
+
+const WorkflowReviewResultSchema = z.object({
+  status: z.enum([
+    "pending_approval",
+    "ordered",
+    "rejected",
+    "revision_required",
+  ]),
+  idempotent: z.boolean(),
+  batch: SupplierPurchaseBatchRecordSchema,
+  version: z.number().int().positive(),
+  workflow_state: WorkflowReviewStateSchema,
+  requisition_ids: z.array(z.uuid()).min(1).max(20).optional(),
+  orders: z.array(SupplierPurchaseBatchOrderSummarySchema).min(1).max(20)
+    .optional(),
+  error_code: SupplierPurchaseBatchRevisionErrorCodeSchema.optional(),
+  details: z.array(SupplierPurchaseBatchBlockerSchema).min(1).max(540)
+    .optional(),
+}).strict().superRefine((result, context) => {
+  const expectedBatchStatus = result.status === "revision_required"
+    ? "draft"
+    : result.status;
+  const ordered = result.status === "ordered";
+  const revision = result.status === "revision_required";
+  if (
+    result.batch.status !== expectedBatchStatus ||
+    result.batch.version !== result.version ||
+    ordered !== Boolean(result.requisition_ids && result.orders) ||
+    (ordered && (
+      result.requisition_ids?.length !== result.batch.supplier_count ||
+      result.orders?.length !== result.batch.supplier_count
+    )) ||
+    revision !== Boolean(result.error_code && result.details)
+  ) {
+    context.addIssue({
+      code: "custom",
+      message: "采购批次审批结果不一致",
+    });
+  }
+});
+
 export type SupplierPurchaseBatchWorkflowSubmitResult = z.infer<
   typeof WorkflowSubmitResultSchema
 >;
+export type SupplierPurchaseBatchWorkflowReviewResult = z.infer<
+  typeof WorkflowReviewResultSchema
+>;
+
+export type SupplierPurchaseBatchWorkflowReviewInput = {
+  tenantId: string;
+  batchId: string;
+  taskId: string;
+  action: "approve" | "reject";
+  reason: string | null;
+  output: Record<string, unknown>;
+  actorUserId: string;
+  actorEmployeeId: string;
+  idempotencyKey: string;
+};
 
 type Client = {
   rpc(
@@ -89,6 +159,53 @@ export class SupplierPurchaseBatchWorkflowRepository {
       throw Errors.dbError(
         "提交供应商采购批次并启动审批失败",
         parsed.success ? data : parsed.error.issues,
+      );
+    }
+    return parsed.data;
+  }
+
+  async completeTask(
+    input: SupplierPurchaseBatchWorkflowReviewInput,
+  ): Promise<SupplierPurchaseBatchWorkflowReviewResult> {
+    const { data, error } = await this.clientProvider().rpc(
+      "complete_supplier_purchase_batch_workflow_task",
+      {
+        p_tenant_id: input.tenantId,
+        p_batch_id: input.batchId,
+        p_task_id: input.taskId,
+        p_action: input.action,
+        p_reason: input.reason,
+        p_output: input.output,
+        p_actor_user_id: input.actorUserId,
+        p_actor_employee_id: input.actorEmployeeId,
+        p_idempotency_key: input.idempotencyKey,
+      },
+    );
+    if (error) {
+      throwSupplierCommandDatabaseError(
+        error,
+        "处理供应商采购批次审批任务失败",
+      );
+    }
+    const parsed = WorkflowReviewResultSchema.safeParse(data);
+    if (!parsed.success || parsed.data.batch.id !== input.batchId ||
+      parsed.data.batch.tenant_id !== input.tenantId) {
+      throw Errors.dbError(
+        "处理供应商采购批次审批任务失败",
+        parsed.success ? data : parsed.error.issues,
+      );
+    }
+    if (parsed.data.status === "revision_required") {
+      throw Errors.business(
+        409,
+        "采购批次数据已变化，请刷新并修订后重新提交",
+        parsed.data.error_code!,
+        {
+          batch: parsed.data.batch,
+          version: parsed.data.version,
+          error_code: parsed.data.error_code,
+          details: parsed.data.details,
+        },
       );
     }
     return parsed.data;

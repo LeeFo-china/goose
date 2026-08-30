@@ -13,6 +13,7 @@ const REQUISITION_ID = "a1000000-0000-4000-8000-000000000006";
 const DEFINITION_ID = "a1000000-0000-4000-8000-000000000007";
 const INSTANCE_ID = "a1000000-0000-4000-8000-000000000008";
 const AT = "2026-08-30T08:00:00.000Z";
+const TASK_ID = "a1000000-0000-4000-8000-000000000009";
 
 const context = {
   tenant_id: TENANT_ID,
@@ -115,4 +116,129 @@ describe("SupplierPurchaseBatchWorkflowRepository", () => {
       code: "DB_ERROR",
     });
   });
+
+  test("completes a supplier workflow task through the dedicated RPC", async () => {
+    const calls: Array<{ name: string; params: Record<string, unknown> }> = [];
+    const reviewedBatch = {
+      ...batch,
+      status: "rejected",
+      version: 3,
+      reviewed_by_employee_id: EMPLOYEE_ID,
+      reviewed_at: AT,
+      review_remark: "数量有误",
+    } as const;
+    const client = { async rpc(name: string, params: Record<string, unknown>) {
+      calls.push({ name, params });
+      return { data: {
+        status: "rejected", idempotent: false, batch: reviewedBatch,
+        version: 3, workflow_state: {
+          ...workflowState,
+          instance_status: "completed",
+          current_node_key: "rejected_end",
+          current_node_title: "审批驳回",
+          pending_task_count: 0,
+        },
+      }, error: null };
+    } };
+    const { SupplierPurchaseBatchWorkflowRepository } = await import(
+      "./supplier-purchase-batch-workflow"
+    );
+    const repository = new SupplierPurchaseBatchWorkflowRepository(() => client);
+
+    expect(await repository.completeTask({
+      tenantId: TENANT_ID,
+      batchId: BATCH_ID,
+      taskId: TASK_ID,
+      action: "reject",
+      reason: "数量有误",
+      output: { comment: "修改后提交" },
+      actorUserId: USER_ID,
+      actorEmployeeId: EMPLOYEE_ID,
+      idempotencyKey: "workflow-review-1",
+    })).toMatchObject({ status: "rejected", version: 3 });
+    expect(calls).toEqual([{
+      name: "complete_supplier_purchase_batch_workflow_task",
+      params: {
+        p_tenant_id: TENANT_ID,
+        p_batch_id: BATCH_ID,
+        p_task_id: TASK_ID,
+        p_action: "reject",
+        p_reason: "数量有误",
+        p_output: { comment: "修改后提交" },
+        p_actor_user_id: USER_ID,
+        p_actor_employee_id: EMPLOYEE_ID,
+        p_idempotency_key: "workflow-review-1",
+      },
+    }]);
+  });
+
+  test("maps review conflicts and preserves revision-required details", async () => {
+    const { SupplierPurchaseBatchWorkflowRepository } = await import(
+      "./supplier-purchase-batch-workflow"
+    );
+    const stale = new SupplierPurchaseBatchWorkflowRepository(() => ({
+      async rpc() {
+        return { data: null, error: {
+          message: "SUPPLIER_PURCHASE_BATCH_APPROVAL_ROUND_STALE",
+        } };
+      },
+    }));
+    await expect(stale.completeTask(reviewContext())).rejects.toMatchObject({
+      statusCode: 409,
+      code: "SUPPLIER_PURCHASE_BATCH_APPROVAL_ROUND_STALE",
+    });
+
+    const revisionBatch = {
+      ...batch,
+      status: "draft",
+      budget_checked_at: null,
+      budget_status: "unchecked",
+      budget_snapshot: {},
+      submitted_by_employee_id: null,
+      submitted_at: null,
+      version: 3,
+    } as const;
+    const revision = new SupplierPurchaseBatchWorkflowRepository(() => ({
+      async rpc() {
+        return { data: {
+          status: "revision_required", idempotent: false,
+          error_code: "SUPPLIER_PURCHASE_BATCH_PRICE_CHANGED",
+          details: [{
+            kind: "price", supplier_sku_id: REQUISITION_ID,
+            product_name: "瓷砖", sku_name: "灰色",
+            frozen_unit_price: "100.00", current_unit_price: "110.00",
+            frozen_price_version: 1, current_price_version: 2,
+          }],
+          batch: revisionBatch, version: 3,
+          workflow_state: {
+            ...workflowState, instance_status: "canceled",
+            pending_task_count: 0,
+          },
+        }, error: null };
+      },
+    }));
+    await expect(revision.completeTask(reviewContext())).rejects.toMatchObject({
+      statusCode: 409,
+      code: "SUPPLIER_PURCHASE_BATCH_PRICE_CHANGED",
+      details: {
+        batch: revisionBatch,
+        version: 3,
+        details: [expect.objectContaining({ kind: "price" })],
+      },
+    });
+  });
 });
+
+function reviewContext() {
+  return {
+    tenantId: TENANT_ID,
+    batchId: BATCH_ID,
+    taskId: TASK_ID,
+    action: "approve" as const,
+    reason: null,
+    output: {},
+    actorUserId: USER_ID,
+    actorEmployeeId: EMPLOYEE_ID,
+    idempotencyKey: "workflow-review-1",
+  };
+}

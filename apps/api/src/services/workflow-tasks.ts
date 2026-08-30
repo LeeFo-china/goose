@@ -27,6 +27,8 @@ import { assertRuntimeNodeCompletionAllowed } from "@/services/workflow-runtime-
 import { workflowSubjectStateService } from "@/services/workflow-subject-state";
 import { buildWorkflowTaskActionsForTask } from "@/services/workflow-task-actions";
 import { buildWorkflowTaskAssigneeMetadata } from "@/services/workflow-task-assignee";
+import { workflowTaskSupplierPurchaseBatchBridge } from
+  "@/services/workflow-task-supplier-purchase-batch-bridge";
 import { workflowTaskCardContextService } from "@/services/workflow-task-card-context";
 import {
   listSupplierPurchaseBatchWorkflowTasks,
@@ -111,6 +113,7 @@ class WorkflowTaskService {
     authContext: AuthContext,
     taskId: string,
     input: WorkflowTaskCompleteInput,
+    idempotencyKey: string | null = null,
   ) {
     const tenantId = this.assertTenantId(authContext);
     const task = await workflowTaskRepository.findById({ tenantId, taskId });
@@ -119,6 +122,26 @@ class WorkflowTaskService {
     }
     if (!await this.isTaskAccessible(authContext, task, input.action)) {
       throw Errors.forbidden();
+    }
+    const output = {
+      ...(input.output as JsonObject),
+      reason: input.reason ?? null,
+    };
+    if (task.instance?.subject_type === "supplier_purchase_batch") {
+      const bridged = await workflowTaskSupplierPurchaseBatchBridge.complete({
+        authContext,
+        task: {
+          id: task.id,
+          tenant_id: task.tenant_id,
+          node_key: task.node_key,
+          instance: { subject_id: task.instance.subject_id },
+        },
+        action: input.action,
+        reason: input.reason ?? null,
+        output,
+        idempotencyKey,
+      });
+      if (bridged) return bridged;
     }
     if (task.status !== "pending") {
       throw Errors.business(409, "流程待办已处理", "WORKFLOW_TASK_NOT_PENDING");
@@ -132,11 +155,6 @@ class WorkflowTaskService {
       });
     }
     assertGenericWorkflowMutationAllowed(null, task.instance.subject_type);
-
-    const output = {
-      ...(input.output as JsonObject),
-      reason: input.reason ?? null,
-    };
     if (task.instance.subject_type === "expense_request") {
       const bridged = await workflowTaskExpenseBridge.complete({
         authContext,

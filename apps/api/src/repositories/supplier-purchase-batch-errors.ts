@@ -56,4 +56,16 @@ export const SUPPLIER_PURCHASE_BATCH_ERRORS = {
   SUPPLIER_PURCHASE_BATCH_NO_APPROVER: {
     statusCode: 409, message: "采购批次审批流程缺少可用审批人",
   },
+  SUPPLIER_PURCHASE_BATCH_APPROVAL_ROUND_STALE: {
+    statusCode: 409, message: "采购批次审批任务已属于旧轮次",
+  },
+  WORKFLOW_TASK_NOT_PENDING: {
+    statusCode: 409, message: "流程待办已处理",
+  },
+  WORKFLOW_NODE_NOT_CURRENT: {
+    statusCode: 409, message: "流程节点不是当前待处理节点",
+  },
+  FORBIDDEN: {
+    statusCode: 403, message: "无权处理该采购批次审批任务",
+  },
 } as const;

@@ -32,10 +32,15 @@ const supplierTask = {
 };
 const completeRuntimeNode = mock(async () => ({ ok: true as const }));
 const assertRuntimeNodeCompletionAllowed = mock(async () => undefined);
+const completeSupplierPurchaseBatchBridge = mock(async () => ({
+  status: "ordered",
+  idempotent: false,
+}));
+const findById = mock(async () => supplierTask);
 
 mock.module("@/repositories/workflow-tasks", () => ({
   workflowTaskRepository: {
-    findById: mock(async () => supplierTask),
+    findById,
   },
 }));
 
@@ -61,16 +66,22 @@ mock.module("@/services/workflow-runtime-guards", () => ({
   assertRuntimeNodeCompletionAllowed,
 }));
 
+mock.module("@/services/workflow-task-supplier-purchase-batch-bridge", () => ({
+  workflowTaskSupplierPurchaseBatchBridge: {
+    complete: completeSupplierPurchaseBatchBridge,
+  },
+}));
+
 mock.module("@/services/workflow-subject-state", () => ({
   workflowSubjectStateService: {
     syncFromRuntimeInstance: mock(async () => null),
   },
 }));
 
-test("rejects generic task completion for supplier purchase batches", async () => {
+test("routes supplier purchase batches through the atomic bridge", async () => {
   const { workflowTaskService } = await import("./workflow-tasks");
 
-  await expect(workflowTaskService.completeTask(
+  const result = await workflowTaskService.completeTask(
     authContext(),
     "task-1",
     {
@@ -81,11 +92,42 @@ test("rejects generic task completion for supplier purchase batches", async () =
         budget_status: "within_budget",
       },
     },
-  )).rejects.toMatchObject({
-    statusCode: 409,
-    code: "SUPPLIER_PURCHASE_BATCH_WORKFLOW_BUSINESS_COMMAND_REQUIRED",
-  });
+    "supplier-review-1",
+  );
+
+  expect(result).toEqual({ status: "ordered", idempotent: false });
+  expect(completeSupplierPurchaseBatchBridge).toHaveBeenCalledWith(
+    expect.objectContaining({
+      task: expect.objectContaining({ id: "task-1" }),
+      action: "approve",
+      idempotencyKey: "supplier-review-1",
+    }),
+  );
   expect(assertRuntimeNodeCompletionAllowed).not.toHaveBeenCalled();
+  expect(completeRuntimeNode).not.toHaveBeenCalled();
+});
+
+test("lets the atomic RPC decide completed supplier task replays", async () => {
+  const { workflowTaskService } = await import("./workflow-tasks");
+  findById.mockImplementationOnce(async () => ({
+    ...supplierTask,
+    status: "completed",
+    instance: { ...supplierTask.instance, current_node_key: "approved_end" },
+  }));
+  completeSupplierPurchaseBatchBridge.mockImplementationOnce(async () => ({
+    status: "ordered",
+    idempotent: true,
+  }));
+
+  const result = await workflowTaskService.completeTask(
+    authContext(),
+    "task-1",
+    { action: "approve", reason: null, output: {} },
+    "supplier-review-1",
+  );
+
+  expect(result).toEqual({ status: "ordered", idempotent: true });
+  expect(completeSupplierPurchaseBatchBridge).toHaveBeenCalled();
   expect(completeRuntimeNode).not.toHaveBeenCalled();
 });
 
