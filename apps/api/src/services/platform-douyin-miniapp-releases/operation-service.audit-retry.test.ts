@@ -96,6 +96,13 @@ function harness(
   submitVersionAudit: () => Promise<{ readonly logId: string }>,
   getAuthorizerAccessToken: () => Promise<string> = async () =>
     "authorizer-access-token",
+  getVersionList: () => Promise<{
+    readonly audit?: {
+      readonly version: string;
+      readonly status?: string | number;
+    };
+    readonly logId: string;
+  }> = async () => ({ logId: "versions-log" }),
 ) {
   let current = initial;
   const patchClaimed = mock(async (
@@ -120,7 +127,7 @@ function harness(
       logId: "hosts-log",
     })),
     submitVersionAudit: mock(submitVersionAudit),
-    getVersionList: mock(async () => ({ logId: "versions-log" })),
+    getVersionList: mock(getVersionList),
     releaseVersion: mock(async () => ({ logId: "release-log" })),
   };
   const operations = new PlatformDouyinMiniappReleaseOperations({
@@ -205,6 +212,9 @@ describe("Douyin audit retry state", () => {
 
     expect(h.gateway.getAvailableAuditHosts).toHaveBeenCalledTimes(1);
     expect(h.gateway.submitVersionAudit).toHaveBeenCalledTimes(1);
+    expect(h.gateway.submitVersionAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ auditWay: 1 }),
+    );
     expect(h.current()).toMatchObject({
       status: "audit_pending",
       audit_host_names: auditInput.host_names,
@@ -245,11 +255,118 @@ describe("Douyin audit retry state", () => {
     );
 
     expect(h.gateway.submitVersionAudit).toHaveBeenCalledTimes(2);
-    expect(h.gateway.getVersionList).not.toHaveBeenCalled();
+    expect(h.gateway.getVersionList).toHaveBeenCalledTimes(1);
     expect(h.current()).toMatchObject({
       status: "audit_pending",
       audit_result: null,
     });
+  });
+
+  test("recovers a failed rejected-version retry from the provider stage", async () => {
+    const h = harness(
+      release({
+        status: "testing",
+        audit_host_names: [],
+        audit_note: null,
+        audit_result: {
+          status: "failed",
+          error_code: "DOUYIN_OPEN_PLATFORM_API_ERROR",
+        },
+        submitted_at: null,
+      }),
+      async () => ({ logId: "audit-retry-log" }),
+      async () => "authorizer-access-token",
+      async () => ({
+        audit: { version: "0.1.2", status: 2 },
+        logId: "versions-log",
+      }),
+    );
+
+    await h.operations.submitAudit(
+      installation,
+      INSTALLATION_ID,
+      h.current(),
+      OPERATOR_ID,
+      auditInput,
+    );
+
+    expect(h.gateway.getVersionList).toHaveBeenCalledTimes(1);
+    expect(h.gateway.submitVersionAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ auditWay: 1 }),
+    );
+    expect(h.current()).toMatchObject({
+      status: "audit_pending",
+      audit_result: null,
+    });
+  });
+
+  for (const platformAudit of [
+    { status: 0, expectedStatus: "audit_pending" },
+    { status: 1, expectedStatus: "audit_approved" },
+  ] as const) {
+    test(`recovers platform audit status ${platformAudit.status} without resubmitting`, async () => {
+      const h = harness(
+        release({ audit_result: {
+          status: "failed", error_code: "DOUYIN_OPEN_PLATFORM_API_ERROR",
+        } }),
+        async () => ({ logId: "unexpected-submit-log" }),
+        async () => "authorizer-access-token",
+        async () => ({
+          audit: { version: "0.1.2", status: platformAudit.status },
+          logId: "versions-log",
+        }),
+      );
+      await h.operations.submitAudit(installation, INSTALLATION_ID, h.current(),
+        OPERATOR_ID, auditInput);
+      expect(h.gateway.getVersionList).toHaveBeenCalledTimes(1);
+      expect(h.gateway.submitVersionAudit).not.toHaveBeenCalled();
+      expect(h.current()).toMatchObject({
+        status: platformAudit.expectedStatus, douyin_log_id: "versions-log",
+      });
+    });
+  }
+
+  for (const failedPreflight of ["access token", "audit hosts"] as const) {
+    test(`keeps an audit rejection retriable when ${failedPreflight} loading fails`, async () => {
+      const previousAuditResult = { status: "rejected" as const, reason: "功能不完整" };
+      const failPreflight = async () => {
+        throw new AppError(502, "预检失败", "DOUYIN_PREFLIGHT_FAILED");
+      };
+      const h = harness(release({
+        status: "audit_rejected", audit_host_names: ["old.douyin.com"],
+        audit_note: "上次审核说明", audit_result: previousAuditResult,
+      }), async () => ({ logId: "unexpected-submit-log" }),
+      failedPreflight === "access token" ? failPreflight : undefined);
+      if (failedPreflight === "audit hosts") {
+        h.gateway.getAvailableAuditHosts = mock(failPreflight);
+      }
+
+      await caught(() => h.operations.submitAudit(installation, INSTALLATION_ID,
+        h.current(), OPERATOR_ID, auditInput));
+      expect(h.current()).toMatchObject({
+        status: "audit_rejected", audit_host_names: ["old.douyin.com"],
+        audit_note: "上次审核说明", audit_result: previousAuditResult,
+      });
+      expect(h.gateway.submitVersionAudit).not.toHaveBeenCalled();
+    });
+  }
+
+  test("preserves a stored rejection marker when access token loading fails", async () => {
+    const storedAuditResult = { status: "failed" as const,
+      error_code: "DOUYIN_OPEN_PLATFORM_API_ERROR" };
+    const h = harness(
+      release({ audit_result: storedAuditResult }),
+      async () => ({ logId: "unexpected-submit-log" }),
+      async () => {
+        throw new AppError(502, "凭证请求失败", "DOUYIN_ACCESS_TOKEN_FAILED");
+      },
+    );
+    await caught(() => h.operations.submitAudit(installation, INSTALLATION_ID,
+      h.current(), OPERATOR_ID, auditInput));
+    expect(h.current()).toMatchObject({ status: "testing",
+      audit_result: storedAuditResult });
+    expect(h.gateway.getVersionList).not.toHaveBeenCalled();
+    expect(h.gateway.submitVersionAudit).not.toHaveBeenCalled();
   });
 
   test("repairs a legacy explicit rejection before resubmitting", async () => {
@@ -271,7 +388,10 @@ describe("Douyin audit retry state", () => {
     );
 
     expect(h.gateway.submitVersionAudit).toHaveBeenCalledTimes(1);
-    expect(h.gateway.getVersionList).not.toHaveBeenCalled();
+    expect(h.gateway.getVersionList).toHaveBeenCalledTimes(1);
+    expect(h.gateway.submitVersionAudit).toHaveBeenCalledWith(
+      expect.not.objectContaining({ auditWay: 1 }),
+    );
     expect(h.current()).toMatchObject({
       status: "audit_pending",
       audit_result: null,
