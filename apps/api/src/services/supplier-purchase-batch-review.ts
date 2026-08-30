@@ -8,28 +8,60 @@ import type { SupplierPurchaseBatchReviewInput } from
 import type { AuthContext } from "@/services/authorization";
 
 type ReviewDependencies = {
-  requireFinanceBudgetManage(auth: AuthContext): unknown;
-  isWorkflowEnabled(tenantId: string): Promise<boolean>;
-  completeLegacyReview(input: {
-    authContext: AuthContext;
-    batch: SupplierPurchaseBatchDetail;
-    action: string;
-    reason: string | null;
-    output: Record<string, unknown>;
-    idempotencyKey: string;
-  }): Promise<unknown>;
-  reviewLegacy(input: {
-    tenant_id: string;
-    batch_id: string;
-    expected_version: number;
-    actor_user_id: string;
-    actor_employee_id: string;
-    idempotency_key: string;
-    action: "approve" | "reject";
-    remark: string | null;
-    can_override_budget: boolean;
-  }): Promise<SupplierPurchaseBatchCommandResult>;
+  financeAccess: {
+    requireFinanceBudgetManage(auth: AuthContext): unknown;
+  };
+  workflowBridge: {
+    completeLegacyReview(input: {
+      authContext: AuthContext;
+      batch: SupplierPurchaseBatchDetail;
+      action: string;
+      reason: string | null;
+      output: Record<string, unknown>;
+      idempotencyKey: string;
+    }): Promise<unknown>;
+  };
+  repository: {
+    review(input: {
+      tenant_id: string;
+      batch_id: string;
+      expected_version: number;
+      actor_user_id: string;
+      actor_employee_id: string;
+      idempotency_key: string;
+      action: "approve" | "reject";
+      remark: string | null;
+      can_override_budget: boolean;
+    }): Promise<SupplierPurchaseBatchCommandResult>;
+  };
 };
+
+export function assertSupplierPurchaseBatchReviewVersion(
+  batch: { status: string; version: number },
+  expectedVersion: number,
+): void {
+  if (batch.status === "pending_approval" &&
+    batch.version !== expectedVersion) {
+    throw Errors.business(
+      409,
+      "采购批次版本已变化，请刷新后重试",
+      "SUPPLIER_PURCHASE_BATCH_VERSION_CONFLICT",
+    );
+  }
+}
+
+export function assertLegacySupplierPurchaseBatchReviewSelf(
+  batch: { created_by_employee_id: string },
+  employeeId: string,
+): void {
+  if (batch.created_by_employee_id === employeeId) {
+    throw Errors.business(
+      409,
+      "提交人不能审批自己提交的采购批次",
+      "SUPPLIER_PURCHASE_BATCH_SELF_REVIEW",
+    );
+  }
+}
 
 export async function executeSupplierPurchaseBatchReview(input: {
   auth: AuthContext;
@@ -39,15 +71,19 @@ export async function executeSupplierPurchaseBatchReview(input: {
   batch: SupplierPurchaseBatchDetail;
   review: SupplierPurchaseBatchReviewInput;
   idempotencyKey: string;
+  workflowEnabled: boolean;
   dependencies: ReviewDependencies;
 }): Promise<unknown> {
-  if (await input.dependencies.isWorkflowEnabled(input.tenantId)) {
-    const result = await input.dependencies.completeLegacyReview({
+  if (input.workflowEnabled) {
+    const result = await input.dependencies.workflowBridge.completeLegacyReview({
       authContext: input.auth,
       batch: input.batch,
       action: input.review.action,
       reason: input.review.remark ?? null,
-      output: { compat_source: "supplier_purchase_batch_review" },
+      output: {
+        compat_source: "supplier_purchase_batch_review",
+        compat_expected_version: input.review.expected_version,
+      },
       idempotencyKey: input.idempotencyKey,
     });
     return adaptWorkflowReviewResult(result);
@@ -56,9 +92,9 @@ export async function executeSupplierPurchaseBatchReview(input: {
   const canOverrideBudget = input.review.action === "approve" &&
     input.batch.budget_status === "over_budget";
   if (canOverrideBudget) {
-    input.dependencies.requireFinanceBudgetManage(input.auth);
+    input.dependencies.financeAccess.requireFinanceBudgetManage(input.auth);
   }
-  const result = await input.dependencies.reviewLegacy({
+  const result = await input.dependencies.repository.review({
     tenant_id: input.tenantId,
     batch_id: input.batch.id,
     expected_version: input.review.expected_version,

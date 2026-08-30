@@ -1,4 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
+import { Errors } from "@/errors/error-factory";
+import type {
+  SupplierPurchaseBatchPendingWorkflowTask,
+  SupplierPurchaseBatchRunningWorkflowInstance,
+} from "@/repositories/supplier-purchase-batch-workflow-review-lookup";
 import type { AuthContext } from "@/services/authorization";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
@@ -25,10 +30,23 @@ function dependencies(overrides: Record<string, unknown> = {}) {
   const listPendingTasks = mock(
     async (): Promise<Array<ReturnType<typeof pendingTask>>> => [pendingTask()],
   );
+  const listReviewEvents = mock(async () => [] as Array<{
+    id: string;
+    idempotency_key: string;
+    request: Record<string, unknown>;
+  }>);
+  const listTasksById = mock(async () => [pendingTask()]);
+  const listInstancesById = mock(async () => [instance()]);
   return {
     repository: { completeTask: mock(async () => ({ status: "ordered" })) },
     batchesRepository: { findBatchAccessContext: mock(async () => batch()) },
-    lookupRepository: { listRunningInstances, listPendingTasks },
+    lookupRepository: {
+      listRunningInstances,
+      listPendingTasks,
+      listReviewEvents,
+      listTasksById,
+      listInstancesById,
+    },
     accessPolicy: {
       hasPermission: (context: AuthContext, code: string) =>
         context.permissions.some((item) => item.code === code),
@@ -237,6 +255,172 @@ describe("WorkflowTaskSupplierPurchaseBatchBridge", () => {
     })).rejects.toMatchObject({ statusCode: 403, code: "FORBIDDEN" });
     expect(deps.repository.completeTask).not.toHaveBeenCalled();
   });
+
+  test.each([
+    ["ordered", "approve", null],
+    ["rejected", "reject", "库存过高"],
+  ] as const)(
+    "replays a terminal %s task from the exact command event",
+    async (status, action, reason) => {
+      const WorkflowTaskSupplierPurchaseBatchBridge = await bridgeClass();
+      const deps = dependencies();
+      deps.lookupRepository.listReviewEvents.mockImplementation(async () => [{
+        id: USER_ID,
+        idempotency_key: "legacy-terminal-key",
+        request: {
+          workflow_task_request: {
+            tenant_id: TENANT_ID,
+            batch_id: BATCH_ID,
+            task_id: TASK_ID,
+            approval_round: 3,
+          },
+        },
+      }]);
+      deps.lookupRepository.listTasksById.mockImplementation(async () => [
+        pendingTask({ status: "completed" }),
+      ]);
+      deps.lookupRepository.listInstancesById.mockImplementation(async () => [
+        instance({ status: "completed", current_node_key: null }),
+      ]);
+      deps.repository.completeTask.mockImplementation(async () => ({
+        status,
+        idempotent: true,
+      }));
+      const bridge = new WorkflowTaskSupplierPurchaseBatchBridge(deps);
+
+      await expect(bridge.completeLegacyReview({
+        authContext: auth(), batch: batch(), action, reason,
+        output: {
+          compat_source: "supplier_purchase_batch_review",
+          compat_expected_version: 2,
+        },
+        idempotencyKey: "legacy-terminal-key",
+      })).resolves.toMatchObject({ status, idempotent: true });
+      expect(deps.lookupRepository.listRunningInstances).not.toHaveBeenCalled();
+      expect(deps.repository.completeTask).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: TASK_ID }),
+      );
+    },
+  );
+
+  test("uses the latest current-round task for a different-key lagging request", async () => {
+    const WorkflowTaskSupplierPurchaseBatchBridge = await bridgeClass();
+    const deps = dependencies();
+    deps.lookupRepository.listRunningInstances.mockImplementation(async () => []);
+    deps.lookupRepository.listReviewEvents
+      .mockImplementationOnce(async () => [])
+      .mockImplementationOnce(async () => [{
+        id: USER_ID,
+        idempotency_key: "winning-key",
+        request: {
+          workflow_task_request: {
+            tenant_id: TENANT_ID,
+            batch_id: BATCH_ID,
+            task_id: TASK_ID,
+            approval_round: 3,
+          },
+        },
+      }]);
+    deps.lookupRepository.listTasksById.mockImplementation(async () => [
+      pendingTask({ status: "completed" }),
+    ]);
+    deps.lookupRepository.listInstancesById.mockImplementation(async () => [
+      instance({ status: "completed", current_node_key: null }),
+    ]);
+    deps.repository.completeTask.mockImplementation(async () => {
+      throw Errors.business(409, "流程待办已处理", "WORKFLOW_TASK_NOT_PENDING");
+    });
+    const bridge = new WorkflowTaskSupplierPurchaseBatchBridge(deps);
+
+    await expect(bridge.completeLegacyReview({
+      authContext: auth(), batch: batch(), action: "approve", reason: null,
+      output: {
+        compat_source: "supplier_purchase_batch_review",
+        compat_expected_version: 2,
+      },
+      idempotencyKey: "lagging-key",
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: "WORKFLOW_TASK_NOT_PENDING",
+    });
+    expect(deps.repository.completeTask).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: TASK_ID, idempotencyKey: "lagging-key" }),
+    );
+  });
+
+  test("recovers when the pending task completes between bounded lookups", async () => {
+    const WorkflowTaskSupplierPurchaseBatchBridge = await bridgeClass();
+    const deps = dependencies();
+    deps.lookupRepository.listPendingTasks.mockImplementation(async () => []);
+    deps.lookupRepository.listReviewEvents
+      .mockImplementationOnce(async () => [])
+      .mockImplementationOnce(async () => [{
+        id: USER_ID,
+        idempotency_key: "winning-key",
+        request: {
+          workflow_task_request: {
+            tenant_id: TENANT_ID,
+            batch_id: BATCH_ID,
+            task_id: TASK_ID,
+            approval_round: 3,
+          },
+        },
+      }]);
+    deps.lookupRepository.listTasksById.mockImplementation(async () => [
+      pendingTask({ status: "completed" }),
+    ]);
+    deps.lookupRepository.listInstancesById.mockImplementation(async () => [
+      instance({ status: "completed", current_node_key: null }),
+    ]);
+    deps.repository.completeTask.mockImplementation(async () => {
+      throw Errors.business(409, "流程待办已处理", "WORKFLOW_TASK_NOT_PENDING");
+    });
+    const bridge = new WorkflowTaskSupplierPurchaseBatchBridge(deps);
+
+    await expect(bridge.completeLegacyReview({
+      authContext: auth(), batch: batch(), action: "approve", reason: null,
+      output: {
+        compat_source: "supplier_purchase_batch_review",
+        compat_expected_version: 2,
+      },
+      idempotencyKey: "lagging-key",
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: "WORKFLOW_TASK_NOT_PENDING",
+    });
+    expect(deps.lookupRepository.listReviewEvents).toHaveBeenCalledTimes(2);
+  });
+
+  test("allows a finance-only assignee and rejects missing finance permission", async () => {
+    const WorkflowTaskSupplierPurchaseBatchBridge = await bridgeClass();
+    const deps = dependencies();
+    deps.lookupRepository.listPendingTasks.mockImplementation(async () => [
+      pendingTask({ node_key: "finance_review" }),
+    ]);
+    deps.lookupRepository.listRunningInstances.mockImplementation(async () => [
+      instance({ current_node_key: "finance_review" }),
+    ]);
+    const bridge = new WorkflowTaskSupplierPurchaseBatchBridge(deps);
+    const finance = auth([
+      "supplier.purchase-requisition.view",
+      "project.read",
+      "finance.budget.manage",
+    ]);
+
+    await expect(bridge.completeLegacyReview({
+      authContext: finance, batch: batch(), action: "approve", reason: null,
+      output: {}, idempotencyKey: "finance-review",
+    })).resolves.toMatchObject({ status: "ordered" });
+
+    await expect(bridge.completeLegacyReview({
+      authContext: auth([
+        "supplier.purchase-requisition.view",
+        "project.read",
+      ]),
+      batch: batch(), action: "approve", reason: null,
+      output: {}, idempotencyKey: "finance-review-denied",
+    })).rejects.toMatchObject({ statusCode: 403, code: "FORBIDDEN" });
+  });
 });
 
 function task() {
@@ -257,7 +441,9 @@ function batch(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function instance(overrides: Record<string, unknown> = {}) {
+function instance(
+  overrides: Partial<SupplierPurchaseBatchRunningWorkflowInstance> = {},
+): SupplierPurchaseBatchRunningWorkflowInstance {
   return {
     id: INSTANCE_ID,
     tenant_id: TENANT_ID,
@@ -270,7 +456,9 @@ function instance(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function pendingTask(overrides: Record<string, unknown> = {}) {
+function pendingTask(
+  overrides: Partial<SupplierPurchaseBatchPendingWorkflowTask> = {},
+): SupplierPurchaseBatchPendingWorkflowTask {
   return {
     ...task(),
     instance_id: INSTANCE_ID,
@@ -282,15 +470,17 @@ function pendingTask(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function auth(): AuthContext {
+function auth(permissionCodes = [
+  "supplier.purchase-requisition.view",
+  "project.read",
+  "supplier.purchase-requisition.approve",
+]): AuthContext {
   return {
     authUserId: USER_ID, employeeId: EMPLOYEE_ID, tenantId: TENANT_ID,
     tenantStatus: "active", isPlatformAdmin: false, employeeName: "审批人",
-    employeeStatus: "active", roleCodes: [], roles: [], permissions: [
-      { code: "supplier.purchase-requisition.view", scope: "all" },
-      { code: "project.read", scope: "all" },
-      { code: "supplier.purchase-requisition.approve", scope: "all" },
-    ], tenantName: null, tenantSlug: null, departmentId: null,
+    employeeStatus: "active", roleCodes: [], roles: [], permissions:
+    permissionCodes.map((code) => ({ code, scope: "all" })),
+    tenantName: null, tenantSlug: null, departmentId: null,
     tenantDepartmentId: null, departmentCode: null, departmentName: null,
     postId: null, postName: null, avatar: null,
   };

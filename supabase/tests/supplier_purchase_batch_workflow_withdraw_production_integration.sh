@@ -85,6 +85,8 @@ done
 
 admin_psql < \
   "$repo_root/supabase/tests/supplier_purchase_batch_workflow_withdraw_production_fixture.sql"
+admin_psql < \
+  "$repo_root/supabase/tests/supplier_purchase_batch_workflow_review_compat_production_fixture.sql"
 
 tenant="85000000-0000-4000-8000-000000000001"
 project="85000000-0000-4000-8000-000000000006"

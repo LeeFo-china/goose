@@ -23,7 +23,11 @@ import {
 } from "@/services/supplier-purchase-batch-access";
 import { resolveSupplierPurchaseBatchProjectOptionWindow } from
   "@/services/supplier-purchase-batch-project-option-window";
-import { executeSupplierPurchaseBatchReview } from
+import {
+  assertLegacySupplierPurchaseBatchReviewSelf,
+  assertSupplierPurchaseBatchReviewVersion,
+  executeSupplierPurchaseBatchReview,
+} from
   "@/services/supplier-purchase-batch-review";
 import { supplierPurchaseBatchWorkflowRuntime } from
   "@/services/supplier-purchase-batch-workflow-runtime";
@@ -350,28 +354,52 @@ export class SupplierPurchaseBatchesService {
     input: SupplierPurchaseBatchReviewInput,
     idempotencyKey: string,
   ) {
-    const scope = await this.access.requireApprove(auth);
+    const viewScope = await this.access.requireView(auth);
     const visibleProjectIds = await this.access.getVisibleProjectIds(auth);
     const batch = await this.requireBatchInScope(
-      scope.tenantId,
+      viewScope.tenantId,
       batchId,
       visibleProjectIds,
     );
     await this.access.assertProjectRead(auth, batch.project_id);
-    this.assertReviewBoundary(batch, scope, input.expected_version);
+    assertSupplierPurchaseBatchReviewVersion(batch, input.expected_version);
 
+    if (await this.workflowRuntime.isEnabled(viewScope.tenantId)) {
+      return this.executeReview({
+        auth, scope: viewScope, batch, input, idempotencyKey,
+        workflowEnabled: true,
+      });
+    }
+
+    const approveScope = await this.access.requireApprove(auth);
+    assertLegacySupplierPurchaseBatchReviewSelf(
+      batch,
+      approveScope.employeeId,
+    );
+    return this.executeReview({
+      auth, scope: approveScope, batch, input, idempotencyKey,
+      workflowEnabled: false,
+    });
+  }
+
+  private executeReview(input: {
+    auth: AuthContext;
+    scope: ActorScope;
+    batch: Awaited<ReturnType<BatchRepositoryPort["findBatch"]>> & {};
+    input: SupplierPurchaseBatchReviewInput;
+    idempotencyKey: string;
+    workflowEnabled: boolean;
+  }) {
     return executeSupplierPurchaseBatchReview({
-      auth, batch, review: input, idempotencyKey,
-      tenantId: scope.tenantId, authUserId: scope.authUserId,
-      employeeId: scope.employeeId,
+      auth: input.auth, batch: input.batch, review: input.input,
+      idempotencyKey: input.idempotencyKey,
+      workflowEnabled: input.workflowEnabled,
+      tenantId: input.scope.tenantId, authUserId: input.scope.authUserId,
+      employeeId: input.scope.employeeId,
       dependencies: {
-        requireFinanceBudgetManage: (context) =>
-          this.access.requireFinanceBudgetManage(context),
-        isWorkflowEnabled: (tenantId) =>
-          this.workflowRuntime.isEnabled(tenantId),
-        completeLegacyReview: (review) =>
-          this.workflowReviewBridge.completeLegacyReview(review),
-        reviewLegacy: (review) => this.repository.review(review),
+        financeAccess: this.access,
+        workflowBridge: this.workflowReviewBridge,
+        repository: this.repository,
       },
     });
   }
@@ -427,32 +455,6 @@ export class SupplierPurchaseBatchesService {
       return batch;
     }
     throw supplierPurchaseBatchNotFound();
-  }
-
-  private assertReviewBoundary(
-    batch: {
-      status: string;
-      version: number;
-      created_by_employee_id: string;
-    },
-    scope: ActorScope,
-    expectedVersion: number,
-  ): void {
-    if (batch.status === "pending_approval" &&
-      batch.version !== expectedVersion) {
-      throw Errors.business(
-        409,
-        "采购批次版本已变化，请刷新后重试",
-        "SUPPLIER_PURCHASE_BATCH_VERSION_CONFLICT",
-      );
-    }
-    if (batch.created_by_employee_id === scope.employeeId) {
-      throw Errors.business(
-        409,
-        "提交人不能审批自己提交的采购批次",
-        "SUPPLIER_PURCHASE_BATCH_SELF_REVIEW",
-      );
-    }
   }
 
   private commandContext(

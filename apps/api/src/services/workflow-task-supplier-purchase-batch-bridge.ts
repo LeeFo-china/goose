@@ -7,6 +7,7 @@ import {
   supplierPurchaseBatchWorkflowReviewLookupRepository,
   type SupplierPurchaseBatchPendingWorkflowTask,
   type SupplierPurchaseBatchRunningWorkflowInstance,
+  type SupplierPurchaseBatchWorkflowReviewEvent,
 } from "@/repositories/supplier-purchase-batch-workflow-review-lookup";
 import { SupplierPurchaseBatchAccessRepository } from
   "@/repositories/supplier-purchase-batch-access";
@@ -61,6 +62,19 @@ type Dependencies = {
       tenantId: string;
       instanceId: string;
     }): Promise<SupplierPurchaseBatchPendingWorkflowTask[]>;
+    listReviewEvents(input: {
+      tenantId: string;
+      batchId: string;
+      idempotencyKey?: string;
+    }): Promise<SupplierPurchaseBatchWorkflowReviewEvent[]>;
+    listTasksById(input: {
+      tenantId: string;
+      taskId: string;
+    }): Promise<SupplierPurchaseBatchPendingWorkflowTask[]>;
+    listInstancesById(input: {
+      tenantId: string;
+      instanceId: string;
+    }): Promise<SupplierPurchaseBatchRunningWorkflowInstance[]>;
   };
 };
 
@@ -92,15 +106,28 @@ export class WorkflowTaskSupplierPurchaseBatchBridge {
   }
 
   async completeLegacyReview(input: LegacyReviewInput) {
+    const exactEvents = await this.dependencies.lookupRepository
+      .listReviewEvents({
+        tenantId: input.batch.tenant_id,
+        batchId: input.batch.id,
+        idempotencyKey: input.idempotencyKey ?? undefined,
+      });
+    if (exactEvents.length > 1) {
+      throw workflowResolutionError(
+        "SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT",
+      );
+    }
+    if (exactEvents[0]) {
+      return this.completeFromReviewEvent(input, exactEvents[0]);
+    }
+
     const instances = await this.dependencies.lookupRepository
       .listRunningInstances({
         tenantId: input.batch.tenant_id,
         batchId: input.batch.id,
       });
     if (instances.length === 0) {
-      throw workflowResolutionError(
-        "SUPPLIER_PURCHASE_BATCH_WORKFLOW_MISSING",
-      );
+      return this.completeLaggingReview(input);
     }
     if (instances.length !== 1) {
       throw workflowResolutionError(
@@ -128,9 +155,7 @@ export class WorkflowTaskSupplierPurchaseBatchBridge {
         instanceId: instance.id,
       });
     if (pendingTasks.length === 0) {
-      throw workflowResolutionError(
-        "SUPPLIER_PURCHASE_BATCH_WORKFLOW_MISSING",
-      );
+      return this.completeLaggingReview(input);
     }
     if (pendingTasks.length !== 1) {
       throw workflowResolutionError(
@@ -148,8 +173,93 @@ export class WorkflowTaskSupplierPurchaseBatchBridge {
         "SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT",
       );
     }
-    this.assertTaskAssignee(input.authContext, task);
+    return this.completeResolvedTask(input, task, instance);
+  }
 
+  private async completeLaggingReview(input: LegacyReviewInput) {
+    const events = await this.dependencies.lookupRepository.listReviewEvents({
+      tenantId: input.batch.tenant_id,
+      batchId: input.batch.id,
+    });
+    if (events.length === 0) {
+      throw workflowResolutionError(
+        "SUPPLIER_PURCHASE_BATCH_WORKFLOW_MISSING",
+      );
+    }
+    const currentRound = input.batch.approval_round;
+    const event = events.find((candidate) => {
+      const reference = reviewEventReference(candidate.request);
+      return reference?.approvalRound === currentRound;
+    });
+    if (!event) {
+      throw workflowResolutionError(
+        "SUPPLIER_PURCHASE_BATCH_WORKFLOW_MISSING",
+      );
+    }
+    return this.completeFromReviewEvent(input, event);
+  }
+
+  private async completeFromReviewEvent(
+    input: LegacyReviewInput,
+    event: SupplierPurchaseBatchWorkflowReviewEvent,
+  ) {
+    const reference = reviewEventReference(event.request);
+    if (!reference || reference.tenantId !== input.batch.tenant_id ||
+      reference.batchId !== input.batch.id) {
+      throw workflowResolutionError(
+        "SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT",
+      );
+    }
+    this.assertApprovalRound(
+      input.batch.approval_round,
+      { approval_round: reference.approvalRound },
+    );
+    const tasks = await this.dependencies.lookupRepository.listTasksById({
+      tenantId: input.batch.tenant_id,
+      taskId: reference.taskId,
+    });
+    if (tasks.length !== 1 || !tasks[0]) {
+      throw workflowResolutionError(
+        "SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT",
+      );
+    }
+    const task = tasks[0];
+    const instances = await this.dependencies.lookupRepository
+      .listInstancesById({
+        tenantId: input.batch.tenant_id,
+        instanceId: task.instance_id,
+      });
+    if (instances.length !== 1 || !instances[0]) {
+      throw workflowResolutionError(
+        "SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT",
+      );
+    }
+    const instance = instances[0];
+    if (task.id !== reference.taskId ||
+      task.tenant_id !== input.batch.tenant_id ||
+      instance.tenant_id !== input.batch.tenant_id ||
+      instance.subject_type !== "supplier_purchase_batch" ||
+      instance.subject_id !== input.batch.id ||
+      (task.node_key !== "purchase_review" &&
+        task.node_key !== "finance_review") ||
+      (task.status === "pending" && (
+        instance.status !== "running" ||
+        instance.current_node_key !== task.node_key
+      ))) {
+      throw workflowResolutionError(
+        "SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT",
+      );
+    }
+    this.assertApprovalRound(input.batch.approval_round, instance.context);
+    return this.completeResolvedTask(input, task, instance);
+  }
+
+  private async completeResolvedTask(
+    input: LegacyReviewInput,
+    task: SupplierPurchaseBatchPendingWorkflowTask,
+    instance: SupplierPurchaseBatchRunningWorkflowInstance,
+  ) {
+    this.assertTaskAssignee(input.authContext, task);
     const result = await this.complete({
       authContext: input.authContext,
       task: {
@@ -304,6 +414,31 @@ function workflowResolutionError(code:
     ? "采购批次审批任务已属于旧轮次"
     : "采购批次审批流程状态冲突，请刷新后重试";
   return Errors.business(409, message, code);
+}
+
+function reviewEventReference(request: Record<string, unknown>): {
+  tenantId: string;
+  batchId: string;
+  taskId: string;
+  approvalRound: number;
+} | null {
+  const nested = asRecord(request.workflow_task_request);
+  const workflowRequest = nested ?? request;
+  const tenantId = workflowRequest.tenant_id;
+  const batchId = workflowRequest.batch_id;
+  const taskId = workflowRequest.task_id;
+  const approvalRound = workflowRequest.approval_round;
+  if (typeof tenantId !== "string" || typeof batchId !== "string" ||
+    typeof taskId !== "string" || !Number.isInteger(approvalRound)) {
+    return null;
+  }
+  return { tenantId, batchId, taskId, approvalRound: approvalRound as number };
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
 }
 
 export const workflowTaskSupplierPurchaseBatchBridge =

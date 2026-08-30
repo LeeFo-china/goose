@@ -12,6 +12,10 @@ const productionIntegrationScript = new URL(
   "../../../../supabase/tests/supplier_purchase_batch_workflow_withdraw_production_integration.sh",
   import.meta.url,
 );
+const reviewCompatProductionFixture = new URL(
+  "../../../../supabase/tests/supplier_purchase_batch_workflow_review_compat_production_fixture.sql",
+  import.meta.url,
+);
 
 async function source() {
   return Bun.file(migration).text();
@@ -146,7 +150,7 @@ describe("supplier purchase batch workflow withdraw migration contract", () => {
       "v_workflow_request->>'approval_round'",
     );
     const replayFingerprint = complete.indexOf(
-      "v_replay_fingerprint := pg_catalog.encode",
+      "v_current_canonical_request := pg_catalog.jsonb_set",
     );
     const directReplay = complete.indexOf(
       "v_event.request->'workflow_task_result'",
@@ -161,6 +165,31 @@ describe("supplier purchase batch workflow withdraw migration contract", () => {
     expect(directReplay).toBeGreaterThan(replayFingerprint);
     expect(stale).toBeGreaterThan(directReplay);
     expect(complete).toContain("SUPPLIER_IDEMPOTENCY_CONFLICT");
+  });
+
+  test("canonicalizes trusted legacy compatibility metadata for cross-route replay", async () => {
+    const complete = functionBody(
+      await source(),
+      "complete_supplier_purchase_batch_workflow_task",
+    );
+    for (const token of [
+      "v_stored_fingerprint",
+      "v_stored_canonical_request",
+      "v_current_canonical_request",
+      "compat_source",
+      "compat_expected_version",
+      "instance.context->>'batch_version'",
+      "v_task_batch_version",
+      "v_event.request->>'workflow_task_fingerprint'",
+      "v_stored_canonical_request IS DISTINCT FROM",
+      "v_current_canonical_request",
+    ]) expect(complete).toContain(token);
+    expect(complete).toMatch(
+      /COALESCE\(v_workflow_request->'output', '\{\}'::jsonb\)\s*-\s*'compat_source'\s*-\s*'compat_expected_version'/,
+    );
+    expect(complete).toMatch(
+      /COALESCE\(v_replay_request->'output', '\{\}'::jsonb\)\s*-\s*'compat_source'\s*-\s*'compat_expected_version'/,
+    );
   });
 
   test("serializes event replay, stale preflight, and v1 delegation behind the batch lock", async () => {
@@ -208,6 +237,22 @@ describe("supplier purchase batch workflow withdraw migration contract", () => {
     expect(script).toContain("dropdb");
     expect(script).not.toContain("approval_round=2");
     expect(script).not.toContain("SET approval_round");
+  });
+
+  test("runs direct and legacy review compatibility against production schema", async () => {
+    const script = await Bun.file(productionIntegrationScript).text();
+    const fixture = await Bun.file(reviewCompatProductionFixture).text();
+    expect(script).toContain(
+      "supplier_purchase_batch_workflow_review_compat_production_fixture.sql",
+    );
+    for (const token of [
+      "production-compat-direct-first",
+      "production-compat-legacy-first",
+      "compat_expected_version', 3",
+      "SUPPLIER_IDEMPOTENCY_CONFLICT",
+      "WORKFLOW_TASK_NOT_PENDING",
+      "production-compat-reject",
+    ]) expect(fixture).toContain(token);
   });
 
   test("blocks an old task behind a real withdrawal and resubmission round update", async () => {

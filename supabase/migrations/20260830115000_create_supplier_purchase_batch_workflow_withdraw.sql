@@ -801,7 +801,14 @@ DECLARE
   v_event public.supplier_purchase_batch_command_events%ROWTYPE;
   v_workflow_request jsonb;
   v_replay_request jsonb;
-  v_replay_fingerprint text;
+  v_stored_fingerprint text;
+  v_stored_canonical_request jsonb;
+  v_current_canonical_request jsonb;
+  v_stored_output jsonb;
+  v_current_output jsonb;
+  v_stored_compat_version integer;
+  v_current_compat_version integer;
+  v_task_batch_version integer;
   v_instance_round integer;
   v_batch_round integer;
 BEGIN
@@ -842,8 +849,18 @@ BEGIN
         ) = 'object'
           THEN v_event.request->'workflow_task_request'
         ELSE v_event.request
+          - 'workflow_task_fingerprint'
+          - 'workflow_task_result'
       END;
-      IF COALESCE(v_workflow_request->>'approval_round', '') !~ '^[0-9]+$'
+      v_stored_fingerprint := pg_catalog.encode(extensions.digest(
+        pg_catalog.convert_to(v_workflow_request::text, 'UTF8'),
+        'sha256'
+      ), 'hex');
+      IF COALESCE(
+        v_event.request->>'workflow_task_fingerprint',
+        v_event.request_fingerprint
+      ) IS DISTINCT FROM v_stored_fingerprint
+        OR COALESCE(v_workflow_request->>'approval_round', '') !~ '^[0-9]+$'
       THEN
         RAISE EXCEPTION USING
           ERRCODE = 'P0001',
@@ -864,14 +881,90 @@ BEGIN
         'actor_user_id', p_actor_user_id,
         'actor_employee_id', p_actor_employee_id
       );
-      v_replay_fingerprint := pg_catalog.encode(extensions.digest(
-        pg_catalog.convert_to(v_replay_request::text, 'UTF8'),
-        'sha256'
-      ), 'hex');
-      IF COALESCE(
-        v_event.request->>'workflow_task_fingerprint',
-        v_event.request_fingerprint
-      ) IS DISTINCT FROM v_replay_fingerprint THEN
+
+      SELECT CASE
+        WHEN COALESCE(instance.context->>'batch_version', '') ~ '^[0-9]+$'
+          THEN (instance.context->>'batch_version')::integer
+        ELSE NULL
+      END
+      INTO v_task_batch_version
+      FROM public.workflow_tasks AS task
+      JOIN public.workflow_instances AS instance
+        ON instance.id = task.instance_id
+       AND instance.tenant_id = task.tenant_id
+      WHERE task.id = p_task_id
+        AND task.tenant_id = p_tenant_id
+        AND instance.subject_type = 'supplier_purchase_batch'
+        AND instance.subject_id = p_batch_id::text;
+
+      v_stored_output := COALESCE(
+        v_workflow_request->'output', '{}'::jsonb
+      );
+      v_current_output := COALESCE(
+        v_replay_request->'output', '{}'::jsonb
+      );
+      v_stored_compat_version := CASE
+        WHEN pg_catalog.jsonb_typeof(
+          v_stored_output->'compat_expected_version'
+        ) = 'number'
+          AND COALESCE(
+            v_stored_output->>'compat_expected_version', ''
+          ) ~ '^[0-9]+$'
+        THEN (v_stored_output->>'compat_expected_version')::integer
+        ELSE NULL
+      END;
+      v_current_compat_version := CASE
+        WHEN pg_catalog.jsonb_typeof(
+          v_current_output->'compat_expected_version'
+        ) = 'number'
+          AND COALESCE(
+            v_current_output->>'compat_expected_version', ''
+          ) ~ '^[0-9]+$'
+        THEN (v_current_output->>'compat_expected_version')::integer
+        ELSE NULL
+      END;
+      IF v_task_batch_version IS NULL
+        OR pg_catalog.jsonb_typeof(v_stored_output) <> 'object'
+        OR pg_catalog.jsonb_typeof(v_current_output) <> 'object'
+        OR (v_stored_output ? 'compat_source') IS DISTINCT FROM
+          (v_stored_output ? 'compat_expected_version')
+        OR (v_current_output ? 'compat_source') IS DISTINCT FROM
+          (v_current_output ? 'compat_expected_version')
+        OR (
+          v_stored_output ? 'compat_source' AND (
+            v_stored_output->>'compat_source' IS DISTINCT FROM
+              'supplier_purchase_batch_review'
+            OR v_stored_compat_version IS DISTINCT FROM v_task_batch_version
+          )
+        )
+        OR (
+          v_current_output ? 'compat_source' AND (
+            v_current_output->>'compat_source' IS DISTINCT FROM
+              'supplier_purchase_batch_review'
+            OR v_current_compat_version IS DISTINCT FROM v_task_batch_version
+          )
+        )
+      THEN
+        RAISE EXCEPTION USING
+          ERRCODE = 'P0001',
+          MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
+      END IF;
+
+      v_stored_canonical_request := pg_catalog.jsonb_set(
+        v_workflow_request,
+        '{output}',
+        COALESCE(v_workflow_request->'output', '{}'::jsonb) -
+          'compat_source' - 'compat_expected_version'
+      );
+      v_current_canonical_request := pg_catalog.jsonb_set(
+        v_replay_request,
+        '{output}',
+        COALESCE(v_replay_request->'output', '{}'::jsonb) -
+          'compat_source' - 'compat_expected_version'
+      );
+      IF v_stored_canonical_request IS DISTINCT FROM
+        v_current_canonical_request
+      THEN
         RAISE EXCEPTION USING
           ERRCODE = 'P0001',
           MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';

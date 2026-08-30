@@ -13,7 +13,10 @@ const PROJECT_ID = "b2000000-0000-4000-8000-000000000003";
 const USER_ID = "b2000000-0000-4000-8000-000000000004";
 const EMPLOYEE_ID = "b2000000-0000-4000-8000-000000000005";
 
-async function subject(workflowResult: unknown) {
+async function subject(
+  workflowResult: unknown,
+  batchOverrides: Record<string, unknown> = {},
+) {
   const { SupplierPurchaseBatchesService } = await import(
     "@/services/supplier-purchase-batches"
   );
@@ -26,18 +29,27 @@ async function subject(workflowResult: unknown) {
     approval_round: 4,
     budget_status: "over_budget",
     created_by_employee_id: "b2000000-0000-4000-8000-000000000099",
+    submitted_by_employee_id: "b2000000-0000-4000-8000-000000000098",
+    ...batchOverrides,
   };
   const completeLegacyReview = mock(async (): Promise<unknown> =>
     workflowResult);
   const legacyReview = mock(async () => ({ status: "ordered" }));
   const requireFinanceBudgetManage = mock(() => undefined);
+  const requireView = mock(async () => ({
+    tenantId: TENANT_ID,
+    authUserId: USER_ID,
+    employeeId: EMPLOYEE_ID,
+  }));
+  const requireApprove = mock(async () => ({
+    tenantId: TENANT_ID,
+    authUserId: USER_ID,
+    employeeId: EMPLOYEE_ID,
+  }));
   const service = new SupplierPurchaseBatchesService({
     access: {
-      requireApprove: mock(async () => ({
-        tenantId: TENANT_ID,
-        authUserId: USER_ID,
-        employeeId: EMPLOYEE_ID,
-      })),
+      requireView,
+      requireApprove,
       getVisibleProjectIds: mock(async () => [PROJECT_ID]),
       assertProjectRead: mock(async () => undefined),
       requireFinanceBudgetManage,
@@ -54,6 +66,8 @@ async function subject(workflowResult: unknown) {
     completeLegacyReview,
     legacyReview,
     requireFinanceBudgetManage,
+    requireView,
+    requireApprove,
     service,
   };
 }
@@ -83,11 +97,16 @@ describe("SupplierPurchaseBatchesService workflow review compatibility", () => {
       batch: current.batch,
       action: "approve",
       reason: "采购审批通过",
-      output: { compat_source: "supplier_purchase_batch_review" },
+      output: {
+        compat_source: "supplier_purchase_batch_review",
+        compat_expected_version: 2,
+      },
       idempotencyKey: "batch:workflow-review",
     });
     expect(current.legacyReview).not.toHaveBeenCalled();
     expect(current.requireFinanceBudgetManage).not.toHaveBeenCalled();
+    expect(current.requireView).toHaveBeenCalledWith(auth());
+    expect(current.requireApprove).not.toHaveBeenCalled();
   });
 
   test("never falls back when workflow resolution fails", async () => {
@@ -119,6 +138,9 @@ describe("SupplierPurchaseBatchesService workflow review compatibility", () => {
       requisition_ids: ["requisition-1"],
       orders: [{ id: "order-1" }],
       workflow_state: { instance_status: "completed" },
+    }, {
+      status: "ordered",
+      version: 3,
     });
 
     expect(await current.service.review(auth(), BATCH_ID, {
@@ -132,6 +154,23 @@ describe("SupplierPurchaseBatchesService workflow review compatibility", () => {
       requisition_ids: ["requisition-1"],
       orders: [{ id: "order-1" }],
     });
+  });
+
+  test("does not apply the legacy creator self-review boundary when enabled", async () => {
+    const current = await subject({ status: "rejected" }, {
+      created_by_employee_id: EMPLOYEE_ID,
+      submitted_by_employee_id: "b2000000-0000-4000-8000-000000000097",
+    });
+
+    await expect(current.service.review(auth(), BATCH_ID, {
+      expected_version: 2,
+      action: "reject",
+      remark: "不同意",
+    }, "batch:workflow-created-by-reviewer")).resolves.toEqual({
+      status: "rejected",
+    });
+    expect(current.completeLegacyReview).toHaveBeenCalled();
+    expect(current.requireApprove).not.toHaveBeenCalled();
   });
 });
 

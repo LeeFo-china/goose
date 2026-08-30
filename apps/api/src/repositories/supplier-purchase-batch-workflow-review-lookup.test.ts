@@ -9,6 +9,7 @@ const BATCH_ID = "b3000000-0000-4000-8000-000000000002";
 const INSTANCE_ID = "b3000000-0000-4000-8000-000000000003";
 const TASK_ID = "b3000000-0000-4000-8000-000000000004";
 const EMPLOYEE_ID = "b3000000-0000-4000-8000-000000000005";
+const EVENT_ID = "b3000000-0000-4000-8000-000000000006";
 
 describe("SupplierPurchaseBatchWorkflowReviewLookupRepository", () => {
   test("uses two bounded narrow queries to resolve the compatibility task", async () => {
@@ -19,6 +20,7 @@ describe("SupplierPurchaseBatchWorkflowReviewLookupRepository", () => {
       tenant_id: TENANT_ID,
       subject_type: "supplier_purchase_batch",
       subject_id: BATCH_ID,
+      status: "running",
       current_node_key: "purchase_review",
       context: { approval_round: 2 },
     }]);
@@ -32,11 +34,18 @@ describe("SupplierPurchaseBatchWorkflowReviewLookupRepository", () => {
       assignee_role_code: null,
       assignee_permission_code: null,
     }]);
+    const eventQuery = query([{
+      id: EVENT_ID,
+      idempotency_key: "review-key",
+      request: { task_id: TASK_ID, approval_round: 2 },
+    }]);
     const repository = new SupplierPurchaseBatchWorkflowReviewLookupRepository(
       () => ({
         from: (table: string) => table === "workflow_instances"
           ? instanceQuery.value
-          : taskQuery.value,
+          : table === "workflow_tasks"
+          ? taskQuery.value
+          : eventQuery.value,
       }),
     );
 
@@ -48,9 +57,22 @@ describe("SupplierPurchaseBatchWorkflowReviewLookupRepository", () => {
       tenantId: TENANT_ID,
       instanceId: INSTANCE_ID,
     })).toHaveLength(1);
+    expect(await repository.listReviewEvents({
+      tenantId: TENANT_ID,
+      batchId: BATCH_ID,
+      idempotencyKey: "review-key",
+    })).toHaveLength(1);
+    expect(await repository.listTasksById({
+      tenantId: TENANT_ID,
+      taskId: TASK_ID,
+    })).toHaveLength(1);
+    expect(await repository.listInstancesById({
+      tenantId: TENANT_ID,
+      instanceId: INSTANCE_ID,
+    })).toHaveLength(1);
 
     expect(instanceQuery.select).toHaveBeenCalledWith(
-      "id,tenant_id,subject_type,subject_id,current_node_key,context",
+      "id,tenant_id,subject_type,subject_id,status,current_node_key,context",
     );
     expect(taskQuery.select).toHaveBeenCalledWith(
       "id,tenant_id,instance_id,node_key,status,assignee_employee_id," +
@@ -58,6 +80,10 @@ describe("SupplierPurchaseBatchWorkflowReviewLookupRepository", () => {
     );
     expect(instanceQuery.limit).toHaveBeenCalledWith(2);
     expect(taskQuery.limit).toHaveBeenCalledWith(2);
+    expect(eventQuery.select).toHaveBeenCalledWith(
+      "id,idempotency_key,request",
+    );
+    expect(eventQuery.limit).toHaveBeenCalledWith(2);
   });
 
   test("wraps malformed lookup rows as database errors", async () => {
