@@ -26,6 +26,7 @@ import { resolveSupplierPurchaseBatchProjectOptionWindow } from
 import {
   assertLegacySupplierPurchaseBatchReviewSelf,
   assertSupplierPurchaseBatchReviewVersion,
+  adaptWorkflowReviewResult,
   executeSupplierPurchaseBatchReview,
 } from
   "@/services/supplier-purchase-batch-review";
@@ -72,7 +73,7 @@ type BatchWorkflowRepositoryPort = Pick<
   typeof supplierPurchaseBatchWorkflowRepository, "withdraw">;
 type BatchWorkflowReviewBridgePort = Pick<
   typeof workflowTaskSupplierPurchaseBatchBridge,
-  "completeLegacyReview"
+  "completeLegacyReview" | "replayExactLegacyReview"
 >;
 
 export type SupplierPurchaseBatchesServiceDependencies = {
@@ -362,6 +363,14 @@ export class SupplierPurchaseBatchesService {
     const scope = workflowEnabled
       ? await this.access.requireView(auth)
       : await this.access.requireApprove(auth);
+    if (workflowEnabled) {
+      const replay = await this.workflowReviewBridge.replayExactLegacyReview({
+        authContext: auth, tenantId: scope.tenantId, batchId,
+        action: input.action, reason: input.remark ?? null,
+        expectedVersion: input.expected_version, output: {}, idempotencyKey,
+      });
+      if (replay.matched) return adaptWorkflowReviewResult(replay.result);
+    }
     const visibleProjectIds = await this.access.getVisibleProjectIds(auth);
     const batch = await this.requireBatchInScope(
       scope.tenantId,

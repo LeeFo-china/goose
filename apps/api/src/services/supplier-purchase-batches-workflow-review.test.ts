@@ -35,7 +35,11 @@ async function subject(
   };
   const completeLegacyReview = mock(async (): Promise<unknown> =>
     workflowResult);
+  const replayExactLegacyReview = mock(async (): Promise<
+    { matched: false } | { matched: true; result: unknown }
+  > => ({ matched: false }));
   const legacyReview = mock(async () => ({ status: "ordered" }));
+  const findBatch = mock(async () => batch);
   const requireFinanceBudgetManage = mock(() => undefined);
   const scope = { tenantId: TENANT_ID, authUserId: USER_ID,
     employeeId: EMPLOYEE_ID };
@@ -61,16 +65,18 @@ async function subject(
       assertProjectRead: mock(async () => undefined),
       requireFinanceBudgetManage,
     },
-    repository: { findBatch: mock(async () => batch), review: legacyReview },
+    repository: { findBatch, review: legacyReview },
     workflowRuntime: {
       isEnabled: mock(async () => workflowEnabled),
       submit: mock(async () => ({ status: "submitted" })),
     },
-    workflowReviewBridge: { completeLegacyReview },
+    workflowReviewBridge: { completeLegacyReview, replayExactLegacyReview },
   } as never);
   return {
     batch,
     completeLegacyReview,
+    replayExactLegacyReview,
+    findBatch,
     legacyReview,
     requireFinanceBudgetManage,
     requireActorScope,
@@ -169,6 +175,30 @@ describe("SupplierPurchaseBatchesService workflow review compatibility", () => {
     expect(current.requireView).toHaveBeenCalledWith(finance);
     expect(current.requireApprove).not.toHaveBeenCalled();
     expect(current.completeLegacyReview).toHaveBeenCalled();
+  });
+
+  test("replays an exact old-round event before current batch boundaries", async () => {
+    const current = await subject({ status: "ordered" }, {
+      status: "pending_approval",
+      version: 5,
+      approval_round: 2,
+      submitted_by_employee_id: EMPLOYEE_ID,
+    });
+    current.replayExactLegacyReview.mockImplementation(async () => ({
+      matched: true as const,
+      result: { status: "rejected", idempotent: true, version: 3 },
+    }));
+
+    await expect(current.service.review(auth(), BATCH_ID, {
+      expected_version: 2,
+      action: "reject",
+      remark: "库存过高",
+    }, "batch:old-round-exact")).resolves.toMatchObject({
+      status: "rejected",
+      idempotent: true,
+    });
+    expect(current.findBatch).not.toHaveBeenCalled();
+    expect(current.completeLegacyReview).not.toHaveBeenCalled();
   });
 
   test("never falls back when workflow resolution fails", async () => {

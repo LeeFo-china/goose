@@ -13,6 +13,12 @@ import { SupplierPurchaseBatchAccessRepository } from
   "@/repositories/supplier-purchase-batch-access";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import {
+  hasReservedCompatibilityMetadata,
+  isPureLegacyReviewEvent,
+  reviewEventReference,
+  workflowResolutionError,
+} from "@/services/workflow-task-supplier-purchase-batch-review-event";
 
 const NODE_PERMISSION = {
   purchase_review: "supplier.purchase-requisition.approve",
@@ -92,6 +98,10 @@ type LegacyReviewInput = {
   idempotencyKey: string | null;
 };
 
+type ExactLegacyReplayInput = Omit<LegacyReviewInput, "batch"> & {
+  tenantId: string;
+  batchId: string;
+};
 const DEFAULT_DEPENDENCIES: Dependencies = {
   repository: supplierPurchaseBatchWorkflowRepository,
   batchesRepository: new SupplierPurchaseBatchAccessRepository(),
@@ -101,28 +111,11 @@ const DEFAULT_DEPENDENCIES: Dependencies = {
 
 export class WorkflowTaskSupplierPurchaseBatchBridge {
   private readonly dependencies: Dependencies;
-
   constructor(dependencies: Partial<Dependencies> = {}) {
     this.dependencies = { ...DEFAULT_DEPENDENCIES, ...dependencies };
   }
-
   async completeLegacyReview(input: LegacyReviewInput) {
-    if (!Number.isInteger(input.expectedVersion) || input.expectedVersion < 1) {
-      throw Errors.badRequest("采购批次审批版本无效");
-    }
-    const {
-      compat_source: _compatSource,
-      compat_expected_version: _compatExpectedVersion,
-      ...businessOutput
-    } = input.output;
-    input = {
-      ...input,
-      output: {
-        ...businessOutput,
-        compat_source: "supplier_purchase_batch_review",
-        compat_expected_version: input.expectedVersion,
-      },
-    };
+    input = withTrustedCompatibilityOutput(input);
     const exactEvents = await this.dependencies.lookupRepository
       .listReviewEvents({
         tenantId: input.batch.tenant_id,
@@ -134,7 +127,7 @@ export class WorkflowTaskSupplierPurchaseBatchBridge {
         "SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT",
       );
     }
-    if (exactEvents[0]) {
+    if (exactEvents[0] && !isPureLegacyReviewEvent(exactEvents[0].request)) {
       return this.completeFromReviewEvent(input, exactEvents[0]);
     }
 
@@ -191,6 +184,63 @@ export class WorkflowTaskSupplierPurchaseBatchBridge {
       );
     }
     return this.completeResolvedTask(input, task, instance);
+  }
+  async replayExactLegacyReview(input: ExactLegacyReplayInput) {
+    input = withTrustedCompatibilityOutput(input);
+    const events = await this.dependencies.lookupRepository.listReviewEvents({
+      tenantId: input.tenantId,
+      batchId: input.batchId,
+      idempotencyKey: input.idempotencyKey ?? undefined,
+    });
+    if (events.length > 1) {
+      throw workflowResolutionError(
+        "SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT",
+      );
+    }
+    const event = events[0];
+    if (!event || isPureLegacyReviewEvent(event.request)) {
+      return { matched: false as const };
+    }
+    const reference = reviewEventReference(event.request);
+    if (!reference || reference.tenantId !== input.tenantId ||
+      reference.batchId !== input.batchId) {
+      throw workflowResolutionError(
+        "SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT",
+      );
+    }
+    const tasks = await this.dependencies.lookupRepository.listTasksById({
+      tenantId: input.tenantId,
+      taskId: reference.taskId,
+    });
+    if (tasks.length !== 1 || !tasks[0]) {
+      throw workflowResolutionError(
+        "SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT",
+      );
+    }
+    const task = tasks[0];
+    const instances = await this.dependencies.lookupRepository.listInstancesById({
+      tenantId: input.tenantId,
+      instanceId: task.instance_id,
+    });
+    const instance = instances[0];
+    if (instances.length !== 1 || !instance || task.id !== reference.taskId ||
+      task.tenant_id !== input.tenantId || instance.tenant_id !== input.tenantId ||
+      instance.subject_type !== "supplier_purchase_batch" ||
+      instance.subject_id !== input.batchId ||
+      (task.node_key !== "purchase_review" && task.node_key !== "finance_review") ||
+      instance.context.approval_round !== reference.approvalRound) {
+      throw workflowResolutionError(
+        "SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT",
+      );
+    }
+    const result = await this.completeTrusted({
+      authContext: input.authContext,
+      task: { id: task.id, tenant_id: task.tenant_id,
+        node_key: task.node_key, instance: { subject_id: instance.subject_id } },
+      action: input.action, reason: input.reason, output: input.output,
+      idempotencyKey: input.idempotencyKey,
+    }, true);
+    return { matched: true as const, result };
   }
 
   private async completeLaggingReview(input: LegacyReviewInput) {
@@ -309,7 +359,7 @@ export class WorkflowTaskSupplierPurchaseBatchBridge {
     return this.completeTrusted(input);
   }
 
-  private async completeTrusted(input: BridgeInput) {
+  private async completeTrusted(input: BridgeInput, frozenReplay = false) {
     const nodeKey = input.task.node_key as SupplierReviewNodeKey;
     if (!(nodeKey in NODE_PERMISSION)) return null;
     const action = input.action.trim();
@@ -331,30 +381,30 @@ export class WorkflowTaskSupplierPurchaseBatchBridge {
 
     const permissionCode = NODE_PERMISSION[nodeKey];
     this.assertPermissions(input.authContext, permissionCode);
-    const batch = await this.dependencies.batchesRepository.findBatchAccessContext(
-      input.task.tenant_id,
-      input.task.instance.subject_id,
-    );
-    if (!batch) throw Errors.notFound("供应商采购批次不存在");
-    if (batch.submitted_by_employee_id === input.authContext.employeeId) {
-      throw Errors.business(
-        409,
-        "提交人不能审批自己提交的采购批次",
-        "SUPPLIER_PURCHASE_BATCH_SELF_REVIEW",
-      );
+    if (!frozenReplay) {
+      const batch = await this.dependencies.batchesRepository
+        .findBatchAccessContext(
+          input.task.tenant_id,
+          input.task.instance.subject_id,
+        );
+      if (!batch) throw Errors.notFound("供应商采购批次不存在");
+      if (batch.submitted_by_employee_id === input.authContext.employeeId) {
+        throw Errors.business(
+          409,
+          "提交人不能审批自己提交的采购批次",
+          "SUPPLIER_PURCHASE_BATCH_SELF_REVIEW",
+        );
+      }
+      const canReadProject = await this.dependencies.accessPolicy
+        .canAccessProject(input.authContext, batch.project_id, "project.read");
+      const canReviewProject = canReadProject &&
+        await this.dependencies.accessPolicy.canAccessProject(
+          input.authContext,
+          batch.project_id,
+          permissionCode,
+        );
+      if (!canReviewProject) throw Errors.forbidden();
     }
-    const canReadProject = await this.dependencies.accessPolicy.canAccessProject(
-      input.authContext,
-      batch.project_id,
-      "project.read",
-    );
-    const canReviewProject = canReadProject &&
-      await this.dependencies.accessPolicy.canAccessProject(
-        input.authContext,
-        batch.project_id,
-        permissionCode,
-      );
-    if (!canReviewProject) throw Errors.forbidden();
     if (!input.authContext.authUserId || !input.authContext.employeeId) {
       throw Errors.forbidden();
     }
@@ -432,48 +482,17 @@ export class WorkflowTaskSupplierPurchaseBatchBridge {
   }
 }
 
-function workflowResolutionError(code:
-  | "SUPPLIER_PURCHASE_BATCH_WORKFLOW_MISSING"
-  | "SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT"
-  | "SUPPLIER_PURCHASE_BATCH_APPROVAL_ROUND_STALE") {
-  const message = code === "SUPPLIER_PURCHASE_BATCH_WORKFLOW_MISSING"
-    ? "采购批次审批流程未配置或未发布"
-    : code === "SUPPLIER_PURCHASE_BATCH_APPROVAL_ROUND_STALE"
-    ? "采购批次审批任务已属于旧轮次"
-    : "采购批次审批流程状态冲突，请刷新后重试";
-  return Errors.business(409, message, code);
-}
-
-function reviewEventReference(request: Record<string, unknown>): {
-  tenantId: string;
-  batchId: string;
-  taskId: string;
-  approvalRound: number;
-} | null {
-  const nested = asRecord(request.workflow_task_request);
-  const workflowRequest = nested ?? request;
-  const tenantId = workflowRequest.tenant_id;
-  const batchId = workflowRequest.batch_id;
-  const taskId = workflowRequest.task_id;
-  const approvalRound = workflowRequest.approval_round;
-  if (typeof tenantId !== "string" || typeof batchId !== "string" ||
-    typeof taskId !== "string" || !Number.isInteger(approvalRound)) {
-    return null;
+function withTrustedCompatibilityOutput<
+  Input extends { expectedVersion: number; output: Record<string, unknown> },
+>(input: Input): Input {
+  if (!Number.isInteger(input.expectedVersion) || input.expectedVersion < 1) {
+    throw Errors.badRequest("采购批次审批版本无效");
   }
-  return { tenantId, batchId, taskId, approvalRound: approvalRound as number };
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null;
-}
-
-function hasReservedCompatibilityMetadata(
-  output: Record<string, unknown>,
-): boolean {
-  return Object.hasOwn(output, "compat_source") ||
-    Object.hasOwn(output, "compat_expected_version");
+  const { compat_source: _source, compat_expected_version: _version,
+    ...businessOutput } = input.output;
+  return { ...input, output: { ...businessOutput,
+    compat_source: "supplier_purchase_batch_review",
+    compat_expected_version: input.expectedVersion } };
 }
 
 export const workflowTaskSupplierPurchaseBatchBridge =

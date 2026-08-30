@@ -272,6 +272,7 @@ describe("supplier purchase batch workflow withdraw migration contract", () => {
       "production-compat-invalid-source",
       "production-compat-invalid-version",
       "production-compat-single-field",
+      "production-compat-raw-key",
       "compat_expected_version', 3",
       "SUPPLIER_IDEMPOTENCY_CONFLICT",
       "WORKFLOW_TASK_NOT_PENDING",

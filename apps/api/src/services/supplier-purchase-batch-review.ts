@@ -108,7 +108,7 @@ export async function executeSupplierPurchaseBatchReview(input: {
   return result;
 }
 
-function adaptWorkflowReviewResult(result: unknown): unknown {
+export function adaptWorkflowReviewResult(result: unknown): unknown {
   if (!result || typeof result !== "object" || Array.isArray(result)) {
     return result;
   }
