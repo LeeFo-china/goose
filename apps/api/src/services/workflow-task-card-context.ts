@@ -2,9 +2,11 @@ import {
   workflowTaskCardContextRepository,
   type WorkflowTaskCustomerSummary,
   type WorkflowTaskExpenseRequestSummary,
+  type WorkflowTaskEmployeeSummary,
   type WorkflowTaskProjectAcceptanceSummary,
   type WorkflowTaskProjectSummary,
   type WorkflowTaskReceivableSummary,
+  type WorkflowTaskSupplierPurchaseBatchSummary,
 } from "@/repositories/workflow-task-card-context";
 import {
   actionLabel,
@@ -40,6 +42,11 @@ type CardContextSources = {
   expenseRequestsById: Map<string, WorkflowTaskExpenseRequestSummary>;
   receivablesByTaskKey: Map<string, WorkflowTaskReceivableSummary>;
   acceptancesByProjectId: Map<string, WorkflowTaskProjectAcceptanceSummary[]>;
+  supplierPurchaseBatchesById: Map<
+    string,
+    WorkflowTaskSupplierPurchaseBatchSummary
+  >;
+  employeesById: Map<string, WorkflowTaskEmployeeSummary>;
 };
 
 type WorkflowTaskCardContextRepositoryPort =
@@ -74,6 +81,7 @@ export class WorkflowTaskCardContextService {
     const customerIds = new Set<string>();
     const expenseRequestIds = new Set<string>();
     const acceptanceProjectIds = new Set<string>();
+    const supplierPurchaseBatchIds = new Set<string>();
     const receivableKeys: Array<{
       projectId: string;
       workflowInstanceId: string;
@@ -98,6 +106,22 @@ export class WorkflowTaskCardContextService {
       }
       if (subjectType === "customer") customerIds.add(subjectId);
       if (subjectType === "expense_request") expenseRequestIds.add(subjectId);
+      if (subjectType === "supplier_purchase_batch") {
+        supplierPurchaseBatchIds.add(subjectId);
+      }
+    }
+
+    const supplierPurchaseBatches =
+      await this.repository.listSupplierPurchaseBatchSummariesByIds({
+        tenantId,
+        batchIds: [...supplierPurchaseBatchIds],
+      });
+    const employeeIds = new Set<string>();
+    for (const batch of supplierPurchaseBatches) {
+      projectIds.add(batch.project_id);
+      if (batch.submitted_by_employee_id) {
+        employeeIds.add(batch.submitted_by_employee_id);
+      }
     }
 
     const [
@@ -106,6 +130,7 @@ export class WorkflowTaskCardContextService {
       expenseRequests,
       receivables,
       acceptances,
+      employees,
     ] = await Promise.all([
       this.repository.listProjectSummariesByIds({
         tenantId,
@@ -126,6 +151,10 @@ export class WorkflowTaskCardContextService {
       this.repository.listProjectAcceptanceSummariesByProjectIds({
         tenantId,
         projectIds: [...acceptanceProjectIds],
+      }),
+      this.repository.listEmployeeSummariesByIds({
+        tenantId,
+        employeeIds: [...employeeIds],
       }),
     ]);
 
@@ -155,6 +184,13 @@ export class WorkflowTaskCardContextService {
         receivable,
       ])),
       acceptancesByProjectId,
+      supplierPurchaseBatchesById: new Map(
+        supplierPurchaseBatches.map((batch) => [batch.id, batch]),
+      ),
+      employeesById: new Map(employees.map((employee) => [
+        employee.id,
+        employee,
+      ])),
     };
   }
 
@@ -177,6 +213,18 @@ export class WorkflowTaskCardContextService {
       return this.buildCustomerContext(
         item,
         sources.customersById.get(subjectId) ?? null,
+      );
+    }
+
+    if (subjectType === "supplier_purchase_batch") {
+      const batch = sources.supplierPurchaseBatchesById.get(subjectId) ?? null;
+      return this.buildSupplierPurchaseBatchContext(
+        item,
+        batch,
+        batch ? sources.projectsById.get(batch.project_id) ?? null : null,
+        batch?.submitted_by_employee_id
+          ? sources.employeesById.get(batch.submitted_by_employee_id) ?? null
+          : null,
       );
     }
 
@@ -323,6 +371,61 @@ export class WorkflowTaskCardContextService {
         ...baseBusiness(item),
         request_no: expense?.request_no ?? null,
         mode: expense?.mode ?? null,
+      },
+    };
+  }
+
+  private buildSupplierPurchaseBatchContext(
+    item: WorkflowTaskCardContextItem,
+    batch: WorkflowTaskSupplierPurchaseBatchSummary | null,
+    project: WorkflowTaskProjectSummary | null,
+    applicant: WorkflowTaskEmployeeSummary | null,
+  ): WorkflowTaskCardContext {
+    const batchId = batch?.id ?? readString(item.task.instance?.subject_id) ?? "";
+    const batchNo = batch?.batch_no ?? null;
+    const applicantName = applicant?.name?.trim() || null;
+    const targetUrl = [
+      "/packageProcurement/pages/batch-review/index",
+      `?id=${encodeURIComponent(batchId)}`,
+      `&workflowTaskId=${encodeURIComponent(item.task.id)}`,
+    ].join("");
+
+    return {
+      todo_type: "supplier_purchase_batch",
+      title: taskTitle(item.task, "采购批次审批"),
+      subtitle: joinText([projectNameOrFallback(project), batchNo], " · "),
+      primary_meta: batchNo ? `批次 ${batchNo}` : null,
+      secondary_meta: item.assignee.current_handler_label ?? null,
+      amount_text: formatMoney(batch?.total_amount),
+      people_text: joinText([
+        applicantName ? `申请人 ${applicantName}` : null,
+        typeof batch?.item_count === "number"
+          ? `商品 ${batch.item_count} 项`
+          : null,
+        typeof batch?.supplier_count === "number"
+          ? `供应商 ${batch.supplier_count} 家`
+          : null,
+      ], " · "),
+      time_text: batch?.submitted_at
+        ? `提交 ${formatDateText(batch.submitted_at)}`
+        : formatDateText(item.task.created_at),
+      target_url: targetUrl,
+      project: buildProjectPayload(project),
+      applicant: batch?.submitted_by_employee_id
+        ? {
+          id: batch.submitted_by_employee_id,
+          name: applicantName ?? "申请人",
+        }
+        : null,
+      assignee: buildAssigneePayload(item.assignee),
+      business: {
+        ...baseBusiness(item),
+        batch_id: batchId || null,
+        batch_no: batchNo,
+        total_amount: batch?.total_amount ?? null,
+        item_count: batch?.item_count ?? null,
+        supplier_count: batch?.supplier_count ?? null,
+        submitted_at: batch?.submitted_at ?? null,
       },
     };
   }

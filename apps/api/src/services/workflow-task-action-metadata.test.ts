@@ -2,8 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { PERMISSION_CODE_VALUES, PermissionCodeConfig } from "@gooes/domain";
 import { ErrorCodes } from "../errors/error-codes";
 import { buildWorkflowTaskActions } from "./workflow-task-action-metadata";
-
 describe("buildWorkflowTaskActions", () => {
+  test("dispatches supplier purchase batch review actions", () => {
+    const actions = buildWorkflowTaskActions({ subjectType: "supplier_purchase_batch", nodeKey: "purchase_review", taskTitle: "采购审批" });
+    expect(actions.map(({ key }) => key)).toEqual(["approve", "reject"]);
+    expect(actions.every(({ business_domain }) => business_domain === "supplier_purchase_batch")).toBe(true);
+  });
   test("declares procedure assignment permissions and stale action errors", () => {
     expect(PERMISSION_CODE_VALUES).toEqual(
       expect.arrayContaining([
@@ -22,7 +26,6 @@ describe("buildWorkflowTaskActions", () => {
       "PROCEDURE_ASSIGNMENT_REQUIRED",
     );
   });
-
   test("builds start_following action for customer potential node", () => {
     const actions = buildWorkflowTaskActions({
       subjectType: "customer",
@@ -50,7 +53,6 @@ describe("buildWorkflowTaskActions", () => {
       },
     ]);
   });
-
   test("describes customer workflow task actions", () => {
     expect(buildWorkflowTaskActions({
       subjectType: "customer",

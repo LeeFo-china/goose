@@ -76,6 +76,33 @@ const expenseFinanceReviewTask = {
   },
 } satisfies WorkflowTaskWithInstanceRow;
 
+const supplierPurchaseReviewTask = {
+  ...paymentTask,
+  id: "supplier-task-1",
+  instance_id: "supplier-instance-1",
+  instance_node_id: "supplier-node-run-1",
+  node_id: "supplier-node-1",
+  node_key: "purchase_review",
+  node_type: "approval",
+  title: "采购审批",
+  assignee_employee_id: null,
+  assignee_role_code: null,
+  assignee_permission_code: "supplier.purchase-requisition.approve",
+  instance: {
+    id: "supplier-instance-1",
+    subject_type: "supplier_purchase_batch",
+    subject_id: "batch-1",
+    status: "running",
+    current_node_key: "purchase_review",
+    current_node_snapshot: {
+      node_key: "purchase_review",
+      node_type: "approval",
+      title: "采购审批",
+      config: {},
+    },
+  },
+} satisfies WorkflowTaskWithInstanceRow;
+
 describe("buildWorkflowTaskActionsForTask", () => {
   test("ensures receivable context for payment collection workflow tasks", async () => {
     const ensureWorkflowPaymentReceivableContext = mock(async () => ({
@@ -133,5 +160,27 @@ describe("buildWorkflowTaskActionsForTask", () => {
       assignee_permission_name: "财务审批费用申请",
       current_handler_label: "等待财务人员审核",
     });
+  });
+
+  test("hides supplier actions for completed or stale tasks", async () => {
+    const completedActions = await buildWorkflowTaskActionsForTask({
+      tenantId: "tenant-1",
+      subjectType: "supplier_purchase_batch",
+      task: { ...supplierPurchaseReviewTask, status: "completed" },
+    });
+    const staleActions = await buildWorkflowTaskActionsForTask({
+      tenantId: "tenant-1",
+      subjectType: "supplier_purchase_batch",
+      task: {
+        ...supplierPurchaseReviewTask,
+        instance: {
+          ...supplierPurchaseReviewTask.instance,
+          current_node_key: "finance_review",
+        },
+      },
+    });
+
+    expect(completedActions).toEqual([]);
+    expect(staleActions).toEqual([]);
   });
 });

@@ -76,6 +76,22 @@ export type WorkflowTaskProjectAcceptanceSummary = {
   } | null;
 };
 
+export type WorkflowTaskSupplierPurchaseBatchSummary = {
+  id: string;
+  batch_no: string;
+  project_id: string;
+  total_amount: number | null;
+  item_count: number;
+  supplier_count: number;
+  submitted_by_employee_id: string | null;
+  submitted_at: string | null;
+};
+
+export type WorkflowTaskEmployeeSummary = {
+  id: string;
+  name: string | null;
+};
+
 type ProjectSummaryRow = {
   id: string;
   name: string | null;
@@ -96,6 +112,15 @@ type ProjectMemberSummaryRow = {
     id: string;
     name: string | null;
   } | null;
+};
+
+type SupplierPurchaseBatchSummaryRow = Omit<
+  WorkflowTaskSupplierPurchaseBatchSummary,
+  "total_amount" | "submitted_at"
+> & {
+  total_amount: string | number | null;
+  submitted_at: string | null;
+  updated_at: string | null;
 };
 
 class WorkflowTaskCardContextRepository {
@@ -235,6 +260,69 @@ class WorkflowTaskCardContextRepository {
     return (data ?? []) as unknown as WorkflowTaskExpenseRequestSummary[];
   }
 
+  async listSupplierPurchaseBatchSummariesByIds(input: {
+    tenantId: string;
+    batchIds: string[];
+  }): Promise<WorkflowTaskSupplierPurchaseBatchSummary[]> {
+    const batchIds = unique(input.batchIds).slice(0, 100);
+    if (batchIds.length === 0) return [];
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("supplier_purchase_batches")
+      .select(`
+        id,
+        batch_no,
+        project_id,
+        total_amount,
+        item_count,
+        supplier_count,
+        submitted_by_employee_id,
+        submitted_at,
+        updated_at
+      `)
+      .in("id", batchIds)
+      .eq("tenant_id", input.tenantId)
+      .limit(100);
+
+    if (error) {
+      throw Errors.dbError("查询流程待办采购批次摘要失败", error);
+    }
+
+    return ((data ?? []) as unknown as SupplierPurchaseBatchSummaryRow[]).map(
+      (row) => ({
+        id: row.id,
+        batch_no: row.batch_no,
+        project_id: row.project_id,
+        total_amount: toFiniteNumber(row.total_amount),
+        item_count: row.item_count,
+        supplier_count: row.supplier_count,
+        submitted_by_employee_id: row.submitted_by_employee_id,
+        submitted_at: row.submitted_at ?? row.updated_at,
+      }),
+    );
+  }
+
+  async listEmployeeSummariesByIds(input: {
+    tenantId: string;
+    employeeIds: string[];
+  }): Promise<WorkflowTaskEmployeeSummary[]> {
+    const employeeIds = unique(input.employeeIds).slice(0, 100);
+    if (employeeIds.length === 0) return [];
+
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("employees")
+      .select("id,name")
+      .in("id", employeeIds)
+      .eq("tenant_id", input.tenantId)
+      .limit(100);
+
+    if (error) {
+      throw Errors.dbError("查询流程待办员工摘要失败", error);
+    }
+
+    return (data ?? []) as WorkflowTaskEmployeeSummary[];
+  }
+
   async listProjectReceivableSummaries(input: {
     tenantId: string;
     keys: Array<{
@@ -326,6 +414,12 @@ function buildPropertyLabel(
 
 function unique(values: string[]): string[] {
   return Array.from(new Set(values.filter((value) => value.trim())));
+}
+
+function toFiniteNumber(value: string | number | null): number | null {
+  if (value === null) return null;
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 export const workflowTaskCardContextRepository =

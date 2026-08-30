@@ -228,7 +228,7 @@ mock.module("@/services/project-procedure-assignments", () => ({
     markProcedureCompleted,
   },
 }));
-mock.module("@/repositories/workflow-task-card-context", () => ({ workflowTaskCardContextRepository: { listProjectSummariesByIds: mock(async () => []), listCustomerSummariesByIds: mock(async () => []), listExpenseRequestSummariesByIds: mock(async () => []), listProjectReceivableSummaries: mock(async () => []), listProjectAcceptanceSummariesByProjectIds: mock(async () => []) } }));
+mock.module("@/repositories/workflow-task-card-context", () => ({ workflowTaskCardContextRepository: { listProjectSummariesByIds: mock(async () => []), listCustomerSummariesByIds: mock(async () => []), listExpenseRequestSummariesByIds: mock(async () => []), listProjectReceivableSummaries: mock(async () => []), listProjectAcceptanceSummariesByProjectIds: mock(async () => []), listSupplierPurchaseBatchSummariesByIds: mock(async () => []), listEmployeeSummariesByIds: mock(async () => []) } }));
 
 describe("workflowTaskService", () => {
   test("keeps payment collection action executable for assigned finance", async () => {

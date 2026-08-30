@@ -31,13 +31,33 @@ const listExpenseRequestSummariesByIds = mock(async () => [
 
 const listProjectReceivableSummaries = mock(async () => []);
 const listProjectAcceptanceSummariesByProjectIds = mock(async () => []);
+const listSupplierPurchaseBatchSummariesByIds = mock(async () => [{
+  id: "batch-1",
+  batch_no: "PB-20260830-00000001",
+  project_id: "project-1",
+  total_amount: 2680,
+  item_count: 4,
+  supplier_count: 2,
+  submitted_by_employee_id: "employee-1",
+  submitted_at: "2026-08-30T03:30:00.000Z",
+}]);
+const listEmployeeSummariesByIds = mock(async () => [{
+  id: "employee-1",
+  name: "黄蓉",
+}]);
 const repository = {
   listProjectSummariesByIds,
   listCustomerSummariesByIds,
   listExpenseRequestSummariesByIds,
   listProjectReceivableSummaries,
   listProjectAcceptanceSummariesByProjectIds,
+  listSupplierPurchaseBatchSummariesByIds,
+  listEmployeeSummariesByIds,
 };
+
+mock.module("@/repositories/workflow-task-card-context", () => ({
+  workflowTaskCardContextRepository: repository,
+}));
 
 describe("workflowTaskCardContextService", () => {
   test("builds project payment card context from project and receivable action data", async () => {
@@ -194,6 +214,83 @@ describe("workflowTaskCardContextService", () => {
     expect(listExpenseRequestSummariesByIds).toHaveBeenCalledWith({
       tenantId: "tenant-1",
       expenseRequestIds: ["expense-1"],
+    });
+  });
+
+  test("builds supplier purchase batch cards with one batched source load", async () => {
+    listSupplierPurchaseBatchSummariesByIds.mockClear();
+    listEmployeeSummariesByIds.mockClear();
+    const { WorkflowTaskCardContextService } = await import(
+      "./workflow-task-card-context"
+    );
+    const service = new WorkflowTaskCardContextService(repository);
+    const items = ["task-purchase", "task-finance"].map((taskId) => ({
+      task: {
+        id: taskId,
+        instance_id: "instance-batch-1",
+        instance_node_id: `node-${taskId}`,
+        node_key: taskId === "task-purchase"
+          ? "purchase_review"
+          : "finance_review",
+        node_type: "approval",
+        title: taskId === "task-purchase" ? "采购审批" : "财务审批",
+        created_at: "2026-08-30T03:30:00.000Z",
+        instance: {
+          subject_type: "supplier_purchase_batch",
+          subject_id: "batch-1",
+          current_node_snapshot: null,
+        },
+      },
+      actions: [{
+        key: "approve",
+        business_domain: "supplier_purchase_batch" as const,
+        business_action: "approve",
+        label: "审批通过",
+        output_fields: [],
+      }],
+      assignee: {
+        current_handler_label: "等待审批人处理",
+        assignee_display_name: "审批人",
+      },
+    }));
+
+    const contexts = await service.buildTaskCardContextMap({
+      tenantId: "tenant-1",
+      items,
+    });
+
+    expect(listSupplierPurchaseBatchSummariesByIds).toHaveBeenCalledTimes(1);
+    expect(listSupplierPurchaseBatchSummariesByIds).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      batchIds: ["batch-1"],
+    });
+    expect(listProjectSummariesByIds).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      projectIds: ["project-1"],
+    });
+    expect(listEmployeeSummariesByIds).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      employeeIds: ["employee-1"],
+    });
+    expect(contexts.get("task-purchase")).toMatchObject({
+      todo_type: "supplier_purchase_batch",
+      title: "采购审批",
+      subtitle: "郭富城 - 日出东方卓悦3期 1栋305设计项目 · PB-20260830-00000001",
+      primary_meta: "批次 PB-20260830-00000001",
+      amount_text: "¥2,680.00",
+      people_text: "申请人 黄蓉 · 商品 4 项 · 供应商 2 家",
+      time_text: "提交 2026-08-30",
+      target_url:
+        "/packageProcurement/pages/batch-review/index?id=batch-1&workflowTaskId=task-purchase",
+      applicant: { id: "employee-1", name: "黄蓉" },
+      business: {
+        batch_id: "batch-1",
+        batch_no: "PB-20260830-00000001",
+        total_amount: 2680,
+        item_count: 4,
+        supplier_count: 2,
+        submitted_at: "2026-08-30T03:30:00.000Z",
+      },
     });
   });
 });

@@ -62,6 +62,13 @@ export async function buildWorkflowTaskActionsForTask(input: {
   receivablesService?: WorkflowReceivableContextProvider;
   procedureAssignment?: ProcedureAssignmentRow | null;
 }): Promise<WorkflowTaskActionPayload[]> {
+  if (
+    input.subjectType === "supplier_purchase_batch" &&
+    !isCurrentPendingTask(input.task)
+  ) {
+    return [];
+  }
+
   const receivableContext = await buildReceivableContextForTask(input);
   const actions = buildWorkflowTaskActions({
     subjectType: input.subjectType,
@@ -192,10 +199,17 @@ function readWorkflowTaskBusinessDomain(
     value === "workflow_project" ||
     value === "project_procedure" ||
     value === "payment_collection" ||
-    value === "expense_request"
+    value === "expense_request" ||
+    value === "supplier_purchase_batch"
   ) {
     return value;
   }
 
   return null;
+}
+
+function isCurrentPendingTask(task: WorkflowTaskActionRow): boolean {
+  return task.status === "pending" &&
+    task.instance?.status === "running" &&
+    task.instance.current_node_key === task.node_key;
 }

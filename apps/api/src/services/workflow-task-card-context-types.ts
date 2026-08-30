@@ -7,6 +7,7 @@ export type WorkflowTaskTodoType =
   | "project_workflow"
   | "project_payment"
   | "expense_request"
+  | "supplier_purchase_batch"
   | "project_acceptance"
   | "customer_service_ticket";
 
@@ -19,6 +20,7 @@ export type WorkflowTaskCardContext = {
   amount_text?: string | null;
   people_text?: string | null;
   time_text?: string | null;
+  target_url?: string | null;
   project?: {
     id: string;
     name: string;

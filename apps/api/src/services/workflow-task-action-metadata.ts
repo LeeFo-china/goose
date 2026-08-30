@@ -2,6 +2,8 @@ import {
   CustomerWorkflowActionConfig,
 } from "@/services/workflow-business-actions";
 import { buildExpenseActions } from "@/services/workflow-task-expense-action-metadata";
+import { buildSupplierPurchaseBatchActions } from
+  "@/services/workflow-task-supplier-purchase-batch-action-metadata";
 import {
   getWorkflowNodeConfig,
   isFinalAcceptanceReportWorkflowNode,
@@ -47,6 +49,7 @@ export type WorkflowTaskActionMetadata = {
     | "project_procedure"
     | "payment_collection"
     | "expense_request"
+    | "supplier_purchase_batch"
     | null;
   business_action: string | null;
   requires_reason: boolean;
@@ -162,6 +165,10 @@ export function buildWorkflowTaskActions(
 
   if (input.subjectType === "expense_request") {
     return buildExpenseActions(input.nodeKey);
+  }
+
+  if (input.subjectType === "supplier_purchase_batch") {
+    return buildSupplierPurchaseBatchActions(input.nodeKey);
   }
 
   return [buildGenericCompleteAction(input.taskTitle)];
