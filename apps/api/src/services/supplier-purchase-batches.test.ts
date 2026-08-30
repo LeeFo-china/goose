@@ -2,11 +2,9 @@ import { describe, expect, mock, test } from "bun:test";
 
 import { Errors } from "@/errors/error-factory";
 import type { AuthContext } from "@/services/authorization";
-
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
-
 const TENANT_ID = "68000000-0000-4000-8000-000000000001";
 const BATCH_ID = "68000000-0000-4000-8000-000000000002";
 const PROJECT_ID = "68000000-0000-4000-8000-000000000003";
@@ -16,7 +14,6 @@ const EMPLOYEE_ID = "68000000-0000-4000-8000-000000000006";
 const CREATOR_ID = "68000000-0000-4000-8000-000000000007";
 const SKU_ID = "68000000-0000-4000-8000-000000000008";
 const COST_CATEGORY_ID = "68000000-0000-4000-8000-000000000009";
-
 function auth(permissions: string[] = []): AuthContext {
   return {
     authUserId: USER_ID,
@@ -40,7 +37,6 @@ function auth(permissions: string[] = []): AuthContext {
     permissions: permissions.map((code) => ({ code, scope: "all" })),
   };
 }
-
 function dependencies(overrides: Record<string, unknown> = {}) {
   const events: string[] = [];
   const scope = {
@@ -108,6 +104,12 @@ function dependencies(overrides: Record<string, unknown> = {}) {
       submit: mock(async (input: unknown) =>
         ({ status: "submitted", input })),
     },
+    workflowReviewBridge: {
+      completeLegacyReview: mock(async (input: unknown): Promise<unknown> => ({
+        status: "ordered",
+        input,
+      })),
+    },
     workflowRepository: { withdraw: mock(async (input: unknown) => {
       events.push("withdraw");
       return { status: "withdrawn", input };
@@ -138,7 +140,6 @@ const draftInput = {
 describe("SupplierPurchaseBatchesService reads", () => {
   test("intersects list filters with visible project read scope", async () => {
     const { deps, service } = await serviceFor();
-
     await service.listBatches(auth(), {
       page: 2,
       pageSize: 100,
@@ -146,7 +147,6 @@ describe("SupplierPurchaseBatchesService reads", () => {
       status: "pending_approval",
       keyword: "补料",
     });
-
     expect(deps.repository.listBatches).toHaveBeenCalledWith({
       tenant_id: TENANT_ID,
       visible_project_ids: [PROJECT_ID],

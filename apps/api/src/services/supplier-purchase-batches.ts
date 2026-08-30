@@ -1,9 +1,7 @@
 import { Errors } from "@/errors/error-factory";
 import { supplierPurchaseBatchWorkflowRepository } from "@/repositories/supplier-purchase-batch-workflow";
-import {
-  supplierPurchaseBatchesRepository,
-  type SupplierPurchaseBatchCommandResult,
-} from "@/repositories/supplier-purchase-batches";
+import { supplierPurchaseBatchesRepository } from
+  "@/repositories/supplier-purchase-batches";
 import type {
   SupplierPurchaseBatchCancelInput,
   SupplierPurchaseBatchCatalogQuery,
@@ -25,8 +23,12 @@ import {
 } from "@/services/supplier-purchase-batch-access";
 import { resolveSupplierPurchaseBatchProjectOptionWindow } from
   "@/services/supplier-purchase-batch-project-option-window";
+import { executeSupplierPurchaseBatchReview } from
+  "@/services/supplier-purchase-batch-review";
 import { supplierPurchaseBatchWorkflowRuntime } from
   "@/services/supplier-purchase-batch-workflow-runtime";
+import { workflowTaskSupplierPurchaseBatchBridge } from
+  "@/services/workflow-task-supplier-purchase-batch-bridge";
 import {
   SupplierPurchaseBatchWorkflowProjectionService,
   supplierPurchaseBatchWorkflowProjectionService,
@@ -63,12 +65,17 @@ type BatchWorkflowRuntimePort = Pick<typeof supplierPurchaseBatchWorkflowRuntime
   "isEnabled" | "submit">;
 type BatchWorkflowRepositoryPort = Pick<
   typeof supplierPurchaseBatchWorkflowRepository, "withdraw">;
+type BatchWorkflowReviewBridgePort = Pick<
+  typeof workflowTaskSupplierPurchaseBatchBridge,
+  "completeLegacyReview"
+>;
 
 export type SupplierPurchaseBatchesServiceDependencies = {
   access?: BatchAccessPort;
   repository?: BatchRepositoryPort;
   workflowRuntime?: BatchWorkflowRuntimePort;
   workflowRepository?: BatchWorkflowRepositoryPort;
+  workflowReviewBridge?: BatchWorkflowReviewBridgePort;
   workflowProjection?: Pick<
     SupplierPurchaseBatchWorkflowProjectionService,
     "enrichPage" | "enrichDetail"
@@ -88,6 +95,7 @@ export class SupplierPurchaseBatchesService {
   private readonly repository: BatchRepositoryPort;
   private readonly workflowRuntime: BatchWorkflowRuntimePort;
   private readonly workflowRepository: BatchWorkflowRepositoryPort;
+  private readonly workflowReviewBridge: BatchWorkflowReviewBridgePort;
   private readonly workflowProjection: Pick<
     SupplierPurchaseBatchWorkflowProjectionService,
     "enrichPage" | "enrichDetail"
@@ -102,6 +110,8 @@ export class SupplierPurchaseBatchesService {
       supplierPurchaseBatchWorkflowRuntime;
     this.workflowRepository = dependencies.workflowRepository ??
       supplierPurchaseBatchWorkflowRepository;
+    this.workflowReviewBridge = dependencies.workflowReviewBridge ??
+      workflowTaskSupplierPurchaseBatchBridge;
     this.workflowProjection = dependencies.workflowProjection ??
       (dependencies.workflowRead
         ? new SupplierPurchaseBatchWorkflowProjectionService({
@@ -350,21 +360,20 @@ export class SupplierPurchaseBatchesService {
     await this.access.assertProjectRead(auth, batch.project_id);
     this.assertReviewBoundary(batch, scope, input.expected_version);
 
-    const canOverrideBudget = input.action === "approve" &&
-      batch.budget_status === "over_budget";
-    if (canOverrideBudget) {
-      this.access.requireFinanceBudgetManage(auth);
-    }
-    const result = await this.repository.review({
-      ...this.commandContext(scope, batchId, input, idempotencyKey),
-      action: input.action,
-      remark: input.remark ?? null,
-      can_override_budget: canOverrideBudget,
+    return executeSupplierPurchaseBatchReview({
+      auth, batch, review: input, idempotencyKey,
+      tenantId: scope.tenantId, authUserId: scope.authUserId,
+      employeeId: scope.employeeId,
+      dependencies: {
+        requireFinanceBudgetManage: (context) =>
+          this.access.requireFinanceBudgetManage(context),
+        isWorkflowEnabled: (tenantId) =>
+          this.workflowRuntime.isEnabled(tenantId),
+        completeLegacyReview: (review) =>
+          this.workflowReviewBridge.completeLegacyReview(review),
+        reviewLegacy: (review) => this.repository.review(review),
+      },
     });
-    if (result.status === "revision_required") {
-      this.throwRevisionRequired(result);
-    }
-    return result;
   }
 
   private async listChild(
@@ -444,25 +453,6 @@ export class SupplierPurchaseBatchesService {
         "SUPPLIER_PURCHASE_BATCH_SELF_REVIEW",
       );
     }
-  }
-
-  private throwRevisionRequired(
-    result: Extract<
-      SupplierPurchaseBatchCommandResult,
-      { status: "revision_required" }
-    >,
-  ): never {
-    throw Errors.business(
-      409,
-      "采购批次数据已变化，请刷新并修订后重新提交",
-      result.error_code,
-      {
-        batch: result.batch,
-        version: result.version,
-        error_code: result.error_code,
-        details: result.details,
-      },
-    );
   }
 
   private commandContext(

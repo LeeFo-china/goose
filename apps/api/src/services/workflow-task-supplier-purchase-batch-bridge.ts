@@ -3,6 +3,11 @@ import {
   supplierPurchaseBatchWorkflowRepository,
   type SupplierPurchaseBatchWorkflowReviewInput,
 } from "@/repositories/supplier-purchase-batch-workflow";
+import {
+  supplierPurchaseBatchWorkflowReviewLookupRepository,
+  type SupplierPurchaseBatchPendingWorkflowTask,
+  type SupplierPurchaseBatchRunningWorkflowInstance,
+} from "@/repositories/supplier-purchase-batch-workflow-review-lookup";
 import { SupplierPurchaseBatchAccessRepository } from
   "@/repositories/supplier-purchase-batch-access";
 import { accessPolicyService } from "@/services/access-policy";
@@ -47,14 +52,124 @@ type Dependencies = {
     typeof accessPolicyService,
     "hasPermission" | "canAccessProject"
   >;
+  lookupRepository: {
+    listRunningInstances(input: {
+      tenantId: string;
+      batchId: string;
+    }): Promise<SupplierPurchaseBatchRunningWorkflowInstance[]>;
+    listPendingTasks(input: {
+      tenantId: string;
+      instanceId: string;
+    }): Promise<SupplierPurchaseBatchPendingWorkflowTask[]>;
+  };
+};
+
+type LegacyReviewInput = {
+  authContext: AuthContext;
+  batch: {
+    id: string;
+    tenant_id: string;
+    approval_round?: number;
+  };
+  action: string;
+  reason: string | null;
+  output: Record<string, unknown>;
+  idempotencyKey: string | null;
+};
+
+const DEFAULT_DEPENDENCIES: Dependencies = {
+  repository: supplierPurchaseBatchWorkflowRepository,
+  batchesRepository: new SupplierPurchaseBatchAccessRepository(),
+  accessPolicy: accessPolicyService,
+  lookupRepository: supplierPurchaseBatchWorkflowReviewLookupRepository,
 };
 
 export class WorkflowTaskSupplierPurchaseBatchBridge {
-  constructor(private readonly dependencies: Dependencies = {
-    repository: supplierPurchaseBatchWorkflowRepository,
-    batchesRepository: new SupplierPurchaseBatchAccessRepository(),
-    accessPolicy: accessPolicyService,
-  }) {}
+  private readonly dependencies: Dependencies;
+
+  constructor(dependencies: Partial<Dependencies> = {}) {
+    this.dependencies = { ...DEFAULT_DEPENDENCIES, ...dependencies };
+  }
+
+  async completeLegacyReview(input: LegacyReviewInput) {
+    const instances = await this.dependencies.lookupRepository
+      .listRunningInstances({
+        tenantId: input.batch.tenant_id,
+        batchId: input.batch.id,
+      });
+    if (instances.length === 0) {
+      throw workflowResolutionError(
+        "SUPPLIER_PURCHASE_BATCH_WORKFLOW_MISSING",
+      );
+    }
+    if (instances.length !== 1) {
+      throw workflowResolutionError(
+        "SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT",
+      );
+    }
+    const [instance] = instances;
+    if (!instance) {
+      throw workflowResolutionError(
+        "SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT",
+      );
+    }
+    if (instance.tenant_id !== input.batch.tenant_id ||
+      instance.subject_type !== "supplier_purchase_batch" ||
+      instance.subject_id !== input.batch.id) {
+      throw workflowResolutionError(
+        "SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT",
+      );
+    }
+    this.assertApprovalRound(input.batch.approval_round, instance.context);
+
+    const pendingTasks = await this.dependencies.lookupRepository
+      .listPendingTasks({
+        tenantId: input.batch.tenant_id,
+        instanceId: instance.id,
+      });
+    if (pendingTasks.length === 0) {
+      throw workflowResolutionError(
+        "SUPPLIER_PURCHASE_BATCH_WORKFLOW_MISSING",
+      );
+    }
+    if (pendingTasks.length !== 1) {
+      throw workflowResolutionError(
+        "SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT",
+      );
+    }
+    const [task] = pendingTasks;
+    if (!task || task.tenant_id !== input.batch.tenant_id ||
+      task.instance_id !== instance.id || task.status !== "pending" ||
+      !instance.current_node_key ||
+      task.node_key !== instance.current_node_key ||
+      (task.node_key !== "purchase_review" &&
+        task.node_key !== "finance_review")) {
+      throw workflowResolutionError(
+        "SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT",
+      );
+    }
+    this.assertTaskAssignee(input.authContext, task);
+
+    const result = await this.complete({
+      authContext: input.authContext,
+      task: {
+        id: task.id,
+        tenant_id: task.tenant_id,
+        node_key: task.node_key,
+        instance: { subject_id: instance.subject_id },
+      },
+      action: input.action,
+      reason: input.reason,
+      output: input.output,
+      idempotencyKey: input.idempotencyKey,
+    });
+    if (!result) {
+      throw workflowResolutionError(
+        "SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT",
+      );
+    }
+    return result;
+  }
 
   async complete(input: BridgeInput) {
     const nodeKey = input.task.node_key as SupplierReviewNodeKey;
@@ -130,6 +245,65 @@ export class WorkflowTaskSupplierPurchaseBatchBridge {
       }
     }
   }
+
+  private assertApprovalRound(
+    batchApprovalRound: number | undefined,
+    context: Record<string, unknown>,
+  ): void {
+    const instanceApprovalRound = context.approval_round;
+    if (!Number.isInteger(batchApprovalRound) ||
+      !Number.isInteger(instanceApprovalRound)) {
+      throw workflowResolutionError(
+        "SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT",
+      );
+    }
+    if (batchApprovalRound !== instanceApprovalRound) {
+      throw workflowResolutionError(
+        "SUPPLIER_PURCHASE_BATCH_APPROVAL_ROUND_STALE",
+      );
+    }
+  }
+
+  private assertTaskAssignee(
+    authContext: AuthContext,
+    task: {
+      assignee_employee_id: string | null;
+      assignee_role_code: string | null;
+      assignee_permission_code: string | null;
+    },
+  ): void {
+    if (task.assignee_employee_id) {
+      if (task.assignee_employee_id !== authContext.employeeId) {
+        throw Errors.forbidden();
+      }
+      return;
+    }
+    if (task.assignee_role_code) {
+      if (!authContext.roleCodes.includes(task.assignee_role_code)) {
+        throw Errors.forbidden();
+      }
+      return;
+    }
+    if (task.assignee_permission_code &&
+      !this.dependencies.accessPolicy.hasPermission(
+        authContext,
+        task.assignee_permission_code,
+      )) {
+      throw Errors.forbidden();
+    }
+  }
+}
+
+function workflowResolutionError(code:
+  | "SUPPLIER_PURCHASE_BATCH_WORKFLOW_MISSING"
+  | "SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT"
+  | "SUPPLIER_PURCHASE_BATCH_APPROVAL_ROUND_STALE") {
+  const message = code === "SUPPLIER_PURCHASE_BATCH_WORKFLOW_MISSING"
+    ? "采购批次审批流程未配置或未发布"
+    : code === "SUPPLIER_PURCHASE_BATCH_APPROVAL_ROUND_STALE"
+    ? "采购批次审批任务已属于旧轮次"
+    : "采购批次审批流程状态冲突，请刷新后重试";
+  return Errors.business(409, message, code);
 }
 
 export const workflowTaskSupplierPurchaseBatchBridge =

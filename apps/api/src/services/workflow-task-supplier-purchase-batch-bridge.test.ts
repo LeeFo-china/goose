@@ -16,6 +16,27 @@ const PROJECT_ID = "b1000000-0000-4000-8000-000000000003";
 const TASK_ID = "b1000000-0000-4000-8000-000000000004";
 const EMPLOYEE_ID = "b1000000-0000-4000-8000-000000000005";
 const USER_ID = "b1000000-0000-4000-8000-000000000006";
+const INSTANCE_ID = "b1000000-0000-4000-8000-000000000007";
+
+function dependencies(overrides: Record<string, unknown> = {}) {
+  const listRunningInstances = mock(
+    async (): Promise<Array<ReturnType<typeof instance>>> => [instance()],
+  );
+  const listPendingTasks = mock(
+    async (): Promise<Array<ReturnType<typeof pendingTask>>> => [pendingTask()],
+  );
+  return {
+    repository: { completeTask: mock(async () => ({ status: "ordered" })) },
+    batchesRepository: { findBatchAccessContext: mock(async () => batch()) },
+    lookupRepository: { listRunningInstances, listPendingTasks },
+    accessPolicy: {
+      hasPermission: (context: AuthContext, code: string) =>
+        context.permissions.some((item) => item.code === code),
+      canAccessProject: mock(async () => true),
+    },
+    ...overrides,
+  };
+}
 
 describe("WorkflowTaskSupplierPurchaseBatchBridge", () => {
   test("validates project access and delegates supplier review atomically", async () => {
@@ -121,6 +142,101 @@ describe("WorkflowTaskSupplierPurchaseBatchBridge", () => {
     })).toBeNull();
     expect(completeTask).not.toHaveBeenCalled();
   });
+
+  test("resolves the unique current task and delegates legacy review", async () => {
+    const WorkflowTaskSupplierPurchaseBatchBridge = await bridgeClass();
+    const deps = dependencies();
+    deps.repository.completeTask.mockImplementation(async () => ({
+      status: "pending_approval",
+      workflow_state: { current_node_key: "finance_review" },
+    }));
+    const bridge = new WorkflowTaskSupplierPurchaseBatchBridge(deps);
+
+    const result = await bridge.completeLegacyReview({
+      authContext: auth(),
+      batch: batch({ approval_round: 3 }),
+      action: "approve",
+      reason: "同意",
+      output: { compat_source: "supplier_purchase_batch_review" },
+      idempotencyKey: "legacy-review-1",
+    });
+
+    expect(result).toEqual({
+      status: "pending_approval",
+      workflow_state: { current_node_key: "finance_review" },
+    });
+    expect(deps.repository.completeTask).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      batchId: BATCH_ID,
+      taskId: TASK_ID,
+      action: "approve",
+      reason: "同意",
+      output: {
+        compat_source: "supplier_purchase_batch_review",
+        reason: "同意",
+      },
+      actorUserId: USER_ID,
+      actorEmployeeId: EMPLOYEE_ID,
+      idempotencyKey: "legacy-review-1",
+    });
+  });
+
+  test.each([
+    [[], [pendingTask()], "SUPPLIER_PURCHASE_BATCH_WORKFLOW_MISSING"],
+    [[instance(), instance({ id: USER_ID })], [pendingTask()],
+      "SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT"],
+    [[instance()], [], "SUPPLIER_PURCHASE_BATCH_WORKFLOW_MISSING"],
+    [[instance()], [pendingTask(), pendingTask({ id: USER_ID })],
+      "SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT"],
+    [[instance({ current_node_key: "finance_review" })], [pendingTask()],
+      "SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT"],
+  ] as const)(
+    "fails closed for a non-unique workflow resolution %#",
+    async (runningInstances, pendingTasks, code) => {
+      const WorkflowTaskSupplierPurchaseBatchBridge = await bridgeClass();
+      const deps = dependencies();
+      deps.lookupRepository.listRunningInstances
+        .mockImplementation(async () => [...runningInstances]);
+      deps.lookupRepository.listPendingTasks
+        .mockImplementation(async () => [...pendingTasks]);
+      const bridge = new WorkflowTaskSupplierPurchaseBatchBridge(deps);
+
+      await expect(bridge.completeLegacyReview({
+        authContext: auth(), batch: batch(), action: "approve", reason: null,
+        output: { compat_source: "supplier_purchase_batch_review" },
+        idempotencyKey: "legacy-review-resolution",
+      })).rejects.toMatchObject({ statusCode: 409, code });
+      expect(deps.repository.completeTask).not.toHaveBeenCalled();
+    },
+  );
+
+  test("rejects stale approval rounds and a non-assignee without fallback", async () => {
+    const WorkflowTaskSupplierPurchaseBatchBridge = await bridgeClass();
+    const deps = dependencies();
+    const bridge = new WorkflowTaskSupplierPurchaseBatchBridge(deps);
+
+    await expect(bridge.completeLegacyReview({
+      authContext: auth(), batch: batch({ approval_round: 4 }),
+      action: "approve", reason: null, output: {},
+      idempotencyKey: "legacy-review-stale",
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: "SUPPLIER_PURCHASE_BATCH_APPROVAL_ROUND_STALE",
+    });
+
+    deps.lookupRepository.listRunningInstances.mockImplementation(
+      async () => [instance({ context: { approval_round: 4 } })],
+    );
+    deps.lookupRepository.listPendingTasks.mockImplementation(
+      async () => [pendingTask({ assignee_employee_id: USER_ID })],
+    );
+    await expect(bridge.completeLegacyReview({
+      authContext: auth(), batch: batch({ approval_round: 4 }),
+      action: "approve", reason: null, output: {},
+      idempotencyKey: "legacy-review-assignee",
+    })).rejects.toMatchObject({ statusCode: 403, code: "FORBIDDEN" });
+    expect(deps.repository.completeTask).not.toHaveBeenCalled();
+  });
 });
 
 function task() {
@@ -135,8 +251,33 @@ function task() {
 function batch(overrides: Record<string, unknown> = {}) {
   return {
     id: BATCH_ID, tenant_id: TENANT_ID, project_id: PROJECT_ID,
-    status: "pending_approval", version: 2, approval_round: 1,
+    status: "pending_approval", version: 2, approval_round: 3,
     submitted_by_employee_id: "b1000000-0000-4000-8000-000000000099",
+    ...overrides,
+  };
+}
+
+function instance(overrides: Record<string, unknown> = {}) {
+  return {
+    id: INSTANCE_ID,
+    tenant_id: TENANT_ID,
+    subject_type: "supplier_purchase_batch" as const,
+    subject_id: BATCH_ID,
+    status: "running",
+    current_node_key: "purchase_review",
+    context: { approval_round: 3 },
+    ...overrides,
+  };
+}
+
+function pendingTask(overrides: Record<string, unknown> = {}) {
+  return {
+    ...task(),
+    instance_id: INSTANCE_ID,
+    status: "pending" as const,
+    assignee_employee_id: EMPLOYEE_ID,
+    assignee_role_code: null,
+    assignee_permission_code: null,
     ...overrides,
   };
 }

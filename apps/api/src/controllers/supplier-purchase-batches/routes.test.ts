@@ -310,6 +310,37 @@ describe("SupplierPurchaseBatchesController", () => {
     }, "batch:command");
   });
 
+  test("keeps the legacy review HTTP contract during workflow rollout", async () => {
+    const value = await controller();
+    review.mockImplementationOnce(async () => ({
+      status: "pending_approval",
+      workflow_state: { current_node_key: "finance_review" },
+    }) as never);
+
+    const response = await value.review({
+      params: { id: BATCH_ID },
+      headers: { "idempotency-key": "legacy-review-key" },
+      body: {
+        expected_version: 2,
+        action: "approve",
+        remark: "采购审批通过",
+      },
+    } as never);
+
+    expect(review).toHaveBeenCalledWith(auth, BATCH_ID, {
+      expected_version: 2,
+      action: "approve",
+      remark: "采购审批通过",
+    }, "legacy-review-key");
+    expect(response).toEqual({
+      data: {
+        status: "pending_approval",
+        workflow_state: { current_node_key: "finance_review" },
+      },
+      message: "success",
+    });
+  });
+
   test.each([
     ["saveDraft", {
       project_id: PROJECT_ID,
