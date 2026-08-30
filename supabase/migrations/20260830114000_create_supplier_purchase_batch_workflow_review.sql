@@ -39,11 +39,18 @@ DECLARE
   v_request jsonb;
   v_runtime_output jsonb;
   v_fingerprint text;
+  v_legacy_request jsonb;
+  v_legacy_fingerprint text;
   v_required_permission text;
   v_review_result jsonb;
   v_runtime_result jsonb;
   v_result jsonb;
   v_workflow_state jsonb;
+  v_expected_runtime_status text;
+  v_expected_next_node_key text;
+  v_expected_task boolean;
+  v_adopted_legacy_event boolean := false;
+  v_expected_batch_version integer;
   v_changed_count integer;
   v_now timestamptz := pg_catalog.statement_timestamp();
 BEGIN
@@ -61,6 +68,19 @@ BEGIN
       ERRCODE = '22023',
       MESSAGE = 'SUPPLIER_PURCHASE_BATCH_VALIDATION_ERROR';
   END IF;
+
+  -- Re-enter both legacy review advisory locks before any row lock. The
+  -- delegated review calls are transaction-reentrant, while concurrent legacy
+  -- callers with either the same or a different key cannot invert batch locks.
+  PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+    'supplier-purchase-batch-command:' || p_tenant_id::text || ':' ||
+      p_batch_id::text || ':review:' || p_idempotency_key,
+    6720240826142000
+  ));
+  PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+    'supplier-purchase-batch-id:' || p_batch_id::text,
+    6720240826142000
+  ));
 
   -- Resolve only the instance identity without a lock, then take every lock
   -- in the shared workflow/purchase order. The locked task is revalidated.
@@ -132,8 +152,33 @@ BEGIN
     'sha256'
   ), 'hex');
 
-  -- The instance lock serializes same-task attempts. Replay is checked before
-  -- any DML so a completed task remains safely replayable.
+  v_expected_batch_version := CASE
+    WHEN COALESCE(v_instance.context->>'batch_version', '') ~ '^[0-9]+$'
+      THEN (v_instance.context->>'batch_version')::integer
+    ELSE NULL
+  END;
+  v_legacy_request := pg_catalog.jsonb_build_object(
+    'tenant_id', p_tenant_id,
+    'batch_id', p_batch_id,
+    'expected_version', v_expected_batch_version,
+    'action', v_action,
+    'remark', v_reason,
+    'can_override_budget',
+      v_action = 'approve' AND v_task.node_key = 'finance_review',
+    'actor_user_id', p_actor_user_id,
+    'actor_employee_id', p_actor_employee_id
+  );
+  v_legacy_fingerprint := pg_catalog.encode(extensions.digest(
+    pg_catalog.convert_to(
+      (v_legacy_request - 'can_override_budget')::text,
+      'UTF8'
+    ),
+    'sha256'
+  ), 'hex');
+
+  -- A workflow replay carries its own fingerprint inside the legacy event.
+  -- If the legacy endpoint won the same-key race, adopt its committed purchase
+  -- result and finish only the workflow half of the atomic operation.
   SELECT event.*
   INTO v_event
   FROM public.supplier_purchase_batch_command_events AS event
@@ -144,46 +189,32 @@ BEGIN
   FOR UPDATE;
 
   IF FOUND THEN
-    IF v_event.request_fingerprint IS DISTINCT FROM v_fingerprint THEN
+    IF v_event.request ? 'workflow_task_fingerprint'
+      OR v_event.request ? 'task_id'
+    THEN
+      IF COALESCE(
+        v_event.request->>'workflow_task_fingerprint',
+        v_event.request_fingerprint
+      ) IS DISTINCT FROM v_fingerprint THEN
+        RAISE EXCEPTION USING
+          ERRCODE = 'P0001',
+          MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
+      END IF;
+      RETURN COALESCE(
+        v_event.request->'workflow_task_result',
+        v_event.result
+      ) || pg_catalog.jsonb_build_object(
+        'idempotent', true
+      );
+    END IF;
+    IF v_event.request_fingerprint IS DISTINCT FROM v_legacy_fingerprint THEN
       RAISE EXCEPTION USING
         ERRCODE = 'P0001',
         MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
     END IF;
-    RETURN v_event.result || pg_catalog.jsonb_build_object(
-      'idempotent', true
-    );
+    v_review_result := v_event.result;
+    v_adopted_legacy_event := true;
   END IF;
-
-  -- Lock current-generation purchase facts before invoking the legacy review
-  -- command, whose locks are re-entrant inside this transaction.
-  PERFORM commitment.id
-  FROM public.project_cost_commitments AS commitment
-  WHERE commitment.tenant_id = p_tenant_id
-    AND commitment.source_type = 'supplier_purchase_requisition'
-    AND commitment.source_id IN (
-      SELECT requisition.id
-      FROM public.supplier_purchase_requisitions AS requisition
-      WHERE requisition.tenant_id = p_tenant_id
-        AND requisition.purchase_batch_id = p_batch_id
-        AND requisition.split_generation = v_batch.split_generation
-    )
-  ORDER BY commitment.source_id, commitment.cost_category_id, commitment.id
-  FOR UPDATE;
-
-  PERFORM requisition.id
-  FROM public.supplier_purchase_requisitions AS requisition
-  WHERE requisition.tenant_id = p_tenant_id
-    AND requisition.purchase_batch_id = p_batch_id
-    AND requisition.split_generation = v_batch.split_generation
-  ORDER BY requisition.tenant_supplier_id, requisition.id
-  FOR UPDATE;
-
-  PERFORM purchase_order.id
-  FROM public.supplier_purchase_orders AS purchase_order
-  WHERE purchase_order.tenant_id = p_tenant_id
-    AND purchase_order.purchase_batch_id = p_batch_id
-  ORDER BY purchase_order.tenant_supplier_id, purchase_order.id
-  FOR UPDATE;
 
   PERFORM public.assert_supplier_purchase_order_actor(
     p_tenant_id,
@@ -240,18 +271,10 @@ BEGIN
       ERRCODE = 'P0001',
       MESSAGE = 'SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT';
   END IF;
-  IF v_batch.status <> 'pending_approval' THEN
-    RAISE EXCEPTION USING
-      ERRCODE = 'P0001',
-      MESSAGE = 'SUPPLIER_PURCHASE_BATCH_STATE_CONFLICT';
-  END IF;
   IF COALESCE(v_instance.context->>'batch_version', '') !~ '^[0-9]+$'
-    OR (v_instance.context->>'batch_version')::integer <> v_batch.version
     OR COALESCE(v_instance.context->>'approval_round', '') !~ '^[0-9]+$'
     OR (v_instance.context->>'approval_round')::integer <>
       v_batch.approval_round
-    OR v_instance.context->>'budget_status' IS DISTINCT FROM
-      v_batch.budget_status
     OR v_instance.context->>'project_id' IS DISTINCT FROM
       v_batch.project_id::text
   THEN
@@ -259,7 +282,40 @@ BEGIN
       ERRCODE = 'P0001',
       MESSAGE = 'SUPPLIER_PURCHASE_BATCH_APPROVAL_ROUND_STALE';
   END IF;
-  IF v_batch.submitted_by_employee_id = p_actor_employee_id THEN
+  IF NOT v_adopted_legacy_event
+    AND v_batch.status <> 'pending_approval'
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'SUPPLIER_PURCHASE_BATCH_STATE_CONFLICT';
+  END IF;
+  IF NOT v_adopted_legacy_event AND (
+    v_expected_batch_version <> v_batch.version
+    OR v_instance.context->>'budget_status' IS DISTINCT FROM
+      v_batch.budget_status
+  ) THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'SUPPLIER_PURCHASE_BATCH_APPROVAL_ROUND_STALE';
+  END IF;
+  IF v_adopted_legacy_event AND (
+    v_batch.version <> v_expected_batch_version + 1
+    OR CASE v_review_result->>'status'
+      WHEN 'ordered' THEN v_action <> 'approve' OR v_batch.status <> 'ordered'
+      WHEN 'rejected' THEN v_action <> 'reject' OR v_batch.status <> 'rejected'
+      WHEN 'revision_required' THEN
+        v_action <> 'approve' OR v_batch.status <> 'draft'
+      ELSE true
+    END
+  ) THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT';
+  END IF;
+  IF COALESCE(
+    v_instance.context->>'submitted_by_employee_id',
+    v_batch.submitted_by_employee_id::text
+  ) = p_actor_employee_id::text THEN
     RAISE EXCEPTION USING
       ERRCODE = 'P0001',
       MESSAGE = 'SUPPLIER_PURCHASE_BATCH_SELF_REVIEW';
@@ -322,7 +378,7 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'FORBIDDEN';
   END IF;
   IF v_task.node_key = 'finance_review'
-    AND v_batch.budget_status <> 'over_budget'
+    AND v_instance.context->>'budget_status' <> 'over_budget'
   THEN
     RAISE EXCEPTION USING
       ERRCODE = 'P0001',
@@ -335,27 +391,29 @@ BEGIN
       WHEN 'approve' THEN 'approved'
       ELSE 'rejected'
     END,
-    'budget_status', v_batch.budget_status,
-    'approval_round', v_batch.approval_round,
-    'batch_version', v_batch.version
+    'budget_status', v_instance.context->>'budget_status',
+    'approval_round', (v_instance.context->>'approval_round')::integer,
+    'batch_version', v_expected_batch_version
   );
 
   IF v_action = 'reject'
     OR (v_task.node_key = 'purchase_review'
-      AND v_batch.budget_status = 'within_budget')
+      AND v_instance.context->>'budget_status' = 'within_budget')
     OR v_task.node_key = 'finance_review'
   THEN
-    v_review_result := public.review_supplier_purchase_batch(
-      p_batch_id,
-      p_tenant_id,
-      v_batch.version,
-      v_action,
-      v_reason,
-      v_action = 'approve' AND v_task.node_key = 'finance_review',
-      p_actor_user_id,
-      p_actor_employee_id,
-      p_idempotency_key
-    );
+    IF NOT v_adopted_legacy_event THEN
+      v_review_result := public.review_supplier_purchase_batch(
+        p_batch_id,
+        p_tenant_id,
+        v_batch.version,
+        v_action,
+        v_reason,
+        v_action = 'approve' AND v_task.node_key = 'finance_review',
+        p_actor_user_id,
+        p_actor_employee_id,
+        p_idempotency_key
+      );
+    END IF;
 
     IF v_review_result->>'status' = 'revision_required' THEN
       UPDATE public.workflow_tasks AS task
@@ -468,12 +526,39 @@ BEGIN
     END IF;
     IF v_task.node_key = 'purchase_review'
       AND v_action = 'approve'
-      AND v_batch.budget_status = 'over_budget'
-      AND (
-        v_runtime_result->'next_node'->>'node_key' IS DISTINCT FROM
-          'finance_review'
+      AND v_instance.context->>'budget_status' = 'over_budget'
+    THEN
+      v_expected_runtime_status := 'running';
+      v_expected_next_node_key := 'finance_review';
+      v_expected_task := true;
+    ELSIF v_action = 'reject' THEN
+      v_expected_runtime_status := 'completed';
+      v_expected_next_node_key := 'rejected_end';
+      v_expected_task := false;
+    ELSE
+      v_expected_runtime_status := 'completed';
+      v_expected_next_node_key := 'approved_end';
+      v_expected_task := false;
+    END IF;
+
+    IF v_runtime_result->'instance'->>'status' IS DISTINCT FROM
+        v_expected_runtime_status
+      OR v_runtime_result->'instance'->>'current_node_key' IS DISTINCT FROM
+        v_expected_next_node_key
+      OR v_runtime_result->'next_node'->>'node_key' IS DISTINCT FROM
+        v_expected_next_node_key
+      OR (v_expected_task AND (
+        v_runtime_result->'next_node'->>'node_type' IS DISTINCT FROM 'approval'
         OR v_runtime_result->'task' IS NULL
-      )
+        OR v_runtime_result->'task' = 'null'::jsonb
+        OR v_runtime_result->'task'->>'node_key' IS DISTINCT FROM
+          v_expected_next_node_key
+        OR v_runtime_result->'task'->>'status' IS DISTINCT FROM 'pending'
+      ))
+      OR (NOT v_expected_task AND (
+        v_runtime_result->'next_node'->>'node_type' IS DISTINCT FROM 'end'
+        OR v_runtime_result->'task' IS DISTINCT FROM 'null'::jsonb
+      ))
     THEN
       RAISE EXCEPTION USING
         ERRCODE = 'P0001',
@@ -553,7 +638,9 @@ BEGIN
       'review',
       p_idempotency_key,
       v_fingerprint,
-      v_request,
+      v_request || pg_catalog.jsonb_build_object(
+        'workflow_task_fingerprint', v_fingerprint
+      ),
       p_actor_user_id,
       p_actor_employee_id,
       v_result,
@@ -567,18 +654,20 @@ BEGIN
       'idempotent', false
     );
 
-    -- The delegated legacy review inserted the canonical purchase review
-    -- event. Promote it to the outer task fingerprint and atomic result.
+    -- Preserve the legacy fingerprint so the old endpoint can replay the same
+    -- key, while nesting the stricter task fingerprint for workflow replays.
     UPDATE public.supplier_purchase_batch_command_events AS event
     SET
-      request_fingerprint = v_fingerprint,
-      request = v_request,
-      result = v_result,
-      result_version = v_batch.version
+      request = event.request || pg_catalog.jsonb_build_object(
+        'workflow_task_fingerprint', v_fingerprint,
+        'workflow_task_request', v_request,
+        'workflow_task_result', v_result
+      )
     WHERE event.tenant_id = p_tenant_id
       AND event.purchase_batch_id = p_batch_id
       AND event.command_type = 'review'
-      AND event.idempotency_key = p_idempotency_key;
+      AND event.idempotency_key = p_idempotency_key
+      AND event.request_fingerprint = v_legacy_fingerprint;
 
     GET DIAGNOSTICS v_changed_count = ROW_COUNT;
     IF v_changed_count <> 1 THEN

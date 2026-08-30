@@ -30,24 +30,39 @@ describe("supplier purchase batch workflow review migration contract", () => {
     expect(sql).toContain(") TO service_role;");
   });
 
-  test("locks runtime and purchase facts in the documented order", async () => {
+  test("acquires the legacy command and batch advisory locks before row locks", async () => {
     const body = functionBody(await source());
+    const commandLock = body.indexOf("'supplier-purchase-batch-command:'");
+    const batchLock = body.indexOf("'supplier-purchase-batch-id:'");
     const instance = body.indexOf("FROM public.workflow_instances AS instance");
     const task = body.indexOf("FROM public.workflow_tasks AS task", instance);
     const batch = body.indexOf("FROM public.supplier_purchase_batches AS batch");
-    const commitments = body.indexOf("FROM public.project_cost_commitments AS commitment");
-    const requisitions = body.indexOf(
-      "FROM public.supplier_purchase_requisitions AS requisition",
-      commitments,
-    );
-    const orders = body.indexOf("FROM public.supplier_purchase_orders AS purchase_order");
+    expect(commandLock).toBeGreaterThan(0);
+    expect(batchLock).toBeGreaterThan(commandLock);
+    expect(instance).toBeGreaterThan(batchLock);
     expect(instance).toBeGreaterThan(0);
     expect(task).toBeGreaterThan(instance);
     expect(batch).toBeGreaterThan(task);
-    expect(commitments).toBeGreaterThan(batch);
-    expect(requisitions).toBeGreaterThan(commitments);
-    expect(orders).toBeGreaterThan(requisitions);
-    expect(body.slice(instance, orders)).toContain("FOR UPDATE");
+    expect(body.slice(instance, batch + 200)).toContain("FOR UPDATE");
+    expect(body.slice(0, instance)).toContain("6720240826142000");
+  });
+
+  test("leaves project budget and purchase fact locking to legacy review", async () => {
+    const body = functionBody(await source());
+    const legacyReview = body.indexOf(
+      "v_review_result := public.review_supplier_purchase_batch(",
+    );
+    expect(legacyReview).toBeGreaterThan(0);
+    const beforeLegacyReview = body.slice(0, legacyReview);
+    expect(beforeLegacyReview).not.toContain(
+      "FROM public.project_cost_commitments AS commitment",
+    );
+    expect(beforeLegacyReview).not.toContain(
+      "FROM public.supplier_purchase_requisitions AS requisition",
+    );
+    expect(beforeLegacyReview).not.toContain(
+      "FROM public.supplier_purchase_orders AS purchase_order",
+    );
   });
 
   test("replays before mutation with an approval-round request fingerprint", async () => {
@@ -80,7 +95,7 @@ describe("supplier purchase batch workflow review migration contract", () => {
       "__gooes_employee_has_project_permission_scope",
       "v_instance.context->>'batch_version'",
       "v_instance.context->>'approval_round'",
-      "v_batch.submitted_by_employee_id = p_actor_employee_id",
+      "v_instance.context->>'submitted_by_employee_id'",
       "SUPPLIER_PURCHASE_BATCH_APPROVAL_ROUND_STALE",
     ]) expect(body).toContain(token);
   });
@@ -89,8 +104,12 @@ describe("supplier purchase batch workflow review migration contract", () => {
     const body = functionBody(await source());
     expect(body).toContain("v_task.node_key = 'purchase_review'");
     expect(body).toContain("v_task.node_key = 'finance_review'");
-    expect(body).toContain("v_batch.budget_status = 'within_budget'");
-    expect(body).toContain("v_batch.budget_status = 'over_budget'");
+    expect(body).toContain(
+      "v_instance.context->>'budget_status' = 'within_budget'",
+    );
+    expect(body).toContain(
+      "v_instance.context->>'budget_status' = 'over_budget'",
+    );
     expect(body).toContain("public.review_supplier_purchase_batch(");
     expect(body.match(/public\.review_supplier_purchase_batch\(/g)).toHaveLength(1);
     expect(body).toContain("public.complete_workflow_instance_node(");
@@ -101,6 +120,33 @@ describe("supplier purchase batch workflow review migration contract", () => {
     expect(body).toContain("status = 'canceled'");
     expect(body).not.toContain("convert_supplier_purchase_requisition_for_batch(");
     expect(body).not.toContain("submit_supplier_purchase_order(");
+  });
+
+  test("asserts the exact runtime semantics for every business branch", async () => {
+    const body = functionBody(await source());
+    for (const token of [
+      "v_expected_runtime_status := 'completed'",
+      "v_expected_next_node_key := 'approved_end'",
+      "v_expected_next_node_key := 'rejected_end'",
+      "v_expected_runtime_status := 'running'",
+      "v_expected_next_node_key := 'finance_review'",
+      "v_runtime_result->'instance'->>'status' IS DISTINCT FROM",
+      "v_runtime_result->'next_node'->>'node_key' IS DISTINCT FROM",
+      "v_runtime_result->'task' IS DISTINCT FROM 'null'::jsonb",
+      "v_runtime_result->'task'->>'node_key' IS DISTINCT FROM",
+      "SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT",
+    ]) expect(body).toContain(token);
+  });
+
+  test("preserves the legacy fingerprint while storing the workflow replay fingerprint", async () => {
+    const body = functionBody(await source());
+    expect(body).toContain("v_legacy_fingerprint");
+    expect(body).toContain("workflow_task_fingerprint");
+    expect(body).toContain("event.request_fingerprint = v_legacy_fingerprint");
+    expect(body).not.toContain("SET\n      request_fingerprint = v_fingerprint");
+    expect(body).toContain("v_event.request->'workflow_task_result'");
+    expect(body).toContain("'workflow_task_result', v_result");
+    expect(body).not.toContain("result = v_result");
   });
 
   test("synchronizes subject state and emits workflow plus purchase audit", async () => {
