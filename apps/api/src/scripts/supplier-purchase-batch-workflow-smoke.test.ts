@@ -1,0 +1,193 @@
+import { describe, expect, mock, test } from "bun:test";
+
+import {
+  formatSupplierPurchaseBatchWorkflowSmokeFailure,
+  parseSupplierPurchaseBatchWorkflowSmokeArgs,
+  runSupplierPurchaseBatchWorkflowSmoke,
+  type SupplierPurchaseBatchWorkflowSmokeGateway,
+} from "./supplier-purchase-batch-workflow-smoke";
+
+const smokeUrl = new URL(
+  "./supplier-purchase-batch-workflow-smoke.ts",
+  import.meta.url,
+);
+
+describe("supplier purchase batch workflow smoke", () => {
+  test("ships the dedicated workflow smoke implementation", async () => {
+    expect(await Bun.file(smokeUrl).exists()).toBe(true);
+  });
+
+  test("is exposed through the API package release command", async () => {
+    const packageJson = await Bun.file(
+      new URL("../../package.json", import.meta.url),
+    ).json();
+    expect(packageJson.scripts["supplier:purchase-batch-workflow:smoke"])
+      .toBe("bun src/scripts/supplier-purchase-batch-workflow-smoke.ts");
+  });
+
+  const ids = {
+    tenantId: "91000000-0000-4000-8000-000000000001",
+    projectId: "91000000-0000-4000-8000-000000000002",
+    applicantEmployeeId: "91000000-0000-4000-8000-000000000003",
+    purchaseApproverId: "91000000-0000-4000-8000-000000000004",
+    financeApproverId: "91000000-0000-4000-8000-000000000005",
+  } as const;
+
+  const argv = [
+    "--tenant-id",
+    ids.tenantId,
+    "--project-id",
+    ids.projectId,
+    "--applicant-employee-id",
+    ids.applicantEmployeeId,
+    "--purchase-approver-id",
+    ids.purchaseApproverId,
+    "--finance-approver-id",
+    ids.financeApproverId,
+  ];
+
+  test("requires exactly five explicit UUID targets and defaults to dry-run", () => {
+    expect(parseSupplierPurchaseBatchWorkflowSmokeArgs(argv)).toEqual({
+      ...ids,
+      execute: false,
+    });
+    expect(parseSupplierPurchaseBatchWorkflowSmokeArgs([...argv, "--execute"]))
+      .toEqual({ ...ids, execute: true });
+    expect(() => parseSupplierPurchaseBatchWorkflowSmokeArgs([])).toThrow(
+      "SUPPLIER_PURCHASE_BATCH_WORKFLOW_SMOKE_ARGUMENT_INVALID",
+    );
+    expect(() => parseSupplierPurchaseBatchWorkflowSmokeArgs([
+      ...argv.slice(0, -1),
+      "not-a-uuid",
+    ])).toThrow("SUPPLIER_PURCHASE_BATCH_WORKFLOW_SMOKE_ARGUMENT_INVALID");
+    expect(() => parseSupplierPurchaseBatchWorkflowSmokeArgs([
+      ...argv,
+      "--unknown",
+    ])).toThrow("SUPPLIER_PURCHASE_BATCH_WORKFLOW_SMOKE_ARGUMENT_INVALID");
+  });
+
+  test("inspects prerequisites without writes in the default dry-run", async () => {
+    const inspect = mock(async () => ({
+      applicantUserId: "91000000-0000-4000-8000-000000000006",
+      purchaseApproverUserId: "91000000-0000-4000-8000-000000000009",
+      financeApproverUserId: "91000000-0000-4000-8000-00000000000a",
+      supplierSkuId: "91000000-0000-4000-8000-000000000007",
+      costCategoryId: "91000000-0000-4000-8000-000000000008",
+      purchaseApproverReady: true,
+      financeApproverReady: true,
+    } as const));
+    const execute = mock(async () => {
+      throw new Error("dry-run must not execute");
+    });
+    const close = mock(async () => {});
+    const gateway: SupplierPurchaseBatchWorkflowSmokeGateway = {
+      inspect,
+      execute,
+      close,
+    };
+
+    const result = await runSupplierPurchaseBatchWorkflowSmoke(
+      { ...ids, execute: false },
+      {
+        createGateway: () => gateway,
+        requestId: () => "92000000-0000-4000-8000-000000000001",
+      },
+    );
+
+    expect(inspect).toHaveBeenCalledWith(ids);
+    expect(execute).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      ok: true,
+      mode: "dry-run",
+      requestId: "92000000-0000-4000-8000-000000000001",
+      fixturePrefix: "SPBW-SMOKE",
+      batchId: null,
+      approvalRound: null,
+      instanceId: null,
+      taskIds: [],
+      budgetState: "preflight_ready",
+      orderIds: [],
+      supplierCount: 0,
+      cleanupRecommendation: "dry-run 未写入，无需清理",
+    });
+  });
+
+  test("executes only when requested and returns bounded evidence identifiers", async () => {
+    const prerequisites = {
+      applicantUserId: "91000000-0000-4000-8000-000000000006",
+      purchaseApproverUserId: "91000000-0000-4000-8000-000000000009",
+      financeApproverUserId: "91000000-0000-4000-8000-00000000000a",
+      supplierSkuId: "91000000-0000-4000-8000-000000000007",
+      costCategoryId: "91000000-0000-4000-8000-000000000008",
+      purchaseApproverReady: true,
+      financeApproverReady: true,
+    } as const;
+    const execute = mock(async () => ({
+      batchId: "93000000-0000-4000-8000-000000000001",
+      approvalRound: 1,
+      instanceId: "93000000-0000-4000-8000-000000000002",
+      taskIds: ["93000000-0000-4000-8000-000000000003"],
+      budgetState: "within_budget" as const,
+      orderIds: ["93000000-0000-4000-8000-000000000004"],
+      supplierCount: 1,
+    }));
+    const gateway: SupplierPurchaseBatchWorkflowSmokeGateway = {
+      inspect: mock(async () => prerequisites),
+      execute,
+      close: mock(async () => {}),
+    };
+    const result = await runSupplierPurchaseBatchWorkflowSmoke(
+      { ...ids, execute: true },
+      {
+        createGateway: () => gateway,
+        requestId: () => "92000000-0000-4000-8000-000000000002",
+      },
+    );
+
+    expect(execute).toHaveBeenCalledWith({
+      targets: ids,
+      prerequisites,
+      requestId: "92000000-0000-4000-8000-000000000002",
+      fixturePrefix: "SPBW-SMOKE",
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      mode: "execute",
+      requestId: "92000000-0000-4000-8000-000000000002",
+      batchId: "93000000-0000-4000-8000-000000000001",
+      approvalRound: 1,
+      instanceId: "93000000-0000-4000-8000-000000000002",
+      taskIds: ["93000000-0000-4000-8000-000000000003"],
+      budgetState: "within_budget",
+      orderIds: ["93000000-0000-4000-8000-000000000004"],
+      supplierCount: 1,
+    });
+    expect(result.cleanupRecommendation).toContain("不自动删除");
+  });
+
+  test("uses bounded reads and emits only a sanitized stable failure", async () => {
+    const source = await Bun.file(smokeUrl).text();
+    expect(source.match(/complete_supplier_purchase_batch_workflow_task/g))
+      .toHaveLength(2);
+    expect(source).toContain("batch.status !== \"ordered\"");
+    expect(source).toContain("supplierCount");
+    expect(source).toContain("p_page_size => 20");
+    expect(source).toMatch(/LIMIT 100/);
+    expect(source).not.toMatch(/LIMIT\s+(?:10[1-9]|1[1-9]\d|[2-9]\d{2,})/);
+
+    const failure = formatSupplierPurchaseBatchWorkflowSmokeFailure(
+      new Error(
+        "postgres://private-user:private-pass@private.invalid/db phone=13800138000",
+      ),
+      "92000000-0000-4000-8000-000000000003",
+    );
+    expect(failure).toEqual({
+      ok: false,
+      code: "SUPPLIER_PURCHASE_BATCH_WORKFLOW_SMOKE_FAILED",
+      requestId: "92000000-0000-4000-8000-000000000003",
+    });
+    expect(JSON.stringify(failure)).not.toContain("private");
+    expect(JSON.stringify(failure)).not.toContain("13800138000");
+  });
+});
