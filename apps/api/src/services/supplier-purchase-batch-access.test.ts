@@ -430,7 +430,7 @@ describe("deriveSupplierPurchaseBatchActions", () => {
     }).can_review).toBe(true);
   });
 
-  test("keeps pending cancellation scoped and terminal actions closed", async () => {
+  test("offers cancel only for draft or rejected and reserves pending for withdraw", async () => {
     const { deriveSupplierPurchaseBatchActions } = await import(
       "./supplier-purchase-batch-access"
     );
@@ -443,11 +443,22 @@ describe("deriveSupplierPurchaseBatchActions", () => {
       canReadProject: true,
       canUpdateProject: true,
     });
-    expect(pending.can_cancel).toBe(true);
+    expect(pending.can_cancel).toBe(false);
     expect(pending.can_edit).toBe(false);
     expect(pending.can_submit).toBe(false);
 
-    for (const status of ["rejected", "cancelled", "ordered"] as const) {
+    expect(deriveSupplierPurchaseBatchActions({
+      status: "rejected",
+      createdByEmployeeId: CREATOR_ID,
+      submittedByEmployeeId: CREATOR_ID,
+      actorEmployeeId: EMPLOYEE_ID,
+      permissions: ["supplier.purchase-requisition.manage"],
+      canReadProject: true,
+      canUpdateProject: true,
+      workflowEnabled: true,
+    }).can_cancel).toBeTrue();
+
+    for (const status of ["cancelled", "ordered"] as const) {
       expect(deriveSupplierPurchaseBatchActions({
         status,
         createdByEmployeeId: CREATOR_ID,

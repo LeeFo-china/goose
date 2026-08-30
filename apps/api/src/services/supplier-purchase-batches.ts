@@ -1,4 +1,5 @@
 import { Errors } from "@/errors/error-factory";
+import { supplierPurchaseBatchWorkflowRepository } from "@/repositories/supplier-purchase-batch-workflow";
 import {
   supplierPurchaseBatchesRepository,
   type SupplierPurchaseBatchCommandResult,
@@ -15,6 +16,7 @@ import type {
   SupplierPurchaseBatchRequisitionListQuery,
   SupplierPurchaseBatchReviewInput,
   SupplierPurchaseBatchSubmitInput,
+  SupplierPurchaseBatchWithdrawInput,
 } from "@/schema/supplier-purchase-batches";
 import type { AuthContext } from "@/services/authorization";
 import {
@@ -57,15 +59,16 @@ type BatchRepositoryPort = Pick<
   | "review"
   | "cancel"
 >;
-type BatchWorkflowRuntimePort = Pick<
-  typeof supplierPurchaseBatchWorkflowRuntime,
-  "isEnabled" | "submit"
->;
+type BatchWorkflowRuntimePort = Pick<typeof supplierPurchaseBatchWorkflowRuntime,
+  "isEnabled" | "submit">;
+type BatchWorkflowRepositoryPort = Pick<
+  typeof supplierPurchaseBatchWorkflowRepository, "withdraw">;
 
 export type SupplierPurchaseBatchesServiceDependencies = {
   access?: BatchAccessPort;
   repository?: BatchRepositoryPort;
   workflowRuntime?: BatchWorkflowRuntimePort;
+  workflowRepository?: BatchWorkflowRepositoryPort;
   workflowProjection?: Pick<
     SupplierPurchaseBatchWorkflowProjectionService,
     "enrichPage" | "enrichDetail"
@@ -84,6 +87,7 @@ export class SupplierPurchaseBatchesService {
   private readonly access: BatchAccessPort;
   private readonly repository: BatchRepositoryPort;
   private readonly workflowRuntime: BatchWorkflowRuntimePort;
+  private readonly workflowRepository: BatchWorkflowRepositoryPort;
   private readonly workflowProjection: Pick<
     SupplierPurchaseBatchWorkflowProjectionService,
     "enrichPage" | "enrichDetail"
@@ -96,6 +100,8 @@ export class SupplierPurchaseBatchesService {
       supplierPurchaseBatchesRepository;
     this.workflowRuntime = dependencies.workflowRuntime ??
       supplierPurchaseBatchWorkflowRuntime;
+    this.workflowRepository = dependencies.workflowRepository ??
+      supplierPurchaseBatchWorkflowRepository;
     this.workflowProjection = dependencies.workflowProjection ??
       (dependencies.workflowRead
         ? new SupplierPurchaseBatchWorkflowProjectionService({
@@ -265,6 +271,10 @@ export class SupplierPurchaseBatchesService {
       await this.access.assertProjectUpdate(auth, input.project_id);
     } else {
       const batch = await this.requireUpdateBatch(auth, scope, batchId);
+      if (batch.status === "rejected" &&
+        batch.submitted_by_employee_id !== scope.employeeId) {
+        throw Errors.forbidden();
+      }
       if (batch.project_id !== input.project_id) {
         await this.access.assertProjectUpdate(auth, input.project_id);
       }
@@ -305,6 +315,22 @@ export class SupplierPurchaseBatchesService {
     return this.repository.cancel({
       ...this.commandContext(scope, batchId, input, idempotencyKey),
       reason: input.reason,
+    });
+  }
+
+  async withdraw(auth: AuthContext, batchId: string,
+    input: SupplierPurchaseBatchWithdrawInput, idempotencyKey: string) {
+    const scope = await this.access.requireManage(auth);
+    const batch = await this.requireUpdateBatch(auth, scope, batchId);
+    if (batch.submitted_by_employee_id !== scope.employeeId) {
+      throw Errors.forbidden();
+    }
+    return this.workflowRepository.withdraw({
+      tenantId: scope.tenantId, batchId,
+      expectedVersion: input.expected_version,
+      reason: input.reason ?? null,
+      actorUserId: scope.authUserId, actorEmployeeId: scope.employeeId,
+      idempotencyKey,
     });
   }
 
@@ -470,6 +496,4 @@ function supplierPurchaseBatchNotFound() {
     "SUPPLIER_PURCHASE_BATCH_NOT_FOUND",
   );
 }
-
-export const supplierPurchaseBatchesService =
-  new SupplierPurchaseBatchesService();
+export const supplierPurchaseBatchesService = new SupplierPurchaseBatchesService();

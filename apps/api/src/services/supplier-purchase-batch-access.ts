@@ -98,7 +98,7 @@ export function deriveSupplierPurchaseBatchActions(
     input.actorEmployeeId === input.submittedByEmployeeId &&
     hasPermission(input.permissions, "supplier.purchase-requisition.manage");
   const canCancel = hasActor &&
-    (input.status === "draft" || input.status === "pending_approval") &&
+    (input.status === "draft" || input.status === "rejected") &&
     input.canUpdateProject && hasPermission(
       input.permissions,
       "supplier.purchase-requisition.manage",

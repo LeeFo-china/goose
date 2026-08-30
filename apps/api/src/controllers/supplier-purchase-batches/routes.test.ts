@@ -30,6 +30,7 @@ const saveDraft = mock(async () => ({ status: "saved" }));
 const submit = mock(async () => ({ status: "submitted" }));
 const review = mock(async () => ({ status: "ordered" }));
 const cancel = mock(async () => ({ status: "cancelled" }));
+const withdraw = mock(async () => ({ status: "withdrawn" }));
 
 mock.module("@/services/supplier-purchase-batches", () => ({
   supplierPurchaseBatchesService: {
@@ -45,6 +46,7 @@ mock.module("@/services/supplier-purchase-batches", () => ({
     submit,
     review,
     cancel,
+    withdraw,
   },
 }));
 
@@ -72,10 +74,11 @@ describe("SupplierPurchaseBatchesController", () => {
       submit,
       review,
       cancel,
+      withdraw,
     ]) fn.mockClear();
   });
 
-  test("registers exactly twelve supplier purchase batch routes", async () => {
+  test("registers exactly thirteen supplier purchase batch routes", async () => {
     const value = await controller();
     const routes: Array<{ method: string; path: string }> = [];
 
@@ -103,6 +106,7 @@ describe("SupplierPurchaseBatchesController", () => {
       { method: "POST", path: "/supplier-purchase-batches/:id/submit" },
       { method: "POST", path: "/supplier-purchase-batches/:id/review" },
       { method: "POST", path: "/supplier-purchase-batches/:id/cancel" },
+      { method: "POST", path: "/supplier-purchase-batches/:id/withdraw" },
     ]);
   });
 
@@ -274,6 +278,11 @@ describe("SupplierPurchaseBatchesController", () => {
       headers,
       body: { expected_version: 2, reason: "计划调整" },
     } as never);
+    await value.withdraw({
+      params: { id: BATCH_ID },
+      headers,
+      body: { expected_version: 2, reason: "采购内容需调整" },
+    } as never);
 
     expect(saveDraft).toHaveBeenCalledWith(
       auth,
@@ -295,6 +304,10 @@ describe("SupplierPurchaseBatchesController", () => {
       expected_version: 2,
       reason: "计划调整",
     }, "batch:command");
+    expect(withdraw).toHaveBeenCalledWith(auth, BATCH_ID, {
+      expected_version: 2,
+      reason: "采购内容需调整",
+    }, "batch:command");
   });
 
   test.each([
@@ -311,6 +324,7 @@ describe("SupplierPurchaseBatchesController", () => {
     ["submit", { expected_version: 1 }, submit],
     ["review", { expected_version: 2, action: "reject", remark: "驳回" }, review],
     ["cancel", { expected_version: 2, reason: "计划调整" }, cancel],
+    ["withdraw", { expected_version: 2 }, withdraw],
   ] as const)("rejects %s without idempotency before service", async (
     method,
     body,
@@ -334,8 +348,19 @@ describe("SupplierPurchaseBatchesController", () => {
       .rejects.toMatchObject({ code: "VALIDATION_ERROR" });
     await expect(value.listCatalog({ query: { projectId: "bad" } } as never))
       .rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    for (const body of [
+      { expected_version: 0 },
+      { expected_version: 2, reason: "   " },
+    ]) {
+      await expect(value.withdraw({
+        params: { id: BATCH_ID },
+        headers: { "idempotency-key": "withdraw:invalid" },
+        body,
+      } as never)).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    }
     expect(getBatch).not.toHaveBeenCalled();
     expect(listCatalog).not.toHaveBeenCalled();
+    expect(withdraw).not.toHaveBeenCalled();
 
     const controllerSource = await Bun.file(
       new URL("./index.ts", import.meta.url),

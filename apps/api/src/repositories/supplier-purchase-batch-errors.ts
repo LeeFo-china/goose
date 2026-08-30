@@ -59,6 +59,12 @@ export const SUPPLIER_PURCHASE_BATCH_ERRORS = {
   SUPPLIER_PURCHASE_BATCH_APPROVAL_ROUND_STALE: {
     statusCode: 409, message: "采购批次审批任务已属于旧轮次",
   },
+  SUPPLIER_PURCHASE_BATCH_WITHDRAW_NOT_ALLOWED: {
+    statusCode: 409, message: "采购批次当前状态不允许撤回",
+  },
+  SUPPLIER_PURCHASE_BATCH_WITHDRAW_REASON_REQUIRED: {
+    statusCode: 400, message: "财务审批阶段撤回必须填写原因",
+  },
   WORKFLOW_TASK_NOT_PENDING: {
     statusCode: 409, message: "流程待办已处理",
   },

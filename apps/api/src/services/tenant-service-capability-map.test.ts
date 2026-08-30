@@ -68,6 +68,8 @@ describe("tenant service capability map", () => {
     ["GET", "/supplier-purchase-batch-cost-categories", "read"],
     ["GET", "/supplier-purchase-batch-catalog", "read"],
     ["GET", "/supplier-purchase-batches", "read"],
+    ["POST", "/supplier-purchase-batches/:id/withdraw", "write"],
+    ["POST", "/workflow-tasks/:id/complete", "write"],
     ["POST", "/supplier-purchasable-products/:id", "write"],
   ] as const)("excludes supplier procurement route %s %s from trial capabilities", async (
     method,
@@ -78,8 +80,11 @@ describe("tenant service capability map", () => {
       "./tenant-service-capability-map"
     );
 
+    const expected = url.startsWith("/workflow-tasks")
+      ? { kind: "capability", capability: "core.workflows" } as const
+      : { kind: "excluded", reason: "not_trial_capability" } as const;
     expect(resolveTenantServiceRouteCapability(route(method, url, access)))
-      .toEqual({ kind: "excluded", reason: "not_trial_capability" });
+      .toEqual(expected);
   });
 
   test("classifies every registered read/write route exactly once", async () => {

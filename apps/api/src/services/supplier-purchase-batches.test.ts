@@ -108,10 +108,13 @@ function dependencies(overrides: Record<string, unknown> = {}) {
       submit: mock(async (input: unknown) =>
         ({ status: "submitted", input })),
     },
+    workflowRepository: { withdraw: mock(async (input: unknown) => {
+      events.push("withdraw");
+      return { status: "withdrawn", input };
+    }) },
     nowFactory: mock(() => new Date("2026-08-27T03:04:05.000Z")),
   };
 }
-
 async function serviceFor(overrides: Record<string, unknown> = {}) {
   const deps = dependencies(overrides);
   const { SupplierPurchaseBatchesService } = await import(
@@ -122,7 +125,6 @@ async function serviceFor(overrides: Record<string, unknown> = {}) {
     service: new SupplierPurchaseBatchesService(deps as never),
   };
 }
-
 const draftInput = {
   project_id: PROJECT_ID,
   expected_version: 0,
@@ -133,7 +135,6 @@ const draftInput = {
     quantity: "2.5000",
   }],
 };
-
 describe("SupplierPurchaseBatchesService reads", () => {
   test("intersects list filters with visible project read scope", async () => {
     const { deps, service } = await serviceFor();

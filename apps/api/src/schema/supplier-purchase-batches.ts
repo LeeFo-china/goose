@@ -124,8 +124,8 @@ export const SupplierPurchaseBatchCancelSchema = z.object({
 }).strict();
 
 export const SupplierPurchaseBatchWithdrawSchema = z.object({
-  expected_version: z.number().int().nonnegative("版本号不能为负数"),
-  reason: z.string().trim().max(500, "撤回原因不能超过 500 个字符").optional(),
+  expected_version: expectedVersion,
+  reason: requiredText("撤回原因").optional(),
 }).strict();
 
 export type SupplierPurchaseBatchStatus =

@@ -14,6 +14,7 @@ import {
   SupplierPurchaseBatchRequisitionListQuerySchema,
   SupplierPurchaseBatchReviewSchema,
   SupplierPurchaseBatchSubmitSchema,
+  SupplierPurchaseBatchWithdrawSchema,
 } from "@/schema/supplier-purchase-batches";
 import { supplierPurchaseBatchesService } from "@/services/supplier-purchase-batches";
 import { Get, Post } from "@/utils/decorators/route";
@@ -145,6 +146,17 @@ class SupplierPurchaseBatchesController extends TenantBaseController {
     const input = this.parse(SupplierPurchaseBatchCancelSchema, request.body);
     return ResponseHandler.success(
       await supplierPurchaseBatchesService.cancel(auth, id, input, key),
+    );
+  }
+
+  @Post("/supplier-purchase-batches/:id/withdraw")
+  async withdraw(request: FastifyRequest) {
+    const auth = await this.getRequiredTenantContext(request);
+    const key = requireSupplierIdempotencyKey(request);
+    const { id } = this.parse(SupplierPurchaseBatchParamSchema, request.params);
+    const input = this.parse(SupplierPurchaseBatchWithdrawSchema, request.body);
+    return ResponseHandler.success(
+      await supplierPurchaseBatchesService.withdraw(auth, id, input, key),
     );
   }
 

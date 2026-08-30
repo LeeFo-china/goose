@@ -100,11 +100,32 @@ const WorkflowReviewResultSchema = z.object({
   }
 });
 
+const WorkflowWithdrawResultSchema = z.object({
+  status: z.literal("withdrawn"),
+  idempotent: z.boolean(),
+  batch: SupplierPurchaseBatchRecordSchema,
+  version: z.number().int().positive(),
+  workflow_state: WorkflowReviewStateSchema,
+}).strict().superRefine((result, context) => {
+  if (result.batch.status !== "draft" ||
+    result.batch.version !== result.version ||
+    result.workflow_state.instance_status !== "canceled" ||
+    result.workflow_state.pending_task_count !== 0) {
+    context.addIssue({
+      code: "custom",
+      message: "采购批次撤回结果不一致",
+    });
+  }
+});
+
 export type SupplierPurchaseBatchWorkflowSubmitResult = z.infer<
   typeof WorkflowSubmitResultSchema
 >;
 export type SupplierPurchaseBatchWorkflowReviewResult = z.infer<
   typeof WorkflowReviewResultSchema
+>;
+export type SupplierPurchaseBatchWorkflowWithdrawResult = z.infer<
+  typeof WorkflowWithdrawResultSchema
 >;
 
 export type SupplierPurchaseBatchWorkflowReviewInput = {
@@ -114,6 +135,16 @@ export type SupplierPurchaseBatchWorkflowReviewInput = {
   action: "approve" | "reject";
   reason: string | null;
   output: Record<string, unknown>;
+  actorUserId: string;
+  actorEmployeeId: string;
+  idempotencyKey: string;
+};
+
+export type SupplierPurchaseBatchWorkflowWithdrawInput = {
+  tenantId: string;
+  batchId: string;
+  expectedVersion: number;
+  reason: string | null;
   actorUserId: string;
   actorEmployeeId: string;
   idempotencyKey: string;
@@ -206,6 +237,38 @@ export class SupplierPurchaseBatchWorkflowRepository {
           error_code: parsed.data.error_code,
           details: parsed.data.details,
         },
+      );
+    }
+    return parsed.data;
+  }
+
+  async withdraw(
+    input: SupplierPurchaseBatchWorkflowWithdrawInput,
+  ): Promise<SupplierPurchaseBatchWorkflowWithdrawResult> {
+    const { data, error } = await this.clientProvider().rpc(
+      "withdraw_supplier_purchase_batch_workflow",
+      {
+        p_tenant_id: input.tenantId,
+        p_batch_id: input.batchId,
+        p_expected_version: input.expectedVersion,
+        p_reason: input.reason,
+        p_actor_user_id: input.actorUserId,
+        p_actor_employee_id: input.actorEmployeeId,
+        p_idempotency_key: input.idempotencyKey,
+      },
+    );
+    if (error) {
+      throwSupplierCommandDatabaseError(
+        error,
+        "撤回供应商采购批次审批失败",
+      );
+    }
+    const parsed = WorkflowWithdrawResultSchema.safeParse(data);
+    if (!parsed.success || parsed.data.batch.id !== input.batchId ||
+      parsed.data.batch.tenant_id !== input.tenantId) {
+      throw Errors.dbError(
+        "撤回供应商采购批次审批失败",
+        parsed.success ? data : parsed.error.issues,
       );
     }
     return parsed.data;

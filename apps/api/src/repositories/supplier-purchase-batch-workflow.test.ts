@@ -227,6 +227,92 @@ describe("SupplierPurchaseBatchWorkflowRepository", () => {
       },
     });
   });
+
+  test("withdraws a workflow batch through the dedicated RPC", async () => {
+    const calls: Array<{ name: string; params: Record<string, unknown> }> = [];
+    const withdrawnBatch = {
+      ...batch,
+      status: "draft",
+      version: 3,
+      budget_checked_at: null,
+      budget_status: "unchecked",
+      budget_snapshot: {},
+    } as const;
+    const client = { async rpc(name: string, params: Record<string, unknown>) {
+      calls.push({ name, params });
+      return { data: {
+        status: "withdrawn",
+        idempotent: false,
+        batch: withdrawnBatch,
+        version: 3,
+        workflow_state: {
+          ...workflowState,
+          instance_status: "canceled",
+          pending_task_count: 0,
+        },
+      }, error: null };
+    } };
+    const { SupplierPurchaseBatchWorkflowRepository } = await import(
+      "./supplier-purchase-batch-workflow"
+    );
+    const repository = new SupplierPurchaseBatchWorkflowRepository(
+      () => client,
+    );
+
+    expect(await repository.withdraw({
+      tenantId: TENANT_ID,
+      batchId: BATCH_ID,
+      expectedVersion: 2,
+      reason: "采购内容需调整",
+      actorUserId: USER_ID,
+      actorEmployeeId: EMPLOYEE_ID,
+      idempotencyKey: "workflow-withdraw-1",
+    })).toMatchObject({ status: "withdrawn", version: 3 });
+    expect(calls).toEqual([{
+      name: "withdraw_supplier_purchase_batch_workflow",
+      params: {
+        p_tenant_id: TENANT_ID,
+        p_batch_id: BATCH_ID,
+        p_expected_version: 2,
+        p_reason: "采购内容需调整",
+        p_actor_user_id: USER_ID,
+        p_actor_employee_id: EMPLOYEE_ID,
+        p_idempotency_key: "workflow-withdraw-1",
+      },
+    }]);
+  });
+
+  test("maps withdraw state errors and rejects malformed results", async () => {
+    const { SupplierPurchaseBatchWorkflowRepository } = await import(
+      "./supplier-purchase-batch-workflow"
+    );
+    const notAllowed = new SupplierPurchaseBatchWorkflowRepository(() => ({
+      async rpc() {
+        return { data: null, error: {
+          message: "SUPPLIER_PURCHASE_BATCH_WITHDRAW_NOT_ALLOWED",
+        } };
+      },
+    }));
+    await expect(notAllowed.withdraw(withdrawContext())).rejects.toMatchObject({
+      statusCode: 409,
+      code: "SUPPLIER_PURCHASE_BATCH_WITHDRAW_NOT_ALLOWED",
+    });
+
+    const malformed = new SupplierPurchaseBatchWorkflowRepository(() => ({
+      async rpc() {
+        return { data: {
+          status: "withdrawn",
+          idempotent: false,
+          batch: { ...batch, status: "draft", version: 3 },
+          version: 3,
+        }, error: null };
+      },
+    }));
+    await expect(malformed.withdraw(withdrawContext())).rejects.toMatchObject({
+      statusCode: 500,
+      code: "DB_ERROR",
+    });
+  });
 });
 
 function reviewContext() {
@@ -240,5 +326,17 @@ function reviewContext() {
     actorUserId: USER_ID,
     actorEmployeeId: EMPLOYEE_ID,
     idempotencyKey: "workflow-review-1",
+  };
+}
+
+function withdrawContext() {
+  return {
+    tenantId: TENANT_ID,
+    batchId: BATCH_ID,
+    expectedVersion: 2,
+    reason: null,
+    actorUserId: USER_ID,
+    actorEmployeeId: EMPLOYEE_ID,
+    idempotencyKey: "workflow-withdraw-1",
   };
 }
