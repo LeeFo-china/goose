@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 
 import type { AuthContext } from "@/services/authorization";
+import type { WorkflowTaskActionPayload } from "@/services/workflow-task-actions";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
@@ -112,7 +113,7 @@ function dependencies() {
     },
   };
   const listAccessiblePendingTasks = mock(async () => [pendingTask]);
-  const buildTaskActions = mock(async () => [{
+  const buildTaskActions = mock(async (input: { task: typeof pendingTask }) => [{
     key: "approve",
     label: "审批通过",
     business_domain: "supplier_purchase_batch",
@@ -120,18 +121,25 @@ function dependencies() {
     requires_reason: false,
     output_fields: [],
     task_id: "6a000000-0000-4000-8000-000000000011",
-    node_key: "purchase_review",
+    node_key: input.task.node_key,
     node_type: "approval",
     disabled: false,
   }]);
-  const getState = mock(async () => ({
+  const getState = mock(async (
+    _auth: AuthContext,
+    _params: {
+      subjectType: "supplier_purchase_batch";
+      subjectId: string;
+    },
+    _options: { actionsPromise: Promise<WorkflowTaskActionPayload[]> },
+  ): Promise<{ workflow_state: Record<string, unknown> | null }> => ({
     workflow_state: {
       instance_id: REVIEW_INSTANCE_ID,
       instance_status: "running",
       current_node_key: "purchase_review",
       current_node_title: "采购审批",
       pending_task_count: 1,
-      actions: await buildTaskActions(),
+      actions: await buildTaskActions({ task: pendingTask }),
       timeline_nodes: [{
         node_key: "purchase_review",
         node_title: "采购审批",
@@ -271,6 +279,122 @@ describe("SupplierPurchaseBatchesService workflow read projection", () => {
 
     expect(result.list[0]).toMatchObject({
       workflow_state: { actions: [] },
+      actions: { can_review: false },
+    });
+  });
+
+  test("does not merge a task from an older instance into the current list state", async () => {
+    const deps = dependencies();
+    deps.listAccessiblePendingTasks.mockImplementation(async () => [{
+      ...deps.pendingTask,
+      instance_id: OWN_INSTANCE_ID,
+      instance: {
+        ...deps.pendingTask.instance,
+        id: OWN_INSTANCE_ID,
+      },
+    }] as never);
+    const { SupplierPurchaseBatchesService } = await import(
+      "./supplier-purchase-batches"
+    );
+    const service = new SupplierPurchaseBatchesService(deps as never);
+
+    const result = await service.listBatches(auth, { page: 1, pageSize: 20 });
+
+    expect(result.list[0]).toMatchObject({
+      workflow_state: {
+        instance_id: REVIEW_INSTANCE_ID,
+        actions: [],
+      },
+      actions: { can_review: false },
+    });
+  });
+
+  test("does not merge a task from another node into the current list state", async () => {
+    const deps = dependencies();
+    deps.listAccessiblePendingTasks.mockImplementation(async () => [{
+      ...deps.pendingTask,
+      node_key: "finance_review",
+      instance: {
+        ...deps.pendingTask.instance,
+        current_node_key: "finance_review",
+      },
+    }] as never);
+    const { SupplierPurchaseBatchesService } = await import(
+      "./supplier-purchase-batches"
+    );
+    const service = new SupplierPurchaseBatchesService(deps as never);
+
+    const result = await service.listBatches(auth, { page: 1, pageSize: 20 });
+
+    expect(result.list[0]).toMatchObject({
+      workflow_state: {
+        current_node_key: "purchase_review",
+        actions: [],
+      },
+      actions: { can_review: false },
+    });
+  });
+
+  test("derives detail review access from actions matching the final instance", async () => {
+    const deps = dependencies();
+    deps.getState.mockImplementation(async (_auth, _params, options) => ({
+      workflow_state: {
+        instance_id: OWN_INSTANCE_ID,
+        instance_status: "running",
+        current_node_key: "purchase_review",
+        pending_task_count: 1,
+        actions: await options.actionsPromise,
+        timeline_nodes: [{
+          node_key: "purchase_review",
+          actions: await options.actionsPromise,
+        }],
+      },
+    }));
+    const { SupplierPurchaseBatchesService } = await import(
+      "./supplier-purchase-batches"
+    );
+    const service = new SupplierPurchaseBatchesService(deps as never);
+
+    const detail = await service.getBatch(auth, REVIEW_BATCH_ID);
+
+    expect(detail).toMatchObject({
+      workflow_state: {
+        instance_id: OWN_INSTANCE_ID,
+        actions: [],
+        timeline_nodes: [{ actions: [] }],
+      },
+      actions: { can_review: false },
+    });
+  });
+
+  test("derives detail review access from actions matching the final node", async () => {
+    const deps = dependencies();
+    deps.getState.mockImplementation(async (_auth, _params, options) => ({
+      workflow_state: {
+        instance_id: REVIEW_INSTANCE_ID,
+        instance_status: "running",
+        current_node_key: "finance_review",
+        pending_task_count: 1,
+        actions: await options.actionsPromise,
+        timeline_nodes: [{
+          node_key: "finance_review",
+          actions: await options.actionsPromise,
+        }],
+      },
+    }));
+    const { SupplierPurchaseBatchesService } = await import(
+      "./supplier-purchase-batches"
+    );
+    const service = new SupplierPurchaseBatchesService(deps as never);
+
+    const detail = await service.getBatch(auth, REVIEW_BATCH_ID);
+
+    expect(detail).toMatchObject({
+      workflow_state: {
+        current_node_key: "finance_review",
+        actions: [],
+        timeline_nodes: [{ actions: [] }],
+      },
       actions: { can_review: false },
     });
   });

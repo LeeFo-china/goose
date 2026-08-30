@@ -14,6 +14,11 @@ import {
   deriveSupplierPurchaseBatchActions,
 } from "@/services/supplier-purchase-batch-access";
 import {
+  actionsMatchingWorkflowState,
+  alignWorkflowStateActions,
+  type SupplierPurchaseBatchWorkflowActionCandidate,
+} from "@/services/supplier-purchase-batch-workflow-projection-consistency";
+import {
   buildWorkflowTaskActionsForTask,
   type WorkflowTaskActionPayload,
 } from "@/services/workflow-task-actions";
@@ -83,7 +88,7 @@ export class SupplierPurchaseBatchWorkflowProjectionService {
   }) {
     if (input.page.list.length === 0) return input.page;
     const subjectIds = input.page.list.map(({ id }) => id);
-    const [states, actionsByBatchId] = await Promise.all([
+    const [states, candidatesByBatchId] = await Promise.all([
       this.workflowRead.listSubjectStates({
         tenantId: input.scope.tenantId,
         subjectType: "supplier_purchase_batch",
@@ -95,18 +100,20 @@ export class SupplierPurchaseBatchWorkflowProjectionService {
         batches: input.page.list,
       }),
     ]);
-    const stateByBatchId = new Map(states.map((state) => [
-      state.subject_id,
-      compactWorkflowState(
-        state,
-        actionsByBatchId.get(state.subject_id) ?? [],
-      ),
-    ]));
+    const stateByBatchId = new Map(states.map((state) => {
+      const candidates = candidatesByBatchId.get(state.subject_id) ?? [];
+      return [
+        state.subject_id,
+        compactWorkflowState(
+          state,
+          actionsMatchingWorkflowState(candidates, state),
+        ),
+      ];
+    }));
     return {
       ...input.page,
       list: input.page.list.map((batch) => {
         const workflowState = stateByBatchId.get(batch.id) ?? null;
-        const workflowActions = actionsByBatchId.get(batch.id) ?? [];
         return {
           ...batch,
           workflow_state: workflowState,
@@ -115,7 +122,6 @@ export class SupplierPurchaseBatchWorkflowProjectionService {
             scope: input.scope,
             batch,
             updateProjectIds: input.updateProjectIds,
-            workflowActions,
             workflowState,
           }),
         };
@@ -129,20 +135,28 @@ export class SupplierPurchaseBatchWorkflowProjectionService {
     batch: SupplierPurchaseBatchDetail;
     updateProjectIds: string[] | null;
   }) {
-    const actionsByBatchId = await this.loadActions({
+    const candidatesByBatchId = await this.loadActions({
       auth: input.auth,
       scope: input.scope,
       batches: [input.batch],
     });
-    const workflowActions = actionsByBatchId.get(input.batch.id) ?? [];
-    const workflowState = (await this.workflowRead.getState(
+    const candidates = candidatesByBatchId.get(input.batch.id) ?? [];
+    const stateResult = await this.workflowRead.getState(
       input.auth,
       {
         subjectType: "supplier_purchase_batch",
         subjectId: input.batch.id,
       },
-      { actionsPromise: Promise.resolve(workflowActions) },
-    )).workflow_state;
+      {
+        actionsPromise: Promise.resolve(
+          candidates.flatMap(({ actions }) => actions),
+        ),
+      },
+    );
+    const workflowState = alignWorkflowStateActions(
+      stateResult.workflow_state,
+      candidates,
+    );
     return {
       ...input.batch,
       workflow_state: workflowState,
@@ -151,7 +165,6 @@ export class SupplierPurchaseBatchWorkflowProjectionService {
         scope: input.scope,
         batch: input.batch,
         updateProjectIds: input.updateProjectIds,
-        workflowActions,
         workflowState,
       }),
     };
@@ -161,7 +174,7 @@ export class SupplierPurchaseBatchWorkflowProjectionService {
     auth: AuthContext;
     scope: ProjectionScope;
     batches: SupplierPurchaseBatchDetail[];
-  }): Promise<Map<string, WorkflowTaskActionPayload[]>> {
+  }): Promise<Map<string, SupplierPurchaseBatchWorkflowActionCandidate[]>> {
     const batchById = new Map(input.batches.map((batch) => [batch.id, batch]));
     const tasks = await this.workflowRead.listAccessiblePendingTasks({
       tenantId: input.scope.tenantId,
@@ -172,8 +185,7 @@ export class SupplierPurchaseBatchWorkflowProjectionService {
       permissionCodes: input.auth.permissions.map(({ code }) => code),
       limit: 100,
     });
-    const actionsByBatchId = new Map<string, WorkflowTaskActionPayload[]>();
-    await Promise.all(tasks.map(async (task) => {
+    const candidates = await Promise.all(tasks.map(async (task) => {
       const subjectId = task.instance?.subject_id;
       const batch = subjectId ? batchById.get(subjectId) : undefined;
       if (!subjectId || !batch || !taskIsAccessible({
@@ -181,18 +193,26 @@ export class SupplierPurchaseBatchWorkflowProjectionService {
         task,
         createdByEmployeeId: batch.created_by_employee_id,
         submittedByEmployeeId: batch.submitted_by_employee_id,
-      })) return;
+      })) return null;
       const actions = await this.workflowRead.buildTaskActions({
         tenantId: input.scope.tenantId,
         subjectType: "supplier_purchase_batch",
         task,
       });
-      actionsByBatchId.set(subjectId, [
-        ...(actionsByBatchId.get(subjectId) ?? []),
-        ...actions,
-      ]);
+      return { subjectId, candidate: { task, actions } };
     }));
-    return actionsByBatchId;
+    const candidatesByBatchId = new Map<
+      string,
+      SupplierPurchaseBatchWorkflowActionCandidate[]
+    >();
+    for (const result of candidates) {
+      if (!result) continue;
+      candidatesByBatchId.set(result.subjectId, [
+        ...(candidatesByBatchId.get(result.subjectId) ?? []),
+        result.candidate,
+      ]);
+    }
+    return candidatesByBatchId;
   }
 }
 
@@ -201,7 +221,6 @@ function deriveWorkflowActions(input: {
   scope: ProjectionScope;
   batch: SupplierPurchaseBatchDetail;
   updateProjectIds: string[] | null;
-  workflowActions: WorkflowTaskActionPayload[];
   workflowState: unknown;
 }) {
   return deriveSupplierPurchaseBatchActions({
@@ -216,7 +235,7 @@ function deriveWorkflowActions(input: {
       input.updateProjectIds,
     ),
     workflowEnabled: true,
-    workflowCanReview: input.workflowActions.length > 0,
+    workflowCanReview: workflowStateHasActions(input.workflowState),
     workflowCanWithdraw: stateAllowsWithdraw(input.workflowState),
   });
 }
@@ -240,6 +259,11 @@ function stateAllowsWithdraw(value: unknown): boolean {
   return state?.instance_status === "running" &&
     typeof state.pending_task_count === "number" &&
     state.pending_task_count > 0;
+}
+
+function workflowStateHasActions(value: unknown): boolean {
+  const state = asRecord(value);
+  return Array.isArray(state?.actions) && state.actions.length > 0;
 }
 
 function taskIsAccessible(input: {

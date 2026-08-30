@@ -30,7 +30,7 @@ returns table (
 language plpgsql
 stable
 security definer
-set search_path = public, pg_temp
+set search_path = pg_catalog, public
 as $$
 declare
   v_subject_ids text[] := coalesce(p_subject_ids, '{}'::text[]);

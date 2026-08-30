@@ -47,7 +47,7 @@ describe("supplier purchase batch workflow projection RPC migration", () => {
   test("keeps the security definer RPC service-role-only", async () => {
     const sql = (await readFile(MIGRATION_URL, "utf8")).toLowerCase();
     expect(sql).toContain("security definer");
-    expect(sql).toContain("set search_path = public, pg_temp");
+    expect(sql).toContain("set search_path = pg_catalog, public");
     expect(sql).toContain("from public, anon, authenticated, service_role");
     expect(sql).toContain("to service_role");
   });
