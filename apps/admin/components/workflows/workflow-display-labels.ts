@@ -120,6 +120,22 @@ export function workflowNodeTitle({
   return workflowNodeKeyLabel(nodeKey, fallback);
 }
 
+export function workflowRuntimeNodeTitle({
+  nodeKey,
+  nodeSnapshot,
+}: {
+  nodeKey?: string | null;
+  nodeSnapshot?: Record<string, unknown> | null;
+}) {
+  const snapshotTitle = nodeSnapshot?.title;
+
+  return workflowNodeTitle({
+    nodeKey,
+    title: typeof snapshotTitle === "string" ? snapshotTitle : null,
+    fallback: "-",
+  });
+}
+
 export function workflowNodeStatusLabel(
   status: string | null | undefined,
   displayLabel?: string | null,

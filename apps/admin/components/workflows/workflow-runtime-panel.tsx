@@ -20,7 +20,7 @@ import {
   fetchWorkflowRuntimeInstances,
 } from "./workflow-requests";
 import {
-  workflowNodeKeyLabel,
+  workflowRuntimeNodeTitle,
   workflowSubjectTypeLabel,
 } from "./workflow-display-labels";
 import {
@@ -224,7 +224,10 @@ export function WorkflowRuntimePanel({
                       </div>
                     </TableCell>
                     <TableCell>
-                      {workflowNodeKeyLabel(instance.current_node_key, "-")}
+                      {workflowRuntimeNodeTitle({
+                        nodeKey: instance.current_node_key,
+                        nodeSnapshot: instance.current_node_snapshot,
+                      })}
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
                       {formatDateTime(instance.started_at)}

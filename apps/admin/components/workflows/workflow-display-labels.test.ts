@@ -7,6 +7,7 @@ import {
   workflowAttributeValue,
   workflowInstanceStatusLabel,
   workflowNodeKeyLabel,
+  workflowRuntimeNodeTitle,
   workflowNodeStatusLabel,
   workflowNodeTitle,
   workflowSubjectTypeLabel,
@@ -73,6 +74,25 @@ describe("workflow display labels", () => {
     expect(workflowNodeKeyLabel("rejected_end")).toBe("审批驳回");
   });
 
+  test("uses the runtime snapshot title before the current node key fallback", () => {
+    expect(workflowRuntimeNodeTitle({
+      nodeKey: "custom_review",
+      nodeSnapshot: { title: "定制审批" },
+    })).toBe("定制审批");
+    expect(workflowRuntimeNodeTitle({
+      nodeKey: "purchase_review",
+      nodeSnapshot: { title: "purchase_review" },
+    })).toBe("采购审批");
+    expect(workflowRuntimeNodeTitle({
+      nodeKey: "finance_review",
+      nodeSnapshot: null,
+    })).toBe("财务审批");
+    expect(workflowRuntimeNodeTitle({
+      nodeKey: "custom_review",
+      nodeSnapshot: { title: "custom_review" },
+    })).toBe("-");
+  });
+
   test("uses shared Chinese labels in the runtime panel", () => {
     const runtimePanelSource = readFileSync(
       new URL("./workflow-runtime-panel.tsx", import.meta.url),
@@ -83,7 +103,11 @@ describe("workflow display labels", () => {
       "workflowSubjectTypeLabel(instance.subject_type)",
     );
     expect(runtimePanelSource).toContain(
-      'workflowNodeKeyLabel(instance.current_node_key, "-")',
+      "workflowRuntimeNodeTitle({",
+    );
+    expect(runtimePanelSource).toContain("nodeKey: instance.current_node_key");
+    expect(runtimePanelSource).toContain(
+      "nodeSnapshot: instance.current_node_snapshot",
     );
     expect(runtimePanelSource).not.toContain("const subjectLabels");
   });
