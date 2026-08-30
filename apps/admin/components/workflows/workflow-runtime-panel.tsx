@@ -51,6 +51,7 @@ const subjectLabels: Record<WorkflowRuntimeInstance["subject_type"], string> = {
   project: "项目",
   expense_request: "费用",
   procedure: "工序",
+  supplier_purchase_batch: "采购批次",
 };
 
 function formatDateTime(value: string | null | undefined) {

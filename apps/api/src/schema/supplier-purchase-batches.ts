@@ -123,6 +123,11 @@ export const SupplierPurchaseBatchCancelSchema = z.object({
   reason: requiredText("取消原因"),
 }).strict();
 
+export const SupplierPurchaseBatchWithdrawSchema = z.object({
+  expected_version: z.number().int().nonnegative("版本号不能为负数"),
+  reason: z.string().trim().max(500, "撤回原因不能超过 500 个字符").optional(),
+}).strict();
+
 export type SupplierPurchaseBatchStatus =
   z.infer<typeof SupplierPurchaseBatchStatusSchema>;
 export type SupplierPurchaseBatchListQuery =
@@ -151,3 +156,5 @@ export type SupplierPurchaseBatchReviewInput =
   z.infer<typeof SupplierPurchaseBatchReviewSchema>;
 export type SupplierPurchaseBatchCancelInput =
   z.infer<typeof SupplierPurchaseBatchCancelSchema>;
+export type SupplierPurchaseBatchWithdrawInput =
+  z.infer<typeof SupplierPurchaseBatchWithdrawSchema>;

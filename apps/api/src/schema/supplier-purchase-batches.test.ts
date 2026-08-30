@@ -13,6 +13,7 @@ import {
   SupplierPurchaseBatchRequisitionListQuerySchema,
   SupplierPurchaseBatchReviewSchema,
   SupplierPurchaseBatchSubmitSchema,
+  SupplierPurchaseBatchWithdrawSchema,
 } from "./supplier-purchase-batches";
 
 const PROJECT_ID = "10000000-0000-4000-8000-000000000001";
@@ -314,6 +315,39 @@ describe("supplier purchase batch command schemas", () => {
       { expected_version: 1, reason: "取消", unknown: true },
     ]) {
       expect(SupplierPurchaseBatchCancelSchema.safeParse(input).success)
+        .toBe(false);
+    }
+  });
+
+  test("withdraw accepts a nonnegative version and an optional bounded reason", () => {
+    expect(SupplierPurchaseBatchWithdrawSchema.parse({
+      expected_version: 0,
+    })).toEqual({ expected_version: 0 });
+    expect(SupplierPurchaseBatchWithdrawSchema.parse({
+      expected_version: 2,
+      reason: "  采购负责人撤回  ",
+    })).toEqual({ expected_version: 2, reason: "采购负责人撤回" });
+    expect(SupplierPurchaseBatchWithdrawSchema.parse({
+      expected_version: 2,
+      reason: "",
+    })).toEqual({ expected_version: 2, reason: "" });
+    expect(SupplierPurchaseBatchWithdrawSchema.parse({
+      expected_version: 2,
+      reason: "   ",
+    })).toEqual({ expected_version: 2, reason: "" });
+    const maxReason = "a".repeat(500);
+    expect(SupplierPurchaseBatchWithdrawSchema.parse({
+      expected_version: 2,
+      reason: `  ${maxReason}  `,
+    })).toEqual({ expected_version: 2, reason: maxReason });
+    for (const input of [
+      { expected_version: -1 },
+      { expected_version: 1.5 },
+      { expected_version: "1" },
+      { expected_version: 1, reason: "a".repeat(501) },
+      { expected_version: 1, unknown: true },
+    ]) {
+      expect(SupplierPurchaseBatchWithdrawSchema.safeParse(input).success)
         .toBe(false);
     }
   });

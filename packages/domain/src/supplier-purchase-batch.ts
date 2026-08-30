@@ -13,6 +13,15 @@ export const SUPPLIER_PURCHASE_BATCH_COMMAND_STATUS_VALUES = [
   "cancelled",
   "ordered",
   "revision_required",
+  "withdrawn",
+] as const;
+
+export const SUPPLIER_PURCHASE_BATCH_COMMAND_TYPE_VALUES = [
+  "save_draft",
+  "submit",
+  "review",
+  "cancel",
+  "withdraw",
 ] as const;
 
 export type SupplierPurchaseBatchStatus =
@@ -20,3 +29,6 @@ export type SupplierPurchaseBatchStatus =
 
 export type SupplierPurchaseBatchCommandStatus =
   (typeof SUPPLIER_PURCHASE_BATCH_COMMAND_STATUS_VALUES)[number];
+
+export type SupplierPurchaseBatchCommandType =
+  (typeof SUPPLIER_PURCHASE_BATCH_COMMAND_TYPE_VALUES)[number];

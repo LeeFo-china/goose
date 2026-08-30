@@ -40,6 +40,7 @@ export const WORKFLOW_SUBJECT_TYPE_VALUES = [
   'project',
   'expense_request',
   'procedure',
+  'supplier_purchase_batch',
 ] as const;
 
 export type WorkflowSubjectType =
