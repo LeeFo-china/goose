@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 
 const MIGRATION_URL = new URL(
-  "../../../../supabase/migrations/20260830114000_list_supplier_purchase_batch_workflow_projection.sql",
+  "../../../../supabase/migrations/20260830113500_list_supplier_purchase_batch_workflow_projection.sql",
   import.meta.url,
 );
 
