@@ -8,6 +8,10 @@ const concurrencyScript = new URL(
   "../../../../supabase/tests/supplier_purchase_batch_workflow_withdraw_concurrency.sh",
   import.meta.url,
 );
+const productionIntegrationScript = new URL(
+  "../../../../supabase/tests/supplier_purchase_batch_workflow_withdraw_production_integration.sh",
+  import.meta.url,
+);
 
 async function source() {
   return Bun.file(migration).text();
@@ -116,12 +120,47 @@ describe("supplier purchase batch workflow withdraw migration contract", () => {
     );
     expect(save).toContain("v_batch.status NOT IN ('draft', 'rejected')");
     expect(save).toContain("status = 'draft'");
+    expect(save).toContain("reviewed_by_employee_id = NULL");
+    expect(save).toContain(
+      "reviewed_by_employee_id = v_batch.reviewed_by_employee_id",
+    );
     expect(cancel).toContain("v_batch.status NOT IN ('draft', 'rejected')");
     expect(cancel).not.toContain("'pending_approval'");
+    expect(cancel).toContain("reviewed_by_employee_id = NULL");
+    expect(cancel).toContain(
+      "reviewed_by_employee_id = v_batch.reviewed_by_employee_id",
+    );
     expect(complete.indexOf("'supplier-purchase-batch-command:'"))
       .toBeLessThan(complete.indexOf("AND event.command_type = 'review'"));
     expect(complete.indexOf("AND event.command_type = 'review'"))
       .toBeLessThan(complete.indexOf("SUPPLIER_PURCHASE_BATCH_APPROVAL_ROUND_STALE"));
+  });
+
+  test("replays a completed old-round workflow task from its frozen request", async () => {
+    const complete = functionBody(
+      await source(),
+      "complete_supplier_purchase_batch_workflow_task",
+    );
+    const eventRead = complete.indexOf("INTO v_event");
+    const frozenRound = complete.indexOf(
+      "v_workflow_request->>'approval_round'",
+    );
+    const replayFingerprint = complete.indexOf(
+      "v_replay_fingerprint := pg_catalog.encode",
+    );
+    const directReplay = complete.indexOf(
+      "v_event.request->'workflow_task_result'",
+    );
+    const stale = complete.indexOf(
+      "SUPPLIER_PURCHASE_BATCH_APPROVAL_ROUND_STALE",
+    );
+    expect(eventRead).toBeGreaterThan(0);
+    expect(complete.slice(eventRead, frozenRound)).toContain("FOR UPDATE");
+    expect(frozenRound).toBeGreaterThan(eventRead);
+    expect(replayFingerprint).toBeGreaterThan(frozenRound);
+    expect(directReplay).toBeGreaterThan(replayFingerprint);
+    expect(stale).toBeGreaterThan(directReplay);
+    expect(complete).toContain("SUPPLIER_IDEMPOTENCY_CONFLICT");
   });
 
   test("coordinates double withdrawal with observable bounded locks", async () => {
@@ -133,5 +172,20 @@ describe("supplier purchase batch workflow withdraw migration contract", () => {
     expect(script).toContain("withdraw-different-a");
     expect(script).toContain("withdraw-different-b");
     expect(script).not.toContain("sleep 1");
+  });
+
+  test("runs the real production-schema save submit review withdraw resubmit chain", async () => {
+    const script = await Bun.file(productionIntegrationScript).text();
+    expect(script).toContain("pg_dump");
+    expect(script).toContain("--schema-only");
+    expect(script).toContain(
+      "20260830113000_create_supplier_purchase_batch_workflow_submit.sql",
+    );
+    expect(script).toContain(
+      "supplier_purchase_batch_workflow_withdraw_production_fixture.sql",
+    );
+    expect(script).toContain("dropdb");
+    expect(script).not.toContain("approval_round=2");
+    expect(script).not.toContain("SET approval_round");
   });
 });

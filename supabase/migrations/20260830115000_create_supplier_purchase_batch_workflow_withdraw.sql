@@ -570,7 +570,11 @@ BEGIN
       RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'FORBIDDEN';
     END IF;
     UPDATE public.supplier_purchase_batches AS batch
-    SET status = 'draft'
+    SET
+      status = 'draft',
+      reviewed_by_employee_id = NULL,
+      reviewed_at = NULL,
+      review_remark = NULL
     WHERE batch.id = p_batch_id
       AND batch.tenant_id = p_tenant_id
       AND batch.version = p_expected_version
@@ -586,7 +590,11 @@ BEGIN
 
   IF v_was_rejected AND v_result->>'status' <> 'saved' THEN
     UPDATE public.supplier_purchase_batches AS batch
-    SET status = 'rejected'
+    SET
+      status = 'rejected',
+      reviewed_by_employee_id = v_batch.reviewed_by_employee_id,
+      reviewed_at = v_batch.reviewed_at,
+      review_remark = v_batch.review_remark
     WHERE batch.id = p_batch_id
       AND batch.tenant_id = p_tenant_id
       AND batch.version = p_expected_version
@@ -722,7 +730,11 @@ BEGIN
 
   IF v_batch.status = 'rejected' THEN
     UPDATE public.supplier_purchase_batches AS batch
-    SET status = 'draft'
+    SET
+      status = 'draft',
+      reviewed_by_employee_id = NULL,
+      reviewed_at = NULL,
+      review_remark = NULL
     WHERE batch.id = p_batch_id
       AND batch.tenant_id = p_tenant_id
       AND batch.version = p_expected_version
@@ -736,7 +748,11 @@ BEGIN
   );
   IF v_was_rejected AND v_result->>'status' <> 'cancelled' THEN
     UPDATE public.supplier_purchase_batches AS batch
-    SET status = 'rejected'
+    SET
+      status = 'rejected',
+      reviewed_by_employee_id = v_batch.reviewed_by_employee_id,
+      reviewed_at = v_batch.reviewed_at,
+      review_remark = v_batch.review_remark
     WHERE batch.id = p_batch_id
       AND batch.tenant_id = p_tenant_id
       AND batch.version = p_expected_version
@@ -782,6 +798,10 @@ SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
 DECLARE
+  v_event public.supplier_purchase_batch_command_events%ROWTYPE;
+  v_workflow_request jsonb;
+  v_replay_request jsonb;
+  v_replay_fingerprint text;
   v_instance_round integer;
   v_batch_round integer;
 BEGIN
@@ -796,15 +816,70 @@ BEGIN
       6720240826142000
     ));
 
-    IF NOT EXISTS (
-      SELECT 1
-      FROM public.supplier_purchase_batch_command_events AS event
-      WHERE event.tenant_id = p_tenant_id
-        AND event.purchase_batch_id = p_batch_id
-        AND event.command_type = 'review'
-        AND event.idempotency_key = p_idempotency_key
-    )
-    THEN
+    SELECT event.*
+    INTO v_event
+    FROM public.supplier_purchase_batch_command_events AS event
+    WHERE event.tenant_id = p_tenant_id
+      AND event.purchase_batch_id = p_batch_id
+      AND event.command_type = 'review'
+      AND event.idempotency_key = p_idempotency_key
+    FOR UPDATE;
+
+    IF FOUND AND (
+      v_event.request ? 'workflow_task_fingerprint'
+      OR v_event.request ? 'task_id'
+    ) THEN
+      v_workflow_request := CASE
+        WHEN pg_catalog.jsonb_typeof(
+          v_event.request->'workflow_task_request'
+        ) = 'object'
+          THEN v_event.request->'workflow_task_request'
+        ELSE v_event.request
+      END;
+      IF COALESCE(v_workflow_request->>'approval_round', '') !~ '^[0-9]+$'
+      THEN
+        RAISE EXCEPTION USING
+          ERRCODE = 'P0001',
+          MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
+      END IF;
+
+      v_replay_request := pg_catalog.jsonb_build_object(
+        'tenant_id', p_tenant_id,
+        'batch_id', p_batch_id,
+        'task_id', p_task_id,
+        'action', pg_catalog.btrim(COALESCE(p_action, '')),
+        'reason', CASE
+          WHEN p_reason IS NULL THEN NULL
+          ELSE NULLIF(pg_catalog.btrim(p_reason), '')
+        END,
+        'output', COALESCE(p_output, '{}'::jsonb),
+        'approval_round', (v_workflow_request->>'approval_round')::integer,
+        'actor_user_id', p_actor_user_id,
+        'actor_employee_id', p_actor_employee_id
+      );
+      v_replay_fingerprint := pg_catalog.encode(extensions.digest(
+        pg_catalog.convert_to(v_replay_request::text, 'UTF8'),
+        'sha256'
+      ), 'hex');
+      IF COALESCE(
+        v_event.request->>'workflow_task_fingerprint',
+        v_event.request_fingerprint
+      ) IS DISTINCT FROM v_replay_fingerprint THEN
+        RAISE EXCEPTION USING
+          ERRCODE = 'P0001',
+          MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
+      END IF;
+      RETURN COALESCE(
+        v_event.request->'workflow_task_result',
+        v_event.result
+      ) || pg_catalog.jsonb_build_object('idempotent', true);
+    ELSIF FOUND THEN
+      -- A pure legacy event retains the Task 8 adoption/replay behavior.
+      RETURN public.__gooes_complete_supplier_purchase_batch_workflow_task_v1(
+        p_tenant_id, p_batch_id, p_task_id, p_action, p_reason, p_output,
+        p_actor_user_id, p_actor_employee_id, p_idempotency_key
+      );
+    ELSE
       SELECT
         CASE
           WHEN COALESCE(instance.context->>'approval_round', '') ~ '^[0-9]+$'

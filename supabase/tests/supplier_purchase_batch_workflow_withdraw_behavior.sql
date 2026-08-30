@@ -3,6 +3,8 @@
 DO $behavior$
 DECLARE
   v_result jsonb;
+  v_request jsonb;
+  v_fingerprint text;
   v_error text;
   v_status text;
   v_tenant uuid := '83000000-0000-4000-8000-000000000001';
@@ -144,7 +146,7 @@ BEGIN
   INSERT INTO public.supplier_purchase_batches VALUES (
     '83000000-0000-4000-8000-000000000030', v_tenant, v_project,
     'rejected', 3, 1, NULL, 'unchecked', '{}'::jsonb, v_actor, 1,
-    v_actor, now()
+    v_actor, now(), v_other_actor, now(), 'fixture rejected'
   );
   v_result := public.save_supplier_purchase_batch_draft(
     '83000000-0000-4000-8000-000000000030', v_tenant, v_project, 3,
@@ -190,7 +192,7 @@ BEGIN
   INSERT INTO public.supplier_purchase_batches VALUES (
     '83000000-0000-4000-8000-000000000040', v_tenant, v_project,
     'rejected', 3, 1, NULL, 'unchecked', '{}'::jsonb, v_actor, 1,
-    v_actor, now()
+    v_actor, now(), v_other_actor, now(), 'fixture rejected'
   );
   v_result := public.cancel_supplier_purchase_batch(
     '83000000-0000-4000-8000-000000000040', v_tenant, 3, '取消',
@@ -203,7 +205,7 @@ BEGIN
   INSERT INTO public.supplier_purchase_batches VALUES (
     '83000000-0000-4000-8000-000000000050', v_tenant, v_project,
     'pending_approval', 2, 1, now(), 'within_budget', '{}'::jsonb, v_actor, 1,
-    v_actor, now()
+    v_actor, now(), NULL, NULL, NULL
   );
   v_result := public.cancel_supplier_purchase_batch(
     '83000000-0000-4000-8000-000000000050', v_tenant, 2, '取消',
@@ -215,9 +217,62 @@ BEGIN
         AND status='pending_approval')
   THEN RAISE EXCEPTION 'pending cancel boundary failed: %', v_result; END IF;
 
+  v_request := jsonb_build_object(
+    'tenant_id', v_tenant,
+    'batch_id', '83000000-0000-4000-8000-000000000010'::uuid,
+    'task_id', '83000000-0000-4000-8000-000000000012'::uuid,
+    'action', 'reject',
+    'reason', '旧轮次驳回',
+    'output', jsonb_build_object('source', 'test'),
+    'approval_round', 1,
+    'actor_user_id', v_user,
+    'actor_employee_id', v_other_actor
+  );
+  v_fingerprint := encode(extensions.digest(
+    convert_to(v_request::text, 'UTF8'), 'sha256'
+  ), 'hex');
+  INSERT INTO public.supplier_purchase_batch_command_events(
+    tenant_id, purchase_batch_id, command_type, idempotency_key,
+    request_fingerprint, request, actor_user_id, actor_employee_id,
+    result, result_version
+  ) VALUES (
+    v_tenant, '83000000-0000-4000-8000-000000000010', 'review',
+    'old-task-success', v_fingerprint,
+    v_request || jsonb_build_object(
+      'workflow_task_fingerprint', v_fingerprint,
+      'workflow_task_result', jsonb_build_object(
+        'status', 'rejected', 'idempotent', false,
+        'version', 3, 'workflow_state', jsonb_build_object(
+          'instance_status', 'completed', 'pending_task_count', 0
+        )
+      )
+    ),
+    v_user, v_other_actor,
+    jsonb_build_object('status', 'rejected', 'idempotent', false), 3
+  );
+
   UPDATE public.supplier_purchase_batches
   SET status='pending_approval', version=4, approval_round=2
   WHERE id='83000000-0000-4000-8000-000000000010';
+  v_result := public.complete_supplier_purchase_batch_workflow_task(
+    v_tenant, '83000000-0000-4000-8000-000000000010',
+    '83000000-0000-4000-8000-000000000012', 'reject', '旧轮次驳回',
+    jsonb_build_object('source', 'test'), v_user, v_other_actor,
+    'old-task-success'
+  );
+  IF v_result->>'status' <> 'rejected'
+    OR v_result->>'idempotent' <> 'true'
+  THEN RAISE EXCEPTION 'old-round task replay mismatch: %', v_result; END IF;
+  BEGIN
+    PERFORM public.complete_supplier_purchase_batch_workflow_task(
+      v_tenant, '83000000-0000-4000-8000-000000000010',
+      '83000000-0000-4000-8000-000000000012', 'approve', NULL,
+      jsonb_build_object('source', 'test'), v_user, v_other_actor,
+      'old-task-success');
+    RAISE EXCEPTION 'different old-round payload unexpectedly replayed';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'SUPPLIER_IDEMPOTENCY_CONFLICT' THEN RAISE; END IF;
+  END;
   BEGIN
     PERFORM public.complete_supplier_purchase_batch_workflow_task(
       v_tenant, '83000000-0000-4000-8000-000000000010',

@@ -31,7 +31,8 @@ CREATE TABLE public.supplier_purchase_batches (
   budget_checked_at timestamptz, budget_status text NOT NULL,
   budget_snapshot jsonb NOT NULL DEFAULT '{}'::jsonb,
   submitted_by_employee_id uuid, split_generation integer NOT NULL DEFAULT 1,
-  updated_by_employee_id uuid, updated_at timestamptz NOT NULL DEFAULT now()
+  updated_by_employee_id uuid, updated_at timestamptz NOT NULL DEFAULT now(),
+  reviewed_by_employee_id uuid, reviewed_at timestamptz, review_remark text
 );
 CREATE TABLE public.supplier_purchase_batch_items (
   id uuid PRIMARY KEY, tenant_id uuid NOT NULL, purchase_batch_id uuid NOT NULL
@@ -216,7 +217,7 @@ BEGIN
   INSERT INTO public.supplier_purchase_batches VALUES (
     p_batch_id, p_tenant_id, p_project_id, 'pending_approval', 2, 1,
     now(), 'within_budget', '{}'::jsonb, p_submitter_id, 1,
-    p_submitter_id, now()
+    p_submitter_id, now(), NULL, NULL, NULL
   );
   INSERT INTO public.supplier_purchase_batch_items VALUES (
     p_item_id, p_tenant_id, p_batch_id
