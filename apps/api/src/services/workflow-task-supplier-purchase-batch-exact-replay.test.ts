@@ -13,8 +13,12 @@ const TASK_ID = "b1000000-0000-4000-8000-000000000004";
 const EMPLOYEE_ID = "b1000000-0000-4000-8000-000000000005";
 const USER_ID = "b1000000-0000-4000-8000-000000000006";
 const INSTANCE_ID = "b1000000-0000-4000-8000-000000000007";
+const MISSING_PROJECT_ID = Symbol("missing-project-id");
 
-async function subject(request: Record<string, unknown>) {
+async function subject(
+  request: Record<string, unknown>,
+  frozenProjectId: unknown = PROJECT_ID,
+) {
   const { WorkflowTaskSupplierPurchaseBatchBridge } = await import(
     "./workflow-task-supplier-purchase-batch-bridge"
   );
@@ -23,7 +27,11 @@ async function subject(request: Record<string, unknown>) {
     tenant_id: TENANT_ID, project_id: PROJECT_ID,
     submitted_by_employee_id: USER_ID,
   }));
-  const canAccessProject = mock(async () => true);
+  const canAccessProject = mock(async (
+    _context: AuthContext,
+    _projectId: string,
+    _permission: string,
+  ) => true);
   const listPendingTasks = mock(async () => [task()]);
   const bridge = new WorkflowTaskSupplierPurchaseBatchBridge({
     repository: { completeTask },
@@ -37,10 +45,10 @@ async function subject(request: Record<string, unknown>) {
       listReviewEvents: mock(async () => [{
         id: USER_ID, idempotency_key: "exact-key", request,
       }]),
-      listRunningInstances: mock(async () => [instance("running")]),
+      listRunningInstances: mock(async () => [instance("running", frozenProjectId)]),
       listPendingTasks,
       listTasksById: mock(async () => [task("completed")]),
-      listInstancesById: mock(async () => [instance("completed")]),
+      listInstancesById: mock(async () => [instance("completed", frozenProjectId)]),
     },
   });
   return { bridge, completeTask, findBatchAccessContext, canAccessProject,
@@ -65,7 +73,7 @@ describe("WorkflowTaskSupplierPurchaseBatchBridge exact replay", () => {
     );
   });
 
-  test("uses frozen workflow facts without current business gates", async () => {
+  test("checks frozen project scope without current batch gates", async () => {
     const current = await subject({ workflow_task_request: {
       tenant_id: TENANT_ID, batch_id: BATCH_ID, task_id: TASK_ID,
       approval_round: 3,
@@ -79,17 +87,47 @@ describe("WorkflowTaskSupplierPurchaseBatchBridge exact replay", () => {
     }));
     current.canAccessProject.mockImplementation(async () => false);
 
-    await expect(current.bridge.replayExactLegacyReview({
+    const replay = {
       authContext: auth(), tenantId: TENANT_ID, batchId: BATCH_ID,
       action: "reject", reason: "库存过高", expectedVersion: 2, output: {},
       idempotencyKey: "exact-key",
-    })).resolves.toEqual({
+    };
+    await expect(current.bridge.replayExactLegacyReview(replay))
+      .rejects.toMatchObject({ statusCode: 403, code: "FORBIDDEN" });
+    expect(current.completeTask).not.toHaveBeenCalled();
+
+    current.canAccessProject.mockClear();
+    current.canAccessProject.mockImplementation(async () => true);
+    await expect(current.bridge.replayExactLegacyReview(replay)).resolves.toEqual({
       matched: true,
       result: { status: "rejected", idempotent: true },
     });
     expect(current.findBatchAccessContext).not.toHaveBeenCalled();
-    expect(current.canAccessProject).not.toHaveBeenCalled();
+    expect(current.canAccessProject.mock.calls).toEqual([
+      [auth(), PROJECT_ID, "project.read"],
+      [auth(), PROJECT_ID, "supplier.purchase-requisition.approve"],
+    ]);
   });
+
+  test.each([MISSING_PROJECT_ID, "not-a-uuid"])(
+    "fails closed when the frozen project id is missing or invalid",
+    async (projectId) => {
+      const current = await subject({ workflow_task_request: {
+        tenant_id: TENANT_ID, batch_id: BATCH_ID, task_id: TASK_ID,
+        approval_round: 3,
+      } }, projectId);
+
+      await expect(current.bridge.replayExactLegacyReview({
+        authContext: auth(), tenantId: TENANT_ID, batchId: BATCH_ID,
+        action: "approve", reason: null, expectedVersion: 2, output: {},
+        idempotencyKey: "exact-key",
+      })).rejects.toMatchObject({
+        statusCode: 409,
+        code: "SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT",
+      });
+      expect(current.completeTask).not.toHaveBeenCalled();
+    },
+  );
 });
 
 function task(status: "pending" | "completed" = "pending") {
@@ -101,12 +139,14 @@ function task(status: "pending" | "completed" = "pending") {
   };
 }
 
-function instance(status: "running" | "completed") {
+function instance(status: "running" | "completed", projectId: unknown) {
   return {
     id: INSTANCE_ID, tenant_id: TENANT_ID,
     subject_type: "supplier_purchase_batch" as const, subject_id: BATCH_ID,
     status, current_node_key: status === "running" ? "purchase_review" : null,
-    context: { approval_round: 3 },
+    context: projectId === MISSING_PROJECT_ID
+      ? { approval_round: 3 }
+      : { approval_round: 3, project_id: projectId },
   };
 }
 

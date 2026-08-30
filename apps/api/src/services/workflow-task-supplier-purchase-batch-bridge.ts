@@ -14,9 +14,11 @@ import { SupplierPurchaseBatchAccessRepository } from
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import {
+  frozenReviewProjectId,
   hasReservedCompatibilityMetadata,
   isPureLegacyReviewEvent,
   reviewEventReference,
+  withTrustedCompatibilityOutput,
   workflowResolutionError,
 } from "@/services/workflow-task-supplier-purchase-batch-review-event";
 
@@ -233,6 +235,18 @@ export class WorkflowTaskSupplierPurchaseBatchBridge {
         "SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT",
       );
     }
+    const projectId = frozenReviewProjectId(instance.context);
+    if (!projectId) throw workflowResolutionError(
+      "SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT",
+    );
+    const permissionCode = NODE_PERMISSION[task.node_key];
+    const canReadProject = await this.dependencies.accessPolicy
+      .canAccessProject(input.authContext, projectId, "project.read");
+    const canReviewProject = canReadProject &&
+      await this.dependencies.accessPolicy.canAccessProject(
+        input.authContext, projectId, permissionCode,
+      );
+    if (!canReviewProject) throw Errors.forbidden();
     const result = await this.completeTrusted({
       authContext: input.authContext,
       task: { id: task.id, tenant_id: task.tenant_id,
@@ -242,7 +256,6 @@ export class WorkflowTaskSupplierPurchaseBatchBridge {
     }, true);
     return { matched: true as const, result };
   }
-
   private async completeLaggingReview(input: LegacyReviewInput) {
     const events = await this.dependencies.lookupRepository.listReviewEvents({
       tenantId: input.batch.tenant_id,
@@ -480,19 +493,6 @@ export class WorkflowTaskSupplierPurchaseBatchBridge {
       throw Errors.forbidden();
     }
   }
-}
-
-function withTrustedCompatibilityOutput<
-  Input extends { expectedVersion: number; output: Record<string, unknown> },
->(input: Input): Input {
-  if (!Number.isInteger(input.expectedVersion) || input.expectedVersion < 1) {
-    throw Errors.badRequest("采购批次审批版本无效");
-  }
-  const { compat_source: _source, compat_expected_version: _version,
-    ...businessOutput } = input.output;
-  return { ...input, output: { ...businessOutput,
-    compat_source: "supplier_purchase_batch_review",
-    compat_expected_version: input.expectedVersion } };
 }
 
 export const workflowTaskSupplierPurchaseBatchBridge =

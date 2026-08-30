@@ -1,4 +1,7 @@
 import { Errors } from "@/errors/error-factory";
+import { z } from "zod";
+
+const UUID_SCHEMA = z.uuid();
 
 export type SupplierPurchaseBatchReviewEventReference = {
   tenantId: string;
@@ -47,6 +50,26 @@ export function hasReservedCompatibilityMetadata(
 ): boolean {
   return Object.hasOwn(output, "compat_source") ||
     Object.hasOwn(output, "compat_expected_version");
+}
+
+export function frozenReviewProjectId(
+  context: Record<string, unknown>,
+): string | null {
+  const parsed = UUID_SCHEMA.safeParse(context.project_id);
+  return parsed.success ? parsed.data : null;
+}
+
+export function withTrustedCompatibilityOutput<
+  Input extends { expectedVersion: number; output: Record<string, unknown> },
+>(input: Input): Input {
+  if (!Number.isInteger(input.expectedVersion) || input.expectedVersion < 1) {
+    throw Errors.badRequest("采购批次审批版本无效");
+  }
+  const { compat_source: _source, compat_expected_version: _version,
+    ...businessOutput } = input.output;
+  return { ...input, output: { ...businessOutput,
+    compat_source: "supplier_purchase_batch_review",
+    compat_expected_version: input.expectedVersion } };
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
