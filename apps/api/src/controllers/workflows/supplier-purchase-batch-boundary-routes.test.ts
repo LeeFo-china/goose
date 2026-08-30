@@ -57,44 +57,52 @@ test("public generic workflow mutation routes enforce the supplier boundary", as
   registerRoutes(app, workflowController);
   registerRoutes(app, workflowTaskController);
 
-  const requests = [
-    app.inject({
-      method: "POST",
-      url: "/workflows/11111111-1111-4111-8111-111111111111/runtime/instances",
-      payload: {
-        subject_type: "project",
-        subject_id: "project-1",
-        context: { budget_status: "within_budget" },
-      },
-    }),
-    app.inject({
-      method: "POST",
-      url: "/workflows/11111111-1111-4111-8111-111111111111/runtime/rebuild",
-      payload: {
-        subject_type: "supplier_purchase_batch",
-        subject_id: "batch-1",
-        reason: "修复流程",
-        context: { budget_status: "within_budget" },
-        delete_completed_instances: false,
-        dry_run: false,
-      },
-    }),
-    app.inject({
-      method: "POST",
-      url: "/workflow-tasks/22222222-2222-4222-8222-222222222222/complete",
-      payload: {
-        action: "approve",
-        output: { decision: "approved", budget_status: "within_budget" },
-      },
-    }),
-  ];
+  const [startResponse, rebuildResponse, supplierTaskResponse] =
+    await Promise.all([
+      app.inject({
+        method: "POST",
+        url: "/workflows/11111111-1111-4111-8111-111111111111/runtime/instances",
+        payload: {
+          subject_type: "project",
+          subject_id: "project-1",
+          context: { budget_status: "within_budget" },
+        },
+      }),
+      app.inject({
+        method: "POST",
+        url: "/workflows/11111111-1111-4111-8111-111111111111/runtime/rebuild",
+        payload: {
+          subject_type: "supplier_purchase_batch",
+          subject_id: "batch-1",
+          reason: "修复流程",
+          context: { budget_status: "within_budget" },
+          delete_completed_instances: false,
+          dry_run: false,
+        },
+      }),
+      app.inject({
+        method: "POST",
+        url: "/workflow-tasks/22222222-2222-4222-8222-222222222222/complete",
+        payload: {
+          action: "approve",
+          output: { decision: "approved", budget_status: "within_budget" },
+        },
+      }),
+    ]);
 
-  for (const response of await Promise.all(requests)) {
+  for (const response of [startResponse, rebuildResponse]) {
     expect(response.statusCode).toBe(409);
     expect(response.json()).toMatchObject({
       code: "SUPPLIER_PURCHASE_BATCH_WORKFLOW_BUSINESS_COMMAND_REQUIRED",
     });
   }
+  expect(supplierTaskResponse.statusCode).toBe(400);
+  expect(supplierTaskResponse.json()).toMatchObject({
+    success: false,
+    message: "缺少有效的 Idempotency-Key",
+    code: "VALIDATION_ERROR",
+    requestId: expect.any(String),
+  });
   expect(startRuntimeInstance).not.toHaveBeenCalled();
   expect(rebuildRuntimeInstance).not.toHaveBeenCalled();
   expect(completeRuntimeNode).not.toHaveBeenCalled();
