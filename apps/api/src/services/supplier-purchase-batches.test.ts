@@ -103,6 +103,11 @@ function dependencies(overrides: Record<string, unknown> = {}) {
         return { status: "cancelled", input };
       }),
     },
+    workflowRuntime: {
+      isEnabled: mock(async () => false),
+      submit: mock(async (input: unknown) =>
+        ({ status: "submitted", input })),
+    },
     nowFactory: mock(() => new Date("2026-08-27T03:04:05.000Z")),
   };
 }

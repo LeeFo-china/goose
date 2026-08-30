@@ -47,4 +47,13 @@ export const SUPPLIER_PURCHASE_BATCH_ERRORS = {
   SUPPLIER_PURCHASE_BATCH_BUDGET_OVERRIDE_REQUIRED: {
     statusCode: 409, message: "超预算审批需要预算管理权限",
   },
+  SUPPLIER_PURCHASE_BATCH_WORKFLOW_MISSING: {
+    statusCode: 409, message: "采购批次审批流程未配置或未发布",
+  },
+  SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT: {
+    statusCode: 409, message: "采购批次审批流程状态冲突，请刷新后重试",
+  },
+  SUPPLIER_PURCHASE_BATCH_WORKFLOW_NO_APPROVER: {
+    statusCode: 409, message: "采购批次审批流程缺少可用审批人",
+  },
 } as const;

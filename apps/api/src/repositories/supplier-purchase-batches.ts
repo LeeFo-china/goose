@@ -6,6 +6,8 @@ import {
   executeSupplierPurchaseBatchCommand,
   type SupplierPurchaseBatchCommandResult,
 } from "@/repositories/supplier-purchase-batch-command-gateway";
+import { SupplierPurchaseBatchWorkflowRepository } from
+  "@/repositories/supplier-purchase-batch-workflow";
 import {
   SUPPLIER_PURCHASE_BATCH_SELECT,
   SupplierPurchaseBatchCatalogResultSchema,
@@ -347,6 +349,12 @@ export class SupplierPurchaseBatchesRepository {
       "提交供应商采购批次失败",
       "submitted",
     );
+  }
+
+  submitWithWorkflow(input: BatchCommandContext) {
+    return new SupplierPurchaseBatchWorkflowRepository(
+      () => this.client,
+    ).submit(input);
   }
 
   cancel(input: BatchCommandContext & { reason: string }) {

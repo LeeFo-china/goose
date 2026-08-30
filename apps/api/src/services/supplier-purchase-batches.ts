@@ -23,6 +23,8 @@ import {
 } from "@/services/supplier-purchase-batch-access";
 import { resolveSupplierPurchaseBatchProjectOptionWindow } from
   "@/services/supplier-purchase-batch-project-option-window";
+import { supplierPurchaseBatchWorkflowRuntime } from
+  "@/services/supplier-purchase-batch-workflow-runtime";
 
 type BatchAccessPort = Pick<
   typeof supplierPurchaseBatchAccessService,
@@ -50,10 +52,15 @@ type BatchRepositoryPort = Pick<
   | "review"
   | "cancel"
 >;
+type BatchWorkflowRuntimePort = Pick<
+  typeof supplierPurchaseBatchWorkflowRuntime,
+  "isEnabled" | "submit"
+>;
 
 export type SupplierPurchaseBatchesServiceDependencies = {
   access?: BatchAccessPort;
   repository?: BatchRepositoryPort;
+  workflowRuntime?: BatchWorkflowRuntimePort;
   nowFactory?: () => Date;
 };
 
@@ -66,12 +73,15 @@ type ActorScope = {
 export class SupplierPurchaseBatchesService {
   private readonly access: BatchAccessPort;
   private readonly repository: BatchRepositoryPort;
+  private readonly workflowRuntime: BatchWorkflowRuntimePort;
   private readonly nowFactory: () => Date;
 
   constructor(dependencies: SupplierPurchaseBatchesServiceDependencies = {}) {
     this.access = dependencies.access ?? supplierPurchaseBatchAccessService;
     this.repository = dependencies.repository ??
       supplierPurchaseBatchesRepository;
+    this.workflowRuntime = dependencies.workflowRuntime ??
+      supplierPurchaseBatchWorkflowRuntime;
     this.nowFactory = dependencies.nowFactory ?? (() => new Date());
   }
 
@@ -234,9 +244,11 @@ export class SupplierPurchaseBatchesService {
   ) {
     const scope = await this.access.requireManage(auth);
     await this.requireUpdateBatch(auth, scope, batchId);
-    return this.repository.submit(
-      this.commandContext(scope, batchId, input, idempotencyKey),
-    );
+    const command = this.commandContext(scope, batchId, input, idempotencyKey);
+    if (await this.workflowRuntime.isEnabled(scope.tenantId)) {
+      return this.workflowRuntime.submit(command);
+    }
+    return this.repository.submit(command);
   }
 
   async cancel(

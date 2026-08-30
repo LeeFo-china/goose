@@ -138,6 +138,47 @@ describe("SupplierPurchaseBatchesRepository commands", () => {
     ]);
   });
 
+  test("routes workflow submission through the dedicated atomic RPC", async () => {
+    const submittedBatch = {
+      ...batch,
+      status: "pending_approval",
+      version: 2,
+      approval_round: 1,
+      budget_checked_at: AT,
+      budget_status: "within_budget",
+      submitted_by_employee_id: EMPLOYEE_ID,
+      submitted_at: AT,
+    };
+    const workflow_state = {
+      definition_id: "a0000000-0000-4000-8000-000000000012",
+      instance_id: "a0000000-0000-4000-8000-000000000013",
+      instance_status: "running",
+      current_node_key: "purchase_review",
+      current_node_title: "采购审批",
+      current_business_kind: null,
+      pending_task_count: 1,
+    };
+    const { repository, calls } = await repositoryFor([{
+      data: {
+        status: "submitted",
+        idempotent: false,
+        batch: submittedBatch,
+        version: 2,
+        requisition_ids: [REQUISITION_ID],
+        workflow_state,
+      },
+      error: null,
+    }]);
+
+    expect(await repository.submitWithWorkflow(context)).toMatchObject({
+      status: "submitted",
+      workflow_state,
+    });
+    expect(calls[0]?.name).toBe(
+      "submit_supplier_purchase_batch_with_workflow",
+    );
+  });
+
   test("rejects malformed or cross-identity success envelopes", async () => {
     const { repository } = await repositoryFor([
       { data: { status: "saved", batch: { ...batch, total_amount: 100 },
