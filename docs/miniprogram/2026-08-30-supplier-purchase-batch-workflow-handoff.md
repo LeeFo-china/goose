@@ -107,7 +107,9 @@ Authorization: Bearer <token>
 说明：
 
 - 上例是字段节选；真实详情还会返回 `timeline_nodes`。
-- `workflow_state` 在旧固定审批或还没有 workflow runtime 时可以为 `null`。
+- `purchase_batch_workflow_enabled=false` 时详情响应会**省略** `workflow_state`；开关开启但
+  尚无 workflow runtime 时才返回 `workflow_state:null`。Orange 类型必须写成
+  `workflow_state?: WorkflowState | null`，同时兼容灰度期间的字段缺失和显式空值。
 - `workflow_state.actions` 只返回当前登录员工真正可执行的任务动作；不可见时为空。
 - 顶层 `actions` 是页面按钮的唯一事实源。小程序不得按 status、权限码或提交人自行推导。
 - `approval_round` 每次驳回编辑/撤回后重新提交都会递增；客户端只展示或随详情刷新，
@@ -264,6 +266,9 @@ Content-Type: application/json
 }
 ```
 
+上例中的 `batch` 和 `workflow_state` 是字段节选；客户端以本节列出的状态、版本和 workflow
+字段为控制依据，其余批次字段沿用详情契约。
+
 撤回保留批次明细、拆分采购申请和审批时间线，释放当前预算占用；不会删除历史。修改后重新
 submit 会建立新 `approval_round`，旧 task 不能继续推进。
 
@@ -326,7 +331,8 @@ stale task 或改变幂等 fingerprint。旧 `/review` 在 workflow 模式下也
 
 - 请求超时、断网、HTTP 500 后状态不确定：保持 payload 不变并复用原 key。
 - 相同 key + 相同 payload：服务端返回同一业务结果，并以 `idempotent:true` 标识重放。
-- 相同 key + 不同 action/reason/output/旧 review expected_version：返回 409 conflict。
+- 相同 key + 不同 action/reason/output/旧 review expected_version：返回 HTTP 409，稳定 code
+  为 `SUPPLIER_IDEMPOTENCY_CONFLICT`。
 - 用户修改 action 或 reason 后再次确认：生成新 key。
 - 不得把一个 task 的 key 用到另一个 task、withdraw 或下一审批轮次。
 - workflow complete 与旧 `/review` 并发时只产生一个业务结果；另一条可能得到 replay 或
@@ -334,6 +340,10 @@ stale task 或改变幂等 fingerprint。旧 `/review` 在 workflow 模式下也
 
 客户端只有在收到确定成功、用户改变 payload 或明确放弃本次意图时清空 key。对超时和 500
 立即生成新 key 是错误做法。
+
+收到 `SUPPLIER_IDEMPOTENCY_CONFLICT` 时不要用原 key 重试，也不要自动换新 key 或切换旧入口。
+先刷新批次和任务，核对客户端保存的 key/payload 是否错配；只有用户基于最新状态明确发起一项
+新的业务意图时，才生成新 key 提交。
 
 ## 7. 错误处理矩阵
 
@@ -343,6 +353,7 @@ stale task 或改变幂等 fingerprint。旧 `/review` 在 workflow 模式下也
 | 403 | `FORBIDDEN` | 关闭动作按钮，刷新详情/任务；提示无权限或任务不再属于本人，不 fallback |
 | 404 | `SUPPLIER_PURCHASE_BATCH_NOT_FOUND` 或任务不存在 | 返回列表/任务中心并刷新；不要推断范围外资源 |
 | 409 | `SUPPLIER_PURCHASE_BATCH_VERSION_CONFLICT` | 刷新详情，使用新 version，用户重新确认后用新 key |
+| 409 | `SUPPLIER_IDEMPOTENCY_CONFLICT` | 停止提交并刷新；核对本地 key/payload，不能原 key 重试、自动换 key 或 fallback；仅新用户意图可生成新 key |
 | 409 | `WORKFLOW_TASK_NOT_PENDING`、`WORKFLOW_NODE_NOT_CURRENT` | 视为任务已推进/失效，刷新详情和任务中心 |
 | 409 | `SUPPLIER_PURCHASE_BATCH_APPROVAL_ROUND_STALE` | 旧轮次，不重试；刷新后进入新任务 |
 | 409 | `SUPPLIER_PURCHASE_BATCH_WORKFLOW_MISSING`、`SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT` | 提示审批流程异常并记录 requestId，不调用旧审批兜底 |
@@ -364,7 +375,7 @@ stale task 或改变幂等 fingerprint。旧 `/review` 在 workflow 模式下也
 
 | Orange 文件 | 当前只读事实 | 小程序团队待改 |
 | --- | --- | --- |
-| `src/types/api/supplier_procurement.d.ts` | 有批次/旧 review 类型；`PurchaseBatchActions` 尚无 `can_withdraw`，批次尚无 `approval_round/workflow_state`，`ReviewedProcurementCommand` 只允许 ordered/rejected | 增加 workflow state、`can_withdraw`、withdraw input/result；允许兼容 review 的 `pending_approval` finance 分支 |
+| `src/types/api/supplier_procurement.d.ts` | 有批次/旧 review 类型；`PurchaseBatchActions` 尚无 `can_withdraw`，批次尚无 `approval_round/workflow_state`，`ReviewedProcurementCommand` 只允许 ordered/rejected | 增加 optional+nullable workflow state、`can_withdraw`、withdraw input/result；允许兼容 review 的 `pending_approval` finance 分支 |
 | `src/types/api/workflow_task.d.ts` | `WorkflowSubjectType` 和 todo/business domain 仍以宽 string 兼容；card context 尚无 `target_url` | 明确加入 `supplier_purchase_batch` subject/todo/business domain，并给 card context 增加 `target_url` |
 | `src/services/supplier_procurement.ts` | mutation helper 已带稳定 key；有旧 `review`，没有 `withdraw` | 新增 withdraw wrapper；旧 review 仅保留无 taskId 的灰度入口 |
 | `src/services/workflow_task.ts` | `complete(taskId,payload)` 尚未传 `Idempotency-Key` | 改为接收 key，并像 supplier mutation 一样放在 header |
@@ -374,6 +385,77 @@ stale task 或改变幂等 fingerprint。旧 `/review` 在 workflow 模式下也
 
 建议 Orange 实施顺序：类型 -> service wrapper -> task center -> batch detail -> batch review -> 真机 smoke。
 这些改动必须由 Orange 团队提交；Gooes 不会跨仓库代改。
+
+### 8.1 Orange 可直接采用的命令类型
+
+Orange 当前 `package.json`/`pnpm-lock.yaml` 和已安装包均指向 `@gooes/domain@1.18.0`。该版本
+`SupplierPurchaseBatchCommandStatus` 只有 `saved`、`submitted`、`rejected`、`cancelled`、
+`ordered`、`revision_required`，不包含 workflow review 的 `pending_approval`，也不包含
+`withdrawn`。
+因此不能用 `Extract<SupplierPurchaseBatchCommandStatus, "pending_approval" | "withdrawn">`；结果会
+被推导为 `never`。在共享 domain 发布并由 Orange 确认升级前，先在
+`src/types/api/supplier_procurement.d.ts` 使用不依赖旧 domain union 的专用字面量类型：
+
+```ts
+import type { WorkflowState } from '@/types/api/workflow_task';
+
+export type ProcurementWorkflowReviewStatus =
+  | 'pending_approval'
+  | 'ordered'
+  | 'rejected';
+
+export interface ProcurementWorkflowReviewState {
+  definition_id: string;
+  instance_id: string;
+  instance_status: 'running' | 'completed' | 'canceled';
+  current_node_key: 'purchase_review' | 'finance_review' | null;
+  current_node_title: string | null;
+  current_business_kind: string | null;
+  pending_task_count: number;
+}
+
+export interface PurchaseBatchActions {
+  // 保留已有字段
+  can_withdraw: boolean;
+}
+
+export interface PurchaseBatch {
+  // 保留已有字段；列表和详情都要兼容灰度字段缺失
+  approval_round?: number;
+  workflow_state?: WorkflowState | null;
+}
+
+export interface WorkflowReviewedProcurementCommand
+  extends ProcurementCommandBase {
+  status: ProcurementWorkflowReviewStatus;
+  // 统一 task complete 总是返回；旧 /review 的 ordered/rejected 兼容响应会省略
+  workflow_state?: ProcurementWorkflowReviewState;
+  requisition_ids?: string[];
+  orders?: Array<{
+    id: string;
+    order_no: string;
+    tenant_supplier_id: string;
+    supplier_id: string;
+    supplier_name: string;
+    status: 'submitted';
+  }>;
+}
+
+export interface WorkflowWithdrawnProcurementCommand
+  extends ProcurementCommandBase {
+  status: 'withdrawn';
+  workflow_state: ProcurementWorkflowReviewState;
+}
+```
+
+`PurchaseBatchActions` 和 `PurchaseBatch` 可利用 interface merging 增补上述新字段；两个 workflow
+command 使用新名字，避免与现有 `ReviewedProcurementCommand.status` 的声明合并冲突。随后将
+`SupplierProcurementService.review` 和 `WorkflowTaskService.complete` 的返回泛型改成
+`WorkflowReviewedProcurementCommand`，withdraw wrapper 使用
+`WorkflowWithdrawnProcurementCommand`。`PurchaseBatchDetail` 继承 `PurchaseBatch` 后自然得到
+`workflow_state?: WorkflowState | null`；页面必须用 optional chaining，不能假定字段一定存在。
+若改为升级共享 domain，必须先发布含 `withdrawn` 的正式包并更新 Orange lockfile；即使升级，
+`pending_approval` 仍是本次 review 的中间结果，建议继续保留专用 review union。
 
 ## 9. 与既有采购能力的兼容说明
 
@@ -411,6 +493,8 @@ body 继续包含 `product + sku + price`。成功后刷新采购 catalog，新 
 - [ ] complete/withdraw 均在 header 发送稳定 `Idempotency-Key`。
 - [ ] reject 无 reason 在客户端阻止；服务端 400 仍可正确展示。
 - [ ] 500/超时重试复用原 key；修改 reason 后生成新 key。
+- [ ] 同 key 改 payload 得到 409 `SUPPLIER_IDEMPOTENCY_CONFLICT`，客户端停止提交并刷新，
+      不自动换 key 或 fallback。
 
 ### 10.2 真机业务矩阵
 
