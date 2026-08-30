@@ -1,5 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 
+import { AppError } from "@/errors/app-error";
+
 import {
   formatSupplierPurchaseBatchWorkflowSmokeFailure,
   parseSupplierPurchaseBatchWorkflowSmokeArgs,
@@ -11,6 +13,17 @@ const smokeUrl = new URL(
   "./supplier-purchase-batch-workflow-smoke.ts",
   import.meta.url,
 );
+
+function captureAppError(action: () => unknown): AppError {
+  let caught: unknown;
+  try {
+    action();
+  } catch (error) {
+    caught = error;
+  }
+  expect(caught).toBeInstanceOf(AppError);
+  return caught as AppError;
+}
 
 describe("supplier purchase batch workflow smoke", () => {
   test("ships the dedicated workflow smoke implementation", async () => {
@@ -53,17 +66,23 @@ describe("supplier purchase batch workflow smoke", () => {
     });
     expect(parseSupplierPurchaseBatchWorkflowSmokeArgs([...argv, "--execute"]))
       .toEqual({ ...ids, execute: true });
-    expect(() => parseSupplierPurchaseBatchWorkflowSmokeArgs([])).toThrow(
-      "SUPPLIER_PURCHASE_BATCH_WORKFLOW_SMOKE_ARGUMENT_INVALID",
-    );
+    expect(() => parseSupplierPurchaseBatchWorkflowSmokeArgs([]))
+      .toThrow(AppError);
     expect(() => parseSupplierPurchaseBatchWorkflowSmokeArgs([
       ...argv.slice(0, -1),
       "not-a-uuid",
-    ])).toThrow("SUPPLIER_PURCHASE_BATCH_WORKFLOW_SMOKE_ARGUMENT_INVALID");
+    ])).toThrow(AppError);
     expect(() => parseSupplierPurchaseBatchWorkflowSmokeArgs([
       ...argv,
       "--unknown",
-    ])).toThrow("SUPPLIER_PURCHASE_BATCH_WORKFLOW_SMOKE_ARGUMENT_INVALID");
+    ])).toThrow(AppError);
+    const invalid = captureAppError(() =>
+      parseSupplierPurchaseBatchWorkflowSmokeArgs([])
+    );
+    expect(invalid).toMatchObject({
+      statusCode: 400,
+      code: "SUPPLIER_PURCHASE_BATCH_WORKFLOW_SMOKE_ARGUMENT_INVALID",
+    });
   });
 
   test("inspects prerequisites without writes in the default dry-run", async () => {
@@ -168,6 +187,8 @@ describe("supplier purchase batch workflow smoke", () => {
 
   test("uses bounded reads and emits only a sanitized stable failure", async () => {
     const source = await Bun.file(smokeUrl).text();
+    expect(source).not.toContain("throw new Error");
+    expect(source).toContain('import { Errors } from "@/errors/error-factory"');
     expect(source.match(/complete_supplier_purchase_batch_workflow_task/g))
       .toHaveLength(2);
     expect(source).toContain("batch.status !== \"ordered\"");
@@ -177,8 +198,11 @@ describe("supplier purchase batch workflow smoke", () => {
     expect(source).not.toMatch(/LIMIT\s+(?:10[1-9]|1[1-9]\d|[2-9]\d{2,})/);
 
     const failure = formatSupplierPurchaseBatchWorkflowSmokeFailure(
-      new Error(
+      new AppError(
+        500,
         "postgres://private-user:private-pass@private.invalid/db phone=13800138000",
+        "PRIVATE_ERROR",
+        { password: "private-pass" },
       ),
       "92000000-0000-4000-8000-000000000003",
     );

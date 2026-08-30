@@ -27,7 +27,7 @@ bun test src/services/supplier-purchase-batch-workflow-database.test.ts \
   src/scripts/supplier-purchase-batch-workflow-smoke.test.ts
 ```
 
-结果：7 pass、0 fail、32 assertions。数据库测试从真实本地 production schema 只克隆
+当前结果：7 pass、0 fail、36 assertions。数据库测试从真实本地 production schema 只克隆
 schema 到随机一次性数据库，加载已在 main 的 `20260830100000` 前置和本功能 10 条
 migration，测试结束强制 drop 一次性数据库；没有修改正式 local/dev 数据。
 修复 smoke execute 在并发预算快照与最终审批之间引入 commitment 的 fixture 顺序问题后，

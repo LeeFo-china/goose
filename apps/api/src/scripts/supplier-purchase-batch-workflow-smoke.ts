@@ -1,3 +1,5 @@
+import { Errors } from "@/errors/error-factory";
+
 export const SUPPLIER_PURCHASE_BATCH_WORKFLOW_SMOKE_PREFIX = "SPBW-SMOKE";
 
 const ARGUMENT_ERROR =
@@ -71,7 +73,7 @@ export function parseSupplierPurchaseBatchWorkflowSmokeArgs(
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
     if (argument === "--execute") {
-      if (execute) throw new Error(ARGUMENT_ERROR);
+      if (execute) throw Errors.business(400, "采购批次审批 smoke 参数无效", ARGUMENT_ERROR);
       execute = true;
       continue;
     }
@@ -81,13 +83,13 @@ export function parseSupplierPurchaseBatchWorkflowSmokeArgs(
     const value = args[index + 1];
     if (!field || !value || values[field] !== undefined ||
       !UUID_PATTERN.test(value)) {
-      throw new Error(ARGUMENT_ERROR);
+      throw Errors.business(400, "采购批次审批 smoke 参数无效", ARGUMENT_ERROR);
     }
     values[field] = value;
     index += 1;
   }
   if (Object.keys(values).length !== Object.keys(ARGUMENTS).length) {
-    throw new Error(ARGUMENT_ERROR);
+    throw Errors.business(400, "采购批次审批 smoke 参数无效", ARGUMENT_ERROR);
   }
   return {
     tenantId: values.tenantId!,
@@ -246,7 +248,7 @@ class PostgresSupplierPurchaseBatchWorkflowSmokeGateway
       input.applicantEmployeeId === input.financeApproverId ||
       typeof firstCatalogItem?.supplier_sku_id !== "string" ||
       !costRows[0]?.id) {
-      throw new Error("SUPPLIER_PURCHASE_BATCH_WORKFLOW_SMOKE_PREREQUISITE");
+      throw Errors.business(409, "采购批次审批 smoke 前置条件不完整", "SUPPLIER_PURCHASE_BATCH_WORKFLOW_SMOKE_PREREQUISITE");
     }
     return {
       applicantUserId: access.applicant_user_id,
@@ -302,9 +304,7 @@ class PostgresSupplierPurchaseBatchWorkflowSmokeGateway
       `;
       const budgetStatus = batchRows[0]?.budget_status;
       if (budgetStatus !== "within_budget" && budgetStatus !== "over_budget") {
-        throw new Error(
-          "SUPPLIER_PURCHASE_BATCH_WORKFLOW_SMOKE_EVIDENCE_INVALID",
-        );
+        throw Errors.business(500, "采购批次审批 smoke 证据状态异常", "SUPPLIER_PURCHASE_BATCH_WORKFLOW_SMOKE_EVIDENCE_INVALID");
       }
       const purchaseTaskId = await findPendingTaskId(
         sql,
@@ -393,7 +393,7 @@ class PostgresSupplierPurchaseBatchWorkflowSmokeGateway
       (batch.budget_status !== "within_budget" &&
         batch.budget_status !== "over_budget") || orderRows.length === 0 ||
       supplierCount !== orderRows.length || batch.supplier_count !== supplierCount) {
-      throw new Error("SUPPLIER_PURCHASE_BATCH_WORKFLOW_SMOKE_EVIDENCE_INVALID");
+      throw Errors.business(500, "采购批次审批 smoke 证据状态异常", "SUPPLIER_PURCHASE_BATCH_WORKFLOW_SMOKE_EVIDENCE_INVALID");
     }
     return {
       batchId,
@@ -432,7 +432,7 @@ async function findPendingTaskId(
     LIMIT 100;
   `;
   if (rows.length !== 1 || !rows[0]?.id) {
-    throw new Error("SUPPLIER_PURCHASE_BATCH_WORKFLOW_SMOKE_TASK_INVALID");
+    throw Errors.business(409, "采购批次审批 smoke 待办状态异常", "SUPPLIER_PURCHASE_BATCH_WORKFLOW_SMOKE_TASK_INVALID");
   }
   return rows[0].id;
 }
@@ -443,7 +443,7 @@ function defaultDependencies(): SmokeDependencies {
       const databaseUrl = process.env.SUPABASE_DB_DIRECT_URL ??
         process.env.SUPABASE_DB_URL;
       if (!databaseUrl) {
-        throw new Error("SUPPLIER_PURCHASE_BATCH_WORKFLOW_SMOKE_DATABASE_REQUIRED");
+        throw Errors.business(500, "采购批次审批 smoke 缺少数据库配置", "SUPPLIER_PURCHASE_BATCH_WORKFLOW_SMOKE_DATABASE_REQUIRED");
       }
       return new PostgresSupplierPurchaseBatchWorkflowSmokeGateway(
         new Bun.SQL(databaseUrl, {
@@ -473,7 +473,7 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 function assertResultStatus(value: unknown, expected: string): void {
   const result = asRecord(value);
   if (result?.status !== expected) {
-    throw new Error("SUPPLIER_PURCHASE_BATCH_WORKFLOW_SMOKE_COMMAND_FAILED");
+    throw Errors.business(500, "采购批次审批 smoke 命令结果异常", "SUPPLIER_PURCHASE_BATCH_WORKFLOW_SMOKE_COMMAND_FAILED");
   }
 }
 
