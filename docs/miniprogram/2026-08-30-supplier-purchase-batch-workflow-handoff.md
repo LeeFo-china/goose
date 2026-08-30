@@ -264,7 +264,7 @@ Content-Type: application/json
   "version": 4,
   "workflow_state": {
     "instance_status": "canceled",
-    "current_node_key": null,
+    "current_node_key": "finance_review",
     "pending_task_count": 0
   }
 }
@@ -272,6 +272,11 @@ Content-Type: application/json
 
 上例中的 `batch` 和 `workflow_state` 是字段节选；客户端以本节列出的状态、版本和 workflow
 字段为控制依据，其余批次字段沿用详情契约。
+
+撤回结果的 `current_node_key` 保留撤回发生前的节点快照，可能是 `purchase_review` 或
+`finance_review`，不表示该节点仍可继续处理，也不能固定断言为 `null`。撤回成功的 workflow
+事实应判断 `instance_status:"canceled"` 且 `pending_task_count:0`；随后以顶层 `actions` 和刷新后的
+任务列表重绘页面。
 
 撤回保留批次明细、拆分采购申请和审批时间线，释放当前预算占用；不会删除历史。修改后重新
 submit 会建立新 `approval_round`，旧 task 不能继续推进。
@@ -382,7 +387,7 @@ stale task 或改变幂等 fingerprint。旧 `/review` 在 workflow 模式下也
 | `src/types/api/supplier_procurement.d.ts` | 有批次/旧 review 类型；`PurchaseBatchActions` 尚无 `can_withdraw`，批次尚无 `approval_round/workflow_state`，`ReviewedProcurementCommand` 只允许 ordered/rejected | 增加 optional+nullable workflow state、`can_withdraw`、withdraw input/result；允许兼容 review 的 `pending_approval` finance 分支 |
 | `src/types/api/workflow_task.d.ts` | `WorkflowSubjectType` 和 todo/business domain 仍以宽 string 兼容；card context 尚无 `target_url` | 明确加入 `supplier_purchase_batch` subject/todo/business domain，并给 card context 增加 `target_url` |
 | `src/services/supplier_procurement.ts` | mutation helper 已带稳定 key；有旧 `review`，没有 `withdraw` | 新增 withdraw wrapper；旧 review 仅保留无 taskId 的灰度入口 |
-| `src/services/workflow_task.ts` | `complete(taskId,payload)` 尚未传 `Idempotency-Key` | 改为接收 key，并像 supplier mutation 一样放在 header |
+| `src/services/workflow_task.ts` | 通用 `complete(taskId,payload)` 被客户、项目、费用等多业务复用，当前不传 `Idempotency-Key` 且返回 `unknown` | 保持通用方法契约；新增带 key 和采购结果类型的 `completeSupplierPurchaseBatchTask` 专用 wrapper |
 | `src/services/task_center.ts` | 可读取通用 task，但未显式处理采购 subject；target URL 未读取 `card_context.target_url` | 识别采购 todo，优先使用 card target，进入 batch review 并保留 `workflowTaskId` |
 | `src/packageProcurement/pages/batch-detail/index.tsx` | 只处理 edit/review/cancel，review URL 没有 taskId | 只读服务端 actions；增加 withdraw、rejected edit；从 workflow action 取 taskId 跳审批页 |
 | `src/packageProcurement/pages/batch-review/index.tsx` | 当前总是调用旧 `SupplierProcurementService.review` | 读取 `workflowTaskId`；存在时调用统一 complete；没有时才走受控旧入口；处理 pending finance/ordered/rejected/409 |
@@ -492,11 +497,36 @@ export interface WorkflowWithdrawnProcurementCommand
 }
 ```
 
+在 `src/services/workflow_task.ts` 新增采购专用 wrapper，不要把通用 `complete` 的全局返回类型
+改成采购结果：
+
+```ts
+import type { WorkflowReviewedProcurementCommand } from
+  '@/types/api/supplier_procurement';
+
+export const completeSupplierPurchaseBatchTask = (
+  taskId: string,
+  payload: CompleteWorkflowTaskPayload,
+  idempotencyKey: string,
+) =>
+  api.post<WorkflowReviewedProcurementCommand>(
+    `/workflow-tasks/${taskId}/complete`,
+    payload,
+    {
+      showErrorToast: false,
+      header: { 'Idempotency-Key': idempotencyKey },
+    },
+  );
+```
+
+`batch-review` 只调用这个专用 wrapper。现有 `WorkflowTaskService.complete` 保持原签名和
+`unknown` 返回，避免客户、项目、费用等调用方被错误收窄；如果 Orange 团队更倾向对象风格，
+也可把同一签名作为 `WorkflowTaskService.completeSupplierPurchaseBatchTask` 方法加入对象。
+
 `PurchaseBatchActions`、`PurchaseBatch` 和 `PurchaseBatchDetail` 可利用 interface merging 增补
 上述新字段；详情 state 继承 compact state，因此能合法收窄 `PurchaseBatch` 的同名可选字段。
 两个 workflow command 使用新名字，避免与现有 `ReviewedProcurementCommand.status` 的声明合并
-冲突。随后将
-`SupplierProcurementService.review` 和 `WorkflowTaskService.complete` 的返回泛型改成
+冲突。随后将 `SupplierProcurementService.review` 的返回泛型改成
 `WorkflowReviewedProcurementCommand`，withdraw wrapper 使用
 `WorkflowWithdrawnProcurementCommand`。列表只读 compact 字段；详情页用 full 字段并通过 optional
 chaining 兼容省略/null。若改为升级共享 domain，必须先发布含 `withdrawn` 的正式包并更新
