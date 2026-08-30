@@ -12,6 +12,7 @@ const subjectTypeLabels: Record<string, string> = {
   project: "项目",
   expense_request: "费用申请",
   procedure: "工序",
+  supplier_purchase_batch: "采购批次",
 };
 
 const instanceStatusLabels: Record<string, string> = {
@@ -38,6 +39,10 @@ const nodeKeyLabels: Record<string, string> = {
   rejected: "已驳回",
   approved: "已通过",
   completed: "已完成",
+  purchase_review: "采购审批",
+  finance_review: "财务审批",
+  approved_end: "审批通过",
+  rejected_end: "审批驳回",
 };
 
 const actionLabels: Record<string, string> = {

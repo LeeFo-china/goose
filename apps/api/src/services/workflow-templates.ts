@@ -4,16 +4,14 @@ import type {
   WorkflowTemplateCreateInput,
 } from "@/schema/workflows";
 import type { AuthContext } from "@/services/authorization";
+import {
+  cloneWorkflowTemplateGraph,
+  freezeWorkflowTemplate,
+  WORKFLOW_TEMPLATE_SUBJECT_TYPES,
+  type WorkflowTemplateDefinition,
+} from "@/services/workflow-template-definition";
 import { workflowService } from "@/services/workflows";
 import type { ProjectConstructionStageCode } from "@gooes/domain";
-
-type WorkflowTemplateDefinition = {
-  workflow_key: string;
-  name: string;
-  description: string;
-  category: "sales" | "signing" | "construction" | "procedure" | "approval" | "main" | "acceptance";
-  graph: WorkflowGraphSaveInput;
-};
 
 type WorkflowPaymentCollectionType = "deposit" | "stage_1" | "stage_2" | "stage_3" | "add_on";
 
@@ -30,8 +28,17 @@ class WorkflowTemplateService {
       category: template.category,
     });
 
-    await workflowService.saveDraftGraph(authContext, definition.id, template.graph);
-    return workflowService.publishDefinition(authContext, definition.id);
+    await workflowService.saveDraftGraph(
+      authContext,
+      definition.id,
+      cloneWorkflowTemplateGraph(template.graph),
+    );
+    return workflowService.publishDefinition(
+      authContext,
+      definition.id,
+      {},
+      { subjectType: template.subject_type },
+    );
   }
 
   getTemplateForTest(input: WorkflowTemplateCreateInput): WorkflowTemplateDefinition {
@@ -41,13 +48,17 @@ class WorkflowTemplateService {
   private getTemplate(input: WorkflowTemplateCreateInput): WorkflowTemplateDefinition {
     switch (input.template_key) {
       case "customer_main":
-        return this.buildCustomerMainTemplate(input.name);
+        return freezeWorkflowTemplate(this.buildCustomerMainTemplate(input.name));
       case "project_signing":
-        return this.buildProjectSigningTemplate(input.name);
+        return freezeWorkflowTemplate(this.buildProjectSigningTemplate(input.name));
       case "construction_main":
-        return this.buildConstructionMainTemplate(input.name);
+        return freezeWorkflowTemplate(this.buildConstructionMainTemplate(input.name));
       case "expense_approval":
-        return this.buildExpenseApprovalTemplate(input.name);
+        return freezeWorkflowTemplate(this.buildExpenseApprovalTemplate(input.name));
+      case "supplier_purchase_batch_approval":
+        return freezeWorkflowTemplate(
+          this.buildSupplierPurchaseBatchApprovalTemplate(input.name),
+        );
       case "sales_main":
       case "procedure_standard":
         return this.buildUnavailableTemplate(input.template_key);
@@ -57,6 +68,7 @@ class WorkflowTemplateService {
   private buildCustomerMainTemplate(name?: string): WorkflowTemplateDefinition {
     return {
       workflow_key: "customer_main",
+      subject_type: WORKFLOW_TEMPLATE_SUBJECT_TYPES.customer_main,
       name: name?.trim() || "客户主流程",
       description: "客户从线索、跟进、到店到设计的标准主流程模板。",
       category: "sales",
@@ -147,6 +159,7 @@ class WorkflowTemplateService {
 
     return {
       workflow_key: "project_signing",
+      subject_type: WORKFLOW_TEMPLATE_SUBJECT_TYPES.project_signing,
       name: name?.trim() || "项目签约主流程",
       description: "项目从设计、方案确认、签约、设计定稿到排期开工的标准主流程模板。",
       category: "signing",
@@ -197,6 +210,7 @@ class WorkflowTemplateService {
 
     return {
       workflow_key: "construction_main",
+      subject_type: WORKFLOW_TEMPLATE_SUBJECT_TYPES.construction_main,
       name: name?.trim() || "项目施工主流程",
       description: "项目从确认开工、工序施工、中期收款、竣工验收到交房的标准主流程模板。",
       category: "construction",
@@ -223,6 +237,7 @@ class WorkflowTemplateService {
   private buildExpenseApprovalTemplate(name?: string): WorkflowTemplateDefinition {
     return {
       workflow_key: "expense_approval",
+      subject_type: WORKFLOW_TEMPLATE_SUBJECT_TYPES.expense_approval,
       name: name?.trim() || "费用审批流程",
       description: "费用申请从主管审批、财务审批到登记打款的标准流程模板。",
       category: "approval",
@@ -272,6 +287,95 @@ class WorkflowTemplateService {
             value: "approved",
           }),
           this.edge("payment", "done", "完成打款", 10),
+        ],
+      },
+    };
+  }
+
+  private buildSupplierPurchaseBatchApprovalTemplate(name?: string): WorkflowTemplateDefinition {
+    return {
+      workflow_key: "supplier_purchase_batch_approval",
+      subject_type:
+        WORKFLOW_TEMPLATE_SUBJECT_TYPES.supplier_purchase_batch_approval,
+      name: name?.trim() || "采购批次审批",
+      description: "采购负责人先审批采购批次，超预算时再由财务审批。",
+      category: "approval",
+      graph: {
+        nodes: [
+          this.node(
+            "start", "start", null, "开始", "采购批次提交审批。", 80, 200, 10, [],
+          ),
+          this.node(
+            "purchase_review",
+            "approval",
+            null,
+            "采购审批",
+            "采购负责人审核采购批次。",
+            320,
+            200,
+            20,
+            ["supplier.purchase-requisition.approve"],
+            {
+              approval_type: "workflow_approval",
+              assignee_rule: "role",
+              assignee_permission_code: "supplier.purchase-requisition.approve",
+              approve_mode: "any",
+              actions: ["approve", "reject"],
+            },
+          ),
+          this.node(
+            "finance_review",
+            "approval",
+            null,
+            "财务审批",
+            "财务负责人审核超预算采购批次。",
+            600,
+            340,
+            30,
+            ["finance.budget.manage"],
+            {
+              approval_type: "workflow_approval",
+              assignee_rule: "role",
+              assignee_permission_code: "finance.budget.manage",
+              approve_mode: "any",
+              actions: ["approve", "reject"],
+            },
+          ),
+          this.node(
+            "approved_end", "end", null, "审批通过", "采购批次审批通过。", 880, 160, 40, [],
+          ),
+          this.node(
+            "rejected_end", "end", null, "审批驳回",
+            "采购批次审批驳回，申请人可修改后重新提交。", 600, 500, 50, [],
+          ),
+        ],
+        edges: [
+          this.edge("start", "purchase_review", "提交审批", 10),
+          this.edge("purchase_review", "rejected_end", "采购驳回", 10, {
+            operator: "eq",
+            field: "decision",
+            value: "rejected",
+          }),
+          this.edge("purchase_review", "approved_end", "采购通过", 20, {
+            operator: "neq",
+            field: "budget_status",
+            value: "over_budget",
+          }),
+          this.edge("purchase_review", "finance_review", "超预算复核", 30, {
+            operator: "eq",
+            field: "budget_status",
+            value: "over_budget",
+          }),
+          this.edge("finance_review", "approved_end", "财务通过", 10, {
+            operator: "eq",
+            field: "decision",
+            value: "approved",
+          }),
+          this.edge("finance_review", "rejected_end", "财务驳回", 20, {
+            operator: "eq",
+            field: "decision",
+            value: "rejected",
+          }),
         ],
       },
     };

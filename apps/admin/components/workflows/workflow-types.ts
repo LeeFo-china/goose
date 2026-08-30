@@ -90,6 +90,7 @@ export type WorkflowApprovalNodeConfig = WorkflowBaseNodeConfig & {
   amount_threshold?: number | null;
   approve_mode?: "any" | "all";
   reject_target_key?: string | null;
+  actions?: Array<"approve" | "reject">;
 };
 
 export type WorkflowProcedureNodeConfig = WorkflowBaseNodeConfig & {
@@ -234,7 +235,11 @@ export type WorkflowDefinitionCreateInput = {
 };
 
 export type WorkflowTemplateCreateInput = {
-  template_key: "customer_main" | "project_signing" | "construction_main";
+  template_key:
+    | "customer_main"
+    | "project_signing"
+    | "construction_main"
+    | "supplier_purchase_batch_approval";
   name?: string;
 };
 

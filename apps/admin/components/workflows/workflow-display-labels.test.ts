@@ -62,4 +62,12 @@ describe("workflow display labels", () => {
     expect(workflowAttributeLabel("stage_code", 1)).toBe("属性 2");
     expect(workflowAttributeValue("waiting_review")).toBe("已配置");
   });
+
+  test("maps supplier purchase batch workflow subject and node keys", () => {
+    expect(workflowSubjectTypeLabel("supplier_purchase_batch")).toBe("采购批次");
+    expect(workflowNodeKeyLabel("purchase_review")).toBe("采购审批");
+    expect(workflowNodeKeyLabel("finance_review")).toBe("财务审批");
+    expect(workflowNodeKeyLabel("approved_end")).toBe("审批通过");
+    expect(workflowNodeKeyLabel("rejected_end")).toBe("审批驳回");
+  });
 });

@@ -28,6 +28,7 @@ import { workflowSubjectStateService } from "@/services/workflow-subject-state";
 import { buildWorkflowTaskActionsForTask } from "@/services/workflow-task-actions";
 import { buildWorkflowTaskAssigneeMetadata } from "@/services/workflow-task-assignee";
 import { workflowTaskCardContextService } from "@/services/workflow-task-card-context";
+import { assertGenericWorkflowMutationAllowed } from "@/services/workflow-supplier-purchase-batch-boundary";
 
 const PROJECT_PROCEDURE_PERMISSION_BY_ACTION: Record<string, string> = {
   start_procedure: "project_procedure.assign",
@@ -116,6 +117,7 @@ class WorkflowTaskService {
         current_node_key: task.instance.current_node_key ?? null,
       });
     }
+    assertGenericWorkflowMutationAllowed(null, task.instance.subject_type);
 
     const output = {
       ...(input.output as JsonObject),

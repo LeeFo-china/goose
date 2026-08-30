@@ -21,6 +21,7 @@ import type {
   WorkflowRuntimeInstanceStartInput,
   WorkflowVersionListQuery,
 } from "@/schema/workflows";
+import type { WorkflowSubjectType } from "@gooes/domain";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { assertRuntimeNodeCompletionAllowed } from "@/services/workflow-runtime-guards";
@@ -32,9 +33,8 @@ import {
   archiveWorkflowRuntimeInstance,
   archiveWorkflowVersion,
 } from "@/services/workflows/archive";
-import {
-  listWorkflowDefinitions,
-} from "@/services/workflows/definition-list";
+import { listWorkflowDefinitions } from "@/services/workflows/definition-list";
+import { assertGenericWorkflowCompletionAllowed, assertGenericWorkflowMutationAllowed } from "@/services/workflow-supplier-purchase-batch-boundary";
 import {
   removeProjectConstructionCandidateWorkflow,
   setProjectConstructionDefaultWorkflow,
@@ -43,9 +43,7 @@ import {
   buildWorkflowSnapshot,
   validateWorkflowPublishGraph,
 } from "@/services/workflow-publish-graph";
-
 const WORKFLOW_MANAGE_PERMISSION = "employee.permission_manage";
-
 type WorkflowDraftGraphView = {
   nodes: WorkflowNodeRow[];
   edges: WorkflowEdgeRow[];
@@ -191,6 +189,7 @@ class WorkflowService {
     authContext: AuthContext,
     definitionId: string,
     input: WorkflowPublishInput = {},
+    templateMetadata?: Readonly<{ subjectType: WorkflowSubjectType }>,
   ): Promise<WorkflowPublishResult> {
     const tenantId = this.assertManagePermission(authContext);
     const definition = await this.getRequiredDefinition(tenantId, definitionId);
@@ -211,6 +210,7 @@ class WorkflowService {
       nodes: draftGraph.nodes,
       edges: draftGraph.edges,
       publishedAt,
+      subjectType: templateMetadata?.subjectType,
     });
     const versionLabel = input.version_label?.trim() || null;
 
@@ -318,7 +318,8 @@ class WorkflowService {
     input: WorkflowRuntimeInstanceStartInput,
   ) {
     const tenantId = this.assertManagePermission(authContext);
-    await this.getRequiredDefinition(tenantId, definitionId);
+    const definition = await this.getRequiredDefinition(tenantId, definitionId);
+    assertGenericWorkflowMutationAllowed(definition, input.subject_type);
 
     const result = await workflowRepository.startRuntimeInstance({
       tenantId,
@@ -344,7 +345,8 @@ class WorkflowService {
     input: WorkflowRuntimeCompleteNodeInput,
   ) {
     const tenantId = this.assertManagePermission(authContext);
-    await this.getRequiredDefinition(tenantId, definitionId);
+    const definition = await this.getRequiredDefinition(tenantId, definitionId);
+    const instance = await assertGenericWorkflowCompletionAllowed({ tenantId, definition, instanceId });
     await assertRuntimeNodeCompletionAllowed({
       tenantId,
       definitionId,
@@ -352,6 +354,7 @@ class WorkflowService {
       nodeKey: input.node_key.trim(),
       action: input.action.trim(),
       output: input.output as JsonObject,
+      instance,
     });
 
     const result = await workflowRepository.completeRuntimeNode({
@@ -378,7 +381,8 @@ class WorkflowService {
     input: WorkflowRuntimeRebuildInput,
   ) {
     const tenantId = this.assertManagePermission(authContext);
-    await this.getRequiredDefinition(tenantId, definitionId);
+    const definition = await this.getRequiredDefinition(tenantId, definitionId);
+    assertGenericWorkflowMutationAllowed(definition, input.subject_type);
 
     const result = await workflowRepository.rebuildRuntimeInstance({
       tenantId,
@@ -490,7 +494,6 @@ class WorkflowService {
         throw Errors.notFound("项目不存在");
     }
   }
-
 }
 
 export const workflowService = new WorkflowService();

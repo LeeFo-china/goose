@@ -8,6 +8,7 @@ import {
   workflowRepository,
   type JsonObject,
   type WorkflowGraphResult,
+  type WorkflowInstanceRow,
   type WorkflowNodeRow,
 } from "@/repositories/workflows";
 import { constructionStageStatusService } from "@/services/construction-stage-status";
@@ -28,12 +29,15 @@ export async function assertRuntimeNodeCompletionAllowed(input: {
   nodeKey: string;
   action?: string | null;
   output: JsonObject;
+  instance?: WorkflowInstanceRow | null;
 }) {
-  const instance = await workflowRepository.getRuntimeInstanceById({
-    tenantId: input.tenantId,
-    definitionId: input.definitionId,
-    instanceId: input.instanceId,
-  });
+  const instance = input.instance === undefined
+    ? await workflowRepository.getRuntimeInstanceById({
+      tenantId: input.tenantId,
+      definitionId: input.definitionId,
+      instanceId: input.instanceId,
+    })
+    : input.instance;
 
   if (!instance) {
     throw Errors.notFound("流程实例不存在");

@@ -1,5 +1,8 @@
 import { Errors } from "@/errors/error-factory";
 import type {
+  WorkflowSubjectType,
+} from "@gooes/domain";
+import type {
   JsonObject,
   WorkflowDefinitionRow,
   WorkflowEdgeRow,
@@ -216,11 +219,13 @@ export function buildWorkflowSnapshot(input: {
   nodes: WorkflowNodeRow[];
   edges: WorkflowEdgeRow[];
   publishedAt: string;
+  subjectType?: WorkflowSubjectType;
 }): JsonObject {
   return {
     definition_id: input.definition.id,
     workflow_key: input.definition.workflow_key,
     category: input.definition.category,
+    ...(input.subjectType ? { subject_type: input.subjectType } : {}),
     published_at: input.publishedAt,
     nodes: input.nodes,
     edges: input.edges,

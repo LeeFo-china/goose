@@ -10,7 +10,7 @@ import type {
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
-const TEMPLATE_OPTIONS = [
+export const WORKFLOW_TEMPLATE_OPTIONS = [
   {
     key: "customer_main",
     label: "客户设计流程",
@@ -25,6 +25,11 @@ const TEMPLATE_OPTIONS = [
     key: "construction_main",
     label: "施工流程",
     title: "创建并发布施工流程模板",
+  },
+  {
+    key: "supplier_purchase_batch_approval",
+    label: "采购批次审批",
+    title: "创建采购审批并在超预算时追加财务审批",
   },
 ] as const satisfies ReadonlyArray<{
   key: WorkflowTemplateCreateInput["template_key"];
@@ -60,7 +65,7 @@ export function WorkflowTemplateActions({
 
   return (
     <>
-      {TEMPLATE_OPTIONS.map((option) => {
+      {WORKFLOW_TEMPLATE_OPTIONS.map((option) => {
         const creating = creatingTemplate === option.key;
         return (
           <Button

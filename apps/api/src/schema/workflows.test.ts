@@ -2,9 +2,70 @@ import { describe, expect, test } from "bun:test";
 import {
   WorkflowGraphSaveSchema,
   WorkflowRuntimeRebuildSchema,
+  WorkflowTemplateCreateSchema,
 } from "./workflows";
 
+describe("WorkflowTemplateCreateSchema", () => {
+  test("accepts every supported template key", () => {
+    for (const templateKey of [
+      "customer_main",
+      "sales_main",
+      "project_signing",
+      "construction_main",
+      "procedure_standard",
+      "expense_approval",
+      "supplier_purchase_batch_approval",
+    ] as const) {
+      expect(WorkflowTemplateCreateSchema.parse({ template_key: templateKey }))
+        .toEqual({ template_key: templateKey });
+    }
+  });
+
+  test("rejects unknown top-level template fields", () => {
+    expect(WorkflowTemplateCreateSchema.safeParse({
+      template_key: "customer_main",
+      subject_type: "supplier_purchase_batch",
+    }).success).toBe(false);
+  });
+
+  test("accepts the supplier purchase batch approval template", () => {
+    expect(WorkflowTemplateCreateSchema.parse({
+      template_key: "supplier_purchase_batch_approval",
+    })).toEqual({
+      template_key: "supplier_purchase_batch_approval",
+    });
+  });
+});
+
 describe("WorkflowGraphSaveSchema", () => {
+  test("accepts explicit approve and reject actions on approval nodes", () => {
+    const result = WorkflowGraphSaveSchema.safeParse({
+      nodes: [{
+        node_key: "purchase_review",
+        node_type: "approval",
+        business_kind: null,
+        title: "采购审批",
+        position: { x: 320, y: 200 },
+        config: {
+          required_permissions: ["supplier.purchase-requisition.approve"],
+          approval_type: "workflow_approval",
+          assignee_rule: "role",
+          assignee_permission_code: "supplier.purchase-requisition.approve",
+          approve_mode: "any",
+          actions: ["approve", "reject"],
+        },
+        sort_order: 20,
+      }],
+      edges: [],
+    });
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.nodes[0]?.config).toMatchObject({
+      actions: ["approve", "reject"],
+    });
+  });
+
   test("accepts admin construction stage node config", () => {
     const result = WorkflowGraphSaveSchema.safeParse({
       nodes: [

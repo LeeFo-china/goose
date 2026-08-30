@@ -10,7 +10,10 @@ import type {
   WorkflowCategory,
   WorkflowNodeType,
 } from "@gooes/domain";
-import { validateWorkflowPublishGraph } from "./workflow-publish-graph";
+import {
+  buildWorkflowSnapshot,
+  validateWorkflowPublishGraph,
+} from "./workflow-publish-graph";
 
 const NOW = "2026-06-17T00:00:00.000Z";
 
@@ -32,6 +35,27 @@ describe("validateWorkflowPublishGraph connectivity", () => {
         edges,
       })
     ).toThrow(/非开始节点必须至少有一条入边: water_electricity_payment/);
+  });
+});
+
+describe("buildWorkflowSnapshot template metadata", () => {
+  test("preserves a trusted template subject without requiring it for custom workflows", () => {
+    const workflowDefinition = definition("supplier_purchase_batch_approval", "approval");
+    const baseInput = {
+      definition: workflowDefinition,
+      nodes: [node("start", "start"), node("end", "end")],
+      edges: [],
+      publishedAt: NOW,
+    };
+
+    expect(buildWorkflowSnapshot({
+      ...baseInput,
+      subjectType: "supplier_purchase_batch",
+    })).toMatchObject({
+      workflow_key: "supplier_purchase_batch_approval",
+      subject_type: "supplier_purchase_batch",
+    });
+    expect(buildWorkflowSnapshot(baseInput)).not.toHaveProperty("subject_type");
   });
 });
 

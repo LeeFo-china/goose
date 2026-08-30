@@ -169,6 +169,9 @@ const ApprovalNodeConfigSchema = BaseNodeConfigSchema.extend({
   amount_threshold: numericField("金额阈值必须为数字").nonnegative("金额阈值不能为负数").nullable().optional(),
   approve_mode: z.enum(["any", "all"], { message: "无效的审批方式" }).default("any"),
   reject_target_key: textField("驳回目标节点格式无效").max(100, "驳回目标节点编码过长").nullable().optional(),
+  actions: z.array(z.enum(["approve", "reject"], {
+    message: "无效的审批动作",
+  })).max(2, "审批动作数量不能超过 2 个").optional(),
 });
 
 const ProcedureNodeConfigSchema = BaseNodeConfigSchema.extend({
@@ -304,11 +307,19 @@ export const WorkflowGraphSaveSchema = z.object({
 });
 
 export const WorkflowTemplateCreateSchema = z.object({
-  template_key: z.enum(["customer_main", "sales_main", "project_signing", "construction_main", "procedure_standard", "expense_approval"], {
+  template_key: z.enum([
+    "customer_main",
+    "sales_main",
+    "project_signing",
+    "construction_main",
+    "procedure_standard",
+    "expense_approval",
+    "supplier_purchase_batch_approval",
+  ], {
     message: "无效的流程模板",
   }),
   name: textField("流程名称不能为空").min(1, "流程名称不能为空").max(100, "流程名称过长").optional(),
-});
+}).strict();
 
 export const WorkflowSimulationSchema = z.object({
   context: z.object({}, { error: "上下文必须是对象" }).catchall(z.unknown()).default({}),
