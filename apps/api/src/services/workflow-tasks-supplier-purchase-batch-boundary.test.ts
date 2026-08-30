@@ -1,7 +1,5 @@
 import { expect, mock, test } from "bun:test";
 import type { AuthContext } from "@/services/authorization";
-import { completeSupplierPurchaseBatchWorkflowTask } from
-  "@/services/workflow-task-supplier-purchase-batch-completion";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
@@ -38,6 +36,9 @@ const supplierTask = {
 };
 
 test("routes supplier purchase batches through the atomic bridge", async () => {
+  const { completeSupplierPurchaseBatchWorkflowTask } = await import(
+    "@/services/workflow-task-supplier-purchase-batch-completion"
+  );
   const complete = mock(async () => ({ status: "ordered", idempotent: false }));
   const result = await completeSupplierPurchaseBatchWorkflowTask({
     authContext: authContext(), task: supplierTask,
@@ -64,6 +65,9 @@ test("routes supplier purchase batches through the atomic bridge", async () => {
 });
 
 test("lets the atomic RPC decide completed supplier task replays", async () => {
+  const { completeSupplierPurchaseBatchWorkflowTask } = await import(
+    "@/services/workflow-task-supplier-purchase-batch-completion"
+  );
   const complete = mock(async () => ({ status: "ordered", idempotent: true }));
   const completedTask = {
     ...supplierTask,
