@@ -55,9 +55,14 @@ async function serviceWithReview(
   };
   const reviewMock = mock(review);
   const financeMock = mock(() => undefined);
+  const completeLegacyReview = mock(async () => null);
+  const replayExactLegacyReview = mock(async () => ({
+    matched: false as const,
+  }));
   const batches = [...(batchSequence ?? [batch])];
   const service = new SupplierPurchaseBatchesService({
     access: {
+      requireActorScope: mock(async () => scope()),
       requireView: mock(async () => scope()),
       requireManage: mock(async () => scope()),
       requireApprove: mock(async () => scope()),
@@ -81,8 +86,23 @@ async function serviceWithReview(
       review: reviewMock,
       cancel: mock(async () => ({})),
     },
+    workflowRuntime: {
+      isEnabled: mock(async () => false),
+      submit: mock(async () => ({})),
+    },
+    workflowReviewBridge: {
+      completeLegacyReview,
+      replayExactLegacyReview,
+    },
   } as never);
-  return { batch, financeMock, reviewMock, service };
+  return {
+    batch,
+    completeLegacyReview,
+    financeMock,
+    replayExactLegacyReview,
+    reviewMock,
+    service,
+  };
 }
 
 function scope() {
@@ -134,6 +154,8 @@ describe("SupplierPurchaseBatchesService review replay", () => {
       expected_version: 2,
       idempotency_key: "batch:review:original",
     }));
+    expect(fixture.completeLegacyReview).not.toHaveBeenCalled();
+    expect(fixture.replayExactLegacyReview).not.toHaveBeenCalled();
   });
 
   test("lets the RPC return a structured conflict for an ordinary draft", async () => {
@@ -157,6 +179,8 @@ describe("SupplierPurchaseBatchesService review replay", () => {
       details: rpcDetails,
     });
     expect(fixture.reviewMock).toHaveBeenCalledTimes(1);
+    expect(fixture.completeLegacyReview).not.toHaveBeenCalled();
+    expect(fixture.replayExactLegacyReview).not.toHaveBeenCalled();
   });
 
   test("replays after the server-derived budget override changes", async () => {
@@ -243,5 +267,7 @@ describe("SupplierPurchaseBatchesService review replay", () => {
         idempotency_key: "batch:review:budget-drift",
       },
     ]);
+    expect(fixture.completeLegacyReview).not.toHaveBeenCalled();
+    expect(fixture.replayExactLegacyReview).not.toHaveBeenCalled();
   });
 });
