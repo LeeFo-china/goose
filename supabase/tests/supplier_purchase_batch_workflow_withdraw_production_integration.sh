@@ -68,7 +68,7 @@ docker exec "$container" pg_dump -U postgres -d "$source_database" \
 
 migrations=(
   20260830100000_standardize_new_tenant_organization_template.sql
-  20260830110000_add_supplier_purchase_batch_workflow_foundation.sql
+  20260830110500_add_supplier_purchase_batch_workflow_foundation.sql
   20260830111000_extend_supplier_workflow_rollout_command.sql
   20260830112000_seed_supplier_purchase_batch_workflow.sql
   20260830113000_create_supplier_purchase_batch_workflow_submit.sql

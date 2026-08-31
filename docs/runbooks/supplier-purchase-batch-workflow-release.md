@@ -23,7 +23,7 @@ git log -1 --oneline
 记录 main commit。工作区必须为空。本功能相对 main 的实际清单为以下 10 条，而不是早期
 计划草案中的 6 条；顺序不可调整：
 
-1. `20260830110000_add_supplier_purchase_batch_workflow_foundation.sql`
+1. `20260830110500_add_supplier_purchase_batch_workflow_foundation.sql`
 2. `20260830111000_extend_supplier_workflow_rollout_command.sql`
 3. `20260830112000_seed_supplier_purchase_batch_workflow.sql`
 4. `20260830113000_create_supplier_purchase_batch_workflow_submit.sql`

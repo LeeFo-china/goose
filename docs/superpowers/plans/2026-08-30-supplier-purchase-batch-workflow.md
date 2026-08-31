@@ -76,7 +76,7 @@
 
 **Files:**
 
-- Create: `supabase/migrations/20260830110000_add_supplier_purchase_batch_workflow_foundation.sql`
+- Create: `supabase/migrations/20260830110500_add_supplier_purchase_batch_workflow_foundation.sql`
 - Create: `apps/api/src/services/supplier-purchase-batch-workflow-foundation-migration-contract.test.ts`
 - Modify: `apps/api/src/types/database.ts`
 
@@ -115,7 +115,7 @@
   supabase gen types typescript --local > apps/api/src/types/database.ts
   ```
 
-  Expected: dry-run 仅包含本计划未应用 migration；应用后 Local migration 含 `20260830110000`；生成类型含两个新字段。若本地 Supabase 未运行，在此停止数据库步骤并记录阻塞，不得从 dev 生成类型或手写伪造类型。
+  Expected: dry-run 仅包含本计划未应用 migration；应用后 Local migration 含 `20260830110500`；生成类型含两个新字段。若本地 Supabase 未运行，在此停止数据库步骤并记录阻塞，不得从 dev 生成类型或手写伪造类型。
 
 - [ ] **Step 5: 运行 GREEN 与类型检查**
 
@@ -128,7 +128,7 @@
 - [ ] **Step 6: 提交基础 migration**
 
   ```bash
-  git add supabase/migrations/20260830110000_add_supplier_purchase_batch_workflow_foundation.sql \
+  git add supabase/migrations/20260830110500_add_supplier_purchase_batch_workflow_foundation.sql \
     apps/api/src/services/supplier-purchase-batch-workflow-foundation-migration-contract.test.ts \
     apps/api/src/types/database.ts
   git commit -m "feat(supplier): 建立采购批次审批数据库基础"

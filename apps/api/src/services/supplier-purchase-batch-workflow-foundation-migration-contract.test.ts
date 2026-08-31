@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 
 const migrationUrl = new URL(
-  "../../../../supabase/migrations/20260830110000_add_supplier_purchase_batch_workflow_foundation.sql",
+  "../../../../supabase/migrations/20260830110500_add_supplier_purchase_batch_workflow_foundation.sql",
   import.meta.url,
 );
 const sql = existsSync(migrationUrl) ? readFileSync(migrationUrl, "utf8") : "";
