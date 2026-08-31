@@ -1,0 +1,218 @@
+name: Verify Development Supplier Purchase Workflow EXPLAIN
+run-name: Verify supplier purchase workflow EXPLAIN ${{ inputs.commit_sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        required: true
+        type: string
+      confirmation:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: verify-dev-supplier-purchase-workflow-explain
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: [self-hosted, Linux, X64, gooes-dev-deploy]
+    environment: development
+    timeout-minutes: 20
+    env:
+      SOURCE_RUN_ID: "33359680214"
+      SOURCE_ARTIFACT_NAME: supplier-purchase-workflow-acceptance-9d02854a88d5ca83a2f883b923de1ffcd7d49bd3
+      DEV_DB_ENV_FILE: /opt/gooes-dev/docker/.env.dev.db
+      DEV_PROJECT_REF: fclnkyatvfvmzgzdqlba
+      DEV_DB_HOST: api-dev.goodcms.cn
+      BLOCKED_PROJECT_REFS: unqhypivjkpwldhufpjc
+      BLOCKED_DB_HOSTS: api.goodcms.cn 1.13.20.39
+      COMMIT_SHA: ${{ inputs.commit_sha }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - name: Guard development runner and request
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME}" = "gooes-dev-vm-0-11"
+          test -r "${DEV_DB_ENV_FILE}"
+          test "${CONFIRMATION}" = "development-read-only"
+          [[ "${COMMIT_SHA}" =~ ^[a-f0-9]{40}$ ]]
+
+      - name: Checkout verified commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.commit_sha }}
+          clean: true
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          package-manager-cache: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.2"
+
+      - name: Verify immutable checkout
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${COMMIT_SHA}"
+          test -z "$(git status --porcelain)"
+
+      - name: Install API workflow dependencies
+        run: |
+          set -euo pipefail
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+          pnpm install --frozen-lockfile --filter @gooes/api... --filter @gooes/domain...
+
+      - name: Verify development database target and migration history
+        env:
+          NO_COLOR: "1"
+          TERM: dumb
+        run: |
+          set -euo pipefail
+          reject_dev_target() {
+            printf '%s\n' "INVALID_DEV_TARGET" >&2
+            exit 1
+          }
+          reject_migration_history() {
+            printf '%s\n' "MIGRATION_HISTORY_MISMATCH" >&2
+            exit 1
+          }
+          load_dev_environment() {
+            set -a
+            . "${DEV_DB_ENV_FILE}"
+            local load_status=$?
+            set +a
+            return "${load_status}"
+          }
+
+          if ! load_dev_environment 2>/dev/null; then
+            reject_dev_target
+          fi
+          if [[ -z "${SUPABASE_DB_URL:-}" || -z "${SUPABASE_DB_DIRECT_URL:-}" ]]; then
+            reject_dev_target
+          fi
+          export SUPABASE_PROJECT_REF="${SUPABASE_PROJECT_REF:-${DEV_PROJECT_REF}}"
+          if ! ACTUAL_PROJECT_REF="$(node scripts/validate-dev-database-target.mjs --resolve-project-ref 2>/dev/null)"; then
+            reject_dev_target
+          fi
+          if [[ -z "${ACTUAL_PROJECT_REF}" ]]; then
+            reject_dev_target
+          fi
+          if ! node scripts/validate-dev-database-target.mjs --direct-migration-history \
+            "${SUPABASE_DB_DIRECT_URL}" "${ACTUAL_PROJECT_REF}" \
+            "${DEV_DB_HOST}" "${DEV_PROJECT_REF}" \
+            "${BLOCKED_DB_HOSTS}" "${BLOCKED_PROJECT_REFS}" \
+            >/dev/null 2>&1; then
+            reject_dev_target
+          fi
+
+          if ! pnpm dlx supabase@2.99.0 migration list --db-url "${SUPABASE_DB_DIRECT_URL}" > migration-history.txt 2>/dev/null; then
+            reject_migration_history
+          fi
+          if ! node scripts/verify-migration-history.mjs \
+            migration-history.txt supabase/migrations 20260830115000 \
+            > migration-evidence.json 2>/dev/null; then
+            reject_migration_history
+          fi
+
+      - name: Download immutable source artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          source_dir="$(mktemp -d "${RUNNER_TEMP}/supplier-purchase-workflow-source.XXXXXX")"
+          timeout --signal=TERM --kill-after=10s 120 gh run download "${SOURCE_RUN_ID}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --name "${SOURCE_ARTIFACT_NAME}" \
+            --dir "${source_dir}"
+          test -f "${source_dir}/rollout-settings.json"
+          test -f "${source_dir}/execute.json"
+          printf 'SOURCE_DIR=%s\n' "${source_dir}" >> "${GITHUB_ENV}"
+
+      - name: Normalize workflow evidence input
+        run: |
+          set -euo pipefail
+          jq -en \
+            --arg sourceRunId "${SOURCE_RUN_ID}" \
+            --arg artifactName "${SOURCE_ARTIFACT_NAME}" \
+            --slurpfile rolloutSettings "${SOURCE_DIR}/rollout-settings.json" \
+            --slurpfile execute "${SOURCE_DIR}/execute.json" \
+            '{
+              sourceRunId: $sourceRunId,
+              artifactName: $artifactName,
+              tenantId: $rolloutSettings[0].tenant_id,
+              batchId: $execute[0].batchId,
+              instanceId: $execute[0].instanceId
+            }
+            | select(
+                [.tenantId, .batchId, .instanceId]
+                | all(type == "string" and test("^[a-f0-9-]{36}$"))
+              )' \
+            > "${GITHUB_WORKSPACE}/workflow-explain-input.json"
+          test -s "${GITHUB_WORKSPACE}/workflow-explain-input.json"
+
+      - name: Run read-only workflow EXPLAIN
+        run: |
+          set -euo pipefail
+          reject_dev_target() {
+            printf '%s\n' "INVALID_DEV_TARGET" >&2
+            exit 1
+          }
+          load_dev_environment() {
+            set -a
+            . "${DEV_DB_ENV_FILE}"
+            local load_status=$?
+            set +a
+            return "${load_status}"
+          }
+
+          if ! load_dev_environment 2>/dev/null; then
+            reject_dev_target
+          fi
+          if [[ -z "${SUPABASE_DB_URL:-}" || -z "${SUPABASE_DB_DIRECT_URL:-}" ]]; then
+            reject_dev_target
+          fi
+          export SUPABASE_PROJECT_REF="${SUPABASE_PROJECT_REF:-${DEV_PROJECT_REF}}"
+          if ! ACTUAL_PROJECT_REF="$(node scripts/validate-dev-database-target.mjs --resolve-project-ref 2>/dev/null)"; then
+            reject_dev_target
+          fi
+          if ! node scripts/validate-dev-database-target.mjs --direct-migration-history \
+            "${SUPABASE_DB_DIRECT_URL}" "${ACTUAL_PROJECT_REF}" \
+            "${DEV_DB_HOST}" "${DEV_PROJECT_REF}" \
+            "${BLOCKED_DB_HOSTS}" "${BLOCKED_PROJECT_REFS}" \
+            >/dev/null 2>&1; then
+            reject_dev_target
+          fi
+
+          SUPPLIER_PURCHASE_WORKFLOW_EXPLAIN_CONFIRM="${CONFIRMATION}" \
+          SUPPLIER_PURCHASE_WORKFLOW_EXPLAIN_DB_URL="${SUPABASE_DB_DIRECT_URL}" \
+          SUPPLIER_PURCHASE_WORKFLOW_EXPLAIN_EVIDENCE_FILE="${GITHUB_WORKSPACE}/workflow-explain-input.json" \
+            bun --cwd apps/api run supplier:purchase-batch-workflow:explain \
+            > "${GITHUB_WORKSPACE}/workflow-explain-summary.json"
+
+      - name: Verify workflow EXPLAIN summary
+        run: |
+          set -euo pipefail
+          jq -e \
+            '.gate == "supplier_purchase_batch_workflow" and .queryCount == 3 and (.queries | length) == 3' \
+            workflow-explain-summary.json >/dev/null
+
+      - name: Upload workflow EXPLAIN evidence
+        uses: actions/upload-artifact@v6
+        with:
+          name: supplier-purchase-workflow-explain-${{ inputs.commit_sha }}
+          path: |
+            workflow-explain-summary.json
+            migration-evidence.json
+          if-no-files-found: error
+          retention-days: 30

@@ -31,6 +31,10 @@ const runnerSource = readFileSync(new URL(
   "./supplier-purchase-batch-workflow-explain.ts",
   import.meta.url,
 ), "utf8");
+const devWorkflow = readFileSync(new URL(
+  "../../../../.github/workflows/verify-dev-supplier-purchase-workflow-explain.yml",
+  import.meta.url,
+), "utf8");
 
 const SCRIPT_NAME = "supplier:purchase-batch-workflow:explain";
 
@@ -173,6 +177,23 @@ function replaceOnce(content: string, from: string, to: string): string {
   return mutated;
 }
 
+function workflowStep(name: string): string {
+  const marker = `      - name: ${name}\n`;
+  const start = devWorkflow.indexOf(marker);
+  expect(start).toBeGreaterThanOrEqual(0);
+  const next = devWorkflow.indexOf("\n      - ", start + marker.length);
+  return devWorkflow.slice(start, next === -1 ? undefined : next);
+}
+
+function expectWorkflowStepsInOrder(names: string[]): void {
+  let previousIndex = -1;
+  for (const name of names) {
+    const index = devWorkflow.indexOf(`      - name: ${name}\n`);
+    expect(index).toBeGreaterThan(previousIndex);
+    previousIndex = index;
+  }
+}
+
 describe("supplier purchase batch workflow EXPLAIN documentation", () => {
   test("publishes the fixed API package command", () => {
     expect(packageJson.scripts?.[SCRIPT_NAME]).toBe(
@@ -264,5 +285,171 @@ describe("supplier purchase batch workflow EXPLAIN documentation", () => {
     expect(runbook).toContain("不能作为 dev 性能验收证据");
     expect(runbook).toContain("不修改 Orange");
     expect(runbook).toContain("不调整 API 契约");
+  });
+});
+
+describe("protected development workflow EXPLAIN gate", () => {
+  test("locks manual inputs, permissions, concurrency, and the dev job", () => {
+    expect(devWorkflow).toContain([
+      "on:",
+      "  workflow_dispatch:",
+      "    inputs:",
+      "      commit_sha:",
+      "        required: true",
+      "        type: string",
+      "      confirmation:",
+      "        required: true",
+      "        type: string",
+    ].join("\n"));
+    expect(devWorkflow).toContain([
+      "permissions:",
+      "  contents: read",
+      "  actions: read",
+    ].join("\n"));
+    expect(devWorkflow).toContain([
+      "concurrency:",
+      "  group: verify-dev-supplier-purchase-workflow-explain",
+      "  cancel-in-progress: false",
+    ].join("\n"));
+    expect(devWorkflow).toContain([
+      "  verify:",
+      "    runs-on: [self-hosted, Linux, X64, gooes-dev-deploy]",
+      "    environment: development",
+      "    timeout-minutes: 20",
+    ].join("\n"));
+  });
+
+  test("locks immutable source, development target, and request inputs", () => {
+    for (const entry of [
+      "SOURCE_RUN_ID: \"33359680214\"",
+      "SOURCE_ARTIFACT_NAME: supplier-purchase-workflow-acceptance-9d02854a88d5ca83a2f883b923de1ffcd7d49bd3",
+      "DEV_DB_ENV_FILE: /opt/gooes-dev/docker/.env.dev.db",
+      "DEV_PROJECT_REF: fclnkyatvfvmzgzdqlba",
+      "DEV_DB_HOST: api-dev.goodcms.cn",
+      "BLOCKED_PROJECT_REFS: unqhypivjkpwldhufpjc",
+      "BLOCKED_DB_HOSTS: api.goodcms.cn 1.13.20.39",
+      "COMMIT_SHA: ${{ inputs.commit_sha }}",
+      "CONFIRMATION: ${{ inputs.confirmation }}",
+    ]) {
+      expect(devWorkflow).toContain(entry);
+    }
+    const guard = workflowStep("Guard development runner and request");
+    expect(guard).toContain('test "${RUNNER_NAME}" = "gooes-dev-vm-0-11"');
+    expect(guard).toContain('test -r "${DEV_DB_ENV_FILE}"');
+    expect(guard).toContain('test "${CONFIRMATION}" = "development-read-only"');
+    expect(guard).toContain('[[ "${COMMIT_SHA}" =~ ^[a-f0-9]{40}$ ]]');
+    expect(devWorkflow).toContain("ref: ${{ inputs.commit_sha }}\n          clean: true");
+    expect(workflowStep("Verify immutable checkout")).toContain(
+      'test "$(git rev-parse HEAD)" = "${COMMIT_SHA}"',
+    );
+  });
+
+  test("uses the repository toolchain and frozen API workspace install", () => {
+    expect(devWorkflow).toContain("uses: actions/setup-node@v6");
+    expect(devWorkflow).toContain('node-version: "22"');
+    expect(devWorkflow).toContain("package-manager-cache: false");
+    expect(devWorkflow).toContain("uses: oven-sh/setup-bun@v2");
+    expect(devWorkflow).toContain('bun-version: "1.3.2"');
+    const install = workflowStep("Install API workflow dependencies");
+    expect(install).toContain("corepack prepare pnpm@10.33.0 --activate");
+    expect(install).toContain(
+      "pnpm install --frozen-lockfile --filter @gooes/api... --filter @gooes/domain...",
+    );
+  });
+
+  test("fails closed around the direct dev target and migration history", () => {
+    const migration = workflowStep(
+      "Verify development database target and migration history",
+    );
+    expect(migration).toContain(
+      'node scripts/validate-dev-database-target.mjs --resolve-project-ref',
+    );
+    expect(migration).toContain(
+      "node scripts/validate-dev-database-target.mjs --direct-migration-history",
+    );
+    expect(migration).toContain(
+      'pnpm dlx supabase@2.99.0 migration list --db-url "${SUPABASE_DB_DIRECT_URL}" > migration-history.txt',
+    );
+    expect(migration).toContain(
+      "migration-history.txt supabase/migrations 20260830115000",
+    );
+    expect(migration).toContain('printf \'%s\\n\' "INVALID_DEV_TARGET" >&2');
+    expect(migration).toContain(
+      'printf \'%s\\n\' "MIGRATION_HISTORY_MISMATCH" >&2',
+    );
+    expect(devWorkflow).not.toMatch(
+      /(?:echo|printf)[^\n]*(?:SUPABASE_DB_DIRECT_URL|SUPABASE_DB_URL|DEV_DB_ENV_FILE)/,
+    );
+  });
+
+  test("downloads and normalizes only the immutable source artifact", () => {
+    const download = workflowStep("Download immutable source artifact");
+    expect(download).toContain("GH_TOKEN: ${{ github.token }}");
+    expect(download).toContain(
+      'timeout --signal=TERM --kill-after=10s 120 gh run download "${SOURCE_RUN_ID}"',
+    );
+    expect(download).toContain('--repo "${GITHUB_REPOSITORY}"');
+    expect(download).toContain('--name "${SOURCE_ARTIFACT_NAME}"');
+    expect(download).toContain('mktemp -d "${RUNNER_TEMP}/supplier-purchase-workflow-source.XXXXXX"');
+    expect(devWorkflow.match(/GH_TOKEN:/g)).toHaveLength(1);
+
+    const normalize = workflowStep("Normalize workflow evidence input");
+    expect(normalize).toContain('"${SOURCE_DIR}/rollout-settings.json"');
+    expect(normalize).toContain('"${SOURCE_DIR}/execute.json"');
+    expect(normalize).toContain(".tenant_id");
+    expect(normalize).toContain(".batchId");
+    expect(normalize).toContain(".instanceId");
+    expect(normalize).toContain('> "${GITHUB_WORKSPACE}/workflow-explain-input.json"');
+  });
+
+  test("runs the package gate with exact env and uploads only summaries", () => {
+    const run = workflowStep("Run read-only workflow EXPLAIN");
+    expect(run).toContain(
+      'SUPPLIER_PURCHASE_WORKFLOW_EXPLAIN_CONFIRM="${CONFIRMATION}"',
+    );
+    expect(run).toContain(
+      'SUPPLIER_PURCHASE_WORKFLOW_EXPLAIN_DB_URL="${SUPABASE_DB_DIRECT_URL}"',
+    );
+    expect(run).toContain(
+      'SUPPLIER_PURCHASE_WORKFLOW_EXPLAIN_EVIDENCE_FILE="${GITHUB_WORKSPACE}/workflow-explain-input.json"',
+    );
+    expect(run).toContain(
+      "bun --cwd apps/api run supplier:purchase-batch-workflow:explain",
+    );
+    expect(run).toContain('> "${GITHUB_WORKSPACE}/workflow-explain-summary.json"');
+    expect(workflowStep("Verify workflow EXPLAIN summary")).toContain(
+      '.gate == "supplier_purchase_batch_workflow" and .queryCount == 3 and (.queries | length) == 3',
+    );
+
+    const upload = workflowStep("Upload workflow EXPLAIN evidence");
+    expect(upload).toContain("uses: actions/upload-artifact@v6");
+    expect(upload).toContain(
+      "name: supplier-purchase-workflow-explain-${{ inputs.commit_sha }}",
+    );
+    expect(upload).toContain([
+      "path: |",
+      "            workflow-explain-summary.json",
+      "            migration-evidence.json",
+      "          if-no-files-found: error",
+      "          retention-days: 30",
+    ].join("\n"));
+    expect(upload).not.toMatch(/workflow-explain-input|raw|\.env|migration-history/);
+  });
+
+  test("keeps security-sensitive steps ordered and excludes clone evidence", () => {
+    expectWorkflowStepsInOrder([
+      "Guard development runner and request",
+      "Checkout verified commit",
+      "Verify immutable checkout",
+      "Install API workflow dependencies",
+      "Verify development database target and migration history",
+      "Download immutable source artifact",
+      "Normalize workflow evidence input",
+      "Run read-only workflow EXPLAIN",
+      "Verify workflow EXPLAIN summary",
+      "Upload workflow EXPLAIN evidence",
+    ]);
+    expect(devWorkflow).not.toMatch(/enable[_ -]?seqscan\s*=\s*off/i);
+    expect(devWorkflow).not.toMatch(/path:[^\n]*(?:workflow-explain-input|raw|\.env)/i);
   });
 });
