@@ -150,17 +150,32 @@ UUID 参数均为必填、默认 dry-run 不调用写路径、execute 使用显�
 两个权限配置项目范围后，该员工可同时作为采购与财务审批人，并与申请人
 `d8ecc522-e6a1-49d6-b7b7-aaa0f3084826` 保持职责分离。
 
-解除阻塞必须先为至少一个上述有预算项目配置另一名 active、已绑定用户且不同于申请人的
-审批员工。采购审批员工需具备 `supplier.purchase-requisition.approve`、view、project.read
-及该项目范围；财务审批员工需具备 `finance.budget.manage`、view、project.read 及该项目
-范围。采购与财务可以由同一名第二员工承担，但二者都不能是申请人。职责分离经同一只读
-preflight 复核后，再由平台管理员使用现有 Admin/API 按父子顺序开启
-`procurement_snapshot_v1_enabled` 与 `purchase_batch_workflow_enabled`，保存审计事件和
-setting version。不得直接修改 `tenant_supplier_settings`，不得手工 seed 业务数据。
+随后使用现有 Admin/API 完成最小、可回退的租户侧配置，未直接修改数据库：
+
+- 在项目 `634ff402-ff84-4541-aa7c-3cdcd4fd5460` 新增员工
+  `bbab0193-43ae-4b7a-a7f3-24314e0f2e0d` 为非主责 `material_manager`，成员记录为
+  `d8eb50d6-09cc-4aa5-808b-320ed5fbac7c`；
+- 员工原有共享角色 `finance_base` 未修改；只新增
+  `supplier.purchase-requisition.view`（permission
+  `68dd5fc7-edf1-4f5a-9bf3-fb629643a57d`）和
+  `supplier.purchase-requisition.approve`（permission
+  `385c284a-5522-4aa5-a1f5-0490571dc1c8`）两条员工级 `allow + assigned` override；
+- API 回读确认两条 override 和项目成员记录均存在。受保护、强制只读复测
+  [run 33351018785](https://github.com/LeeFo-china/goose/actions/runs/33351018785) 得到专用候选
+  组合 1，选中申请人 `d8ecc522-e6a1-49d6-b7b7-aaa0f3084826`、采购/财务审批人
+  `bbab0193-43ae-4b7a-a7f3-24314e0f2e0d`；purchase、finance、all candidates 三项
+  preflight 均为 true，`prerequisites_ready_without_rollout=true`。
+
+租户侧职责分离阻塞已消除。剩余阻塞仅为平台 rollout：setting version 仍为 6，snapshot 与
+workflow 均为 false；租户管理员访问平台设置接口返回 HTTP 403
+`PLATFORM_STAFF_REQUIRED`，本机也没有可复用的平台管理员浏览器会话。必须由平台管理员使用
+现有 Admin/API 按父子顺序开启 `procurement_snapshot_v1_enabled` 与
+`purchase_batch_workflow_enabled`，保存审计事件和 setting version。不得直接修改
+`tenant_supplier_settings`。
 
 ## 灰度前待补证据
 
-- 职责分离修复后的审批人 preflight、flag=false 基线及 flag=true setting version；
+- flag=false 基线及 flag=true setting version；
 - 默认 planner 的只读 dev EXPLAIN 摘要；
 - smoke dry-run 输出，以及明确授权后的 execute requestId/batch/round/instance/task/
   budget/order/supplierCount；
