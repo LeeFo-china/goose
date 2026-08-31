@@ -11,11 +11,12 @@
   仓库官方命令。
 
 类型基线门禁已在未加本轮 migration 的 disposable production-schema clone 上，以真实
-`supabase gen types typescript --db-url ... --schema public` 执行。机械结果与当前
-`database.ts` 已有差异：当前文件包含 `graphql_public`，clone 的 `public.ai_models` 与当前
-文件也存在 `category_id` 差异。这是本任务之外的既有 schema/type 漂移，因此 Task12
-没有继续生成本轮类型、没有覆盖文件。Task13 必须在 dev migration 对齐后从 linked/dev
-执行官方生成、解释全部 diff，并把生成提交的 API typecheck/build 作为 API 发布前硬门禁。
+`supabase gen types typescript --db-url ... --schema public,graphql_public` 执行。即使 schema
+参数与当前文件一致，机械结果仍有 14 行既有差异，其中 clone 的 `public.ai_models` 缺少当前
+文件中的 `category_id`，`graphql_public` 生成片段也不完全一致。这是本任务之外的既有
+schema/type 漂移，因此 Task12 没有继续生成本轮类型、没有覆盖文件。Task13 必须在同一
+显式 dev DB 目标 migration 对齐后执行官方生成、解释全部 diff，并把生成提交的 API
+typecheck/build 作为 API 发布前硬门禁。
 
 ## 已完成自动化证据
 
@@ -33,8 +34,8 @@ assertions。数据库测试从真实本地 production schema 只克隆 schema �
 非幂等重放并验证最终对象，混合态 fail closed。测试结束必须成功 drop 一次性数据库；没有
 修改正式 local/dev 数据。
 修复 smoke execute 在并发预算快照与最终审批之间引入 commitment 的 fixture 顺序问题后，
-同一 focused 命令连续运行 3 次均为 7 pass、0 fail、32 assertions，且没有遗留一次性
-数据库或 `/tmp/task12-race-*.log`。
+数据库矩阵连续运行 3 次均为 1 pass、0 fail、16 assertions，且没有遗留一次性数据库或
+race 临时日志。
 
 覆盖摘要：
 
@@ -84,6 +85,13 @@ Cannot find project ref. Have you run supabase link?
 因此没有伪造 Local/Remote 对齐结论，也没有运行 `supabase db push`、手工 DDL/DML 或
 正式 type generation。另已知正式 local 存在与本任务无关的 pending migration，Task12
 没有尝试推进或修复它们。
+
+Task12 也实际运行了正式 local 的 `supplier-rollout-settings-database.test.ts`：6 个 helper
+测试通过，2 个行为测试因该 local 仍只有旧 12 参数 RPC、没有新 13 参数 RPC 和
+`purchase_batch_workflow_enabled` 列而失败（只读 catalog 证据为 `t|f|f`）。这不是本次
+compatibility migration 在 production-schema clone 上的回归；clone 已分别调用旧/新签名，
+证明旧签名保留 workflow flag、新签名正常。禁止为让正式 local 测试变绿而单独重放 migration
+或手工 DDL，待 Task13 在同一授权 dev 目标按清单迁移后复验。
 
 ## Task13 待补证据
 
