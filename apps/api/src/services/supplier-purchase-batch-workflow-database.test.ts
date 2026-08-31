@@ -48,12 +48,21 @@ DECLARE
  xu uuid := '85000000-0000-4000-8000-00000000f003'; xe uuid := '85000000-0000-4000-8000-00000000f013';
  sku uuid := '85000000-0000-4000-8000-000000000026'; cat uuid := '85000000-0000-4000-8000-000000000029';
  b uuid; task uuid; result jsonb; setting_version integer;
+ legacy_result_version integer; event_count integer;
 BEGIN
- -- DB-first compatibility: old API preserves the already-enabled workflow flag.
+ -- DB-first compatibility: old API preserves the flag and owns a stable old fingerprint.
  SELECT version INTO STRICT setting_version FROM public.tenant_supplier_settings WHERE tenant_id=t;
  result := public.set_tenant_supplier_rollout_settings(t,true,false,true,true,true,true,setting_version,su,se,'task12-legacy-rollout',NULL);
  IF result->>'status'<>'updated' OR result->'setting'->>'purchase_batch_workflow_enabled'<>'true' THEN RAISE EXCEPTION 'legacy rollout did not preserve workflow flag: %',result; END IF;
+ legacy_result_version := (result->>'version')::integer;
  setting_version := (result->>'version')::integer;
+ result := public.set_tenant_supplier_rollout_settings(t,true,false,true,true,true,true,false,setting_version,su,se,'task12-current-rollout-disable',NULL);
+ IF result->>'status'<>'updated' OR result->'setting'->>'purchase_batch_workflow_enabled'<>'false' THEN RAISE EXCEPTION 'current rollout disable failed: %',result; END IF;
+ setting_version := (result->>'version')::integer;
+ result := public.set_tenant_supplier_rollout_settings(t,true,false,true,true,true,true,legacy_result_version-1,su,se,'task12-legacy-rollout',NULL);
+ SELECT count(*) INTO event_count FROM public.supplier_command_events WHERE actor_user_id=su AND idempotency_key IN ('task12-legacy-rollout','task12-current-rollout-disable');
+ IF result->>'status'<>'updated' OR NOT (result->>'idempotent')::boolean OR (result->>'version')::integer<>legacy_result_version OR result->'setting'->>'purchase_batch_workflow_enabled'<>'true' OR (SELECT version FROM public.tenant_supplier_settings WHERE tenant_id=t)<>setting_version OR (SELECT purchase_batch_workflow_enabled FROM public.tenant_supplier_settings WHERE tenant_id=t) OR event_count<>2 THEN RAISE EXCEPTION 'legacy rollout replay changed after flag mutation: %, current version %, events %',result,setting_version,event_count; END IF;
+ BEGIN PERFORM public.set_tenant_supplier_rollout_settings(t,true,true,true,true,true,true,legacy_result_version-1,su,se,'task12-legacy-rollout',NULL); RAISE EXCEPTION 'changed legacy rollout replay accepted'; EXCEPTION WHEN SQLSTATE 'P0001' THEN IF SQLERRM<>'SUPPLIER_IDEMPOTENCY_CONFLICT' THEN RAISE; END IF; END;
  result := public.set_tenant_supplier_rollout_settings(t,true,false,true,true,true,true,true,setting_version,su,se,'task12-current-rollout',NULL);
  IF result->>'status'<>'updated' OR result->'setting'->>'purchase_batch_workflow_enabled'<>'true' THEN RAISE EXCEPTION 'current rollout failed: %',result; END IF;
 

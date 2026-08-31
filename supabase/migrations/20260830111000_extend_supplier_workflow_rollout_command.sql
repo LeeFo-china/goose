@@ -346,6 +346,7 @@ AS $$
 DECLARE
   v_event public.supplier_command_events%ROWTYPE;
   v_request jsonb;
+  v_result jsonb;
   v_purchase_batch_workflow_enabled boolean;
 BEGIN
   IF p_tenant_id IS NULL
@@ -434,7 +435,7 @@ BEGIN
   ), false)
   INTO v_purchase_batch_workflow_enabled;
 
-  RETURN public.set_tenant_supplier_rollout_settings(
+  v_result := public.set_tenant_supplier_rollout_settings(
     p_tenant_id,
     p_module_enabled,
     p_require_active_contract_for_new_order,
@@ -449,6 +450,39 @@ BEGIN
     p_idempotency_key,
     p_reason
   );
+
+  IF v_result ->> 'status' = 'updated'
+    AND NOT COALESCE((v_result ->> 'idempotent')::boolean, false)
+  THEN
+    UPDATE public.supplier_command_events AS event
+    SET from_state = jsonb_set(
+      event.from_state,
+      '{_request}',
+      v_request,
+      true
+    )
+    WHERE event.actor_user_id = p_actor_user_id
+      AND event.idempotency_key = p_idempotency_key
+      AND event.tenant_id = p_tenant_id
+      AND event.resource_type = 'tenant_supplier'
+      AND event.resource_id = p_tenant_id
+      AND event.command = 'set_tenant_supplier_rollout_settings'
+      AND event.result_version = (v_result ->> 'version')::integer
+      AND event.from_state -> '_request' IS NOT DISTINCT FROM (
+        v_request || jsonb_build_object(
+          'purchase_batch_workflow_enabled',
+          v_purchase_batch_workflow_enabled
+        )
+      );
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
+    END IF;
+  END IF;
+
+  RETURN v_result;
 END;
 $$;
 

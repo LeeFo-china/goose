@@ -251,7 +251,7 @@ describe("tenant supplier rollout command migration contract", () => {
     expect(legacy).toContain("SET search_path = pg_catalog, public");
     expect(legacy).toContain("purchase_batch_workflow_enabled");
     expect(legacy).toContain(
-      "RETURN public.set_tenant_supplier_rollout_settings(",
+      "v_result := public.set_tenant_supplier_rollout_settings(",
     );
     for (const parameter of [
       "p_tenant_id uuid",
@@ -299,6 +299,23 @@ describe("tenant supplier rollout command migration contract", () => {
       "'procurement_snapshot_v1_enabled', p_procurement_snapshot_v1_enabled",
     );
     expect(legacyRequest).not.toContain("purchase_batch_workflow_enabled");
+  });
+
+  test("persists the old explicit fingerprint for writes made through the compatibility overload", () => {
+    const legacy = compact(legacyRolloutFunction());
+    const delegate = legacy.indexOf(
+      "v_result := public.set_tenant_supplier_rollout_settings(",
+    );
+    const persistLegacyFingerprint = legacy.indexOf(
+      "SET from_state = jsonb_set( event.from_state, '{_request}', v_request, true )",
+    );
+
+    expect(delegate).toBeGreaterThan(-1);
+    expect(persistLegacyFingerprint).toBeGreaterThan(delegate);
+    expect(legacy).toContain(
+      "NOT COALESCE((v_result ->> 'idempotent')::boolean, false)",
+    );
+    expect(legacy).toContain("RETURN v_result");
   });
 
   test("locks the tenant and settings row before optimistic update", () => {
