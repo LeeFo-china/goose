@@ -141,6 +141,15 @@ UUID 参数均为必填、默认 dry-run 不调用写路径、execute 使用显�
   职责分离，不是模板、目录、预算或 migration 缺失。按 self-review 门禁，不能通过开启
   rollout flag 绕过。
 
+第三轮强制只读核查
+[run 33350486669](https://github.com/LeeFo-china/goose/actions/runs/33350486669) 进一步确认租户
+共有 9 名 active、已绑定用户的员工，因此不需要为 smoke 新建员工。最小权限变更候选为
+`bbab0193-43ae-4b7a-a7f3-24314e0f2e0d`：该员工在两个有预算项目上已经具备
+`project.read` 和 `finance.budget.manage`，当前只缺
+`supplier.purchase-requisition.view` 与 `supplier.purchase-requisition.approve`。为上述
+两个权限配置项目范围后，该员工可同时作为采购与财务审批人，并与申请人
+`d8ecc522-e6a1-49d6-b7b7-aaa0f3084826` 保持职责分离。
+
 解除阻塞必须先为至少一个上述有预算项目配置另一名 active、已绑定用户且不同于申请人的
 审批员工。采购审批员工需具备 `supplier.purchase-requisition.approve`、view、project.read
 及该项目范围；财务审批员工需具备 `finance.budget.manage`、view、project.read 及该项目
