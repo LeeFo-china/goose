@@ -124,6 +124,18 @@ export type WorkflowExplainSummary = {
   }>;
 };
 
+export type WorkflowExplainCliDependencies = {
+  env: Record<string, string | undefined>;
+  readEvidence(path: string): Promise<unknown>;
+  runGate(
+    config: WorkflowExplainConfig,
+    evidence: WorkflowExplainEvidenceInput,
+  ): Promise<WorkflowExplainSummary>;
+  writeStdout(line: string): void;
+  writeStderr(line: string): void;
+  setExitCode(code: number): void;
+};
+
 type TransactionGuard = {
   backendPid: number;
   readOnly: "on";
@@ -353,20 +365,43 @@ const DEFAULT_DEPENDENCIES: WorkflowExplainDependencies = {
   },
 };
 
-async function main(): Promise<void> {
+export async function runWorkflowExplainCli(
+  dependencies: WorkflowExplainCliDependencies,
+): Promise<void> {
   try {
-    const config = parseWorkflowExplainConfig(process.env);
+    const config = parseWorkflowExplainConfig(dependencies.env);
     const evidence = parseWorkflowExplainEvidenceInput(
-      await Bun.file(config.evidenceFile).json(),
+      await dependencies.readEvidence(config.evidenceFile),
     );
-    console.log(JSON.stringify(await runWorkflowExplainGate(config, evidence)));
+    dependencies.writeStdout(JSON.stringify(
+      await dependencies.runGate(config, evidence),
+    ));
   } catch (error) {
     const failure = normalizeError(error);
-    console.error(
+    dependencies.writeStderr(
       `SUPPLIER_PURCHASE_WORKFLOW_EXPLAIN_FAILED:${failure.code}`,
     );
-    process.exitCode = 1;
+    dependencies.setExitCode(1);
   }
 }
 
-if (import.meta.main) void main();
+const DEFAULT_CLI_DEPENDENCIES: WorkflowExplainCliDependencies = {
+  env: process.env,
+  readEvidence(path) {
+    return Bun.file(path).json();
+  },
+  runGate(config, evidence) {
+    return runWorkflowExplainGate(config, evidence);
+  },
+  writeStdout(line) {
+    console.log(line);
+  },
+  writeStderr(line) {
+    console.error(line);
+  },
+  setExitCode(code) {
+    process.exitCode = code;
+  },
+};
+
+if (import.meta.main) void runWorkflowExplainCli(DEFAULT_CLI_DEPENDENCIES);
