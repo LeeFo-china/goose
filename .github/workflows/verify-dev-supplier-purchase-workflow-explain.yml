@@ -34,20 +34,58 @@ jobs:
       BLOCKED_DB_HOSTS: api.goodcms.cn 1.13.20.39
       COMMIT_SHA: ${{ inputs.commit_sha }}
       CONFIRMATION: ${{ inputs.confirmation }}
+      DISPATCH_REF: ${{ github.ref }}
+      DISPATCH_SHA: ${{ github.sha }}
     steps:
       - name: Guard development runner and request
         run: |
           set -euo pipefail
-          test "${RUNNER_NAME}" = "gooes-dev-vm-0-11"
-          test -r "${DEV_DB_ENV_FILE}"
-          test "${CONFIRMATION}" = "development-read-only"
-          [[ "${COMMIT_SHA}" =~ ^[a-f0-9]{40}$ ]]
+          reject_dev_target() {
+            printf '%s\n' "INVALID_DEV_TARGET" >&2
+            exit 1
+          }
+          reject_confirmation() {
+            printf '%s\n' "CONFIRMATION_REQUIRED" >&2
+            exit 1
+          }
+
+          if [[ "${CONFIRMATION:-}" != "development-read-only" ]]; then
+            reject_confirmation
+          fi
+          if [[ "${RUNNER_NAME:-}" != "gooes-dev-vm-0-11" ||
+            ! -r "${DEV_DB_ENV_FILE:-}" ||
+            "${DISPATCH_REF:-}" != "refs/heads/main" ||
+            ! "${COMMIT_SHA:-}" =~ ^[a-f0-9]{40}$ ||
+            "${COMMIT_SHA:-}" != "${DISPATCH_SHA:-}" ]]; then
+            reject_dev_target
+          fi
 
       - name: Checkout verified commit
         uses: actions/checkout@v6
         with:
           ref: ${{ inputs.commit_sha }}
           clean: true
+
+      - name: Verify immutable checkout and deployed revision
+        run: |
+          set -euo pipefail
+          reject_dev_target() {
+            printf '%s\n' "INVALID_DEV_TARGET" >&2
+            exit 1
+          }
+
+          if ! head_revision="$(git rev-parse HEAD 2>/dev/null)"; then
+            reject_dev_target
+          fi
+          if ! workspace_status="$(git status --porcelain 2>/dev/null)"; then
+            reject_dev_target
+          fi
+          if ! deployed_revision="$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' gooes-api-dev 2>/dev/null)"; then
+            reject_dev_target
+          fi
+          if [[ "${head_revision}" != "${COMMIT_SHA}" || -n "${workspace_status}" || "${deployed_revision}" != "${COMMIT_SHA}" ]]; then
+            reject_dev_target
+          fi
 
       - name: Set up Node
         uses: actions/setup-node@v6
@@ -59,12 +97,6 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: "1.3.2"
-
-      - name: Verify immutable checkout
-        run: |
-          set -euo pipefail
-          test "$(git rev-parse HEAD)" = "${COMMIT_SHA}"
-          test -z "$(git status --porcelain)"
 
       - name: Install API workflow dependencies
         run: |
@@ -130,36 +162,64 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          source_dir="$(mktemp -d "${RUNNER_TEMP}/supplier-purchase-workflow-source.XXXXXX")"
-          timeout --signal=TERM --kill-after=10s 120 gh run download "${SOURCE_RUN_ID}" \
+          reject_evidence() {
+            printf '%s\n' "INVALID_EVIDENCE_INPUT" >&2
+            exit 1
+          }
+
+          if ! source_dir="$(mktemp -d "${RUNNER_TEMP}/supplier-purchase-workflow-source.XXXXXX" 2>/dev/null)"; then
+            reject_evidence
+          fi
+          if ! timeout --signal=TERM --kill-after=10s 120 gh run download "${SOURCE_RUN_ID}" \
             --repo "${GITHUB_REPOSITORY}" \
             --name "${SOURCE_ARTIFACT_NAME}" \
-            --dir "${source_dir}"
-          test -f "${source_dir}/rollout-settings.json"
-          test -f "${source_dir}/execute.json"
-          printf 'SOURCE_DIR=%s\n' "${source_dir}" >> "${GITHUB_ENV}"
+            --dir "${source_dir}" \
+            >/dev/null 2>&1; then
+            reject_evidence
+          fi
+          if [[ ! -f "${source_dir}/rollout-settings.json" ||
+            ! -f "${source_dir}/execute.json" ]]; then
+            reject_evidence
+          fi
+          if ! { printf 'SOURCE_DIR=%s\n' "${source_dir}" >> "${GITHUB_ENV}"; } 2>/dev/null; then
+            reject_evidence
+          fi
 
       - name: Normalize workflow evidence input
         run: |
           set -euo pipefail
-          jq -en \
-            --arg sourceRunId "${SOURCE_RUN_ID}" \
-            --arg artifactName "${SOURCE_ARTIFACT_NAME}" \
-            --slurpfile rolloutSettings "${SOURCE_DIR}/rollout-settings.json" \
-            --slurpfile execute "${SOURCE_DIR}/execute.json" \
-            '{
-              sourceRunId: $sourceRunId,
-              artifactName: $artifactName,
-              tenantId: $rolloutSettings[0].tenant_id,
-              batchId: $execute[0].batchId,
-              instanceId: $execute[0].instanceId
-            }
-            | select(
-                [.tenantId, .batchId, .instanceId]
-                | all(type == "string" and test("^[a-f0-9-]{36}$"))
-              )' \
-            > "${GITHUB_WORKSPACE}/workflow-explain-input.json"
-          test -s "${GITHUB_WORKSPACE}/workflow-explain-input.json"
+          reject_evidence() {
+            printf '%s\n' "INVALID_EVIDENCE_INPUT" >&2
+            exit 1
+          }
+
+          if ! {
+            jq -en \
+              --arg sourceRunId "${SOURCE_RUN_ID}" \
+              --arg artifactName "${SOURCE_ARTIFACT_NAME}" \
+              --slurpfile rolloutSettings "${SOURCE_DIR}/rollout-settings.json" \
+              --slurpfile execute "${SOURCE_DIR}/execute.json" \
+              '{
+                sourceRunId: $sourceRunId,
+                artifactName: $artifactName,
+                tenantId: $rolloutSettings[0].tenant_id,
+                batchId: $execute[0].batchId,
+                instanceId: $execute[0].instanceId
+              }
+              | select(
+                  [.tenantId, .batchId, .instanceId]
+                  | all(
+                      type == "string" and
+                      test("^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
+                    )
+                )' \
+              > "${GITHUB_WORKSPACE}/workflow-explain-input.json"
+          } 2>/dev/null; then
+            reject_evidence
+          fi
+          if [[ ! -s "${GITHUB_WORKSPACE}/workflow-explain-input.json" ]]; then
+            reject_evidence
+          fi
 
       - name: Run read-only workflow EXPLAIN
         run: |
@@ -197,15 +257,23 @@ jobs:
           SUPPLIER_PURCHASE_WORKFLOW_EXPLAIN_CONFIRM="${CONFIRMATION}" \
           SUPPLIER_PURCHASE_WORKFLOW_EXPLAIN_DB_URL="${SUPABASE_DB_DIRECT_URL}" \
           SUPPLIER_PURCHASE_WORKFLOW_EXPLAIN_EVIDENCE_FILE="${GITHUB_WORKSPACE}/workflow-explain-input.json" \
-            bun --cwd apps/api run supplier:purchase-batch-workflow:explain \
+            bun run --silent --cwd apps/api supplier:purchase-batch-workflow:explain \
             > "${GITHUB_WORKSPACE}/workflow-explain-summary.json"
 
       - name: Verify workflow EXPLAIN summary
         run: |
           set -euo pipefail
-          jq -e \
+          reject_evidence() {
+            printf '%s\n' "INVALID_EVIDENCE_INPUT" >&2
+            exit 1
+          }
+
+          if ! jq -e \
             '.gate == "supplier_purchase_batch_workflow" and .queryCount == 3 and (.queries | length) == 3' \
-            workflow-explain-summary.json >/dev/null
+            workflow-explain-summary.json \
+            >/dev/null 2>&1; then
+            reject_evidence
+          fi
 
       - name: Upload workflow EXPLAIN evidence
         uses: actions/upload-artifact@v6
