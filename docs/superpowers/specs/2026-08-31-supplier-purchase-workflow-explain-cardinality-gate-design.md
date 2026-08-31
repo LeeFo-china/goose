@@ -128,9 +128,12 @@ LIMIT 2;
   30 秒进程等待上限；
 - 不执行 `SET enable_seqscan=off`。在同一事务内读取 `pg_settings` 中所有
   `category LIKE 'Query Tuning /%'` 的项目以及 `plan_cache_mode`，覆盖 planner method、
-  cost constants、GEQO、统计和其他 planner 选项；每项 `setting` 必须等于 `boot_val`，否则
-  以非默认 planner 失败。EXPLAIN 根对象的 `Settings` 缺失时按空对象处理，存在时必须是
-  对象并写入脱敏证据；其中任何 Query Tuning 或 `plan_cache_mode` 项也必须满足相同规则；
+  cost constants、GEQO、统计和其他 planner 选项。来源只允许 `default` 或
+  `configuration file`；通常 `setting` 必须等于 `boot_val`，唯一已登记的受管偏移是来源为
+  `configuration file` 的 `effective_cache_size`（展示值 `128MB`、raw `16384`、boot
+  `524288`）。`session/client` 等临时来源和其他偏移均以
+  非默认 planner 失败。EXPLAIN 根对象的 `Settings` 缺失时按空对象处理，存在时必须是对象并
+  写入脱敏证据；其中任何 planner 项必须与 `current_setting(name)` 的展示值完全一致；
 - 清单列出的每个预期索引都必须在 `pg_index` 中证明属于 `public` 下对应目标 relation，且
   `indisvalid=true`、`indisready=true`；
 - planning time 不超过 50ms；
@@ -226,7 +229,8 @@ LIMIT 2;
 - `INVALID_DEV_TARGET`：数据库不是获授权 dev 目标或角色不能有效绕过 RLS；
 - `MIGRATION_HISTORY_MISMATCH`：local/remote migration history 不一致；
 - `TRANSACTION_GUARD_INVALID`：事务不是只读可重复读，或检查未共享同一事务；
-- `NON_DEFAULT_PLANNER`：任一 Query Tuning setting 或 `plan_cache_mode` 不等于 boot value；
+- `NON_DEFAULT_PLANNER`：planner 来源不受信、出现未登记 boot 偏移，或 EXPLAIN Settings
+  不等于当前受管基线；
 - `INDEX_METADATA_INVALID`：预期索引缺失、未 ready 或无效；
 - `INDEX_RELATION_MISMATCH`：索引不属于清单指定的 `public` relation；
 - `MISSING_PLAN`：清单查询缺少计划；

@@ -201,6 +201,20 @@ describe("supplier purchase batch workflow EXPLAIN documentation", () => {
     assertCardinalityAndThresholdContract(runbook);
   });
 
+  test("locks the managed planner baseline exception", () => {
+    for (const value of [
+      "current_setting(name)",
+      "effective_cache_size",
+      "configuration file",
+      "session/client",
+      "128MB",
+      "16384",
+      "524288",
+    ]) {
+      expect(runbook).toContain(value);
+    }
+  });
+
   test("matches the runner stable error allowlist exactly and in order", () => {
     assertStableErrorContract(runbook);
     expect(runbook).toContain(

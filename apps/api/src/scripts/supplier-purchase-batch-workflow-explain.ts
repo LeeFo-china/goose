@@ -46,7 +46,8 @@ const ROLE_QUERY = `
 `;
 
 const PLANNER_SETTINGS_QUERY = `
-  select name, setting AS "current", boot_val AS "bootValue", category
+  select name, current_setting(name) AS "current", setting AS "rawValue",
+    boot_val AS "bootValue", category, source
   from pg_settings
   where category LIKE 'Query Tuning /%' OR name = 'plan_cache_mode'
   order by name

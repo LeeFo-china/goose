@@ -147,6 +147,13 @@ bun --env-file=.env test \
 `REPEATABLE READ READ ONLY` 事务快照内完成目标校验、有界计数、索引元数据读取和三条
 `EXPLAIN (ANALYZE, BUFFERS, SETTINGS, VERBOSE, FORMAT JSON)`。
 
+这里的默认 planner 包含受保护 dev 集群的已登记受管基线：runner 同时读取
+`pg_settings.setting`、`boot_val`、`source` 和 `current_setting(name)`。只有来源为
+`default` 或 `configuration file` 才可继续；偏离 boot value 时仅允许已登记的
+`effective_cache_size` 配置文件基线（展示值 `128MB`、raw `16384`、boot `524288`）。
+`session/client` 等临时来源、其他参数偏移以及
+EXPLAIN `Settings` 与 `current_setting(name)` 不一致均返回 `NON_DEFAULT_PLANNER`。
+
 证据来源固定为 GitHub Actions run `33359680214` 的 immutable artifact
 `supplier-purchase-workflow-acceptance-9d02854a88d5ca83a2f883b923de1ffcd7d49bd3`。
 `SUPPLIER_PURCHASE_WORKFLOW_EXPLAIN_EVIDENCE_FILE` 必须指向 protected workflow 从该

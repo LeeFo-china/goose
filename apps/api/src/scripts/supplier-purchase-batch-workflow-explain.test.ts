@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-
 import {
   WORKFLOW_EXPLAIN_SOURCE,
   WorkflowExplainError,
@@ -70,18 +69,17 @@ function plan(relation: string, overrides: Record<string, unknown> = {}) {
 const PLANNER_ROWS = [
   {
     name: "enable_seqscan",
-    current: "on",
-    bootValue: "on",
+    current: "on", rawValue: "on", bootValue: "on",
     category: "Query Tuning / Planner Method Configuration",
+    source: "default",
   },
   {
     name: "plan_cache_mode",
-    current: "auto",
-    bootValue: "auto",
+    current: "auto", rawValue: "auto", bootValue: "auto",
     category: "Query Tuning / Other Planner Options",
+    source: "default",
   },
 ];
-
 const METADATA_ROWS = Object.values(WORKFLOW_EXPLAIN_MANIFEST).flatMap(
   (entry) => entry.indexes.map((indexName) => ({
     indexName,
@@ -256,8 +254,10 @@ describe("supplier purchase workflow EXPLAIN SQL", () => {
     expect(role).toContain('roles.rolbypassrls AS "rolbypassrl"');
     expect(role).not.toMatch(/roles\.rolbypassrl(?!s)/);
     const planner = harness.calls.find((call) => call.event === "planner")!.text;
-    expect(planner).toContain('setting AS "current"');
+    expect(planner).toContain('current_setting(name) AS "current"');
+    expect(planner).toContain('setting AS "rawValue"');
     expect(planner).toContain('boot_val AS "bootValue"');
+    expect(planner).toContain("category, source");
     expect(planner).toContain("category LIKE 'Query Tuning /%'");
     expect(planner).toContain("OR name = 'plan_cache_mode'");
     expect(planner.toLowerCase()).toContain("order by name");
@@ -331,9 +331,9 @@ describe("supplier purchase workflow EXPLAIN evidence gate", () => {
   test("passes every planner row unchanged to the raw gate", async () => {
     const plannerRows = [...PLANNER_ROWS, {
       name: "enable_hashjoin",
-      current: "off",
-      bootValue: "on",
+      current: "off", rawValue: "off", bootValue: "on",
       category: "Query Tuning / Planner Method Configuration",
+      source: "default",
     }];
     const { error } = await captureFailure({ responses: { planner: plannerRows } });
     expect(error.code).toBe("NON_DEFAULT_PLANNER");

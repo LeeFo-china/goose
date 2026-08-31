@@ -94,14 +94,18 @@ function passingInput(): WorkflowExplainGateInput {
       {
         name: "enable_seqscan",
         current: "on",
+        rawValue: "on",
         bootValue: "on",
         category: "Query Tuning / Planner Method Configuration",
+        source: "default",
       },
       {
         name: "plan_cache_mode",
         current: "auto",
+        rawValue: "auto",
         bootValue: "auto",
         category: "Query Tuning / Other",
+        source: "default",
       },
     ],
     plans: WORKFLOW_EXPLAIN_QUERY_NAMES.map((name) => parsed(name)),
@@ -113,14 +117,18 @@ function catalogPlannerSettings(): WorkflowExplainGateInput["plannerSettings"] {
     {
       name: "enable_seqscan",
       current: "on",
+      rawValue: "on",
       bootValue: "on",
       category: "Query Tuning / Planner Method Configuration",
+      source: "default",
     },
     {
       name: "plan_cache_mode",
       current: "auto",
+      rawValue: "auto",
       bootValue: "auto",
       category: "Query Tuning / Other",
+      source: "default",
     },
   ];
 }
@@ -172,6 +180,80 @@ describe("workflow EXPLAIN adversarial planner evidence", () => {
     expect(assertWorkflowExplainGate(input)).toBe(true);
   });
 
+  test("accepts only the registered managed effective cache baseline", () => {
+    const input = passingInput();
+    input.plannerSettings = [{
+      name: "effective_cache_size",
+      current: "128MB",
+      rawValue: "16384",
+      bootValue: "524288",
+      category: "Query Tuning / Planner Cost Constants",
+      source: "configuration file",
+    }, catalogPlannerSettings()[1]!] as never;
+    input.plans[0] = parsed("running_instance", directScan(
+      "running_instance",
+    ), { Settings: { effective_cache_size: "128MB" } });
+
+    expect(assertWorkflowExplainGate(input)).toBe(true);
+  });
+
+  test("accepts default planner settings with PostgreSQL unit formatting", () => {
+    const input = passingInput();
+    input.plannerSettings = [
+      {
+        name: "min_parallel_table_scan_size",
+        current: "8MB", rawValue: "1024", bootValue: "1024",
+        category: "Query Tuning / Planner Cost Constants",
+        source: "default",
+      },
+      {
+        name: "min_parallel_index_scan_size",
+        current: "512kB", rawValue: "64", bootValue: "64",
+        category: "Query Tuning / Planner Cost Constants",
+        source: "default",
+      },
+      catalogPlannerSettings()[1]!,
+    ];
+
+    expect(assertWorkflowExplainGate(input)).toBe(true);
+  });
+
+  test("rejects unregistered or transient planner overrides", () => {
+    for (const plannerSetting of [
+      {
+        name: "enable_seqscan",
+        current: "off",
+        rawValue: "off",
+        bootValue: "on",
+        category: "Query Tuning / Planner Method Configuration",
+        source: "configuration file",
+      },
+      {
+        name: "effective_cache_size",
+        current: "128MB",
+        rawValue: "16384",
+        bootValue: "524288",
+        category: "Query Tuning / Planner Cost Constants",
+        source: "session",
+      },
+      {
+        name: "effective_cache_size",
+        current: "64MB",
+        rawValue: "8192",
+        bootValue: "524288",
+        category: "Query Tuning / Planner Cost Constants",
+        source: "configuration file",
+      },
+    ]) {
+      const input = passingInput();
+      input.plannerSettings = [
+        plannerSetting,
+        catalogPlannerSettings()[1]!,
+      ] as never;
+      expectCode(() => assertWorkflowExplainGate(input), "NON_DEFAULT_PLANNER");
+    }
+  });
+
   test("rejects malformed, duplicate, and contradictory planner rows safely", () => {
     const valid = catalogPlannerSettings();
     const malformed: unknown[] = [
@@ -217,6 +299,7 @@ describe("workflow EXPLAIN raw gate ordering", () => {
   test("checks current planner settings before cardinality", () => {
     const input = passingRawInput();
     input.plannerSettings[0]!.current = "off";
+    input.plannerSettings[0]!.rawValue = "off";
     input.cardinalities.running_instance = -1;
     expectCode(
       () => assertWorkflowExplainRawGate(input),

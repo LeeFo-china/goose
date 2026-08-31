@@ -71,15 +71,15 @@ function plannerRows() {
   return [
     {
       name: "enable_seqscan",
-      current: "on",
-      bootValue: "on",
+      current: "on", rawValue: "on", bootValue: "on",
       category: "Query Tuning / Planner Method Configuration",
+      source: "default",
     },
     {
       name: "plan_cache_mode",
-      current: "auto",
-      bootValue: "auto",
+      current: "auto", rawValue: "auto", bootValue: "auto",
       category: "Connections / Other Defaults",
+      source: "default",
     },
   ];
 }
@@ -194,6 +194,7 @@ describe("supplier purchase workflow EXPLAIN phase ordering", () => {
   test("rejects planner drift before preflight or later failures", async () => {
     const nonDefaultPlanner = plannerRows();
     nonDefaultPlanner[0]!.current = "off";
+    nonDefaultPlanner[0]!.rawValue = "off";
     const { error, events } = await failGate({
       responses: {
         planner: nonDefaultPlanner,
@@ -277,7 +278,10 @@ describe("supplier purchase workflow EXPLAIN phase ordering", () => {
     const { error, events } = await failGate({
       responses: { planner: settings },
       onEvent(event) {
-        if (event === "guard-end") settings[0]!.current = "off";
+        if (event === "guard-end") {
+          settings[0]!.current = "off";
+          settings[0]!.rawValue = "off";
+        }
       },
     });
     expect(error.code).toBe("NON_DEFAULT_PLANNER");

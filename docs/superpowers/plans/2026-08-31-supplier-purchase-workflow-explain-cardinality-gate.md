@@ -6,6 +6,12 @@
 
 **Architecture:** A strict config module authenticates the fixed prior smoke artifact. A pure evidence module parses PostgreSQL JSON plans and applies deterministic cardinality, index, planner, timing, and buffer rules; a separate runner owns the single read-only repeatable-read database transaction. A workflow-dispatch gate validates the dev target and migration history, downloads the immutable source artifact, runs the gate, and uploads only normalized evidence.
 
+**2026-09-01 dev baseline correction:** Protected run `33418391961` proved that dev sets
+`effective_cache_size` from the cluster configuration file (`16384` versus boot value `524288`).
+The permanent gate therefore accepts only this registered managed override, rejects all other
+boot-value drift and transient `session/client` sources, and compares EXPLAIN Settings with
+`current_setting(name)` so PostgreSQL unit formatting remains canonical.
+
 **Tech Stack:** Bun 1.3.2, TypeScript 5, Bun SQL/PostgreSQL, Bun test, GitHub Actions, Supabase CLI 2.99.0, shell/jq.
 
 ---
@@ -319,7 +325,7 @@ expect(events).toEqual([
 ]);
 ```
 
-Also verify repeatable-read/read-only is the first transaction statement, timeout precedes reads, backend pid is stable, role is superuser or BYPASSRLS, all Query Tuning settings plus `plan_cache_mode` equal `boot_val`, bounded counts contain fixed `LIMIT 1000`, exact EXPLAIN SQL uses `VERBOSE` and `LIMIT 2`, PostgreSQL `57014` maps to `STATEMENT_TIMEOUT`, and output excludes URLs/UUIDs/raw predicates.
+Also verify repeatable-read/read-only is the first transaction statement, timeout precedes reads, backend pid is stable, role is superuser or BYPASSRLS, all Query Tuning settings plus `plan_cache_mode` use default or the registered `effective_cache_size` configuration-file baseline, bounded counts contain fixed `LIMIT 1000`, exact EXPLAIN SQL uses `VERBOSE` and `LIMIT 2`, PostgreSQL `57014` maps to `STATEMENT_TIMEOUT`, and output excludes URLs/UUIDs/raw predicates.
 
 - [ ] **Step 2: Run the runner test and verify RED**
 

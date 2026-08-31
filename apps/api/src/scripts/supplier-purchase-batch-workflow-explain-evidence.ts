@@ -1,5 +1,4 @@
-import { WorkflowExplainError } from
-  "./supplier-purchase-batch-workflow-explain-config";
+import { WorkflowExplainError } from "./supplier-purchase-batch-workflow-explain-config";
 
 export const WORKFLOW_EXPLAIN_THRESHOLDS = {
   statementTimeoutMs: 5_000,
@@ -10,15 +9,17 @@ export const WORKFLOW_EXPLAIN_THRESHOLDS = {
 } as const;
 
 export const WORKFLOW_EXPLAIN_CARDINALITY_LIMIT = 1_000;
+const MANAGED_PLANNER_OVERRIDE = {
+  name: "effective_cache_size", current: "128MB",
+  rawValue: "16384", bootValue: "524288",
+} as const;
 
 export const WORKFLOW_EXPLAIN_QUERY_NAMES = [
   "running_instance",
   "pending_task",
   "subject_state",
 ] as const;
-
-export type WorkflowExplainQueryName =
-  typeof WORKFLOW_EXPLAIN_QUERY_NAMES[number];
+export type WorkflowExplainQueryName = typeof WORKFLOW_EXPLAIN_QUERY_NAMES[number];
 
 export const WORKFLOW_EXPLAIN_MANIFEST = {
   running_instance: {
@@ -59,17 +60,12 @@ export type WorkflowExplainErrorCode =
   typeof WORKFLOW_EXPLAIN_ERROR_CODES[number];
 export type WorkflowCardinalityClass = "small" | "large";
 export type WorkflowExplainSettingValue = string | number | boolean | null;
-export type WorkflowExplainSettings = Record<
-  string,
-  WorkflowExplainSettingValue
->;
-
+export type WorkflowExplainSettings = Record<string, WorkflowExplainSettingValue>;
 export type WorkflowExplainTargetNode = {
   nodeType: string;
   relation: string;
   schema: "public";
 };
-
 export type WorkflowExplainPlanEvidence = {
   name: WorkflowExplainQueryName;
   targetNodes: WorkflowExplainTargetNode[];
@@ -87,8 +83,10 @@ export type WorkflowExplainPlanEvidence = {
 export type WorkflowExplainPlannerSetting = {
   name: string;
   current: string;
+  rawValue: string;
   bootValue: string;
   category: string;
+  source: string;
 };
 
 export type WorkflowExplainIndexMetadata = {
@@ -98,7 +96,6 @@ export type WorkflowExplainIndexMetadata = {
   indisvalid: boolean;
   indisready: boolean;
 };
-
 export type WorkflowExplainGateInput = {
   cardinalities: Record<WorkflowExplainQueryName, number>;
   indexMetadata: Record<
@@ -356,7 +353,15 @@ export function assertWorkflowExplainCurrentPlannerSettings(
     if (registry.has(setting.name)) {
       fail("NON_DEFAULT_PLANNER", "planner setting names must be unique");
     }
-    if (setting.current !== setting.bootValue) {
+    const sourceAllowed = setting.source === "default" ||
+      setting.source === "configuration file";
+    const managedOverride = setting.source === "configuration file" &&
+      setting.name === MANAGED_PLANNER_OVERRIDE.name &&
+      setting.current === MANAGED_PLANNER_OVERRIDE.current &&
+      setting.rawValue === MANAGED_PLANNER_OVERRIDE.rawValue &&
+      setting.bootValue === MANAGED_PLANNER_OVERRIDE.bootValue;
+    if (!sourceAllowed ||
+      (setting.rawValue !== setting.bootValue && !managedOverride)) {
       fail("NON_DEFAULT_PLANNER", "current planner setting is not default");
     }
     if (setting.name === "plan_cache_mode") planCacheModeCount += 1;
@@ -364,7 +369,7 @@ export function assertWorkflowExplainCurrentPlannerSettings(
       setting.category.startsWith("Query Tuning /")) {
       queryTuningCount += 1;
     }
-    registry.set(setting.name, setting.bootValue);
+    registry.set(setting.name, setting.current);
   }
   if (planCacheModeCount !== 1 || queryTuningCount === 0) {
     fail("NON_DEFAULT_PLANNER", "planner setting evidence is incomplete");
@@ -390,16 +395,17 @@ function plannerSetting(value: unknown): WorkflowExplainPlannerSetting {
     fail("NON_DEFAULT_PLANNER", "planner setting row must be an object");
   }
   const row = value as Record<string, unknown>;
-  const { name, current, bootValue, category } = row;
+  const { name, current, rawValue, bootValue, category, source } = row;
   if (typeof name !== "string" || name.trim().length === 0 ||
-    typeof current !== "string" || typeof bootValue !== "string" ||
-    typeof category !== "string") {
+    typeof current !== "string" || typeof rawValue !== "string" ||
+    typeof bootValue !== "string" || typeof category !== "string" ||
+    typeof source !== "string") {
     fail("NON_DEFAULT_PLANNER", "planner setting row is malformed");
   }
   if (!category.startsWith("Query Tuning /") && name !== "plan_cache_mode") {
     fail("NON_DEFAULT_PLANNER", "planner setting scope is invalid");
   }
-  return { name, current, bootValue, category };
+  return { name, current, rawValue, bootValue, category, source };
 }
 
 function assertRuntimeThresholds(plan: WorkflowExplainPlanEvidence): void {

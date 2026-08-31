@@ -128,15 +128,15 @@ function passingInput(): WorkflowExplainGateInput {
     plannerSettings: [
       {
         name: "enable_seqscan",
-        current: "on",
-        bootValue: "on",
+        current: "on", rawValue: "on", bootValue: "on",
         category: "Query Tuning / Planner Method Configuration",
+        source: "default",
       },
       {
         name: "plan_cache_mode",
-        current: "auto",
-        bootValue: "auto",
+        current: "auto", rawValue: "auto", bootValue: "auto",
         category: "Query Tuning / Other",
+        source: "default",
       },
     ],
     plans: WORKFLOW_EXPLAIN_QUERY_NAMES.map((name) => parsed(name)),
@@ -352,6 +352,7 @@ describe("workflow EXPLAIN gate", () => {
   test("enforces current and EXPLAIN planner defaults but allows timeout", () => {
     const current = passingInput();
     current.plannerSettings[0]!.current = "off";
+    current.plannerSettings[0]!.rawValue = "off";
     expectCode(() => assertWorkflowExplainGate(current), "NON_DEFAULT_PLANNER");
 
     const complete = passingInput().plannerSettings;
