@@ -27,9 +27,11 @@ bun test src/services/supplier-purchase-batch-workflow-database.test.ts \
   src/scripts/supplier-purchase-batch-workflow-smoke.test.ts
 ```
 
-当前结果：7 pass、0 fail、36 assertions。数据库测试从真实本地 production schema 只克隆
-schema 到随机一次性数据库，加载已在 main 的 `20260830100000` 前置和本功能 10 条
-migration，测试结束强制 drop 一次性数据库；没有修改正式 local/dev 数据。
+当前结果：聚焦 smoke 6 pass、0 fail、38 assertions；数据库矩阵 1 pass、0 fail、16
+assertions。数据库测试从真实本地 production schema 只克隆 schema 到随机一次性数据库：
+基线态会按需加载已在 main 的 `20260830100000` 前置和本功能 10 条 migration，HEAD 态跳过
+非幂等重放并验证最终对象，混合态 fail closed。测试结束必须成功 drop 一次性数据库；没有
+修改正式 local/dev 数据。
 修复 smoke execute 在并发预算快照与最终审批之间引入 commitment 的 fixture 顺序问题后，
 同一 focused 命令连续运行 3 次均为 7 pass、0 fail、32 assertions，且没有遗留一次性
 数据库或 `/tmp/task12-race-*.log`。
@@ -45,8 +47,11 @@ migration，测试结束强制 drop 一次性数据库；没有修改正式 loca
   submit replay/conflict；tenant、project scope、assignee、self-review 拦截。
 - 双会话对同一最终审批 task 使用不同 key 竞争：恰好一个成功、一个
   `WORKFLOW_TASK_NOT_PENDING`，仅一张订单且仅一条最终 review event。
-- smoke 在同一个一次性 clone 上真实运行 dry-run 和 `--execute`；execute 使用显式采购/
-  财务审批人完成最终审批并输出 `supplierCount=1`。clone 随测试销毁，不计作 dev 证据。
+- smoke 在同一个一次性 clone 上真实运行 dry-run 和 `--execute`；dry-run 检查六级 rollout
+  flag、active/published 精确模板解析、两个预算上下文的权威审批候选解析以及项目/目录/预算；
+  execute 使用显式采购/财务审批人完成最终审批并输出 `supplierCount=1`，且最终订单均为
+  `submitted`。save、submit、两级审批分别提交，失败时不由外层事务抹去既有 requestId
+  证据。clone 随测试销毁，不计作 dev 证据。
 
 API 静态检查：`pnpm exec tsc -p tsconfig.json --noEmit` exit 0。smoke 脚本单测证明五个
 UUID 参数均为必填、默认 dry-run 不调用写路径、execute 使用显式审批人真实完成审批、
@@ -58,7 +63,7 @@ UUID 参数均为必填、默认 dry-run 不调用写路径、execute 使用显�
 
 - running instance：`workflow_instances_purchase_batch_lookup_idx`；
 - pending task：`idx_workflow_tasks_instance_status`；
-- subject state batch：`idx_workflow_subject_states_tenant_type_status`。
+- subject state batch：`idx_workflow_subject_states_subject`。
 
 该设置只证明索引结构可用，不能代表默认 planner 或 dev 真实基数性能，不作为“无大表
 顺扫”的发布结论。Task13 的硬门禁是在授权 dev、只读事务、代表性数据基数、默认 planner

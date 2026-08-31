@@ -97,6 +97,11 @@ flag=false 时提交必须继续走旧 RPC；flag=true 时只能走专用 workfl
 配置不完整时保持 flag=false，不得用 SQL 临时补数据。配置完成后通过租户灰度命令开启
 `purchase_batch_workflow_enabled`，保存审计事件和 setting version。
 
+这里的“绑定”是提交 RPC 的真实解析规则：租户 `workflow_key` 精确命中 active definition，
+且其 `active_version_id` 指向 published、snapshot subject_type 为
+`supplier_purchase_batch` 的版本。采购批次模板不使用仅服务施工流程的
+`workflow_definition_bindings` 行；不得为通过 smoke 猜造该表数据。
+
 ## 5. 默认 dry-run 与显式 execute
 
 先运行不写数据库的 dry-run：
@@ -116,6 +121,9 @@ bun run supplier:purchase-batch-workflow:smoke -- \
 `SPBW-SMOKE` 的证据批次，真实完成采购审批，超预算时继续完成财务审批，并验证最终
 `ordered`、一供应商一单。记录脱敏的 requestId、batchId、approvalRound、instanceId、
 taskIds、budgetState、orderIds、supplierCount 和清理建议。脚本不自动删除证据。
+execute 的 save、submit、采购审批、财务审批均模拟真实请求分别提交，不包在一个外层事务；
+任一步失败时，已提交的固定前缀/requestId 证据会保留，按输出 requestId 调查，不自动删除或
+重放随机 key。
 
 ## 6. 数据库矩阵与性能硬门禁
 

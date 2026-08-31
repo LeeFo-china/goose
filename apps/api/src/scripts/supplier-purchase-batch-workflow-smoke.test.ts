@@ -13,6 +13,10 @@ const smokeUrl = new URL(
   "./supplier-purchase-batch-workflow-smoke.ts",
   import.meta.url,
 );
+const smokeGatewayUrl = new URL(
+  "./supplier-purchase-batch-workflow-smoke-gateway.ts",
+  import.meta.url,
+);
 
 function captureAppError(action: () => unknown): AppError {
   let caught: unknown;
@@ -187,15 +191,31 @@ describe("supplier purchase batch workflow smoke", () => {
 
   test("uses bounded reads and emits only a sanitized stable failure", async () => {
     const source = await Bun.file(smokeUrl).text();
+    const gatewaySource = await Bun.file(smokeGatewayUrl).text();
     expect(source).not.toContain("throw new Error");
+    expect(gatewaySource).not.toContain("throw new Error");
     expect(source).toContain('import { Errors } from "@/errors/error-factory"');
-    expect(source.match(/complete_supplier_purchase_batch_workflow_task/g))
+    expect(gatewaySource.match(/complete_supplier_purchase_batch_workflow_task/g))
       .toHaveLength(2);
-    expect(source).toContain("batch.status !== \"ordered\"");
-    expect(source).toContain("supplierCount");
-    expect(source).toContain("p_page_size => 20");
-    expect(source).toMatch(/LIMIT 100/);
-    expect(source).not.toMatch(/LIMIT\s+(?:10[1-9]|1[1-9]\d|[2-9]\d{2,})/);
+    expect(gatewaySource).not.toContain(".begin(");
+    expect(gatewaySource).toContain("batch.status !== \"ordered\"");
+    expect(gatewaySource).toContain("purchase_order.status !== \"submitted\"");
+    expect(gatewaySource).toContain("supplierCount");
+    expect(gatewaySource).toContain("p_page_size => 20");
+    expect(gatewaySource).toContain("__gooes_workflow_node_has_candidate");
+    expect(gatewaySource).toContain("supplier_purchase_batch_approval");
+    for (const flag of [
+      "module_enabled",
+      "ownership_reads_enabled",
+      "private_supplier_writes_enabled",
+      "private_catalog_writes_enabled",
+      "procurement_snapshot_v1_enabled",
+      "purchase_batch_workflow_enabled",
+    ]) expect(gatewaySource).toContain(flag);
+    expect(gatewaySource).toMatch(/LIMIT 100/);
+    expect(gatewaySource).not.toMatch(
+      /LIMIT\s+(?:10[1-9]|1[1-9]\d|[2-9]\d{2,})/,
+    );
 
     const failure = formatSupplierPurchaseBatchWorkflowSmokeFailure(
       new AppError(
