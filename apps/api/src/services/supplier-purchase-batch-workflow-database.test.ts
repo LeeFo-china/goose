@@ -157,28 +157,84 @@ repo_root=${JSON.stringify(repoRoot)}
 container=${JSON.stringify(container)}
 database=${JSON.stringify(database)}
 psql_admin() { docker exec -e PGPASSWORD=postgres -i "$container" psql -h 127.0.0.1 -U supabase_admin -d "$database" -X --set ON_ERROR_STOP=1 "$@"; }
-cleanup() { docker exec -e PGPASSWORD=postgres "$container" dropdb -h 127.0.0.1 -U supabase_admin --if-exists --force "$database" >/dev/null 2>&1 || true; }
+race_dir=""
+gate_pid=""
+cleanup() {
+  status=$?
+  trap - EXIT
+  set +e
+  if [ -n "$gate_pid" ]; then docker exec -e PGPASSWORD=postgres "$container" psql -h 127.0.0.1 -U supabase_admin -d "$database" -Atqc "select pg_terminate_backend(pid) from pg_stat_activity where datname=current_database() and application_name='task12_review_gate'" </dev/null >/dev/null 2>&1; fi
+  if [ $status -ne 0 ] && [ -n "$race_dir" ]; then for log in "$race_dir"/*.log; do [ -f "$log" ] && { echo "===== $log" >&2; sed -n '1,120p' "$log" >&2; }; done; fi
+  if [ -n "$race_dir" ]; then for artifact in "$race_dir"/*; do [ -e "$artifact" ] && unlink "$artifact"; done; rmdir "$race_dir"; fi
+  drop_output=$(docker exec -e PGPASSWORD=postgres "$container" dropdb -h 127.0.0.1 -U supabase_admin --if-exists --force "$database" 2>&1)
+  drop_status=$?
+  if [ $drop_status -ne 0 ]; then echo "Task12 disposable database cleanup failed: $drop_output" >&2; status=1; fi
+  residual=$(docker exec -e PGPASSWORD=postgres "$container" psql -h 127.0.0.1 -U supabase_admin -d postgres -Atqc "select count(*) from pg_database where datname='$database'" </dev/null)
+  if [ "$residual" != "0" ]; then echo "Task12 disposable database still exists" >&2; status=1; else echo TASK12_DATABASE_CLEANUP_OK; fi
+  exit $status
+}
+ensure_workflow_schema() {
+  schema_state=$(psql_admin -Atqc "select (to_regclass('public.workflow_instances_purchase_batch_lookup_idx') is not null)::int::text || (to_regprocedure('public.withdraw_supplier_purchase_batch_workflow(uuid,uuid,integer,text,uuid,uuid,text)') is not null)::int::text" </dev/null)
+  if [ "$schema_state" = "00" ]; then
+    for migration in ${migrations}; do psql_admin < "$repo_root/supabase/migrations/$migration" >/dev/null; done
+    echo TASK12_SCHEMA_APPLIED_BASELINE
+  elif [ "$schema_state" = "11" ]; then
+    echo TASK12_SCHEMA_SKIPPED_HEAD
+  else
+    echo "Mixed supplier purchase workflow schema state: $schema_state" >&2
+    return 1
+  fi
+  psql_admin -Atqc "do \$schema\$ begin if to_regclass('public.workflow_instances_purchase_batch_lookup_idx') is null or to_regprocedure('public.submit_supplier_purchase_batch_with_workflow(uuid,uuid,integer,uuid,uuid,text)') is null or to_regprocedure('public.complete_supplier_purchase_batch_workflow_task(uuid,uuid,uuid,text,text,jsonb,uuid,uuid,text)') is null or to_regprocedure('public.withdraw_supplier_purchase_batch_workflow(uuid,uuid,integer,text,uuid,uuid,text)') is null then raise exception 'supplier purchase workflow schema incomplete'; end if; end \$schema\$;" </dev/null
+}
+wait_for_database_condition() {
+  description=$1
+  query=$2
+  for ((attempt=1; attempt<=200; attempt+=1)); do
+    if [ "$(psql_admin -Atqc "$query" </dev/null)" = "t" ]; then return 0; fi
+    sleep 0.05
+  done
+  echo "Timed out waiting for $description" >&2
+  psql_admin -c "select pid,application_name,wait_event_type,wait_event,pg_blocking_pids(pid) from pg_stat_activity where datname=current_database()" </dev/null >&2
+  return 1
+}
 trap cleanup EXIT
 docker exec -e PGPASSWORD=postgres "$container" createdb -h 127.0.0.1 -U supabase_admin "$database"
 docker exec "$container" pg_dump -U postgres -d postgres --schema-only --no-owner --no-privileges | psql_admin >/dev/null
-for migration in ${migrations}; do psql_admin < "$repo_root/supabase/migrations/$migration" >/dev/null; done
+ensure_workflow_schema
+ensure_workflow_schema
+echo TASK12_SCHEMA_HEAD_VALIDATED
 psql_admin < "$repo_root/supabase/tests/supplier_purchase_batch_workflow_withdraw_production_fixture.sql" >/dev/null
 psql_admin <<'TASK12_SQL'
 ${releaseMatrixSql()}
 TASK12_SQL
 task=$(psql_admin -Atqc "select wt.id from public.workflow_instances wi join public.workflow_tasks wt on wt.instance_id=wi.id where wi.subject_id='85000000-0000-4000-8000-000000001008' and wt.status='pending'" </dev/null)
+race_dir=$(mktemp -d /tmp/gooes-task12-review.XXXXXX)
+mkfifo "$race_dir/gate-input"
+docker exec -e PGPASSWORD=postgres -i "$container" psql -h 127.0.0.1 -U supabase_admin -d "$database" -X --set ON_ERROR_STOP=1 < "$race_dir/gate-input" >"$race_dir/gate.log" 2>&1 &
+gate_pid=$!
+exec 3>"$race_dir/gate-input"
+printf "set application_name='task12_review_gate'; select pg_advisory_lock(hashtextextended('task12-review-gate',6720240826142000));\n" >&3
+wait_for_database_condition "review gate lock" "select exists(select 1 from pg_stat_activity a join pg_locks l on l.pid=a.pid where a.datname=current_database() and a.application_name='task12_review_gate' and l.locktype='advisory' and l.granted)"
+psql_admin -c "set application_name='task12_review_winner'; set statement_timeout='20s'; begin; select pg_advisory_xact_lock(hashtextextended('supplier-purchase-batch-id:85000000-0000-4000-8000-000000001008',6720240826142000)); select pg_advisory_xact_lock(hashtextextended('task12-review-gate',6720240826142000)); select public.complete_supplier_purchase_batch_workflow_task('85000000-0000-4000-8000-000000000001','85000000-0000-4000-8000-000000001008','$task','approve',null,'{}','85000000-0000-4000-8000-00000000f001','85000000-0000-4000-8000-00000000f011','task12-race-winner'); commit" </dev/null >"$race_dir/winner.log" 2>&1 & winner=$!
+wait_for_database_condition "winner holds batch while waiting gate" "select exists(select 1 from pg_stat_activity a join pg_locks l on l.pid=a.pid where a.datname=current_database() and a.application_name='task12_review_winner' and a.wait_event_type='Lock' and l.locktype='advisory' and l.granted)"
+psql_admin -c "set application_name='task12_review_loser'; set statement_timeout='20s'; select public.complete_supplier_purchase_batch_workflow_task('85000000-0000-4000-8000-000000000001','85000000-0000-4000-8000-000000001008','$task','approve',null,'{}','85000000-0000-4000-8000-00000000f001','85000000-0000-4000-8000-00000000f011','task12-race-loser')" </dev/null >"$race_dir/loser.log" 2>&1 & loser=$!
+wait_for_database_condition "loser blocked by winner" "select exists(select 1 from pg_stat_activity w join pg_stat_activity b on b.pid=any(pg_blocking_pids(w.pid)) where w.datname=current_database() and w.application_name='task12_review_loser' and w.wait_event_type='Lock' and b.application_name='task12_review_winner')"
+echo TASK12_REVIEW_RACE_BLOCKED
+psql_admin -Atqc "select pg_terminate_backend(pid) from pg_stat_activity where datname=current_database() and application_name='task12_review_gate'" </dev/null >/dev/null
+exec 3>&-
+wait "$gate_pid" 2>/dev/null || true
+gate_pid=""
 set +e
-psql_admin -c "select public.complete_supplier_purchase_batch_workflow_task('85000000-0000-4000-8000-000000000001','85000000-0000-4000-8000-000000001008','$task','approve',null,'{}','85000000-0000-4000-8000-00000000f001','85000000-0000-4000-8000-00000000f011','task12-race-a')" </dev/null >/tmp/task12-race-a-${process.pid}.log 2>&1 & a=$!
-psql_admin -c "select public.complete_supplier_purchase_batch_workflow_task('85000000-0000-4000-8000-000000000001','85000000-0000-4000-8000-000000001008','$task','approve',null,'{}','85000000-0000-4000-8000-00000000f001','85000000-0000-4000-8000-00000000f011','task12-race-b')" </dev/null >/tmp/task12-race-b-${process.pid}.log 2>&1 & b=$!
-wait $a; sa=$?; wait $b; sb=$?; set -e
-if ! { { [ $sa -eq 0 ] && [ $sb -ne 0 ]; } || { [ $sa -ne 0 ] && [ $sb -eq 0 ]; }; }; then cat /tmp/task12-race-a-${process.pid}.log /tmp/task12-race-b-${process.pid}.log >&2; exit 1; fi
+wait "$winner"; winner_status=$?
+wait "$loser"; loser_status=$?
+set -e
+if [ $winner_status -ne 0 ] || [ $loser_status -eq 0 ] || ! grep -q 'ERROR:  WORKFLOW_TASK_NOT_PENDING' "$race_dir/loser.log" || ! grep -q '"status": "ordered"' "$race_dir/winner.log"; then echo "Task12 review race returned unexpected results" >&2; exit 1; fi
 psql_admin -Atqc "do \$verify\$ begin if (select count(*) from public.supplier_purchase_orders where purchase_batch_id='85000000-0000-4000-8000-000000001008' and status='submitted')<>1 or (select count(*) from public.supplier_purchase_batch_command_events where purchase_batch_id='85000000-0000-4000-8000-000000001008' and command_type='review')<>2 then raise exception 'double approval residue'; end if; end \$verify\$;" </dev/null
 SUPABASE_DB_DIRECT_URL="postgresql://supabase_admin:postgres@127.0.0.1:54322/$database" bun --cwd "$repo_root/apps/api" src/scripts/supplier-purchase-batch-workflow-smoke.ts --tenant-id 85000000-0000-4000-8000-000000000001 --project-id 85000000-0000-4000-8000-000000000006 --applicant-employee-id 85000000-0000-4000-8000-000000000003 --purchase-approver-id 85000000-0000-4000-8000-000000000005 --finance-approver-id 85000000-0000-4000-8000-00000000f011
 SUPABASE_DB_DIRECT_URL="postgresql://supabase_admin:postgres@127.0.0.1:54322/$database" bun --cwd "$repo_root/apps/api" src/scripts/supplier-purchase-batch-workflow-smoke.ts --tenant-id 85000000-0000-4000-8000-000000000001 --project-id 85000000-0000-4000-8000-000000000006 --applicant-employee-id 85000000-0000-4000-8000-000000000003 --purchase-approver-id 85000000-0000-4000-8000-000000000005 --finance-approver-id 85000000-0000-4000-8000-00000000f011 --execute
-rm -f /tmp/task12-race-a-${process.pid}.log /tmp/task12-race-b-${process.pid}.log
 # Structural eligibility only. The release runbook requires a separate
 # default-planner, read-only EXPLAIN on representative dev cardinality.
-psql_admin -c "set enable_seqscan=off; explain (analyze,buffers) select id from public.workflow_instances where tenant_id='85000000-0000-4000-8000-000000000001' and subject_type='supplier_purchase_batch' and subject_id='85000000-0000-4000-8000-000000001007' and status='running' order by created_at desc,id desc limit 2; explain (analyze,buffers) select id from public.workflow_tasks where instance_id=(select id from public.workflow_instances where subject_id='85000000-0000-4000-8000-000000001007' and status='running') and status='pending' order by created_at limit 2; explain (analyze,buffers) select subject_id from public.workflow_subject_states where tenant_id='85000000-0000-4000-8000-000000000001' and subject_type='supplier_purchase_batch' and subject_id=any(array['85000000-0000-4000-8000-000000001007'])" </dev/null
+psql_admin -c "analyze public.workflow_subject_states; set enable_seqscan=off; explain (analyze,buffers) select id from public.workflow_instances where tenant_id='85000000-0000-4000-8000-000000000001' and subject_type='supplier_purchase_batch' and subject_id='85000000-0000-4000-8000-000000001007' and status='running' order by created_at desc,id desc limit 2; explain (analyze,buffers) select id from public.workflow_tasks where instance_id=(select id from public.workflow_instances where subject_id='85000000-0000-4000-8000-000000001007' and status='running') and status='pending' order by created_at limit 2; explain (analyze,buffers) select subject_id from public.workflow_subject_states where tenant_id='85000000-0000-4000-8000-000000000001' and subject_type='supplier_purchase_batch' and subject_id='85000000-0000-4000-8000-000000001007'" </dev/null
 echo TASK12_SUPPLIER_PURCHASE_BATCH_WORKFLOW_DATABASE_OK
 `;
 }
@@ -200,12 +256,17 @@ test("runs release matrix, concurrency, and structural index checks on a product
     new Response(child.stderr).text(),
   ]);
   expect(exitCode, stderr).toBe(0);
+  expect(stdout).toContain("TASK12_SCHEMA_APPLIED_BASELINE");
+  expect(stdout).toContain("TASK12_SCHEMA_SKIPPED_HEAD");
+  expect(stdout).toContain("TASK12_SCHEMA_HEAD_VALIDATED");
   expect(stdout).toContain("TASK12_RELEASE_MATRIX_READY");
+  expect(stdout).toContain("TASK12_REVIEW_RACE_BLOCKED");
   expect(stdout).toContain('"mode": "dry-run"');
   expect(stdout).toContain('"mode": "execute"');
   expect(stdout).toContain('"supplierCount": 1');
   expect(stdout).toContain("TASK12_SUPPLIER_PURCHASE_BATCH_WORKFLOW_DATABASE_OK");
   expect(stdout).toContain("workflow_instances_purchase_batch_lookup_idx");
   expect(stdout).toContain("idx_workflow_tasks_instance_status");
-  expect(stdout).toContain("idx_workflow_subject_states_tenant_type_status");
+  expect(stdout).toContain("idx_workflow_subject_states_subject");
+  expect(stdout).toContain("TASK12_DATABASE_CLEANUP_OK");
 }, 30_000);
