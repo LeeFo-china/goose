@@ -7,6 +7,8 @@ import type {
   SupplierPurchaseBatchWorkflowSmokePrerequisites,
   SupplierPurchaseBatchWorkflowSmokeTargets,
 } from "./supplier-purchase-batch-workflow-smoke";
+import { inspectSupplierPurchaseBatchWorkflow } from
+  "./supplier-purchase-batch-workflow-smoke-workflow-preflight";
 
 const PREREQUISITE_ERROR =
   "SUPPLIER_PURCHASE_BATCH_WORKFLOW_SMOKE_PREREQUISITE";
@@ -31,12 +33,6 @@ type RolloutRow = {
   purchase_batch_workflow_enabled: boolean;
 };
 
-type WorkflowRow = {
-  all_candidates_ready: boolean;
-  purchase_node_ready: boolean;
-  finance_node_ready: boolean;
-};
-
 class PostgresSupplierPurchaseBatchWorkflowSmokeGateway
   implements SupplierPurchaseBatchWorkflowSmokeGateway {
   constructor(private readonly database: Bun.SQL) {}
@@ -46,7 +42,7 @@ class PostgresSupplierPurchaseBatchWorkflowSmokeGateway
       await Promise.all([
         this.inspectAccess(input),
         this.inspectRollout(input),
-        this.inspectWorkflow(input),
+        inspectSupplierPurchaseBatchWorkflow(this.database, input),
         this.database<Array<{ result: unknown }>>`
           SELECT public.resolve_supplier_purchase_batch_catalog(
             p_tenant_id => ${input.tenantId}::uuid,
@@ -161,77 +157,6 @@ class PostgresSupplierPurchaseBatchWorkflowSmokeGateway
       FROM public.tenant_supplier_settings AS setting
       WHERE setting.tenant_id = ${input.tenantId}::uuid
       LIMIT 100;
-    `;
-  }
-
-  private inspectWorkflow(input: SupplierPurchaseBatchWorkflowSmokeTargets) {
-    return this.database<Array<WorkflowRow>>`
-      WITH resolved AS (
-        SELECT definition.id AS definition_id, version.id AS version_id,
-          version.snapshot
-        FROM public.workflow_definitions AS definition
-        JOIN public.workflow_versions AS version
-          ON version.id = definition.active_version_id
-         AND version.tenant_id = definition.tenant_id
-         AND version.definition_id = definition.id
-         AND version.status = 'published'
-        WHERE definition.tenant_id = ${input.tenantId}::uuid
-          AND definition.workflow_key = 'supplier_purchase_batch_approval'
-          AND definition.status = 'active'
-          AND version.snapshot->>'workflow_key' =
-            'supplier_purchase_batch_approval'
-          AND version.snapshot->>'subject_type' = 'supplier_purchase_batch'
-        LIMIT 100
-      ), contexts(budget_status) AS (
-        VALUES ('within_budget'::text), ('over_budget'::text)
-      ), reachable AS (
-        SELECT resolved.definition_id, resolved.version_id,
-          contexts.budget_status, approval_node.node
-        FROM resolved
-        CROSS JOIN contexts
-        CROSS JOIN LATERAL
-          public.__gooes_supplier_workflow_reachable_approvals(
-            resolved.snapshot,
-            jsonb_build_object(
-              'batch_id', ${input.projectId}::uuid,
-              'batch_version', 1,
-              'approval_round', 1,
-              'budget_status', contexts.budget_status,
-              'project_id', ${input.projectId}::uuid,
-              'submitted_by_employee_id',
-                ${input.applicantEmployeeId}::uuid
-            )
-          ) AS approval_node(node)
-      ), candidates AS (
-        SELECT reachable.budget_status, reachable.node,
-          public.__gooes_workflow_node_has_candidate(
-            ${input.tenantId}::uuid, reachable.version_id,
-            reachable.definition_id, 'supplier_purchase_batch',
-            ${input.projectId}::text, reachable.node,
-            jsonb_build_object(
-              'batch_id', ${input.projectId}::uuid,
-              'batch_version', 1,
-              'approval_round', 1,
-              'budget_status', reachable.budget_status,
-              'project_id', ${input.projectId}::uuid,
-              'submitted_by_employee_id',
-                ${input.applicantEmployeeId}::uuid
-            ),
-            ${input.projectId}::uuid, ${input.applicantEmployeeId}::uuid
-          ) AS candidate_ready
-        FROM reachable
-      )
-      SELECT COALESCE(bool_and(candidate_ready), false)
-          AS all_candidates_ready,
-        COALESCE(bool_or(
-          budget_status = 'within_budget'
-          AND node->>'node_key' = 'purchase_review'
-        ), false) AS purchase_node_ready,
-        COALESCE(bool_or(
-          budget_status = 'over_budget'
-          AND node->>'node_key' = 'finance_review'
-        ), false) AS finance_node_ready
-      FROM candidates;
     `;
   }
 

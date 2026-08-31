@@ -17,6 +17,10 @@ const smokeGatewayUrl = new URL(
   "./supplier-purchase-batch-workflow-smoke-gateway.ts",
   import.meta.url,
 );
+const workflowPreflightUrl = new URL(
+  "./supplier-purchase-batch-workflow-smoke-workflow-preflight.ts",
+  import.meta.url,
+);
 
 function captureAppError(action: () => unknown): AppError {
   let caught: unknown;
@@ -192,6 +196,8 @@ describe("supplier purchase batch workflow smoke", () => {
   test("uses bounded reads and emits only a sanitized stable failure", async () => {
     const source = await Bun.file(smokeUrl).text();
     const gatewaySource = await Bun.file(smokeGatewayUrl).text();
+    const workflowPreflightSource = await Bun.file(workflowPreflightUrl).text();
+    const databaseSource = gatewaySource + workflowPreflightSource;
     expect(source).not.toContain("throw new Error");
     expect(gatewaySource).not.toContain("throw new Error");
     expect(source).toContain('import { Errors } from "@/errors/error-factory"');
@@ -211,8 +217,13 @@ describe("supplier purchase batch workflow smoke", () => {
     );
     expect(gatewaySource).toContain("supplierCount");
     expect(gatewaySource).toContain("p_page_size => 20");
-    expect(gatewaySource).toContain("__gooes_workflow_node_has_candidate");
-    expect(gatewaySource).toContain("supplier_purchase_batch_approval");
+    expect(databaseSource).toContain("__gooes_workflow_node_has_candidate");
+    expect(databaseSource).toContain("__gooes_workflow_task_projection");
+    expect(databaseSource).toContain("explicit_approver_ready");
+    expect(databaseSource).toContain("assignee_employee_id");
+    expect(databaseSource).toContain("assignee_role_code");
+    expect(databaseSource).toContain("assignee_permission_code");
+    expect(databaseSource).toContain("supplier_purchase_batch_approval");
     for (const flag of [
       "module_enabled",
       "ownership_reads_enabled",

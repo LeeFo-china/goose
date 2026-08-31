@@ -201,6 +201,66 @@ wait_for_database_condition() {
   psql_admin -c "select pid,application_name,wait_event_type,wait_event,pg_blocking_pids(pid) from pg_stat_activity where datname=current_database()" </dev/null >&2
   return 1
 }
+set_smoke_node_assignment() {
+  node_key=$1
+  assignee_rule=$2
+  assignee_id=$3
+  psql_admin -v node_key="$node_key" -v assignee_rule="$assignee_rule" -v assignee_id="$assignee_id" <<'NODE_ASSIGNMENT' >/dev/null
+UPDATE public.workflow_versions AS version
+SET snapshot = jsonb_set(
+  version.snapshot,
+  '{nodes}',
+  (
+    SELECT jsonb_agg(
+      CASE WHEN nodes.value->>'node_key' = :'node_key'
+        THEN jsonb_set(
+          nodes.value, '{config}',
+          (nodes.value->'config') || jsonb_build_object(
+            'assignee_rule', :'assignee_rule', 'assignee_id', :'assignee_id'
+          )
+        ) ELSE nodes.value END
+      ORDER BY ordinal
+    )
+    FROM jsonb_array_elements(version.snapshot->'nodes')
+      WITH ORDINALITY AS nodes(value, ordinal)
+  )
+)
+FROM public.workflow_definitions AS definition
+WHERE definition.id = version.definition_id
+  AND definition.tenant_id = '85000000-0000-4000-8000-000000000001'
+  AND definition.workflow_key = 'supplier_purchase_batch_approval'
+  AND definition.active_version_id = version.id;
+NODE_ASSIGNMENT
+}
+reset_smoke_node_assignment() {
+  node_key=$1
+  psql_admin -v node_key="$node_key" <<'NODE_RESET' >/dev/null
+UPDATE public.workflow_versions AS version
+SET snapshot = jsonb_set(
+  version.snapshot,
+  '{nodes}',
+  (
+    SELECT jsonb_agg(
+      CASE WHEN nodes.value->>'node_key' = :'node_key'
+        THEN jsonb_set(
+          nodes.value, '{config}',
+          ((nodes.value->'config') - 'assignee_id'::text) || jsonb_build_object(
+            'assignee_rule', 'role'
+          )
+        ) ELSE nodes.value END
+      ORDER BY ordinal
+    )
+    FROM jsonb_array_elements(version.snapshot->'nodes')
+      WITH ORDINALITY AS nodes(value, ordinal)
+  )
+)
+FROM public.workflow_definitions AS definition
+WHERE definition.id = version.definition_id
+  AND definition.tenant_id = '85000000-0000-4000-8000-000000000001'
+  AND definition.workflow_key = 'supplier_purchase_batch_approval'
+  AND definition.active_version_id = version.id;
+NODE_RESET
+}
 trap cleanup EXIT
 docker exec -e PGPASSWORD=postgres "$container" createdb -h 127.0.0.1 -U supabase_admin "$database"
 docker exec "$container" pg_dump -U postgres -d postgres --schema-only --no-owner --no-privileges | psql_admin >/dev/null
@@ -267,6 +327,23 @@ psql_admin < "$repo_root/supabase/tests/supplier_purchase_batch_workflow_withdra
 psql_admin <<'TASK12_SQL'
 ${releaseMatrixSql()}
 TASK12_SQL
+set_smoke_node_assignment purchase_review employee 85000000-0000-4000-8000-00000000f012
+set +e
+fixed_employee_output=$(SUPABASE_DB_DIRECT_URL="postgresql://supabase_admin:postgres@127.0.0.1:54322/$database" bun --cwd "$repo_root/apps/api" src/scripts/supplier-purchase-batch-workflow-smoke.ts --tenant-id 85000000-0000-4000-8000-000000000001 --project-id 85000000-0000-4000-8000-000000000006 --applicant-employee-id 85000000-0000-4000-8000-000000000003 --purchase-approver-id 85000000-0000-4000-8000-000000000005 --finance-approver-id 85000000-0000-4000-8000-00000000f011 2>&1)
+fixed_employee_status=$?
+set -e
+if [ $fixed_employee_status -eq 0 ] || ! grep -q 'SUPPLIER_PURCHASE_BATCH_WORKFLOW_SMOKE_FAILED' <<<"$fixed_employee_output"; then echo "Fixed employee smoke preflight did not fail closed" >&2; exit 1; fi
+echo TASK12_SMOKE_FIXED_EMPLOYEE_PREFLIGHT_OK
+reset_smoke_node_assignment purchase_review
+psql_admin -Atqc "insert into public.role_permissions(role_id,permission_id,access_scope) select '85000000-0000-4000-8000-00000000f022',id,'all' from public.permissions where code='finance.budget.manage' on conflict do nothing" </dev/null
+set_smoke_node_assignment finance_review role task12_other
+set +e
+fixed_role_output=$(SUPABASE_DB_DIRECT_URL="postgresql://supabase_admin:postgres@127.0.0.1:54322/$database" bun --cwd "$repo_root/apps/api" src/scripts/supplier-purchase-batch-workflow-smoke.ts --tenant-id 85000000-0000-4000-8000-000000000001 --project-id 85000000-0000-4000-8000-000000000006 --applicant-employee-id 85000000-0000-4000-8000-000000000003 --purchase-approver-id 85000000-0000-4000-8000-000000000005 --finance-approver-id 85000000-0000-4000-8000-00000000f011 2>&1)
+fixed_role_status=$?
+set -e
+if [ $fixed_role_status -eq 0 ] || ! grep -q 'SUPPLIER_PURCHASE_BATCH_WORKFLOW_SMOKE_FAILED' <<<"$fixed_role_output"; then echo "Fixed role smoke preflight did not fail closed" >&2; exit 1; fi
+echo TASK12_SMOKE_FIXED_ROLE_PREFLIGHT_OK
+reset_smoke_node_assignment finance_review
 task=$(psql_admin -Atqc "select wt.id from public.workflow_instances wi join public.workflow_tasks wt on wt.instance_id=wi.id where wi.subject_id='85000000-0000-4000-8000-000000001008' and wt.status='pending'" </dev/null)
 race_dir=$(mktemp -d /tmp/gooes-task12-review.XXXXXX)
 mkfifo "$race_dir/gate-input"
@@ -339,6 +416,8 @@ test("runs release matrix, concurrency, and structural index checks on a product
   }
   expect(stdout).toContain("TASK12_RELEASE_MATRIX_READY");
   expect(stdout).toContain("TASK12_REVIEW_RACE_BLOCKED");
+  expect(stdout).toContain("TASK12_SMOKE_FIXED_EMPLOYEE_PREFLIGHT_OK");
+  expect(stdout).toContain("TASK12_SMOKE_FIXED_ROLE_PREFLIGHT_OK");
   expect(stdout).toContain('"mode": "dry-run"');
   expect(stdout).toContain('"mode": "execute"');
   expect(stdout).toContain('"supplierCount": 1');
