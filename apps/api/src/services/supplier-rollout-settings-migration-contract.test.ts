@@ -143,6 +143,15 @@ function rolloutFunction(source = sql) {
   return matches.length === 1 ? matches[0] ?? "" : "";
 }
 
+function legacyRolloutFunction(source = sql) {
+  const prefix =
+    "CREATE OR REPLACE FUNCTION public.set_tenant_supplier_rollout_settings(";
+  const matches = splitTopLevelSqlStatements(source).filter((statement) =>
+    compact(statement).startsWith(prefix)
+  );
+  return matches.length === 1 ? matches[0] ?? "" : "";
+}
+
 const normalizedStatements = splitTopLevelSqlStatements(sql).map(compact);
 
 describe("tenant supplier rollout command migration contract", () => {
@@ -230,15 +239,19 @@ describe("tenant supplier rollout command migration contract", () => {
     expect(normalizedStatements.at(-1)).toBe("COMMIT;");
   });
 
-  test("replaces the exact old overload with the complete atomic signature", () => {
+  test("keeps the old overload as a flag-preserving compatibility delegate", () => {
     const normalized = compact(executableSql(sql));
     const fn = compact(rolloutFunction());
     expect(normalized).toContain(
       `REVOKE ALL ON FUNCTION ${oldSignature} FROM PUBLIC, anon, authenticated, service_role;`,
     );
-    expect(normalized).toContain(`DROP FUNCTION ${oldSignature};`);
-    expect(normalized.indexOf(`DROP FUNCTION ${oldSignature};`)).toBeLessThan(
-      normalized.indexOf("CREATE FUNCTION public.set_tenant_supplier_rollout_settings("),
+    const legacy = compact(legacyRolloutFunction());
+    expect(normalized).not.toContain(`DROP FUNCTION ${oldSignature};`);
+    expect(legacy).toContain("SECURITY DEFINER");
+    expect(legacy).toContain("SET search_path = pg_catalog, public");
+    expect(legacy).toContain("purchase_batch_workflow_enabled");
+    expect(legacy).toContain(
+      "RETURN public.set_tenant_supplier_rollout_settings(",
     );
     for (const parameter of [
       "p_tenant_id uuid",
@@ -305,7 +318,7 @@ describe("tenant supplier rollout command migration contract", () => {
     expect(fn).toContain("'setting', to_jsonb(v_setting)");
   });
 
-  test("exposes only the new service-role execute grant", () => {
+  test("exposes both overloads only to service_role", () => {
     const normalized = compact(executableSql(sql));
     expect(normalized).toContain(
       `REVOKE ALL ON FUNCTION ${newSignature} FROM PUBLIC, anon, authenticated, service_role;`,
@@ -313,7 +326,10 @@ describe("tenant supplier rollout command migration contract", () => {
     expect(normalized).toContain(
       `GRANT EXECUTE ON FUNCTION ${newSignature} TO service_role;`,
     );
-    expect(normalized.match(/GRANT EXECUTE ON FUNCTION/g)).toHaveLength(1);
+    expect(normalized).toContain(
+      `GRANT EXECUTE ON FUNCTION ${oldSignature} TO service_role;`,
+    );
+    expect(normalized.match(/GRANT EXECUTE ON FUNCTION/g)).toHaveLength(2);
     expect(normalized).not.toContain(
       `GRANT EXECUTE ON FUNCTION ${newSignature} TO PUBLIC`,
     );
@@ -325,21 +341,28 @@ describe("tenant supplier rollout command migration contract", () => {
     );
   });
 
-  test("allows only the exact executable command replacement sequence", () => {
-    expect(normalizedStatements).toHaveLength(9);
-    expect(normalizedStatements.slice(0, 5)).toEqual([
+  test("allows only the exact additive compatibility sequence", () => {
+    expect(normalizedStatements).toHaveLength(12);
+    expect(normalizedStatements.slice(0, 4)).toEqual([
       "BEGIN;",
       "SET LOCAL lock_timeout = '5s';",
       "SET LOCAL statement_timeout = '5min';",
       `REVOKE ALL ON FUNCTION ${oldSignature} FROM PUBLIC, anon, authenticated, service_role;`,
-      `DROP FUNCTION ${oldSignature};`,
     ]);
-    expect(normalizedStatements[5]).toStartWith(
+    expect(normalizedStatements[4]).toStartWith(
       "CREATE FUNCTION public.set_tenant_supplier_rollout_settings(",
     );
-    expect(normalizedStatements.slice(6)).toEqual([
+    expect(normalizedStatements.slice(5, 7)).toEqual([
       `REVOKE ALL ON FUNCTION ${newSignature} FROM PUBLIC, anon, authenticated, service_role;`,
       `GRANT EXECUTE ON FUNCTION ${newSignature} TO service_role;`,
+    ]);
+    expect(normalizedStatements[7]).toStartWith(
+      "CREATE OR REPLACE FUNCTION public.set_tenant_supplier_rollout_settings(",
+    );
+    expect(normalizedStatements.slice(8)).toEqual([
+      `REVOKE ALL ON FUNCTION ${oldSignature} FROM PUBLIC, anon, authenticated, service_role;`,
+      `GRANT EXECUTE ON FUNCTION ${oldSignature} TO service_role;`,
+      "COMMENT ON FUNCTION public.set_tenant_supplier_rollout_settings(uuid, boolean, boolean, boolean, boolean, boolean, boolean, integer, uuid, uuid, text, text) IS 'Temporary DB-first compatibility overload; preserves purchase_batch_workflow_enabled while delegating to the level-six command. Retire only in a reviewed forward migration after old API revisions are gone.';",
       "COMMIT;",
     ]);
   });

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { fileURLToPath } from "node:url";
 
-import { resolveLocalSupabasePostgres } from
+import { resolveLocalSupabasePostgres, supplierRolloutAclSql } from
   "./supplier-rollout-settings-database.test-helper";
 
 const repoRoot = fileURLToPath(new URL("../../../../", import.meta.url));
@@ -36,6 +36,8 @@ INSERT INTO public.employee_roles(employee_id,role_id) VALUES
  ('85000000-0000-4000-8000-00000000f012','85000000-0000-4000-8000-00000000f022'),
  ('85000000-0000-4000-8000-00000000f013','85000000-0000-4000-8000-00000000f023');
 
+${supplierRolloutAclSql()}
+
 DO $matrix$
 DECLARE
  t uuid := '85000000-0000-4000-8000-000000000001'; p uuid := '85000000-0000-4000-8000-000000000006';
@@ -45,8 +47,16 @@ DECLARE
  ou uuid := '85000000-0000-4000-8000-00000000f002'; oe uuid := '85000000-0000-4000-8000-00000000f012';
  xu uuid := '85000000-0000-4000-8000-00000000f003'; xe uuid := '85000000-0000-4000-8000-00000000f013';
  sku uuid := '85000000-0000-4000-8000-000000000026'; cat uuid := '85000000-0000-4000-8000-000000000029';
- b uuid; task uuid; result jsonb;
+ b uuid; task uuid; result jsonb; setting_version integer;
 BEGIN
+ -- DB-first compatibility: old API preserves the already-enabled workflow flag.
+ SELECT version INTO STRICT setting_version FROM public.tenant_supplier_settings WHERE tenant_id=t;
+ result := public.set_tenant_supplier_rollout_settings(t,true,false,true,true,true,true,setting_version,su,se,'task12-legacy-rollout',NULL);
+ IF result->>'status'<>'updated' OR result->'setting'->>'purchase_batch_workflow_enabled'<>'true' THEN RAISE EXCEPTION 'legacy rollout did not preserve workflow flag: %',result; END IF;
+ setting_version := (result->>'version')::integer;
+ result := public.set_tenant_supplier_rollout_settings(t,true,false,true,true,true,true,true,setting_version,su,se,'task12-current-rollout',NULL);
+ IF result->>'status'<>'updated' OR result->'setting'->>'purchase_batch_workflow_enabled'<>'true' THEN RAISE EXCEPTION 'current rollout failed: %',result; END IF;
+
  -- within budget -> purchase approval -> one submitted supplier order
  b := '85000000-0000-4000-8000-000000001001';
  PERFORM public.save_supplier_purchase_batch_draft(b,t,p,0,'Task12 within',NULL,NULL,jsonb_build_array(jsonb_build_object('supplier_sku_id',sku,'cost_category_id',cat,'quantity','1')),su,se,'task12-within-save');

@@ -1,7 +1,9 @@
 -- Rollback: forward-only. Disable the rollout API, then disable the purchase
 -- workflow and all prerequisite flags in reverse order through the command.
--- Ship a new migration that revokes and drops this function. Keep tenant data
--- and command events for audit; never repair or delete rollout state manually.
+-- Ship a new migration that revokes and drops the level-six function and its
+-- temporary legacy overload. Keep tenant data and command events for audit;
+-- never repair or delete rollout state manually. Retire the legacy overload
+-- only after every old API revision has left service.
 -- If lock or statement timeout is reached, this transaction rolls back.
 
 BEGIN;
@@ -11,7 +13,6 @@ SET LOCAL statement_timeout = '5min';
 
 REVOKE ALL ON FUNCTION public.set_tenant_supplier_rollout_settings(uuid, boolean, boolean, boolean, boolean, boolean, boolean, integer, uuid, uuid, text, text)
   FROM PUBLIC, anon, authenticated, service_role;
-DROP FUNCTION public.set_tenant_supplier_rollout_settings(uuid, boolean, boolean, boolean, boolean, boolean, boolean, integer, uuid, uuid, text, text);
 
 CREATE FUNCTION public.set_tenant_supplier_rollout_settings(
   p_tenant_id uuid,
@@ -322,5 +323,60 @@ REVOKE ALL ON FUNCTION public.set_tenant_supplier_rollout_settings(uuid, boolean
   FROM PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.set_tenant_supplier_rollout_settings(uuid, boolean, boolean, boolean, boolean, boolean, boolean, boolean, integer, uuid, uuid, text, text)
   TO service_role;
+
+CREATE OR REPLACE FUNCTION public.set_tenant_supplier_rollout_settings(
+  p_tenant_id uuid,
+  p_module_enabled boolean,
+  p_require_active_contract_for_new_order boolean,
+  p_ownership_reads_enabled boolean,
+  p_private_supplier_writes_enabled boolean,
+  p_private_catalog_writes_enabled boolean,
+  p_procurement_snapshot_v1_enabled boolean,
+  p_expected_version integer,
+  p_actor_user_id uuid,
+  p_actor_employee_id uuid,
+  p_idempotency_key text,
+  p_reason text DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_purchase_batch_workflow_enabled boolean;
+BEGIN
+  SELECT COALESCE((
+    SELECT setting.purchase_batch_workflow_enabled
+    FROM public.tenant_supplier_settings AS setting
+    WHERE setting.tenant_id = p_tenant_id
+  ), false)
+  INTO v_purchase_batch_workflow_enabled;
+
+  RETURN public.set_tenant_supplier_rollout_settings(
+    p_tenant_id,
+    p_module_enabled,
+    p_require_active_contract_for_new_order,
+    p_ownership_reads_enabled,
+    p_private_supplier_writes_enabled,
+    p_private_catalog_writes_enabled,
+    p_procurement_snapshot_v1_enabled,
+    v_purchase_batch_workflow_enabled,
+    p_expected_version,
+    p_actor_user_id,
+    p_actor_employee_id,
+    p_idempotency_key,
+    p_reason
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.set_tenant_supplier_rollout_settings(uuid, boolean, boolean, boolean, boolean, boolean, boolean, integer, uuid, uuid, text, text)
+  FROM PUBLIC, anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.set_tenant_supplier_rollout_settings(uuid, boolean, boolean, boolean, boolean, boolean, boolean, integer, uuid, uuid, text, text)
+  TO service_role;
+
+COMMENT ON FUNCTION public.set_tenant_supplier_rollout_settings(uuid, boolean, boolean, boolean, boolean, boolean, boolean, integer, uuid, uuid, text, text)
+IS 'Temporary DB-first compatibility overload; preserves purchase_batch_workflow_enabled while delegating to the level-six command. Retire only in a reviewed forward migration after old API revisions are gone.';
 
 COMMIT;

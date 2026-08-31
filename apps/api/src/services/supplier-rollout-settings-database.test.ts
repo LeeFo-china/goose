@@ -359,10 +359,10 @@ describe("supplier rollout local PostgreSQL helper", () => {
     expect((timeoutError as Error).message).not.toContain(simulatedSecret);
   });
 
-  test("guards the exact retired and current overload ACL catalog state", () => {
+  test("guards both compatibility and current overload ACL catalog state", () => {
     const aclSql = supplierRolloutAclSql();
     expect(aclSql).toContain(
-      "to_regprocedure('public.set_tenant_supplier_rollout_settings(uuid,boolean,boolean,boolean,boolean,boolean,boolean,integer,uuid,uuid,text,text)') IS NOT NULL",
+      "to_regprocedure('public.set_tenant_supplier_rollout_settings(uuid,boolean,boolean,boolean,boolean,boolean,boolean,integer,uuid,uuid,text,text)') IS NULL",
     );
     expect(aclSql).toContain(
       "to_regprocedure('public.set_tenant_supplier_rollout_settings(uuid,boolean,boolean,boolean,boolean,boolean,boolean,boolean,integer,uuid,uuid,text,text)') IS NULL",

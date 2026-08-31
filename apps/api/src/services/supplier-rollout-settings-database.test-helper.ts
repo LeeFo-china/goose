@@ -49,21 +49,27 @@ const newRolloutSignature = [
 export function supplierRolloutAclSql(): string {
   return `DO $acl$
 BEGIN
-  IF pg_catalog.to_regprocedure('${oldRolloutSignature}') IS NOT NULL THEN
-    RAISE EXCEPTION 'old rollout command overload must not exist';
+  IF pg_catalog.to_regprocedure('${oldRolloutSignature}') IS NULL THEN
+    RAISE EXCEPTION 'legacy rollout compatibility overload must exist';
   END IF;
   IF pg_catalog.to_regprocedure('${newRolloutSignature}') IS NULL THEN
     RAISE EXCEPTION 'new rollout command overload must exist';
   END IF;
   IF NOT pg_catalog.has_function_privilege(
+    'service_role', '${oldRolloutSignature}', 'EXECUTE'
+  ) OR NOT pg_catalog.has_function_privilege(
     'service_role', '${newRolloutSignature}', 'EXECUTE'
   ) THEN
-    RAISE EXCEPTION 'service_role must execute rollout command';
+    RAISE EXCEPTION 'service_role must execute both rollout overloads';
   END IF;
   IF pg_catalog.has_function_privilege(
     'authenticated', '${newRolloutSignature}', 'EXECUTE'
   ) OR pg_catalog.has_function_privilege(
     'anon', '${newRolloutSignature}', 'EXECUTE'
+  ) OR pg_catalog.has_function_privilege(
+    'authenticated', '${oldRolloutSignature}', 'EXECUTE'
+  ) OR pg_catalog.has_function_privilege(
+    'anon', '${oldRolloutSignature}', 'EXECUTE'
   ) THEN
     RAISE EXCEPTION 'rollout command ACL is wider than service_role';
   END IF;
@@ -74,8 +80,10 @@ BEGIN
       procedure_definition.proacl,
       pg_catalog.acldefault('f', procedure_definition.proowner)
     )) AS permission
-    WHERE procedure_definition.oid =
+    WHERE procedure_definition.oid IN (
+      pg_catalog.to_regprocedure('${oldRolloutSignature}'),
       pg_catalog.to_regprocedure('${newRolloutSignature}')
+    )
       AND permission.privilege_type = 'EXECUTE'
       AND permission.grantee <> procedure_definition.proowner
       AND (
@@ -89,15 +97,17 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'rollout command ACL has an unexpected execute grantee';
   END IF;
-  IF NOT EXISTS (
-    SELECT 1
+  IF (
+    SELECT pg_catalog.count(*)
     FROM pg_catalog.pg_proc AS procedure_definition
     CROSS JOIN LATERAL pg_catalog.aclexplode(coalesce(
       procedure_definition.proacl,
       pg_catalog.acldefault('f', procedure_definition.proowner)
     )) AS permission
-    WHERE procedure_definition.oid =
+    WHERE procedure_definition.oid IN (
+      pg_catalog.to_regprocedure('${oldRolloutSignature}'),
       pg_catalog.to_regprocedure('${newRolloutSignature}')
+    )
       AND permission.privilege_type = 'EXECUTE'
       AND NOT permission.is_grantable
       AND permission.grantee = (
@@ -105,8 +115,8 @@ BEGIN
         FROM pg_catalog.pg_roles AS role_definition
         WHERE role_definition.rolname = 'service_role'
       )
-  ) THEN
-    RAISE EXCEPTION 'service_role must hold the exact execute grant';
+  ) <> 2 THEN
+    RAISE EXCEPTION 'service_role must hold both exact execute grants';
   END IF;
 END
 $acl$;`;
