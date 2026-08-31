@@ -139,12 +139,65 @@ bun --env-file=.env test \
 超预算双审批、采购/财务驳回、缺审批人零残留、幂等冲突、tenant/project/assignee/self
 越权和双会话审批。
 
-clone 中的 `enable_seqscan=off` EXPLAIN 只证明索引结构可用，不是性能结论。Task13 必须
-在已迁移的授权 dev 库、代表性数据基数和默认 planner 下，使用只读事务重新运行三条
-`EXPLAIN (ANALYZE, BUFFERS)`：running instance lookup、pending task lookup、subject state
-batch lookup。不得设置 `enable_seqscan=off`，不得 seed/写入。保存脱敏的 node type、index
-name、planning/execution time 和 buffer 摘要；出现大表 Seq Scan、超时或未命中预期有界
-索引即停止发布。
+### 授权 dev EXPLAIN 分层门禁
+
+一次性 clone 中的 `enable_seqscan=off` 仅用于结构性验证，不能作为 dev 性能验收证据。
+正式门禁必须在已迁移的授权 dev 库和默认 planner 下执行，禁止设置
+`enable_seqscan=off`、seed 或写入业务数据。runner 在一个
+`REPEATABLE READ READ ONLY` 事务快照内完成目标校验、有界计数、索引元数据读取和三条
+`EXPLAIN (ANALYZE, BUFFERS, SETTINGS, VERBOSE, FORMAT JSON)`。
+
+证据来源固定为 GitHub Actions run `33359680214` 的 immutable artifact
+`supplier-purchase-workflow-acceptance-9d02854a88d5ca83a2f883b923de1ffcd7d49bd3`。
+`SUPPLIER_PURCHASE_WORKFLOW_EXPLAIN_EVIDENCE_FILE` 必须指向 protected workflow 从该
+artifact 的 `rollout-settings.json` 和 `execute.json` 归一化出的固定 JSON；runner 会逐值
+校验 source run、artifact、tenant、batch 和 instance，不接受替换证据或字段别名。
+
+三条查询及允许索引是固定契约：
+
+| 查询名 | 目标 relation | 批准索引 |
+| --- | --- | --- |
+| `running_instance` | `workflow_instances` | `workflow_instances_running_purchase_batch_uidx`、`workflow_instances_purchase_batch_lookup_idx` |
+| `pending_task` | `workflow_tasks` | `idx_workflow_tasks_instance_status` |
+| `subject_state` | `workflow_subject_states` | `idx_workflow_subject_states_subject` |
+
+在 `apps/api` 下执行的底层命令如下；数据库 URL 和证据文件内容不得写入日志或上传为
+artifact。正式发布证据应由受保护的
+`verify-dev-supplier-purchase-workflow-explain.yml` workflow 调用同一命令：
+
+```bash
+SUPPLIER_PURCHASE_WORKFLOW_EXPLAIN_CONFIRM=development-read-only \
+SUPPLIER_PURCHASE_WORKFLOW_EXPLAIN_DB_URL="${DEV_SUPABASE_DB_DIRECT_URL}" \
+SUPPLIER_PURCHASE_WORKFLOW_EXPLAIN_EVIDENCE_FILE="${EVIDENCE_FILE}" \
+bun run supplier:purchase-batch-workflow:explain
+```
+
+分层判定如下。无论 small 或 large，所有清单索引的索引元数据都必须证明其属于对应的
+`public` relation，并且 valid、ready；共同阈值始终生效。
+
+| 有界整表基数 | 默认 planner 的目标 relation 计划 | 结论 |
+| --- | --- | --- |
+| `cardinality < 1,000`（small） | small 表允许目标表出现 `Seq Scan` 或批准索引；共同阈值内且索引元数据有效 | 通过 |
+| `cardinality >= 1,000`（large） | large 表禁止目标表出现 `Seq Scan`，且必须命中批准索引 | 通过 |
+| 任意 | planning `> 50ms`、execution `> 250ms`、shared read `> 20,000`、temp blocks `> 0` | 失败 |
+
+共同阈值的精确定义为：`planning time <= 50ms`、`execution time <= 250ms`、
+`shared read blocks <= 20,000`、`temp blocks = 0`（read 和 written 均为 0），以及
+`statement timeout = 5,000ms`。small 表允许 Seq Scan 不代表跳过时延、buffer、默认 planner
+或索引元数据检查；large 表出现 Seq Scan 或未命中该查询批准索引必须立即停止发布。
+
+失败时 CLI 只输出 `SUPPLIER_PURCHASE_WORKFLOW_EXPLAIN_FAILED:<CODE>`。稳定 failure codes
+固定为：`CONFIRMATION_REQUIRED`、`MISSING_CONFIG`、`INVALID_DATABASE_URL`、
+`INVALID_EVIDENCE_INPUT`、`INVALID_PLAN`、`NON_DEFAULT_PLANNER`、
+`INVALID_CARDINALITY`、`INDEX_RELATION_MISMATCH`、`INDEX_METADATA_INVALID`、
+`UNKNOWN_PLAN`、`DUPLICATE_PLAN`、`MISSING_PLAN`、`PLANNING_THRESHOLD`、
+`EXECUTION_THRESHOLD`、`SHARED_READ_THRESHOLD`、`TEMP_BLOCKS`、
+`LARGE_TABLE_SEQ_SCAN`、`LARGE_TABLE_INDEX_REQUIRED`、`TRANSACTION_GUARD_INVALID`、
+`INVALID_DEV_TARGET`、`STATEMENT_TIMEOUT`、`DATABASE_FAILURE` 和
+`DATABASE_CLOSE_FAILED`。门禁成功只保存脱敏 summary；不得保存或上传数据库 URL、归一化
+UUID 输入或原始 EXPLAIN JSON。
+
+本门禁仅补充 gooes 的发布校验：不修改 Orange，不调整 API 契约。
 
 ## 7. 验收与扩大灰度
 
