@@ -46,4 +46,26 @@ describe("supplier purchase batch workflow release runbook", () => {
       "若紧急情况下必须立即关 flag，必须同时阻断旧 review 入口",
     );
   });
+
+  test("compares legacy review and task complete on different dev batches", () => {
+    expect(runbook).toContain(
+      "POST /supplier-purchase-batches/:id/review",
+    );
+    expect(runbook).toContain("POST /workflow-tasks/:taskId/complete");
+    expect(runbook).toContain("必须使用两个不同批次");
+    expect(runbook).toContain("禁止在同一批次串行调用两个入口");
+    for (const evidence of [
+      "batch.status",
+      "budget_status",
+      "approval_round",
+      "orderIds",
+      "supplierCount",
+      "status=submitted",
+    ]) expect(runbook).toContain(evidence);
+    for (const errorCode of [
+      "WORKFLOW_TASK_NOT_PENDING",
+      "SUPPLIER_PURCHASE_BATCH_VERSION_CONFLICT",
+      "SUPPLIER_PURCHASE_BATCH_SELF_REVIEW",
+    ]) expect(runbook).toContain(errorCode);
+  });
 });

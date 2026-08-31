@@ -153,6 +153,29 @@ name、planning/execution time 和 buffer 摘要；出现大表 Seq Scan、超�
 一致后，再通知 Orange 做真机验收。Orange 未完成前不得扩大租户灰度，也不得删除旧
 `/review` 兼容桥。
 
+旧入口与新入口必须在已发布 dev API 上做兼容对照，不能只调用数据库 RPC。必须使用两个不同批次：
+
+| 证据批次 | HTTP 入口 | 请求 | 成功预期 |
+| --- | --- | --- | --- |
+| A（额度内） | `POST /supplier-purchase-batches/:id/review` | 原 body `expected_version/action/remark`，独立稳定 `Idempotency-Key` | 兼容桥返回 `ordered` |
+| B（额度内） | `POST /workflow-tasks/:taskId/complete` | `action/reason/output`，另一独立稳定 `Idempotency-Key` | task complete 返回 `ordered` |
+
+禁止在同一批次串行调用两个入口来制造“对照”，那只是在测试已完成 task。A、B 必须由同一
+已发布 API revision 分别创建、提交，使用相同项目、SKU、数量和供货价，并分别保存 requestId、
+batchId、taskId、key 和响应。成功后从详情及采购单分页接口对照以下真实事实，而非只对照 HTTP：
+
+- `batch.status=ordered`、相同 `budget_status=within_budget`、`approval_round=1`；
+- 每批 `orderIds` 恰好一项、`supplierCount=1`，且该批全部订单 `status=submitted`；
+- workflow instance completed、pending task 为 0、预算 commitment 与订单终态一致；
+- 同 key 同 payload 各自重放为原结果，event/order 数量不增加。
+
+稳定错误码也必须通过已发布 API 对照，每个负例使用另外的独立批次和 key，避免前一操作污染
+后一个断言：旧 `/review` 与新 task complete 均以 stale version 验证 HTTP 409
+`SUPPLIER_PURCHASE_BATCH_VERSION_CONFLICT`；均以提交人审批验证 HTTP 409
+`SUPPLIER_PURCHASE_BATCH_SELF_REVIEW`；成功后用不同 key 再处理已完成 task，验证 HTTP 409
+`WORKFLOW_TASK_NOT_PENDING`。任一路径返回不同终态、额外订单、非稳定 code 或自动 fallback，
+立即停止灰度并保留两批证据。
+
 ## 紧急止血与前向回滚
 
 1. 第一动作是进入维护窗口，并在网关或当前 API revision 同时阻断采购 submit 和新旧 review 入口；

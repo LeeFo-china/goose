@@ -48,8 +48,14 @@ race 临时日志。
   submit replay/conflict；tenant、project scope、assignee、self-review 拦截。
 - 双会话对同一最终审批 task 使用不同 key 竞争：恰好一个成功、一个
   `WORKFLOW_TASK_NOT_PENDING`，仅一张订单且仅一条最终 review event。
+- DB-first compatibility 在 migration 前先用旧 12 参数签名成功写入旧 fingerprint，应用本轮
+  migration 后用相同旧 key/payload 原样 replay；setting version 和 command event 数量均不
+  增加。migration 后的新旧签名写入仍委托含 workflow flag 的新 fingerprint。
 - smoke 在同一个一次性 clone 上真实运行 dry-run 和 `--execute`；dry-run 检查六级 rollout
   flag、active/published 精确模板解析、两个预算上下文的权威审批候选解析以及项目/目录/预算；
+  传入的采购/财务审批人还必须逐节点满足权威 task projection 的固定 employee、role、
+  permission 和项目范围规则。clone 中分别把采购节点固定给另一员工、把财务节点固定给另一
+  role，均验证 smoke fail closed，而不是因“存在某个候选人”误通过；
   execute 使用显式采购/财务审批人完成最终审批并输出 `supplierCount=1`，且最终订单均为
   `submitted`。save、submit、两级审批分别提交，失败时不由外层事务抹去既有 requestId
   证据。clone 随测试销毁，不计作 dev 证据。
@@ -102,4 +108,6 @@ compatibility migration 在 production-schema clone 上的回归；clone 已分�
 - 默认 planner 的只读 dev EXPLAIN 摘要；
 - smoke dry-run 输出，以及明确授权后的 execute requestId/batch/round/instance/task/
   budget/order/supplierCount；
+- 已发布 dev API 上使用两个不同批次分别调用旧 `/review` 和新 workflow task complete 的
+  终态/订单/稳定错误码对照证据；不得用同一批次串行调用两个入口伪造对照；
 - Orange 真机验收结论和灰度范围。
