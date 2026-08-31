@@ -274,6 +274,33 @@ describe("tenant supplier rollout command migration contract", () => {
     expect(fn).toContain("SET search_path = pg_catalog, public");
   });
 
+  test("replays pre-migration legacy fingerprints before delegating new events", () => {
+    const legacy = compact(legacyRolloutFunction());
+    const replayLookup = legacy.indexOf(
+      "FROM public.supplier_command_events AS event",
+    );
+    const workflowFlagLookup = legacy.indexOf(
+      "SELECT setting.purchase_batch_workflow_enabled",
+    );
+
+    expect(replayLookup).toBeGreaterThan(-1);
+    expect(workflowFlagLookup).toBeGreaterThan(replayLookup);
+    expect(legacy).toContain("v_event.from_state -> '_request'");
+    expect(legacy).toContain("'setting', v_event.to_state");
+    expect(legacy).toContain("'previous_setting', v_event.from_state - '_request'");
+    expect(legacy).toContain(
+      "NOT COALESCE( v_event.from_state -> '_request' ? 'purchase_batch_workflow_enabled', false )",
+    );
+    const legacyRequest = legacy.slice(
+      legacy.indexOf("v_request := jsonb_build_object("),
+      legacy.indexOf("PERFORM pg_catalog.pg_advisory_xact_lock("),
+    );
+    expect(legacyRequest).toContain(
+      "'procurement_snapshot_v1_enabled', p_procurement_snapshot_v1_enabled",
+    );
+    expect(legacyRequest).not.toContain("purchase_batch_workflow_enabled");
+  });
+
   test("locks the tenant and settings row before optimistic update", () => {
     const fn = rolloutFunction();
     expect(fn).toMatch(

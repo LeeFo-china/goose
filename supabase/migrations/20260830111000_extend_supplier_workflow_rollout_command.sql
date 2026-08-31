@@ -344,8 +344,89 @@ SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
 DECLARE
+  v_event public.supplier_command_events%ROWTYPE;
+  v_request jsonb;
   v_purchase_batch_workflow_enabled boolean;
 BEGIN
+  IF p_tenant_id IS NULL
+    OR p_module_enabled IS NULL
+    OR p_require_active_contract_for_new_order IS NULL
+    OR p_ownership_reads_enabled IS NULL
+    OR p_private_supplier_writes_enabled IS NULL
+    OR p_private_catalog_writes_enabled IS NULL
+    OR p_procurement_snapshot_v1_enabled IS NULL
+    OR p_expected_version IS NULL
+    OR p_expected_version < 0
+    OR p_actor_user_id IS NULL
+    OR p_actor_employee_id IS NULL
+    OR p_idempotency_key IS NULL
+    OR btrim(p_idempotency_key) = ''
+    OR char_length(p_idempotency_key) > 120
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '22023',
+      MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
+  END IF;
+
+  IF p_reason IS NOT NULL AND char_length(btrim(p_reason)) > 500 THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '22023',
+      MESSAGE = 'SUPPLIER_STATE_CONFLICT';
+  END IF;
+  p_reason := NULLIF(btrim(p_reason), '');
+
+  v_request := jsonb_build_object(
+    'tenant_id', p_tenant_id,
+    'module_enabled', p_module_enabled,
+    'require_active_contract_for_new_order',
+      p_require_active_contract_for_new_order,
+    'ownership_reads_enabled', p_ownership_reads_enabled,
+    'private_supplier_writes_enabled', p_private_supplier_writes_enabled,
+    'private_catalog_writes_enabled', p_private_catalog_writes_enabled,
+    'procurement_snapshot_v1_enabled', p_procurement_snapshot_v1_enabled,
+    'expected_version', p_expected_version,
+    'reason', p_reason,
+    'actor_employee_id', p_actor_employee_id
+  );
+
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      'supplier-command:' || p_actor_user_id::text || ':' || p_idempotency_key,
+      0
+    )
+  );
+
+  SELECT event.*
+  INTO v_event
+  FROM public.supplier_command_events AS event
+  WHERE event.actor_user_id = p_actor_user_id
+    AND event.idempotency_key = p_idempotency_key
+  FOR UPDATE;
+
+  IF FOUND AND NOT COALESCE(
+    v_event.from_state -> '_request' ? 'purchase_batch_workflow_enabled',
+    false
+  ) THEN
+    IF v_event.tenant_id IS DISTINCT FROM p_tenant_id
+      OR v_event.from_state -> '_request' IS DISTINCT FROM v_request
+      OR v_event.resource_type <> 'tenant_supplier'
+      OR v_event.resource_id <> p_tenant_id
+      OR v_event.command <> 'set_tenant_supplier_rollout_settings'
+    THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
+    END IF;
+
+    RETURN jsonb_build_object(
+      'status', 'updated',
+      'idempotent', true,
+      'setting', v_event.to_state,
+      'previous_setting', v_event.from_state - '_request',
+      'version', v_event.result_version
+    );
+  END IF;
+
   SELECT COALESCE((
     SELECT setting.purchase_batch_workflow_enabled
     FROM public.tenant_supplier_settings AS setting

@@ -207,9 +207,62 @@ docker exec "$container" pg_dump -U postgres -d postgres --schema-only --no-owne
 if ensure_workflow_schema mixed >/dev/null 2>&1; then echo "Mixed state was not rejected" >&2; exit 1; else echo TASK12_SCHEMA_MIXED_REJECTED; fi
 initial_schema_state=$(psql_admin -Atqc "select (to_regclass('public.workflow_instances_purchase_batch_lookup_idx') is not null)::int::text || (to_regprocedure('public.withdraw_supplier_purchase_batch_workflow(uuid,uuid,integer,text,uuid,uuid,text)') is not null)::int::text" </dev/null)
 echo "TASK12_INITIAL_SCHEMA_STATE=$initial_schema_state"
+if [ "$initial_schema_state" = "00" ]; then
+  psql_admin <<'LEGACY_BEFORE_MIGRATION' >/dev/null
+INSERT INTO auth.users(id,email) VALUES
+  ('84000000-0000-4000-8000-000000000001','task12-legacy-rollout@example.invalid');
+INSERT INTO public.tenants(id,name,slug) VALUES
+  ('84000000-0000-4000-8000-000000000002','Task12 Legacy Rollout','task12-legacy-rollout');
+INSERT INTO public.employees(id,name,status,user_id,tenant_id) VALUES
+  ('84000000-0000-4000-8000-000000000003','Task12 Legacy Actor','active',
+   '84000000-0000-4000-8000-000000000001','84000000-0000-4000-8000-000000000002');
+DO $legacy$
+DECLARE result jsonb;
+BEGIN
+  result := public.set_tenant_supplier_rollout_settings(
+    '84000000-0000-4000-8000-000000000002', true, false,
+    false, false, false, false, 0,
+    '84000000-0000-4000-8000-000000000001',
+    '84000000-0000-4000-8000-000000000003',
+    'task12-pre-migration-rollout', NULL
+  );
+  IF result->>'status' <> 'updated'
+    OR (result->>'idempotent')::boolean
+    OR result->'setting' ? 'purchase_batch_workflow_enabled'
+  THEN RAISE EXCEPTION 'pre-migration legacy rollout failed: %', result; END IF;
+END
+$legacy$;
+LEGACY_BEFORE_MIGRATION
+fi
 ensure_workflow_schema "$initial_schema_state"
 ensure_workflow_schema auto
 echo TASK12_SCHEMA_HEAD_VALIDATED
+if [ "$initial_schema_state" = "00" ]; then
+  psql_admin <<'LEGACY_AFTER_MIGRATION' >/dev/null
+DO $legacy$
+DECLARE result jsonb;
+BEGIN
+  result := public.set_tenant_supplier_rollout_settings(
+    '84000000-0000-4000-8000-000000000002', true, false,
+    false, false, false, false, 0,
+    '84000000-0000-4000-8000-000000000001',
+    '84000000-0000-4000-8000-000000000003',
+    'task12-pre-migration-rollout', NULL
+  );
+  IF result->>'status' <> 'updated'
+    OR NOT (result->>'idempotent')::boolean
+    OR result->'setting' ? 'purchase_batch_workflow_enabled'
+    OR (SELECT version FROM public.tenant_supplier_settings
+        WHERE tenant_id='84000000-0000-4000-8000-000000000002') <> 1
+    OR (SELECT count(*) FROM public.supplier_command_events
+        WHERE actor_user_id='84000000-0000-4000-8000-000000000001'
+          AND idempotency_key='task12-pre-migration-rollout') <> 1
+  THEN RAISE EXCEPTION 'cross-migration legacy replay failed: %', result; END IF;
+END
+$legacy$;
+LEGACY_AFTER_MIGRATION
+  echo TASK12_LEGACY_ROLLOUT_CROSS_MIGRATION_REPLAY_OK
+fi
 psql_admin < "$repo_root/supabase/tests/supplier_purchase_batch_workflow_withdraw_production_fixture.sql" >/dev/null
 psql_admin <<'TASK12_SQL'
 ${releaseMatrixSql()}
@@ -279,6 +332,11 @@ test("runs release matrix, concurrency, and structural index checks on a product
     expect(skippedCount).toBe(2);
   }
   expect(stdout).toContain("TASK12_SCHEMA_HEAD_VALIDATED");
+  if (initialSchemaState === "00") {
+    expect(stdout).toContain(
+      "TASK12_LEGACY_ROLLOUT_CROSS_MIGRATION_REPLAY_OK",
+    );
+  }
   expect(stdout).toContain("TASK12_RELEASE_MATRIX_READY");
   expect(stdout).toContain("TASK12_REVIEW_RACE_BLOCKED");
   expect(stdout).toContain('"mode": "dry-run"');
