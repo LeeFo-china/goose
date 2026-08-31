@@ -12,18 +12,14 @@ import {
 import type { CreateProjectLogInput, UpdateProjectLogInput } from "@/schema/project-logs";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
-import { projectProcedureAssignmentService } from "@/services/project-procedure-assignments";
 import { assertProjectWorkflowStageMutationAllowed } from "@/services/project-workflow-mutation-guards";
 import { projectSer } from "@/services/projects";
 import { projectStatusService } from "@/services/project-status";
-import {
-  isProjectConstructionStageCode,
-  isProjectLogStageCode,
-} from "@gooes/domain";
+import { isProjectLogStageCode } from "@gooes/domain";
 import { ProjectLogCalendarCache } from "./project-logs/calendar-cache";
+import { createProjectLogRecord } from "./project-logs/create";
 import { ProjectLogProjectListCache } from "./project-logs/project-list-cache";
 import {
-  createWorkflowApprovedConstructionLog,
   measureProjectLogCreateStep,
   type ProjectLogCreateTimingSteps,
 } from "./project-logs/workflow-approved-create";
@@ -102,48 +98,14 @@ class ProjectLogService {
       () => this.getRequiredProject({ projectId: input.payload.project_id, tenantId }),
     );
     projectStatusService.assertCanCreateProjectLog(project);
-    const stageCode = isProjectLogStageCode(input.payload.stage_code) ? input.payload.stage_code : null;
-    if (stageCode) {
-      await measureProjectLogCreateStep(
-        timings,
-        "workflow_guard_ms",
-        () => assertProjectWorkflowStageMutationAllowed({
-          tenantId,
-          projectId: project.id,
-          stageCode,
-          mutation: "create_project_log",
-        }),
-      );
-      await measureProjectLogCreateStep(timings, "assignment_guard_ms", () =>
-        projectProcedureAssignmentService.assertCanCreateProjectLog({
-          authContext: input.authContext,
-          projectId: project.id,
-          stageCode,
-        }));
-    }
-
-    const row = stageCode && isProjectConstructionStageCode(stageCode)
-      ? await createWorkflowApprovedConstructionLog({
-        authContext: input.authContext,
-        tenantId,
-        project,
-        payload: input.payload,
-        timings,
-      })
-      : await measureProjectLogCreateStep(
-        timings,
-        "create_rpc_ms",
-        () => projectLogRepository.createFast({
-          tenantId,
-          employeeId: input.authContext.employeeId!,
-          tenantDepartmentId: input.authContext.tenantDepartmentId,
-          projectLogScope: accessPolicyService.getScope(
-            input.authContext,
-            "project_log.create",
-          ),
-          payload: input.payload,
-        }),
-      );
+    const row = await createProjectLogRecord({
+      authContext: input.authContext,
+      employeeId: input.authContext.employeeId,
+      tenantId,
+      project,
+      payload: input.payload,
+      timings,
+    });
     projectSer.invalidatePublicProjectLogsCache(input.payload.project_id);
     this.projectLogCalendarCache.updateAfterCreate({
       tenantId,

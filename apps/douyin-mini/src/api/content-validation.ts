@@ -172,12 +172,15 @@ export function parseSiteLogPage(value: unknown): PublicSiteLogPage | null {
 function parseSiteLog(value: unknown): PublicSiteLog | null {
   if (!isRecord(value) || typeof value.id !== "string" || !UUID_PATTERN.test(value.id)
     || !isNullableBoundedString(value.stage_code, 80)
+    || (value.stage_label !== undefined
+      && !isNullableBoundedString(value.stage_label, 80))
     || !isNullableBoundedString(value.node_name, 120)
     || !isBoundedString(value.created_at, 1, 80)) return null;
   const images = parseHttpsArray(value.images, 9);
   return images ? {
     id: value.id,
     stage_code: value.stage_code,
+    stage_label: value.stage_label ?? null,
     node_name: value.node_name,
     images,
     created_at: value.created_at,

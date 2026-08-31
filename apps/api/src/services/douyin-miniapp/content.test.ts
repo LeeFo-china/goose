@@ -429,6 +429,45 @@ describe("DouyinMiniappContentService", () => {
     expect(JSON.stringify(result)).not.toMatch(/content|employee|customer|address/i);
   });
 
+  test("maps canonical construction stages without guessing legacy labels", async () => {
+    const deps = dependencies({
+      listSiteLogs: mock(async () => ({
+        rows: [
+          {
+            id: "44444444-4444-4444-8444-444444444444",
+            stage_code: "plumbing_electrical",
+            node_name: null,
+            images: [],
+            created_at: "2026-08-31T06:30:00.000Z",
+          },
+          {
+            id: "55555555-5555-4555-8555-555555555555",
+            stage_code: "legacy-stage",
+            node_name: null,
+            images: [],
+            created_at: "2026-08-30T06:30:00.000Z",
+          },
+        ],
+        total: 2,
+      })),
+    });
+
+    const result = await new DouyinMiniappContentService(deps as never).listSiteLogs(
+      user,
+      PROJECT_ID,
+      { page: 1, pageSize: 20 },
+    );
+
+    expect(result.items[0]).toMatchObject({
+      stage_code: "plumbing_electrical",
+      stage_label: "水电",
+    });
+    expect(result.items[1]).toMatchObject({
+      stage_code: "legacy-stage",
+      stage_label: null,
+    });
+  });
+
   test("never exposes an internal project name as a public site title", async () => {
     const privateName = "张先生 1号楼101室装修";
     const privateSite = { ...project, name: privateName };
