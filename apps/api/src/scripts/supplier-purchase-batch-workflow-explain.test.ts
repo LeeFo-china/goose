@@ -27,7 +27,6 @@ const QUERY_NAMES = [
   "pending_task",
   "subject_state",
 ] as const;
-
 type EventName =
   | "set-transaction"
   | "statement-timeout"
@@ -253,6 +252,9 @@ describe("supplier purchase workflow EXPLAIN SQL", () => {
   test("uses the fixed complete planner and index catalog predicates", async () => {
     const harness = makeHarness();
     await runWorkflowExplainGate(CONFIG, EVIDENCE, harness.dependencies);
+    const role = harness.calls.find((call) => call.event === "role")!.text;
+    expect(role).toContain('roles.rolbypassrls AS "rolbypassrl"');
+    expect(role).not.toMatch(/roles\.rolbypassrl(?!s)/);
     const planner = harness.calls.find((call) => call.event === "planner")!.text;
     expect(planner).toContain('setting AS "current"');
     expect(planner).toContain('boot_val AS "bootValue"');

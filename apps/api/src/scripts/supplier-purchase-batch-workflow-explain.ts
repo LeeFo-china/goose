@@ -40,7 +40,7 @@ const TRANSACTION_GUARD_QUERY = `
 `;
 
 const ROLE_QUERY = `
-  select roles.rolsuper, roles.rolbypassrl
+  select roles.rolsuper, roles.rolbypassrls AS "rolbypassrl"
   from pg_roles as roles
   where roles.rolname = current_user
 `;
