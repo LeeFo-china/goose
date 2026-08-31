@@ -211,6 +211,10 @@ describe("supplier purchase workflow EXPLAIN CLI", () => {
         "EXECUTION_THRESHOLD",
       ],
       [new Error(VALID_ENV[WORKFLOW_EXPLAIN_ENV.databaseUrl]), "DATABASE_FAILURE"],
+      [
+        new WorkflowExplainError("SENSITIVE_CODE", "sensitive injected code"),
+        "DATABASE_FAILURE",
+      ],
     ];
 
     for (const [failure, code] of cases) {

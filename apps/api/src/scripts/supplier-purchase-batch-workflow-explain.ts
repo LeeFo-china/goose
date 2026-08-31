@@ -7,12 +7,17 @@ import {
 } from "./supplier-purchase-batch-workflow-explain-config";
 import {
   WORKFLOW_EXPLAIN_MANIFEST,
+  WORKFLOW_EXPLAIN_ERROR_CODES,
   WORKFLOW_EXPLAIN_QUERY_NAMES,
   WORKFLOW_EXPLAIN_THRESHOLDS,
+  assertWorkflowExplainCurrentPlannerSettings,
+  assertWorkflowExplainIndexMetadata,
+  assertWorkflowExplainPlanEvidence,
   assertWorkflowExplainRawGate,
   classifyWorkflowCardinality,
   parseWorkflowExplainPlan,
   type WorkflowExplainIndexMetadata,
+  type WorkflowExplainPlanEvidence,
   type WorkflowExplainPlannerSetting,
   type WorkflowExplainQueryName,
   type WorkflowExplainRawPlan,
@@ -21,11 +26,11 @@ import {
 const EXPLAIN =
   "explain (analyze, buffers, settings, verbose, format json)";
 
-export const WORKFLOW_EXPLAIN_QUERIES = {
+export const WORKFLOW_EXPLAIN_QUERIES = Object.freeze({
   running_instance: `${EXPLAIN}\nselect id from public.workflow_instances\nwhere tenant_id = $1::uuid and subject_type = 'supplier_purchase_batch'\n  and subject_id = $2::text and status = 'running'\norder by created_at desc, id desc\nlimit 2`,
   pending_task: `${EXPLAIN}\nselect id from public.workflow_tasks\nwhere tenant_id = $1::uuid and instance_id = $2::uuid and status = 'pending'\norder by created_at asc, id asc\nlimit 2`,
   subject_state: `${EXPLAIN}\nselect subject_id from public.workflow_subject_states\nwhere tenant_id = $1::uuid and subject_type = 'supplier_purchase_batch'\n  and subject_id = $2::text\nlimit 2`,
-} as const;
+} as const);
 
 const TRANSACTION_GUARD_QUERY = `
   select
@@ -144,6 +149,7 @@ type TransactionGuard = {
 
 type TransactionEvidence = {
   cardinalities: Record<WorkflowExplainQueryName, number>;
+  parsedPlans: Record<WorkflowExplainQueryName, WorkflowExplainPlanEvidence>;
   plans: WorkflowExplainRawPlan[];
 };
 
@@ -171,10 +177,18 @@ export async function runWorkflowExplainGate(
       await assertPrivilegedRole(sql);
       const plannerSettings = await sql.unsafe(PLANNER_SETTINGS_QUERY) as
         WorkflowExplainPlannerSetting[];
+      const plannerRegistry = assertWorkflowExplainCurrentPlannerSettings(
+        plannerSettings,
+      );
       await assertEvidencePreflight(sql, evidence);
       const cardinalities = await readCardinalities(sql);
       const indexMetadata = await readIndexMetadata(sql);
-      const plans = await readPlans(sql, evidence);
+      const { parsedPlans, plans } = await readPlans(
+        sql,
+        evidence,
+        cardinalities,
+        plannerRegistry,
+      );
       const endGuard = await readTransactionGuard(sql);
       if (endGuard.backendPid !== startGuard.backendPid) {
         fail(
@@ -188,7 +202,7 @@ export async function runWorkflowExplainGate(
         indexMetadata,
         plans,
       });
-      return { cardinalities, plans };
+      return { cardinalities, parsedPlans, plans };
     });
     return summarize(result);
   } catch (error) {
@@ -286,33 +300,49 @@ async function readIndexMetadata(
         approved.has(row.indexName),
     ) as WorkflowExplainIndexMetadata[];
   }
+  for (const name of WORKFLOW_EXPLAIN_QUERY_NAMES) {
+    assertWorkflowExplainIndexMetadata(name, result[name]);
+  }
   return result;
 }
 
 async function readPlans(
   sql: WorkflowExplainSql,
   evidence: WorkflowExplainEvidenceInput,
-): Promise<WorkflowExplainRawPlan[]> {
+  cardinalities: Record<WorkflowExplainQueryName, number>,
+  plannerRegistry: Map<string, string>,
+): Promise<Pick<TransactionEvidence, "parsedPlans" | "plans">> {
   const values: Record<WorkflowExplainQueryName, unknown[]> = {
     running_instance: [evidence.tenantId, evidence.batchId],
     pending_task: [evidence.tenantId, evidence.instanceId],
     subject_state: [evidence.tenantId, evidence.batchId],
   };
   const plans: WorkflowExplainRawPlan[] = [];
+  const parsedPlans = {} as Record<
+    WorkflowExplainQueryName,
+    WorkflowExplainPlanEvidence
+  >;
   for (const name of WORKFLOW_EXPLAIN_QUERY_NAMES) {
-    plans.push({
+    const rawPlan = {
       name,
       rows: await sql.unsafe(WORKFLOW_EXPLAIN_QUERIES[name], values[name]),
-    });
+    };
+    plans.push(rawPlan);
+    const parsedPlan = parseWorkflowExplainPlan(rawPlan.rows, name);
+    assertWorkflowExplainPlanEvidence(
+      parsedPlan,
+      cardinalities[name],
+      plannerRegistry,
+    );
+    parsedPlans[name] = parsedPlan;
   }
-  return plans;
+  return { parsedPlans, plans };
 }
 
 function summarize(result: TransactionEvidence): WorkflowExplainSummary {
   const queries = {} as WorkflowExplainSummary["queries"];
   for (const name of WORKFLOW_EXPLAIN_QUERY_NAMES) {
-    const rawPlan = result.plans.find((plan) => plan.name === name)!;
-    const plan = parseWorkflowExplainPlan(rawPlan.rows, name);
+    const plan = result.parsedPlans[name];
     queries[name] = {
       cardinality: result.cardinalities[name],
       cardinalityClass: classifyWorkflowCardinality(
@@ -336,8 +366,24 @@ function summarize(result: TransactionEvidence): WorkflowExplainSummary {
   };
 }
 
+const STABLE_ERROR_CODES = new Set<string>([
+  "CONFIRMATION_REQUIRED",
+  "MISSING_CONFIG",
+  "INVALID_DATABASE_URL",
+  "INVALID_EVIDENCE_INPUT",
+  ...WORKFLOW_EXPLAIN_ERROR_CODES,
+  "TRANSACTION_GUARD_INVALID",
+  "INVALID_DEV_TARGET",
+  "STATEMENT_TIMEOUT",
+  "DATABASE_FAILURE",
+  "DATABASE_CLOSE_FAILED",
+]);
+
 function normalizeError(error: unknown): WorkflowExplainError {
-  if (error instanceof WorkflowExplainError) return error;
+  if (error instanceof WorkflowExplainError &&
+    STABLE_ERROR_CODES.has(error.code)) {
+    return error;
+  }
   if (isRecord(error) && error.code === "57014") {
     return new WorkflowExplainError(
       "STATEMENT_TIMEOUT",

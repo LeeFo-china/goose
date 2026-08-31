@@ -170,7 +170,11 @@ export function assertWorkflowExplainGate(
   assertPlanSet(input.plans);
   for (const name of WORKFLOW_EXPLAIN_QUERY_NAMES) {
     const plan = input.plans.find((item) => item.name === name)!;
-    assertPlanEvidence(plan, input.cardinalities[name], plannerRegistry);
+    assertWorkflowExplainPlanEvidence(
+      plan,
+      input.cardinalities[name],
+      plannerRegistry,
+    );
   }
   return true;
 }
@@ -183,7 +187,11 @@ export function assertWorkflowExplainRawGate(
   for (const name of WORKFLOW_EXPLAIN_QUERY_NAMES) {
     const rawPlan = input.plans.find((item) => item.name === name)!;
     const plan = parseWorkflowExplainPlan(rawPlan.rows, name);
-    assertPlanEvidence(plan, input.cardinalities[name], plannerRegistry);
+    assertWorkflowExplainPlanEvidence(
+      plan,
+      input.cardinalities[name],
+      plannerRegistry,
+    );
   }
   return true;
 }
@@ -194,17 +202,19 @@ function assertGateGlobals(
     "plannerSettings" | "cardinalities" | "indexMetadata"
   >,
 ): Map<string, string> {
-  const registry = assertCurrentPlannerSettings(input.plannerSettings);
+  const registry = assertWorkflowExplainCurrentPlannerSettings(
+    input.plannerSettings,
+  );
   for (const name of WORKFLOW_EXPLAIN_QUERY_NAMES) {
     classifyWorkflowCardinality(input.cardinalities[name]);
   }
   for (const name of WORKFLOW_EXPLAIN_QUERY_NAMES) {
-    assertIndexMetadata(name, input.indexMetadata[name]);
+    assertWorkflowExplainIndexMetadata(name, input.indexMetadata[name]);
   }
   return registry;
 }
 
-function assertPlanEvidence(
+export function assertWorkflowExplainPlanEvidence(
   plan: WorkflowExplainPlanEvidence,
   cardinality: number,
   plannerRegistry: Map<string, string>,
@@ -289,7 +299,7 @@ function collectPlanFacts(
   };
 }
 
-function assertIndexMetadata(
+export function assertWorkflowExplainIndexMetadata(
   name: WorkflowExplainQueryName,
   rows: WorkflowExplainIndexMetadata[],
 ): void {
@@ -332,7 +342,9 @@ function assertPlanSet(plans: Array<{ name: string }>): void {
   }
 }
 
-function assertCurrentPlannerSettings(settings: unknown): Map<string, string> {
+export function assertWorkflowExplainCurrentPlannerSettings(
+  settings: unknown,
+): Map<string, string> {
   if (!Array.isArray(settings)) {
     fail("NON_DEFAULT_PLANNER", "planner setting evidence must be an array");
   }
