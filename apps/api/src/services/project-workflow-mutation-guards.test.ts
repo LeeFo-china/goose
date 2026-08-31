@@ -79,17 +79,17 @@ describe("assertProjectWorkflowStageMutationAllowedFromProgress", () => {
   });
 
   test("allows construction log creation for current workflow procedure", () => {
-    expect(() =>
-      assertProjectWorkflowStageMutationAllowedFromProgress({
-        workflowProgress: workflowProgress({
-          current_node_key: "procedure_woodwork",
-          current_node_title: "木工",
-          current_stage_code: "woodwork",
-        }),
-        mutation: "create_project_log",
-        stageCode: "woodwork",
-      })
-    ).not.toThrow();
+    const progress = workflowProgress({
+      current_node_key: "procedure_woodwork",
+      current_node_title: "木工",
+      current_stage_code: "woodwork",
+    });
+
+    expect(assertProjectWorkflowStageMutationAllowedFromProgress({
+      workflowProgress: progress,
+      mutation: "create_project_log",
+      stageCode: "woodwork",
+    })).toBe(progress);
   });
 
   test("blocks project log creation when workflow runtime is unavailable", () => {

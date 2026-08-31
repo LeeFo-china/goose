@@ -20,9 +20,9 @@ export function assertProjectWorkflowStageMutationAllowedFromProgress(input: {
   workflowProgress: ProjectWorkflowProgress;
   mutation: ProjectWorkflowStageMutation;
   stageCode: ProjectLogStageCode;
-}) {
+}): ProjectWorkflowProgress {
   if (!isProjectConstructionStageCode(input.stageCode)) {
-    return;
+    return input.workflowProgress;
   }
 
   if (input.workflowProgress.source !== "workflow_runtime") {
@@ -39,17 +39,17 @@ export function assertProjectWorkflowStageMutationAllowedFromProgress(input: {
 
   if (input.workflowProgress.current_stage_code === input.stageCode) {
     assertAcceptanceEnabledIfNeeded(input);
-    return;
+    return input.workflowProgress;
   }
 
   if (isAcceptanceMutationAllowedAfterPaymentGate(input)) {
     assertAcceptanceEnabledIfNeeded(input);
-    return;
+    return input.workflowProgress;
   }
 
   if (isRequiredAcceptanceCatchUpMutation(input)) {
     assertAcceptanceEnabledIfNeeded(input);
-    return;
+    return input.workflowProgress;
   }
 
   throw Errors.business(
@@ -147,7 +147,7 @@ export async function assertProjectWorkflowStageMutationAllowed(input: {
     projectId: input.projectId,
   });
 
-  assertProjectWorkflowStageMutationAllowedFromProgress({
+  return assertProjectWorkflowStageMutationAllowedFromProgress({
     workflowProgress,
     stageCode: input.stageCode,
     mutation: input.mutation,
