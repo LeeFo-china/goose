@@ -141,6 +141,7 @@ export type PublicProjectPage = { items: PublicProject[]; pagination: Pagination
 export type PublicSiteLog = {
   id: string;
   stage_code: string | null;
+  stage_label: string | null;
   node_name: string | null;
   images: string[];
   created_at: string;

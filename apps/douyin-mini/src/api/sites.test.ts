@@ -42,7 +42,8 @@ describe("Douyin public site API clients", () => {
         return {
           items: [{
             id: LOG_ID,
-            stage_code: "water-electric",
+            stage_code: "plumbing_electrical",
+            stage_label: "水电",
             node_name: "水电施工",
             images: ["https://cdn.example.com/site.jpg", "http://unsafe.test/private.jpg"],
             created_at: "2026-07-20T08:00:00.000Z",
@@ -69,8 +70,26 @@ describe("Douyin public site API clients", () => {
     ]);
     expect(list.items[0]!.community).toBe("示例花园");
     expect(detail).not.toHaveProperty("address");
+    expect(logs.items[0]?.stage_label).toBe("水电");
     expect(logs.items[0]!.images).toEqual(["https://cdn.example.com/site.jpg"]);
     expect(logs.items[0]).not.toHaveProperty("owner_phone");
+  });
+
+  test("accepts legacy logs without a stage label", async () => {
+    const client = clientWith(() => ({
+      items: [{
+        id: LOG_ID,
+        stage_code: "water-electric",
+        node_name: "水电施工",
+        images: [],
+        created_at: "2026-07-20T08:00:00.000Z",
+      }],
+      pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+    }));
+
+    const logs = await fetchSiteLogs(client, SITE_ID, { page: 1, pageSize: 20 });
+
+    expect(logs.items[0]?.stage_label).toBeNull();
   });
 
   test("rejects forged IDs and inconsistent log pagination", async () => {

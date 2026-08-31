@@ -6,7 +6,6 @@ import {
   type DouyinContentArea,
   type DouyinContentCompany,
   type DouyinContentInstallation,
-  type DouyinContentLog,
   type DouyinContentProject,
   type DouyinContentWorkflowState,
 } from "@/repositories/douyin-miniapp-content";
@@ -24,6 +23,7 @@ import {
   ensurePlatformCosAccessConfigCache,
   resolveStoredFileUrlList,
 } from "@/services/files/file-url-resolver";
+import { mapDouyinContentLog } from "./content-log";
 
 type RepositoryPort = Pick<DouyinMiniappContentRepository,
   | "findActiveInstallation" | "findPublishedCompany" | "listServiceAreas"
@@ -180,7 +180,10 @@ export class DouyinMiniappContentService {
       ...query,
     });
     if (result.rows.length > 0) await this.prepareImageUrls();
-    return page(result.rows.map((log) => mapLog(log, this.resolveImageUrls)), query, result.total);
+    return page(result.rows.map((log) => mapDouyinContentLog(
+      log,
+      resolvedHttpsImages(log.images, this.resolveImageUrls),
+    )), query, result.total);
   }
 
   async listSiteLogs(
@@ -195,7 +198,10 @@ export class DouyinMiniappContentService {
       tenantId: context.tenantId, projectId, ...query,
     });
     if (result.rows.length > 0) await this.prepareImageUrls();
-    return page(result.rows.map((log) => mapLog(log, this.resolveImageUrls)), query, result.total);
+    return page(result.rows.map((log) => mapDouyinContentLog(
+      log,
+      resolvedHttpsImages(log.images, this.resolveImageUrls),
+    )), query, result.total);
   }
 
   private async loadContext(user?: JwtPayload): Promise<ContentContext> {
@@ -413,16 +419,6 @@ function compatibilityProject(
     start_date: project.start_date,
     updated_at: project.updated_at,
     description: project.description.slice(0, 2_000),
-  };
-}
-
-function mapLog(log: DouyinContentLog, resolveImageUrls: (value: unknown) => string[]) {
-  return {
-    id: log.id,
-    stage_code: log.stage_code,
-    node_name: log.node_name,
-    images: resolvedHttpsImages(log.images, resolveImageUrls),
-    created_at: log.created_at,
   };
 }
 

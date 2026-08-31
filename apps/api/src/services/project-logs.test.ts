@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { AppError } from "@/errors/app-error";
 import type { AuthContext } from "@/services/authorization";
+import type { ProjectWorkflowProgress } from "@/services/project-workflow-progress";
 
 const findProjectById = mock(async () => ({
   id: "550e8400-e29b-41d4-a716-446655440001",
@@ -52,7 +53,41 @@ const listBootstrapByProject = mock(async () => ({
   hasMore: true,
   total: 28,
 }));
-const assertProjectWorkflowStageMutationAllowed = mock(async () => undefined);
+const currentWorkflowProgress = {
+  source: "workflow_runtime",
+  instance_id: "instance-1",
+  instance_status: "running",
+  current_node_key: "procedure_tiling",
+  current_node_title: "瓦工铺贴",
+  current_group_key: "construction",
+  current_group_label: "施工阶段",
+  current_group_order: 20,
+  current_node_type: "procedure",
+  current_business_kind: "procedure_template",
+  current_stage_code: "tiling",
+  current_gate: null,
+  timeline_nodes: [{
+    node_key: "procedure_tiling",
+    node_title: "瓦工铺贴",
+    node_type: "procedure",
+    business_kind: "procedure_template",
+    group: { key: "construction", label: "施工阶段", order: 20 },
+    status: "current",
+    display: {
+      label: "瓦工铺贴",
+      status_label: "当前",
+      status_variant: "default",
+    },
+    attributes: { stage_code: "tiling" },
+    actions: [],
+  }],
+  pending_task_count: 1,
+  actions: [],
+  warnings: [],
+} satisfies ProjectWorkflowProgress;
+const assertProjectWorkflowStageMutationAllowed = mock(
+  async () => currentWorkflowProgress,
+);
 const assertCanCreateProjectLog = mock(async () => undefined);
 
 mock.module("@/repositories/project-logs", () => ({
@@ -166,6 +201,26 @@ describe("projectLogService", () => {
       stageCode: "tiling",
     });
     expect(createFast).not.toHaveBeenCalled();
+  });
+
+  test("snapshots the current workflow process when node name is omitted", async () => {
+    const { projectLogService } = await import("./project-logs");
+
+    await projectLogService.createProjectLog({
+      authContext,
+      payload: {
+        project_id: "550e8400-e29b-41d4-a716-446655440001",
+        stage_code: "tiling",
+        node_name: null,
+        content: "瓦工节点施工日志",
+        images: ["project-log/tiling-b.jpg"],
+      },
+    });
+
+    expect(create.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({
+      stage_code: "tiling",
+      node_name: "瓦工铺贴",
+    }));
   });
 
   test("uses workflow runtime guard when updating a construction log stage", async () => {
