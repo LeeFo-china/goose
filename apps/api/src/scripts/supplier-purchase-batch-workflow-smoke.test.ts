@@ -204,6 +204,8 @@ describe("supplier purchase batch workflow smoke", () => {
     expect(gatewaySource.match(/complete_supplier_purchase_batch_workflow_task/g))
       .toHaveLength(2);
     expect(gatewaySource).not.toContain(".begin(");
+    expect(gatewaySource).toContain("const draftItems = JSON.stringify([");
+    expect(gatewaySource).toContain("${draftItems}::jsonb");
     expect(gatewaySource).toContain("batch.status !== \"ordered\"");
     expect(gatewaySource).toContain("purchase_order.status !== \"submitted\"");
     const orderEvidenceQuery = gatewaySource.slice(
