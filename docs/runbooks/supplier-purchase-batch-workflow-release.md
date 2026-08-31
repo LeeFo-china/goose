@@ -39,12 +39,13 @@ git log -1 --oneline
 
 ## 2. 只读预检与 migration dry-run
 
-在已授权、已 link 的 dev 环境运行；不要打印数据库 URL：
+在已授权的 dev 环境运行。以下命令必须共用同一个显式直连目标；不要打印 URL，也不要
+混用 linked、本地或项目 ID：
 
 ```bash
 supabase --version
-supabase db push --dry-run --db-url "$SUPABASE_DB_DIRECT_URL"
-supabase migration list
+supabase db push --dry-run --db-url "$DEV_SUPABASE_DB_DIRECT_URL"
+supabase migration list --db-url "$DEV_SUPABASE_DB_DIRECT_URL"
 ```
 
 dry-run 必须只列出上面的 10 条。若同时出现非事务 migration，按
@@ -53,11 +54,29 @@ workflow，不得用 CLI 绕过并发索引规则或手工登记 history。正�
 
 ## 3. 发布数据库、API 和 Admin
 
-1. 通过既定 dev database migration workflow 应用审查后的清单。
-2. 再运行 `supabase migration list`，确认 Local/Remote 精确对齐并保存输出摘要。
-3. 在这个已对齐环境运行仓库官方 `gen` 命令，机械生成 `database.ts`；审查 diff 仅来自
-   已发布 migration，运行 API typecheck/build 后提交生成文件。任何既有 schema 漂移都必须
-   先解释，禁止手工修类型或夹带无关大范围 diff。这是 API 发布前硬门禁。
+1. 通过既定 dev database migration workflow、仍以
+   `--db-url "$DEV_SUPABASE_DB_DIRECT_URL"` 应用审查后的清单。
+2. 再运行
+   `supabase migration list --db-url "$DEV_SUPABASE_DB_DIRECT_URL"`，确认本地 migration
+   history 与这个 dev 目标精确对齐并保存输出摘要。
+3. 在这个已对齐 dev 目标机械生成 `public,graphql_public` 两个当前类型文件使用的 schema，
+   先输出临时文件再审查；不得直接覆盖：
+
+   ```bash
+   GENERATED_TYPES_FILE="$(mktemp /tmp/gooes-database-types.XXXXXX.ts)"
+   supabase gen types typescript --db-url "$DEV_SUPABASE_DB_DIRECT_URL" --schema public,graphql_public > "$GENERATED_TYPES_FILE"
+   git diff --no-index apps/api/src/types/database.ts "$GENERATED_TYPES_FILE"
+   ```
+
+   只有 migration history 对齐、差异全部可解释且只来自已发布 migration，才机械替换：
+
+   ```bash
+   cp "$GENERATED_TYPES_FILE" apps/api/src/types/database.ts
+   unlink "$GENERATED_TYPES_FILE"
+   ```
+
+   随后运行 API typecheck/build 并提交生成文件。任何既有 schema 漂移都必须先解释，禁止
+   手工修类型或夹带无关大范围 diff。这是 API 发布前硬门禁。
 4. 记录包含官方生成类型的最终 main commit，发布该 commit 的 API 与 Admin；记录两个
    revision、构建时间和健康检查结果。
 5. 不开启任何租户的 `purchase_batch_workflow_enabled`，先完成 flag=false 基线。
@@ -128,10 +147,15 @@ name、planning/execution time 和 buffer 摘要；出现大表 Seq Scan、超�
 
 ## 紧急止血与前向回滚
 
-1. 第一动作是通过现有 Admin/API 将受影响租户
-   `purchase_batch_workflow_enabled=false`，记录审计和 setting version。
-2. 停止扩大灰度；保留 API requestId、batch/round/instance/task/order 和日志证据。
-3. 不回滚或删除 workflow 历史、预算记录、请购单、采购单、command event 和 migration
+1. 第一动作是进入维护窗口，并在网关或当前 API revision 同时阻断采购 submit 和新旧 review 入口；
+   停止扩大灰度，保留 API requestId、batch/round/instance/task/order 和日志证据。
+2. 通过只读投影盘点所有 running 实例，按 batch、round、instance、current task 建账；逐批
+   完成、withdraw 或受控 cancel。禁止丢弃仍在运行的实例，也禁止让旧 review 绕过工作流。
+3. 复核 subject state、预算占用和任务均已收敛；只有确认 `running=0` 后，才通过现有
+   Admin/API 设置 `purchase_batch_workflow_enabled=false`，记录审计和 setting version，
+   再回退 API/Admin revision。若紧急情况下必须立即关 flag，必须同时阻断旧 review 入口，
+   直到 running 实例完成上述受控收敛。
+4. 不回滚或删除 workflow 历史、预算记录、请购单、采购单、command event 和 migration
    history。
-4. 根因修复必须用新的前向 migration/代码提交，经同一 dry-run、矩阵和 dev 门禁后发布。
-5. 只有代码和数据库兼容性得到确认后才回退 API/Admin revision；禁止手工远端修库。
+5. 根因修复必须用新的前向 migration/代码提交，经同一 dry-run、矩阵和 dev 门禁后发布；
+   禁止手工远端修库。
