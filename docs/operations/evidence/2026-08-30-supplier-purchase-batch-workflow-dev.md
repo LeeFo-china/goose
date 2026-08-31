@@ -2,9 +2,10 @@
 
 ## 当前结论
 
-- 记录日期：2026-08-31（文件名沿用 Task12 计划日期）。
-- 功能与已部署 API/Admin revision：
-  `8594acba06d9909419954039c42dd8da7460f613`。
+- 记录日期：2026-09-01（文件名沿用 Task12 计划日期）。
+- 当前已部署 API/Admin revision：
+  `812cd9766e79e7b318ce2a81b1081054d3a1d083`；该 revision 的受保护 dev
+  EXPLAIN 基数门禁已通过。
 - 功能分支：`feat/supplier-purchase-batch-workflow-design`。
 - Task12 开始前基线：`3841a2c698aad53a19be9529c4cd2c57c9874b29`。
 - 10 条 migration 已通过受保护 dev workflow 应用，发布后 history 为 550 条、最新
@@ -95,7 +96,7 @@ API 静态检查：`pnpm exec tsc -p tsconfig.json --noEmit` exit 0。smoke 脚�
 UUID 参数均为必填、默认 dry-run 不调用写路径、execute 使用显式审批人真实完成审批、
 所有列表 `LIMIT/pageSize <= 100`、失败输出不包含原始数据库错误或敏感值。
 
-## EXPLAIN 证据边界
+## EXPLAIN 证据
 
 一次性 clone 使用 `SET enable_seqscan=off` 执行结构可用性检查，观察到：
 
@@ -104,8 +105,55 @@ UUID 参数均为必填、默认 dry-run 不调用写路径、execute 使用显�
 - subject state batch：`idx_workflow_subject_states_subject`。
 
 该设置只证明索引结构可用，不能代表默认 planner 或 dev 真实基数性能，不作为“无大表
-顺扫”的发布结论。Task13 的硬门禁是在授权 dev、只读事务、代表性数据基数、默认 planner
-下重跑三条 `EXPLAIN (ANALYZE, BUFFERS)`；未取得该证据前不得扩大灰度。
+顺扫”的发布结论。正式证据已由授权 dev runner 在只读事务、真实 dev 基数与受控 planner
+设置下取得：
+
+- 最终实现 revision：`812cd9766e79e7b318ce2a81b1081054d3a1d083`；
+- 最终构建：[run 33423091122](https://github.com/LeeFo-china/goose/actions/runs/33423091122)，
+  成功；
+- dev 自动发布：[run 33423332354](https://github.com/LeeFo-china/goose/actions/runs/33423332354)，
+  成功并部署上述 immutable revision；
+- 受保护 EXPLAIN 门禁：
+  [run 33423552325](https://github.com/LeeFo-china/goose/actions/runs/33423552325)，成功；
+  migration history aligned、目标 migration present，三条查询均满足 execution、planning、
+  shared read、temp block 与 statement timeout 阈值；
+- 脱敏 artifact：
+  `supplier-purchase-workflow-explain-812cd9766e79e7b318ce2a81b1081054d3a1d083`
+  （artifact ID `9769843242`），仅包含 `migration-evidence.json` 和
+  `workflow-explain-summary.json`，不含数据库 URL、业务 UUID、原始执行计划或密钥。
+
+最终摘要：
+
+| 查询 | 基数分档 | Planning | Execution | shared hit/read | 计划节点 / 索引 |
+| --- | --- | ---: | ---: | ---: | --- |
+| pending task | 211 / small | 0.763 ms | 0.071 ms | 11 / 0 | Limit、Incremental Sort、Index Scan；`idx_workflow_tasks_instance_status` |
+| running instance | 59 / small | 2.121 ms | 0.036 ms | 1 / 0 | Limit、Index Only Scan；`workflow_instances_purchase_batch_lookup_idx` |
+| subject state | 45 / small | 0.076 ms | 0.025 ms | 2 / 0 | Limit、Seq Scan |
+
+门禁阈值为 execution 250 ms、planning 50 ms、shared read 20,000、temp read/write 0、
+statement timeout 5,000 ms。`subject state` 只有 45 行，属于门禁明确允许的小基数范围；其
+Seq Scan 未触发“大基数顺扫”拒绝条件，且耗时与 buffer 均在阈值内。
+
+门禁修复链路保留如下，所有诊断均为受保护、只读执行：
+
+- [run 33398905613](https://github.com/LeeFo-china/goose/actions/runs/33398905613)
+  因查询不存在的 `pg_roles.rolbypassrl` 返回 `DATABASE_FAILURE`；revision
+  `2b276b5a` 改为读取真实角色字段并消除该根因；
+- [run 33401640537](https://github.com/LeeFo-china/goose/actions/runs/33401640537)
+  因 dev 管理的 `effective_cache_size` 与 PostgreSQL boot 值不同而返回
+  `NON_DEFAULT_PLANNER`；[诊断 run 33418391961](https://github.com/LeeFo-china/goose/actions/runs/33418391961)
+  确认 current `128MB`、raw `16384`、boot `524288`、source `configuration file`，
+  revision `6f548398` 将这个精确元组登记为受控基线，并继续拒绝其他漂移；
+- [run 33421542006](https://github.com/LeeFo-china/goose/actions/runs/33421542006)
+  因 EXPLAIN `Settings` 还包含平台管理的 `search_path` 而返回
+  `NON_DEFAULT_PLANNER`；[诊断 run 33421831850](https://github.com/LeeFo-china/goose/actions/runs/33421831850)
+  与 [run 33422018634](https://github.com/LeeFo-china/goose/actions/runs/33422018634)
+  确认 current/raw 为 `\"\\$user\", public, extensions`、boot 为
+  `\"$user\", public`、source 为 `user`，revision `812cd976` 只登记该精确元组。
+
+最终实现仍会拒绝错误路径、错误 source、附加 schema，以及任何未登记的 planner 设置；
+`source=user` 没有被泛化放行。此次门禁修复未增加 migration、未改变 API 契约，也未改动
+Orange 仓库。
 
 ## dev 租户灰度阻塞
 
@@ -176,7 +224,6 @@ workflow 均为 false；租户管理员访问平台设置接口返回 HTTP 403
 ## 灰度前待补证据
 
 - flag=false 基线及 flag=true setting version；
-- 默认 planner 的只读 dev EXPLAIN 摘要；
 - smoke dry-run 输出，以及明确授权后的 execute requestId/batch/round/instance/task/
   budget/order/supplierCount；
 - 已发布 dev API 上使用两个不同批次分别调用旧 `/review` 和新 workflow task complete 的
