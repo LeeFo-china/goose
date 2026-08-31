@@ -65,7 +65,26 @@ describe("supplier purchase batch workflow release runbook", () => {
     for (const errorCode of [
       "WORKFLOW_TASK_NOT_PENDING",
       "SUPPLIER_PURCHASE_BATCH_VERSION_CONFLICT",
+      "SUPPLIER_PURCHASE_BATCH_APPROVAL_ROUND_STALE",
       "SUPPLIER_PURCHASE_BATCH_SELF_REVIEW",
     ]) expect(runbook).toContain(errorCode);
+    expect(runbook).toContain(
+      "旧 `/review` 的 stale version：保持当前轮 task 为 pending",
+    );
+    expect(runbook).toContain(
+      "新 task complete 的 stale round：保留 round 1 的旧 taskId",
+    );
+    expect(runbook).toContain(
+      "新 complete body 仍只传 `action/reason/output`",
+    );
+    expect(runbook).toContain(
+      "申请人同时具备该节点审批权限",
+    );
+    expect(runbook).toContain(
+      "先以原 key 原 payload 确认 replay，再改用新 key",
+    );
+    expect(runbook).not.toContain(
+      "旧 `/review` 与新 task complete 均以 stale version",
+    );
   });
 });

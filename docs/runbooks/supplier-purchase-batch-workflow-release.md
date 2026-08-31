@@ -169,12 +169,25 @@ batchId、taskId、key 和响应。成功后从详情及采购单分页接口对
 - workflow instance completed、pending task 为 0、预算 commitment 与订单终态一致；
 - 同 key 同 payload 各自重放为原结果，event/order 数量不增加。
 
-稳定错误码也必须通过已发布 API 对照，每个负例使用另外的独立批次和 key，避免前一操作污染
-后一个断言：旧 `/review` 与新 task complete 均以 stale version 验证 HTTP 409
-`SUPPLIER_PURCHASE_BATCH_VERSION_CONFLICT`；均以提交人审批验证 HTTP 409
-`SUPPLIER_PURCHASE_BATCH_SELF_REVIEW`；成功后用不同 key 再处理已完成 task，验证 HTTP 409
-`WORKFLOW_TASK_NOT_PENDING`。任一路径返回不同终态、额外订单、非稳定 code 或自动 fallback，
-立即停止灰度并保留两批证据。
+稳定错误码必须按各入口真实参数和检查顺序在已发布 API 验证；每个负例使用另外的独立批次
+和 key，避免前一操作污染后一个断言：
+
+1. 旧 `/review` 的 stale version：保持当前轮 task 为 pending，只把 body 的
+   `expected_version` 改为小于当前 batch version，验证 HTTP 409
+   `SUPPLIER_PURCHASE_BATCH_VERSION_CONFLICT`；不得先完成或撤回该批次。
+2. 新 task complete 的 stale round：保留 round 1 的旧 taskId，先通过 withdraw、编辑并重提
+   形成 round 2，再由原本有权的审批人用新 key 调用旧 taskId。
+   新 complete body 仍只传 `action/reason/output`，不得伪造 `expected_version` 或 compat 字段；预期 HTTP 409
+   `SUPPLIER_PURCHASE_BATCH_APPROVAL_ROUND_STALE`。该路径已有 production fixture 覆盖。
+3. self-review：为旧、新入口各建一个独立批次，申请人同时具备该节点审批权限；由该申请人
+   提交后，在当前 round、当前 pending task 上使用本人令牌审批。旧入口带当前
+   `expected_version`，新入口只传标准 complete body；均应返回 HTTP 409
+   `SUPPLIER_PURCHASE_BATCH_SELF_REVIEW`，且 task/订单不变。
+4. 已完成 task：对 A、B 的成功请求先以原 key 原 payload 确认 replay，再改用新 key 对同一
+   已完成 task 发送同一动作。旧兼容桥通过冻结 event/task 解析，新入口直接使用原 taskId；
+   均应返回 HTTP 409 `WORKFLOW_TASK_NOT_PENDING`，不得自动换入口或再生成订单。
+
+任一路径返回不同终态、额外订单、非稳定 code 或自动 fallback，立即停止灰度并保留证据。
 
 ## 紧急止血与前向回滚
 
