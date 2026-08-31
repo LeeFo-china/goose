@@ -263,7 +263,6 @@ export type Database = {
       }
       ai_models: {
         Row: {
-          category_id: string | null
           code: string
           created_at: string
           id: string
@@ -275,7 +274,6 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          category_id?: string | null
           code: string
           created_at?: string
           id?: string
@@ -287,7 +285,6 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          category_id?: string | null
           code?: string
           created_at?: string
           id?: string
@@ -13160,6 +13157,7 @@ export type Database = {
       }
       supplier_purchase_batches: {
         Row: {
+          approval_round: number
           batch_no: string
           budget_checked_at: string | null
           budget_snapshot: Json
@@ -13194,6 +13192,7 @@ export type Database = {
           version: number
         }
         Insert: {
+          approval_round?: number
           batch_no?: string
           budget_checked_at?: string | null
           budget_snapshot?: Json
@@ -13228,6 +13227,7 @@ export type Database = {
           version?: number
         }
         Update: {
+          approval_round?: number
           batch_no?: string
           budget_checked_at?: string | null
           budget_snapshot?: Json
@@ -19432,6 +19432,7 @@ export type Database = {
           private_catalog_writes_enabled: boolean
           private_supplier_writes_enabled: boolean
           procurement_snapshot_v1_enabled: boolean
+          purchase_batch_workflow_enabled: boolean
           require_active_contract_for_new_order: boolean
           tenant_id: string
           updated_at: string
@@ -19446,6 +19447,7 @@ export type Database = {
           private_catalog_writes_enabled?: boolean
           private_supplier_writes_enabled?: boolean
           procurement_snapshot_v1_enabled?: boolean
+          purchase_batch_workflow_enabled?: boolean
           require_active_contract_for_new_order?: boolean
           tenant_id: string
           updated_at?: string
@@ -19460,6 +19462,7 @@ export type Database = {
           private_catalog_writes_enabled?: boolean
           private_supplier_writes_enabled?: boolean
           procurement_snapshot_v1_enabled?: boolean
+          purchase_batch_workflow_enabled?: boolean
           require_active_contract_for_new_order?: boolean
           tenant_id?: string
           updated_at?: string
@@ -22532,6 +22535,104 @@ export type Database = {
       }
     }
     Functions: {
+      __gooes_cancel_supplier_purchase_batch_v1: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_batch_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_reason: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      __gooes_complete_supplier_purchase_batch_workflow_task_v1: {
+        Args: {
+          p_action: string
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_batch_id: string
+          p_idempotency_key: string
+          p_output: Json
+          p_reason: string
+          p_task_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      __gooes_employee_has_project_permission_scope: {
+        Args: {
+          p_employee_id: string
+          p_permission_code: string
+          p_project_id: string
+          p_tenant_id: string
+        }
+        Returns: boolean
+      }
+      __gooes_ensure_supplier_purchase_batch_workflow_template: {
+        Args: { p_tenant_id: string }
+        Returns: string
+      }
+      __gooes_initialize_default_decoration_tenant_20260830: {
+        Args: {
+          p_admin_name: string
+          p_admin_phone: string
+          p_operator_employee_id?: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      __gooes_save_supplier_purchase_batch_draft_v1: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_batch_id: string
+          p_expected_delivery_date: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_items: Json
+          p_project_id: string
+          p_reason: string
+          p_remark: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      __gooes_supplier_purchase_batch_budget_preflight: {
+        Args: { p_batch_id: string; p_project_id: string; p_tenant_id: string }
+        Returns: Json
+      }
+      __gooes_supplier_workflow_reachable_approvals: {
+        Args: { p_context: Json; p_snapshot: Json }
+        Returns: Json[]
+      }
+      __gooes_workflow_node_has_candidate: {
+        Args: {
+          p_context: Json
+          p_definition_id: string
+          p_node: Json
+          p_project_id: string
+          p_subject_id: string
+          p_subject_type: string
+          p_submitter_employee_id: string
+          p_tenant_id: string
+          p_version_id: string
+        }
+        Returns: boolean
+      }
+      __gooes_workflow_task_projection: {
+        Args: {
+          p_context: Json
+          p_definition_id: string
+          p_node: Json
+          p_subject_id: string
+          p_subject_type: string
+          p_tenant_id: string
+          p_version_id: string
+        }
+        Returns: Json
+      }
       abandon_tenant_supplier_code_reservations: {
         Args: { p_limit?: number }
         Returns: number
@@ -24840,7 +24941,40 @@ export type Database = {
         }
         Returns: Json
       }
+      command_supplier_purchasable_product_v2: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_idempotency_key: string
+          p_price: Json
+          p_product: Json
+          p_product_id: string
+          p_sku: Json
+          p_sku_id: string
+          p_supplier_id: string
+          p_tenant_id: string
+          p_tenant_supplier_id: string
+        }
+        Returns: Json
+      }
       command_supplier_sku_v2: {
+        Args: {
+          p_action: string
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_ownership_scope: string
+          p_payload: Json
+          p_sku_id: string
+          p_supplier_id: string
+          p_supplier_product_id: string
+          p_tenant_id: string
+          p_tenant_supplier_id: string
+        }
+        Returns: Json
+      }
+      command_supplier_sku_v3: {
         Args: {
           p_action: string
           p_actor_employee_id: string
@@ -24948,6 +25082,20 @@ export type Database = {
       complete_douyin_unsupported_event: {
         Args: { p_claim_token: string; p_event_key: string }
         Returns: boolean
+      }
+      complete_supplier_purchase_batch_workflow_task: {
+        Args: {
+          p_action: string
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_batch_id: string
+          p_idempotency_key: string
+          p_output: Json
+          p_reason: string
+          p_task_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
       }
       complete_tenant_douyin_authorization_intent: {
         Args: {
@@ -26617,6 +26765,43 @@ export type Database = {
           version_id: string
         }[]
       }
+      list_accessible_supplier_purchase_batch_workflow_tasks: {
+        Args: {
+          p_employee_id: string
+          p_page?: number
+          p_page_size?: number
+          p_permission_codes?: string[]
+          p_role_codes?: string[]
+          p_status?: string
+          p_subject_id?: string
+          p_tenant_id: string
+          p_visible_project_ids?: string[]
+        }
+        Returns: {
+          assignee_employee: Json
+          assignee_employee_id: string
+          assignee_permission_code: string
+          assignee_role_code: string
+          completed_at: string
+          completed_by: string
+          created_at: string
+          definition_id: string
+          due_at: string
+          id: string
+          instance: Json
+          instance_id: string
+          instance_node_id: string
+          node_id: string
+          node_key: string
+          node_type: string
+          status: string
+          tenant_id: string
+          title: string
+          total_count: number
+          updated_at: string
+          version_id: string
+        }[]
+      }
       list_accessible_workflow_tasks: {
         Args: {
           p_employee_id?: string
@@ -26628,6 +26813,73 @@ export type Database = {
           p_status?: string
           p_subject_id?: string
           p_subject_type?: string
+          p_tenant_id: string
+        }
+        Returns: {
+          assignee_employee: Json
+          assignee_employee_id: string
+          assignee_permission_code: string
+          assignee_role_code: string
+          completed_at: string
+          completed_by: string
+          created_at: string
+          definition_id: string
+          due_at: string
+          id: string
+          instance: Json
+          instance_id: string
+          instance_node_id: string
+          node_id: string
+          node_key: string
+          node_type: string
+          status: string
+          tenant_id: string
+          title: string
+          total_count: number
+          updated_at: string
+          version_id: string
+        }[]
+      }
+      list_accessible_workflow_tasks_by_subject_ids: {
+        Args: {
+          p_employee_id?: string
+          p_limit?: number
+          p_permission_codes?: string[]
+          p_role_codes?: string[]
+          p_subject_ids?: string[]
+          p_subject_type: string
+          p_tenant_id: string
+        }
+        Returns: {
+          assignee_employee_id: string
+          assignee_permission_code: string
+          assignee_role_code: string
+          created_at: string
+          id: string
+          instance: Json
+          instance_id: string
+          instance_node_id: string
+          node_id: string
+          node_key: string
+          node_type: string
+          status: string
+          title: string
+        }[]
+      }
+      list_accessible_workflow_tasks_with_supplier_scope: {
+        Args: {
+          p_employee_id?: string
+          p_instance_id?: string
+          p_page?: number
+          p_page_size?: number
+          p_permission_codes?: string[]
+          p_role_codes?: string[]
+          p_status?: string
+          p_subject_id?: string
+          p_subject_type?: string
+          p_supplier_access_allowed?: boolean
+          p_supplier_employee_id?: string
+          p_supplier_visible_project_ids?: string[]
           p_tenant_id: string
         }
         Returns: {
@@ -26864,6 +27116,19 @@ export type Database = {
           p_visible_project_ids?: string[]
         }
         Returns: Json
+      }
+      list_supplier_product_sku_counts: {
+        Args: {
+          p_ownership_scope: string
+          p_product_ids: string[]
+          p_supplier_id: string
+          p_tenant_id?: string
+        }
+        Returns: {
+          active_sku_count: number
+          sku_count: number
+          supplier_product_id: string
+        }[]
       }
       list_supplier_purchase_order_supplier_options: {
         Args: {
@@ -28735,23 +29000,42 @@ export type Database = {
         }
         Returns: Json
       }
-      set_tenant_supplier_rollout_settings: {
-        Args: {
-          p_actor_employee_id: string
-          p_actor_user_id: string
-          p_expected_version: number
-          p_idempotency_key: string
-          p_module_enabled: boolean
-          p_ownership_reads_enabled: boolean
-          p_private_catalog_writes_enabled: boolean
-          p_private_supplier_writes_enabled: boolean
-          p_procurement_snapshot_v1_enabled: boolean
-          p_reason?: string
-          p_require_active_contract_for_new_order: boolean
-          p_tenant_id: string
-        }
-        Returns: Json
-      }
+      set_tenant_supplier_rollout_settings:
+        | {
+            Args: {
+              p_actor_employee_id: string
+              p_actor_user_id: string
+              p_expected_version: number
+              p_idempotency_key: string
+              p_module_enabled: boolean
+              p_ownership_reads_enabled: boolean
+              p_private_catalog_writes_enabled: boolean
+              p_private_supplier_writes_enabled: boolean
+              p_procurement_snapshot_v1_enabled: boolean
+              p_reason?: string
+              p_require_active_contract_for_new_order: boolean
+              p_tenant_id: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_actor_employee_id: string
+              p_actor_user_id: string
+              p_expected_version: number
+              p_idempotency_key: string
+              p_module_enabled: boolean
+              p_ownership_reads_enabled: boolean
+              p_private_catalog_writes_enabled: boolean
+              p_private_supplier_writes_enabled: boolean
+              p_procurement_snapshot_v1_enabled: boolean
+              p_purchase_batch_workflow_enabled: boolean
+              p_reason?: string
+              p_require_active_contract_for_new_order: boolean
+              p_tenant_id: string
+            }
+            Returns: Json
+          }
       start_workflow_instance: {
         Args: {
           p_context: Json
@@ -28825,6 +29109,17 @@ export type Database = {
         Returns: Json
       }
       submit_supplier_purchase_batch: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_batch_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      submit_supplier_purchase_batch_with_workflow: {
         Args: {
           p_actor_employee_id: string
           p_actor_user_id: string
@@ -29461,6 +29756,18 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      withdraw_supplier_purchase_batch_workflow: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_batch_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_reason: string
+          p_tenant_id: string
+        }
+        Returns: Json
       }
       withdraw_tenant_onboarding_application: {
         Args: {
