@@ -40,6 +40,41 @@ describe("public site progress presentation", () => {
     }]);
   });
 
+  test("uses the concrete process before standard and generic fallbacks", () => {
+    const progress = buildSiteProgress([
+      {
+        id: FIRST_ID,
+        stage_code: "plumbing_electrical",
+        stage_label: "水电",
+        node_name: "强弱电开槽验收",
+        images: [],
+        created_at: "2026-08-31T06:30:00.000Z",
+      },
+      {
+        id: SECOND_ID,
+        stage_code: "tiling",
+        stage_label: "瓦工",
+        node_name: null,
+        images: [],
+        created_at: "2026-08-30T06:30:00.000Z",
+      },
+      {
+        id: THIRD_ID,
+        stage_code: null,
+        stage_label: null,
+        node_name: null,
+        images: [],
+        created_at: "2026-08-29T06:30:00.000Z",
+      },
+    ]);
+
+    expect(progress.map((item) => item.title)).toEqual([
+      "强弱电开槽验收",
+      "瓦工",
+      "施工记录",
+    ]);
+  });
+
   test("appends a page stably without duplicates", () => {
     const current = buildSiteProgress([
       { id: SECOND_ID, stage_code: null, node_name: "木作阶段", images: [],

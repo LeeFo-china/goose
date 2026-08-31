@@ -5,6 +5,14 @@ import {
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const STAGE_LABELS: Record<string, string> = {
+  measure: "量房",
+  demolition: "拆改",
+  plumbing_electrical: "水电",
+  tiling: "瓦工",
+  woodwork: "木工",
+  painting: "油工",
+  installation: "安装",
+  completion: "竣工",
   started: "已开工",
   construction: "施工中",
   constructing: "施工中",
@@ -33,10 +41,15 @@ export function buildSiteProgress(value: unknown): SiteProgressItem[] {
       && item.node_name.length <= 120
       ? item.node_name.trim()
       : "";
+    const stageLabel = typeof item.stage_label === "string" && item.stage_label.trim()
+      && item.stage_label.length <= 80
+      ? item.stage_label.trim()
+      : "";
     progress.push({
       id: item.id,
       stageCode,
-      title: nodeName || (stageCode ? STAGE_LABELS[stageCode] : "") || "施工进度",
+      title: nodeName || stageLabel || (stageCode ? STAGE_LABELS[stageCode] : "")
+        || "施工记录",
       images: buildImageGallery(item.images),
       createdAt: item.created_at,
       date: item.created_at.slice(0, 10),
