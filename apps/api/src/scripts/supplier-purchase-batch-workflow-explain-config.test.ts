@@ -12,6 +12,14 @@ import {
 const DATABASE_URL =
   "postgresql://dev-reader:secret@db.example.test:5432/gooes";
 const EVIDENCE_FILE = "/tmp/supplier-purchase-workflow-evidence.json";
+const EXPECTED_SOURCE = {
+  sourceRunId: "33359680214",
+  artifactName:
+    "supplier-purchase-workflow-acceptance-9d02854a88d5ca83a2f883b923de1ffcd7d49bd3",
+  tenantId: "3eebca47-961f-4899-b976-a3d3208d326b",
+  batchId: "53298aa5-a3f6-45c3-8820-4cbfa15abfdb",
+  instanceId: "158649b4-c356-4b04-abb4-d1d1b65f08d5",
+} as const;
 
 function validEnv(): Record<string, string> {
   return {
@@ -43,17 +51,34 @@ function expectWorkflowExplainError(
 
 describe("supplier purchase batch workflow EXPLAIN evidence input", () => {
   test("locks the exact accepted source evidence", () => {
-    expect(WORKFLOW_EXPLAIN_SOURCE).toEqual({
-      sourceRunId: "33359680214",
-      artifactName:
-        "supplier-purchase-workflow-acceptance-9d02854a88d5ca83a2f883b923de1ffcd7d49bd3",
-      tenantId: "3eebca47-961f-4899-b976-a3d3208d326b",
-      batchId: "53298aa5-a3f6-45c3-8820-4cbfa15abfdb",
-      instanceId: "158649b4-c356-4b04-abb4-d1d1b65f08d5",
-    });
+    expect(WORKFLOW_EXPLAIN_SOURCE).toEqual(EXPECTED_SOURCE);
     expect(parseWorkflowExplainEvidenceInput({
       ...WORKFLOW_EXPLAIN_SOURCE,
-    })).toBe(WORKFLOW_EXPLAIN_SOURCE);
+    })).toEqual(EXPECTED_SOURCE);
+  });
+
+  test("keeps the locked source immutable at runtime", () => {
+    const originalRunId = WORKFLOW_EXPLAIN_SOURCE.sourceRunId;
+    let wasMutated = false;
+
+    try {
+      wasMutated = Reflect.set(
+        WORKFLOW_EXPLAIN_SOURCE,
+        "sourceRunId",
+        "untrusted-run-id",
+      );
+
+      expect(wasMutated).toBe(false);
+      expect(Object.isFrozen(WORKFLOW_EXPLAIN_SOURCE)).toBe(true);
+      expect(WORKFLOW_EXPLAIN_SOURCE).toEqual(EXPECTED_SOURCE);
+      expect(parseWorkflowExplainEvidenceInput({
+        ...EXPECTED_SOURCE,
+      })).toEqual(EXPECTED_SOURCE);
+    } finally {
+      if (wasMutated) {
+        Reflect.set(WORKFLOW_EXPLAIN_SOURCE, "sourceRunId", originalRunId);
+      }
+    }
   });
 
   test("rejects every changed fixed source value with a safe stable error", () => {
