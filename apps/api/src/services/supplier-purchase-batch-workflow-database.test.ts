@@ -139,8 +139,9 @@ SELECT 'TASK12_RELEASE_MATRIX_READY';
 
 function productionCloneScript(container: string) {
   const database = `gooes_task12_release_${process.pid}_${crypto.randomUUID().replaceAll("-", "")}`;
-  const migrations = [
-    "20260830100000_standardize_new_tenant_organization_template.sql",
+  const prerequisiteMigration =
+    "20260830100000_standardize_new_tenant_organization_template.sql";
+  const featureMigrations = [
     "20260830110000_add_supplier_purchase_batch_workflow_foundation.sql",
     "20260830111000_extend_supplier_workflow_rollout_command.sql",
     "20260830112000_seed_supplier_purchase_batch_workflow.sql",
@@ -174,9 +175,12 @@ cleanup() {
   exit $status
 }
 ensure_workflow_schema() {
-  schema_state=$(psql_admin -Atqc "select (to_regclass('public.workflow_instances_purchase_batch_lookup_idx') is not null)::int::text || (to_regprocedure('public.withdraw_supplier_purchase_batch_workflow(uuid,uuid,integer,text,uuid,uuid,text)') is not null)::int::text" </dev/null)
+  schema_state=$1
+  if [ "$schema_state" = "auto" ]; then schema_state=$(psql_admin -Atqc "select (to_regclass('public.workflow_instances_purchase_batch_lookup_idx') is not null)::int::text || (to_regprocedure('public.withdraw_supplier_purchase_batch_workflow(uuid,uuid,integer,text,uuid,uuid,text)') is not null)::int::text" </dev/null); fi
   if [ "$schema_state" = "00" ]; then
-    for migration in ${migrations}; do psql_admin < "$repo_root/supabase/migrations/$migration" >/dev/null; done
+    prerequisite_exists=$(psql_admin -Atqc "select coalesce((pg_get_functiondef(to_regprocedure('public.initialize_default_decoration_tenant(uuid,text,text,uuid)')) like '%2026.08.30%')::int, 0)" </dev/null)
+    if [ "$prerequisite_exists" = "0" ]; then psql_admin < "$repo_root/supabase/migrations/${prerequisiteMigration}" >/dev/null; fi
+    for migration in ${featureMigrations}; do psql_admin < "$repo_root/supabase/migrations/$migration" >/dev/null; done
     echo TASK12_SCHEMA_APPLIED_BASELINE
   elif [ "$schema_state" = "11" ]; then
     echo TASK12_SCHEMA_SKIPPED_HEAD
@@ -200,8 +204,11 @@ wait_for_database_condition() {
 trap cleanup EXIT
 docker exec -e PGPASSWORD=postgres "$container" createdb -h 127.0.0.1 -U supabase_admin "$database"
 docker exec "$container" pg_dump -U postgres -d postgres --schema-only --no-owner --no-privileges | psql_admin >/dev/null
-ensure_workflow_schema
-ensure_workflow_schema
+if ensure_workflow_schema mixed >/dev/null 2>&1; then echo "Mixed state was not rejected" >&2; exit 1; else echo TASK12_SCHEMA_MIXED_REJECTED; fi
+initial_schema_state=$(psql_admin -Atqc "select (to_regclass('public.workflow_instances_purchase_batch_lookup_idx') is not null)::int::text || (to_regprocedure('public.withdraw_supplier_purchase_batch_workflow(uuid,uuid,integer,text,uuid,uuid,text)') is not null)::int::text" </dev/null)
+echo "TASK12_INITIAL_SCHEMA_STATE=$initial_schema_state"
+ensure_workflow_schema "$initial_schema_state"
+ensure_workflow_schema auto
 echo TASK12_SCHEMA_HEAD_VALIDATED
 psql_admin < "$repo_root/supabase/tests/supplier_purchase_batch_workflow_withdraw_production_fixture.sql" >/dev/null
 psql_admin <<'TASK12_SQL'
@@ -256,8 +263,21 @@ test("runs release matrix, concurrency, and structural index checks on a product
     new Response(child.stderr).text(),
   ]);
   expect(exitCode, stderr).toBe(0);
-  expect(stdout).toContain("TASK12_SCHEMA_APPLIED_BASELINE");
-  expect(stdout).toContain("TASK12_SCHEMA_SKIPPED_HEAD");
+  const initialSchemaState = stdout.match(
+    /TASK12_INITIAL_SCHEMA_STATE=(00|11)/,
+  )?.[1];
+  const appliedCount =
+    stdout.match(/TASK12_SCHEMA_APPLIED_BASELINE/g)?.length ?? 0;
+  const skippedCount = stdout.match(/TASK12_SCHEMA_SKIPPED_HEAD/g)?.length ?? 0;
+  expect(initialSchemaState).toBeDefined();
+  expect(stdout).toContain("TASK12_SCHEMA_MIXED_REJECTED");
+  if (initialSchemaState === "00") {
+    expect(appliedCount).toBe(1);
+    expect(skippedCount).toBe(1);
+  } else {
+    expect(appliedCount).toBe(0);
+    expect(skippedCount).toBe(2);
+  }
   expect(stdout).toContain("TASK12_SCHEMA_HEAD_VALIDATED");
   expect(stdout).toContain("TASK12_RELEASE_MATRIX_READY");
   expect(stdout).toContain("TASK12_REVIEW_RACE_BLOCKED");
