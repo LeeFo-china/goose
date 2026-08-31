@@ -3,8 +3,8 @@
 ## 当前结论
 
 - 记录日期：2026-09-01（文件名沿用 Task12 计划日期）。
-- 当前已部署 API/Admin revision：
-  `812cd9766e79e7b318ce2a81b1081054d3a1d083`；该 revision 的受保护 dev
+- 当前已部署 API revision：`812cd9766e79e7b318ce2a81b1081054d3a1d083`；本轮 Admin、
+  Web、H5 未命中构建/发布，本证据不更新其部署 revision。API revision 的受保护 dev
   EXPLAIN 基数门禁已通过。
 - 功能分支：`feat/supplier-purchase-batch-workflow-design`。
 - Task12 开始前基线：`3841a2c698aad53a19be9529c4cd2c57c9874b29`。
@@ -112,7 +112,7 @@ UUID 参数均为必填、默认 dry-run 不调用写路径、execute 使用显�
 - 最终构建：[run 33423091122](https://github.com/LeeFo-china/goose/actions/runs/33423091122)，
   成功；
 - dev 自动发布：[run 33423332354](https://github.com/LeeFo-china/goose/actions/runs/33423332354)，
-  成功并部署上述 immutable revision；
+  成功发布上述 immutable revision 的 API 与命中的 workers；Admin、Web、H5 未命中；
 - 受保护 EXPLAIN 门禁：
   [run 33423552325](https://github.com/LeeFo-china/goose/actions/runs/33423552325)，成功；
   migration history aligned、目标 migration present，三条查询均满足 execution、planning、
