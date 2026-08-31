@@ -1,22 +1,53 @@
-# 采购批次审批 dev 发布证据（待 Task13 完成）
+# 采购批次审批 dev 发布证据
 
 ## 当前结论
 
 - 记录日期：2026-08-31（文件名沿用 Task12 计划日期）。
-- 分支：`feat/supplier-purchase-batch-workflow-design`。
+- 功能与已部署 API/Admin revision：
+  `8594acba06d9909419954039c42dd8da7460f613`。
+- 功能分支：`feat/supplier-purchase-batch-workflow-design`。
 - Task12 开始前基线：`3841a2c698aad53a19be9529c4cd2c57c9874b29`。
-- 当前仅形成隔离 clone 与本地工具证据；未获得已授权 dev 发布凭据，未发布 API/Admin、
-  未开启 dev tenant flag、未生成 dev execute requestId。不得把本文件视为 dev 已验收。
-- `apps/api/src/types/database.ts` 未手改；正式生成只能在 migration history 对齐环境使用
-  仓库官方命令。
+- 10 条 migration 已通过受保护 dev workflow 应用，发布后 history 为 550 条、最新
+  `20260830115000`、pending 0；API/Admin 已发布并通过健康检查。
+- `apps/api/src/types/database.ts` 已在 migration history 对齐的 dev 数据库上，使用官方
+  `postgres-meta:v0.96.4` 机械生成并审查，未手改生成结果。
+- dev 发布已完成，但租户灰度验收尚未完成：只读检查确认 14 个租户中
+  `purchase_batch_workflow_enabled=true` 为 0，且
+  `procurement_snapshot_v1_enabled=true AND purchase_batch_workflow_enabled=false` 也为 0。
+  因此没有符合 runbook 的内部验收租户，未运行 dev execute、未生成业务批次，也未扩大
+  灰度。必须由平台管理员通过现有 Admin/API 完成租户配置；禁止用 SQL 临时开关或造数据。
 
-类型基线门禁已在未加本轮 migration 的 disposable production-schema clone 上，以真实
+以下为 Task12 的历史类型基线：当时在未加本轮 migration 的 disposable
+production-schema clone 上，以真实
 `supabase gen types typescript --db-url ... --schema public,graphql_public` 执行。即使 schema
 参数与当前文件一致，机械结果仍有 14 行既有差异，其中 clone 的 `public.ai_models` 缺少当前
 文件中的 `category_id`，`graphql_public` 生成片段也不完全一致。这是本任务之外的既有
-schema/type 漂移，因此 Task12 没有继续生成本轮类型、没有覆盖文件。Task13 必须在同一
-显式 dev DB 目标 migration 对齐后执行官方生成、解释全部 diff，并把生成提交的 API
-typecheck/build 作为 API 发布前硬门禁。
+schema/type 漂移，因此 Task12 没有覆盖文件。Task13 已在同一显式 dev DB 目标 migration
+对齐后完成正式生成：最终文件 29,936 行，diff 为 327 additions、20 deletions；新增采购
+审批字段/RPC 及此前已发布但旧类型未包含的 supplier command 类型，删除 dev schema 中
+从未存在的 `ai_models.category_id` 旧类型。生成后 API typecheck/build 均通过。
+
+## Task13 发布与迁移证据
+
+- migration 预检：[run 33346621490](https://github.com/LeeFo-china/goose/actions/runs/33346621490)，
+  精确识别本功能 10 条 pending migration。
+- migration apply：[run 33346665362](https://github.com/LeeFo-china/goose/actions/runs/33346665362)，
+  history 从 540 增至 550，最新版本为 `20260830115000`。
+- migration 发布后复核：
+  [run 33346703992](https://github.com/LeeFo-china/goose/actions/runs/33346703992)，pending 0。
+- 官方数据库类型生成：
+  [run 33347720027](https://github.com/LeeFo-china/goose/actions/runs/33347720027)。生成前再次
+  复核 history 550/最新 `20260830115000`/pending 0；生成提交即最终 revision
+  `8594acba06d9909419954039c42dd8da7460f613`。
+- 最终构建：[run 33348005045](https://github.com/LeeFo-china/goose/actions/runs/33348005045)，
+  API、Admin、H5、Web、social-video-worker 全部成功。
+- dev 自动发布：[run 33348468012](https://github.com/LeeFo-china/goose/actions/runs/33348468012)，
+  API、Admin、H5、Web 及三个 worker 均部署同一 immutable revision
+  `8594acba06d9909419954039c42dd8da7460f613`；API/Admin 健康检查均为 HTTP 200。
+- API image digest：
+  `sha256:0af91ec556824856abb1b5ce87e511b9b5aa716c351ad3e18acc419056b9e082`。
+- Admin image digest：
+  `sha256:9ebe8bb5c652b496ee38049b29b45a740325709a91a74c8ddfcc3c5d830c2deb`。
 
 ## 已完成自动化证据
 
@@ -76,34 +107,30 @@ UUID 参数均为必填、默认 dry-run 不调用写路径、execute 使用显�
 顺扫”的发布结论。Task13 的硬门禁是在授权 dev、只读事务、代表性数据基数、默认 planner
 下重跑三条 `EXPLAIN (ANALYZE, BUFFERS)`；未取得该证据前不得扩大灰度。
 
-## Migration 状态与阻塞
+## dev 租户灰度阻塞
 
-相对 main 的实际功能 migration 为 `20260830110500`、`111000`、`112000`、`113000`、
-`113500`、`113600`、`113700`、`113800`、`114000`、`115000`，共 10 条。早期计划写
-“6 个 migration”已过时，发布以 runbook 的完整文件名为准。
+受保护 runner 在临时 ops commit `86127e0f6e3aa0aa55bace04a98874d358d86b22`
+运行了只读候选筛选：[run 33349436557](https://github.com/LeeFo-china/goose/actions/runs/33349436557)。
+该 run 先再次证明 migration history 为 550、最新 `20260830115000`、pending 0，然后得到：
 
-在当前 worktree 执行 `supabase migration list` 返回：
+- dev tenant 总数：14；
+- `purchase_batch_workflow_enabled=true`：0；
+- `procurement_snapshot_v1_enabled=true AND purchase_batch_workflow_enabled=false`：0；
+- 六个采购 rollout flag 全部为 true：0；
+- 可进入官方 smoke dry-run 的候选：0。
 
-```text
-Cannot find project ref. Have you run supabase link?
-```
+检查在候选为空时 fail closed；没有调用 save/submit/review RPC，没有生成 `SPBW-SMOKE`
+批次、workflow instance、task 或采购单。当前已登录的内部测试租户 setting version 为 6，
+其中 module/ownership/private supplier/private catalog 为 true，procurement snapshot/workflow
+为 false；租户管理员不能调用平台 rollout 写接口。
 
-因此没有伪造 Local/Remote 对齐结论，也没有运行 `supabase db push`、手工 DDL/DML 或
-正式 type generation。另已知正式 local 存在与本任务无关的 pending migration，Task12
-没有尝试推进或修复它们。
+解除阻塞必须由平台管理员使用现有 Admin/API，先确认 active/published 模板、申请人、采购与
+财务审批人、项目范围、SKU/供货价、成本科目和项目预算，再按父子顺序开启
+`procurement_snapshot_v1_enabled` 与 `purchase_batch_workflow_enabled`，保存审计事件和
+setting version。不得直接修改 `tenant_supplier_settings`，不得手工 seed 业务数据。
 
-Task12 也实际运行了正式 local 的 `supplier-rollout-settings-database.test.ts`：6 个 helper
-测试通过，2 个行为测试因该 local 仍只有旧 12 参数 RPC、没有新 13 参数 RPC 和
-`purchase_batch_workflow_enabled` 列而失败（只读 catalog 证据为 `t|f|f`）。这不是本次
-compatibility migration 在 production-schema clone 上的回归；clone 已分别调用旧/新签名，
-证明旧签名保留 workflow flag、新签名正常。禁止为让正式 local 测试变绿而单独重放 migration
-或手工 DDL，待 Task13 在同一授权 dev 目标按清单迁移后复验。
+## 灰度前待补证据
 
-## Task13 待补证据
-
-- main 最终 commit，以及 dev database/API/Admin revision；
-- dev migration 对齐后的官方 `database.ts` 生成 diff、生成 commit 和 API 检查；
-- `supabase db push --dry-run` 的精确 10 条清单和发布后 `migration list` 对齐；
 - flag=false 基线、模板/审批人配置审计、flag=true setting version；
 - 默认 planner 的只读 dev EXPLAIN 摘要；
 - smoke dry-run 输出，以及明确授权后的 execute requestId/batch/round/instance/task/
