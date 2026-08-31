@@ -360,13 +360,13 @@ class PostgresSupplierPurchaseBatchWorkflowSmokeGateway
         id: string;
         supplier_id: string;
         status: string;
+        total_count: number;
       }>>`
         SELECT purchase_order.id, purchase_order.supplier_id,
-          purchase_order.status
+          purchase_order.status, COUNT(*) OVER()::integer AS total_count
         FROM public.supplier_purchase_orders AS purchase_order
         WHERE purchase_order.tenant_id = ${tenantId}::uuid
           AND purchase_order.purchase_batch_id = ${batchId}::uuid
-          AND purchase_order.status = 'submitted'
         ORDER BY purchase_order.id
         LIMIT 100;
       `,
@@ -380,7 +380,8 @@ class PostgresSupplierPurchaseBatchWorkflowSmokeGateway
         batch.budget_status !== "over_budget") || orderRows.length === 0 ||
       orderRows.some((purchase_order) =>
         purchase_order.status !== "submitted"
-      ) || supplierCount !== orderRows.length ||
+      ) || orderRows[0]?.total_count !== orderRows.length ||
+      supplierCount !== orderRows.length ||
       batch.supplier_count !== supplierCount) {
       throw Errors.business(500, "采购批次审批 smoke 证据状态异常", EVIDENCE_ERROR);
     }

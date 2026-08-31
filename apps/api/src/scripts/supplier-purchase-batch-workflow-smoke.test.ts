@@ -200,6 +200,15 @@ describe("supplier purchase batch workflow smoke", () => {
     expect(gatewaySource).not.toContain(".begin(");
     expect(gatewaySource).toContain("batch.status !== \"ordered\"");
     expect(gatewaySource).toContain("purchase_order.status !== \"submitted\"");
+    const orderEvidenceQuery = gatewaySource.slice(
+      gatewaySource.indexOf("SELECT purchase_order.id"),
+      gatewaySource.indexOf("ORDER BY purchase_order.id"),
+    );
+    expect(orderEvidenceQuery).not.toContain("AND purchase_order.status");
+    expect(orderEvidenceQuery).toContain("COUNT(*) OVER()");
+    expect(gatewaySource).toContain(
+      "orderRows[0]?.total_count !== orderRows.length",
+    );
     expect(gatewaySource).toContain("supplierCount");
     expect(gatewaySource).toContain("p_page_size => 20");
     expect(gatewaySource).toContain("__gooes_workflow_node_has_candidate");
