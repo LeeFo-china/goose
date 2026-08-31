@@ -124,14 +124,34 @@ UUID 参数均为必填、默认 dry-run 不调用写路径、execute 使用显�
 其中 module/ownership/private supplier/private catalog 为 true，procurement snapshot/workflow
 为 false；租户管理员不能调用平台 rollout 写接口。
 
-解除阻塞必须由平台管理员使用现有 Admin/API，先确认 active/published 模板、申请人、采购与
-财务审批人、项目范围、SKU/供货价、成本科目和项目预算，再按父子顺序开启
+随后针对内部测试租户 `3eebca47-961f-4899-b976-a3d3208d326b`，受保护 runner 又执行两轮
+强制 `default_transaction_read_only=on` 的分层核查：
+[run 33350117862](https://github.com/LeeFo-china/goose/actions/runs/33350117862) 与
+[run 33350225028](https://github.com/LeeFo-china/goose/actions/runs/33350225028)。结果证明：
+
+- active definition `bbb1cb91-5976-42d9-8a09-81faa9f9f5d5` 唯一命中，active published
+  version 为 `937ef5cf-4fa2-4d24-a06d-391a0f8e302f`，模板本身不是阻塞；
+- 共检查 17 个项目，每个项目目录分页均返回 1 个可采购 SKU，三类权限表面计数均为 1；
+- 项目 `634ff402-ff84-4541-aa7c-3cdcd4fd5460` 有 1 个有效预算科目，项目
+  `b95f6b51-6b9c-4970-948e-b369106545d8` 有 2 个，目录和预算不是当前主阻塞；
+- 两个有预算的项目中，申请、采购审批和财务审批的唯一员工都为
+  `d8ecc522-e6a1-49d6-b7b7-aaa0f3084826`，两项目
+  `separation_of_duties_ready=false`；
+- 专用候选组合为 0，权威 workflow preflight 三项均为 false。根因是申请人与审批人没有
+  职责分离，不是模板、目录、预算或 migration 缺失。按 self-review 门禁，不能通过开启
+  rollout flag 绕过。
+
+解除阻塞必须先为至少一个上述有预算项目配置另一名 active、已绑定用户且不同于申请人的
+审批员工。采购审批员工需具备 `supplier.purchase-requisition.approve`、view、project.read
+及该项目范围；财务审批员工需具备 `finance.budget.manage`、view、project.read 及该项目
+范围。采购与财务可以由同一名第二员工承担，但二者都不能是申请人。职责分离经同一只读
+preflight 复核后，再由平台管理员使用现有 Admin/API 按父子顺序开启
 `procurement_snapshot_v1_enabled` 与 `purchase_batch_workflow_enabled`，保存审计事件和
 setting version。不得直接修改 `tenant_supplier_settings`，不得手工 seed 业务数据。
 
 ## 灰度前待补证据
 
-- flag=false 基线、模板/审批人配置审计、flag=true setting version；
+- 职责分离修复后的审批人 preflight、flag=false 基线及 flag=true setting version；
 - 默认 planner 的只读 dev EXPLAIN 摘要；
 - smoke dry-run 输出，以及明确授权后的 execute requestId/batch/round/instance/task/
   budget/order/supplierCount；
