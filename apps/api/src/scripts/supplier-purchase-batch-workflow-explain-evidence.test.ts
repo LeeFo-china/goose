@@ -130,15 +130,13 @@ function passingInput(): WorkflowExplainGateInput {
         name: "enable_seqscan",
         current: "on",
         bootValue: "on",
-        isQueryTuning: true,
-        isPlanCacheMode: false,
+        category: "Query Tuning / Planner Method Configuration",
       },
       {
         name: "plan_cache_mode",
         current: "auto",
         bootValue: "auto",
-        isQueryTuning: false,
-        isPlanCacheMode: true,
+        category: "Query Tuning / Other",
       },
     ],
     plans: WORKFLOW_EXPLAIN_QUERY_NAMES.map((name) => parsed(name)),
@@ -351,7 +349,7 @@ describe("workflow EXPLAIN gate", () => {
     }
   });
 
-  test("enforces current and EXPLAIN planner defaults but allows unrelated settings", () => {
+  test("enforces current and EXPLAIN planner defaults but allows timeout", () => {
     const current = passingInput();
     current.plannerSettings[0]!.current = "off";
     expectCode(() => assertWorkflowExplainGate(current), "NON_DEFAULT_PLANNER");
@@ -372,7 +370,7 @@ describe("workflow EXPLAIN gate", () => {
     const allowed = passingInput();
     replacePlan(allowed, parsed("running_instance", directScan(
       "running_instance",
-    ), { Settings: { statement_timeout: "5s", unrelated_setting: "custom" } }));
+    ), { Settings: { statement_timeout: "5s" } }));
     expect(assertWorkflowExplainGate(allowed)).toBe(true);
   });
 

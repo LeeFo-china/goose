@@ -55,6 +55,8 @@ export const WORKFLOW_EXPLAIN_ERROR_CODES = [
   "LARGE_TABLE_INDEX_REQUIRED",
 ] as const;
 
+export type WorkflowExplainErrorCode =
+  typeof WORKFLOW_EXPLAIN_ERROR_CODES[number];
 export type WorkflowCardinalityClass = "small" | "large";
 export type WorkflowExplainSettingValue = string | number | boolean | null;
 export type WorkflowExplainSettings = Record<
@@ -86,8 +88,7 @@ export type WorkflowExplainPlannerSetting = {
   name: string;
   current: string;
   bootValue: string;
-  isQueryTuning: boolean;
-  isPlanCacheMode: boolean;
+  category: string;
 };
 
 export type WorkflowExplainIndexMetadata = {
@@ -106,6 +107,18 @@ export type WorkflowExplainGateInput = {
   >;
   plannerSettings: WorkflowExplainPlannerSetting[];
   plans: WorkflowExplainPlanEvidence[];
+};
+
+export type WorkflowExplainRawPlan = {
+  name: string;
+  rows: unknown;
+};
+
+export type WorkflowExplainRawGateInput = Omit<
+  WorkflowExplainGateInput,
+  "plans"
+> & {
+  plans: WorkflowExplainRawPlan[];
 };
 
 export function classifyWorkflowCardinality(
@@ -153,34 +166,59 @@ export function parseWorkflowExplainPlan(
 export function assertWorkflowExplainGate(
   input: WorkflowExplainGateInput,
 ): true {
+  const plannerRegistry = assertGateGlobals(input);
+  assertPlanSet(input.plans);
+  for (const name of WORKFLOW_EXPLAIN_QUERY_NAMES) {
+    const plan = input.plans.find((item) => item.name === name)!;
+    assertPlanEvidence(plan, input.cardinalities[name], plannerRegistry);
+  }
+  return true;
+}
+
+export function assertWorkflowExplainRawGate(
+  input: WorkflowExplainRawGateInput,
+): true {
+  const plannerRegistry = assertGateGlobals(input);
+  assertPlanSet(input.plans);
+  for (const name of WORKFLOW_EXPLAIN_QUERY_NAMES) {
+    const rawPlan = input.plans.find((item) => item.name === name)!;
+    const plan = parseWorkflowExplainPlan(rawPlan.rows, name);
+    assertPlanEvidence(plan, input.cardinalities[name], plannerRegistry);
+  }
+  return true;
+}
+
+function assertGateGlobals(
+  input: Pick<
+    WorkflowExplainGateInput,
+    "plannerSettings" | "cardinalities" | "indexMetadata"
+  >,
+): Map<string, string> {
+  const registry = assertCurrentPlannerSettings(input.plannerSettings);
   for (const name of WORKFLOW_EXPLAIN_QUERY_NAMES) {
     classifyWorkflowCardinality(input.cardinalities[name]);
   }
   for (const name of WORKFLOW_EXPLAIN_QUERY_NAMES) {
     assertIndexMetadata(name, input.indexMetadata[name]);
   }
-  assertPlanSet(input.plans);
-  assertCurrentPlannerSettings(input.plannerSettings);
+  return registry;
+}
 
-  for (const name of WORKFLOW_EXPLAIN_QUERY_NAMES) {
-    const plan = input.plans.find((item) => item.name === name)!;
-    assertDefaultExplainSettings(plan, input.plannerSettings);
-    assertRuntimeThresholds(plan);
-    if (classifyWorkflowCardinality(input.cardinalities[name]) === "small") {
-      continue;
-    }
-    if (plan.targetNodes.some((node) => node.nodeType === "Seq Scan")) {
-      fail("LARGE_TABLE_SEQ_SCAN", `${name} target relation used Seq Scan`);
-    }
-    const approved = new Set<string>(WORKFLOW_EXPLAIN_MANIFEST[name].indexes);
-    if (!plan.indexNames.some((indexName) => approved.has(indexName))) {
-      fail(
-        "LARGE_TABLE_INDEX_REQUIRED",
-        `${name} approved index is required`,
-      );
-    }
+function assertPlanEvidence(
+  plan: WorkflowExplainPlanEvidence,
+  cardinality: number,
+  plannerRegistry: Map<string, string>,
+): void {
+  assertDefaultExplainSettings(plan, plannerRegistry);
+  assertRuntimeThresholds(plan);
+  if (classifyWorkflowCardinality(cardinality) === "small") return;
+  if (plan.targetNodes.some((node) => node.nodeType === "Seq Scan")) {
+    fail("LARGE_TABLE_SEQ_SCAN", `${plan.name} target relation used Seq Scan`);
   }
-  return true;
+  const approved = new Set<string>(WORKFLOW_EXPLAIN_MANIFEST[plan.name].indexes);
+  if (!plan.indexNames.some((indexName) => approved.has(indexName))) {
+    fail("LARGE_TABLE_INDEX_REQUIRED", `${plan.name} approved index is required`);
+  }
 }
 
 function collectPlanFacts(
@@ -220,9 +258,14 @@ function collectPlanFacts(
       }
     }
 
-    const isBitmapDescendant = isTargetBitmapDescendant ||
-      (isTarget && nodeType === "Bitmap Heap Scan");
-    if (isTargetBitmapDescendant && nodeType === "Bitmap Index Scan") {
+    const hasNoRelation = node["Relation Name"] === undefined;
+    const isBitmapConnector = hasNoRelation &&
+      (nodeType === "BitmapAnd" || nodeType === "BitmapOr");
+    const childHasTargetBitmapContext =
+      (isTarget && nodeType === "Bitmap Heap Scan") ||
+      (isTargetBitmapDescendant && isBitmapConnector);
+    if (isTargetBitmapDescendant && hasNoRelation &&
+      nodeType === "Bitmap Index Scan") {
       indexNames.push(requiredIndexName(node));
     }
 
@@ -231,7 +274,7 @@ function collectPlanFacts(
       fail("INVALID_PLAN", "plan node Plans must be an array");
     }
     for (const child of node.Plans) {
-      visit(record(child, "EXPLAIN child Plan"), isBitmapDescendant);
+      visit(record(child, "EXPLAIN child Plan"), childHasTargetBitmapContext);
     }
   }
 
@@ -272,7 +315,7 @@ function assertIndexMetadata(
   }
 }
 
-function assertPlanSet(plans: WorkflowExplainPlanEvidence[]): void {
+function assertPlanSet(plans: Array<{ name: string }>): void {
   const allowed = new Set<string>(WORKFLOW_EXPLAIN_QUERY_NAMES);
   if (plans.some((plan) => !allowed.has(plan.name))) {
     fail("UNKNOWN_PLAN", "unknown EXPLAIN plan name");
@@ -289,44 +332,62 @@ function assertPlanSet(plans: WorkflowExplainPlanEvidence[]): void {
   }
 }
 
-function assertCurrentPlannerSettings(
-  settings: WorkflowExplainPlannerSetting[],
-): void {
-  const planCacheMode = settings.filter((setting) =>
-    setting.name === "plan_cache_mode" && setting.isPlanCacheMode
-  );
-  if (planCacheMode.length !== 1 ||
-    !settings.some((setting) => setting.isQueryTuning)) {
-    fail("NON_DEFAULT_PLANNER", "planner setting evidence is incomplete");
+function assertCurrentPlannerSettings(settings: unknown): Map<string, string> {
+  if (!Array.isArray(settings)) {
+    fail("NON_DEFAULT_PLANNER", "planner setting evidence must be an array");
   }
-  for (const setting of settings) {
-    if ((isRequiredPlannerSetting(setting)) &&
-      setting.current !== setting.bootValue) {
+  const registry = new Map<string, string>();
+  let planCacheModeCount = 0;
+  let queryTuningCount = 0;
+  for (const value of settings) {
+    const setting = plannerSetting(value);
+    if (registry.has(setting.name)) {
+      fail("NON_DEFAULT_PLANNER", "planner setting names must be unique");
+    }
+    if (setting.current !== setting.bootValue) {
       fail("NON_DEFAULT_PLANNER", "current planner setting is not default");
     }
+    if (setting.name === "plan_cache_mode") planCacheModeCount += 1;
+    if (setting.name !== "plan_cache_mode" &&
+      setting.category.startsWith("Query Tuning /")) {
+      queryTuningCount += 1;
+    }
+    registry.set(setting.name, setting.bootValue);
   }
+  if (planCacheModeCount !== 1 || queryTuningCount === 0) {
+    fail("NON_DEFAULT_PLANNER", "planner setting evidence is incomplete");
+  }
+  return registry;
 }
 
 function assertDefaultExplainSettings(
   plan: WorkflowExplainPlanEvidence,
-  currentSettings: WorkflowExplainPlannerSetting[],
+  plannerRegistry: Map<string, string>,
 ): void {
-  const bootValues = new Map(currentSettings
-    .filter(isRequiredPlannerSetting)
-    .map((setting) => [setting.name, setting.bootValue]));
   for (const [name, value] of Object.entries(plan.settings)) {
-    if (!bootValues.has(name) && name !== "plan_cache_mode") continue;
-    if (String(value) !== bootValues.get(name)) {
+    if (name === "statement_timeout") continue;
+    if (!plannerRegistry.has(name) ||
+      String(value) !== plannerRegistry.get(name)) {
       fail("NON_DEFAULT_PLANNER", `${plan.name} planner setting is not default`);
     }
   }
 }
 
-function isRequiredPlannerSetting(
-  setting: WorkflowExplainPlannerSetting,
-): boolean {
-  return setting.isQueryTuning || setting.isPlanCacheMode ||
-    setting.name === "plan_cache_mode";
+function plannerSetting(value: unknown): WorkflowExplainPlannerSetting {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    fail("NON_DEFAULT_PLANNER", "planner setting row must be an object");
+  }
+  const row = value as Record<string, unknown>;
+  const { name, current, bootValue, category } = row;
+  if (typeof name !== "string" || name.trim().length === 0 ||
+    typeof current !== "string" || typeof bootValue !== "string" ||
+    typeof category !== "string") {
+    fail("NON_DEFAULT_PLANNER", "planner setting row is malformed");
+  }
+  if (!category.startsWith("Query Tuning /") && name !== "plan_cache_mode") {
+    fail("NON_DEFAULT_PLANNER", "planner setting scope is invalid");
+  }
+  return { name, current, bootValue, category };
 }
 
 function assertRuntimeThresholds(plan: WorkflowExplainPlanEvidence): void {
@@ -413,6 +474,6 @@ function isSafeScalar(value: unknown): value is WorkflowExplainSettingValue {
     (typeof value === "number" && Number.isFinite(value));
 }
 
-function fail(code: string, message: string): never {
+function fail(code: WorkflowExplainErrorCode, message: string): never {
   throw new WorkflowExplainError(code, message);
 }
