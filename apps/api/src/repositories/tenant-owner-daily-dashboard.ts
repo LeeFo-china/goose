@@ -2,6 +2,7 @@ import { Errors } from "@/errors/error-factory";
 import type {
   TenantOwnerActionItem,
   TenantOwnerConstructionActivity,
+  TenantOwnerCustomerFollowUpSnapshot,
   TenantOwnerFinanceSnapshot,
   TenantOwnerGanttProjectRow,
   TenantOwnerProjectSnapshot,
@@ -10,6 +11,9 @@ import type {
 } from "@/services/tenant-owner-daily-dashboard-types";
 import { SupabaseDB } from "@/utils/supabase/index";
 import { getTenantOwnerFinanceSnapshot } from "./tenant-owner-dashboard-finance";
+import {
+  getTenantOwnerCustomerFollowUp,
+} from "./tenant-owner-dashboard-customer-follow-up";
 
 type ProjectRelation = { id: string; name: string | null; status?: string | null } |
   Array<{ id: string; name: string | null; status?: string | null }> |
@@ -307,6 +311,16 @@ class TenantOwnerDailyDashboardRepository {
           };
         }),
     };
+  }
+
+  async getCustomerFollowUp(input: {
+    tenantId: string;
+    businessDate: string;
+    startAt: string;
+    endAt: string;
+    limit: number;
+  }): Promise<TenantOwnerCustomerFollowUpSnapshot> {
+    return getTenantOwnerCustomerFollowUp(input);
   }
 
   async listGanttProjects(input: {

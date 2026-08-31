@@ -126,6 +126,26 @@ function createRepository(overrides: Record<string, unknown> = {}) {
         assignee_employee_name: null,
       })),
     })),
+    getCustomerFollowUp: mock(async () => ({
+      total: 9,
+      due_today_count: 4,
+      overdue_count: 3,
+      completed_today_count: 2,
+      new_customer_count: 1,
+      items: Array.from({ length: 6 }, (_, index) => ({
+        customer_id: `customer-${index + 1}`,
+        customer_name: `客户 ${index + 1}`,
+        owner_employee_name: index === 0 ? "王五" : null,
+        status_label: index === 0 ? "跟进中" : null,
+        last_follow_up_at: index === 0 ? "2026-08-25T08:00:00.000Z" : null,
+        next_follow_up_at: "2026-08-26T02:00:00.000Z",
+        reason: index === 0 ? "逾期未跟进" : "今日应跟进",
+        target: {
+          path: "/packageCustomers/pages/detail/index",
+          query: { id: `customer-${index + 1}` },
+        },
+      })),
+    })),
     listGanttProjects: mock(async () => ({
       list: [{
         id: "project-1",
@@ -244,6 +264,30 @@ describe("TenantOwnerDailyDashboardService", () => {
     expect(result.risk_projects.total).toBe(7);
     expect(result.risk_projects.items).toHaveLength(5);
     expect(result.construction_activity.missing_logs).toHaveLength(5);
+    expect(repository.getCustomerFollowUp).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      businessDate: "2026-08-26",
+      startAt: "2026-08-25T16:00:00.000Z",
+      endAt: "2026-08-26T16:00:00.000Z",
+      limit: 5,
+    });
+    expect(result.customer_follow_up).toEqual({
+      total: 9,
+      due_today_count: 4,
+      overdue_count: 3,
+      completed_today_count: 2,
+      new_customer_count: 1,
+      items: expect.arrayContaining([expect.objectContaining({
+        customer_id: "customer-1",
+        customer_name: "客户 1",
+        reason: "逾期未跟进",
+        target: {
+          path: "/packageCustomers/pages/detail/index",
+          query: { id: "customer-1" },
+        },
+      })]),
+    });
+    expect(result.customer_follow_up.items).toHaveLength(5);
     expect(result.partial_errors).toEqual([]);
   });
 
@@ -282,6 +326,37 @@ describe("TenantOwnerDailyDashboardService", () => {
       code: "DB_ERROR",
       message: "财务数据暂不可用",
     }]);
+  });
+
+  test("returns empty customer follow up section when follow up module fails", async () => {
+    const repository = createRepository({
+      getCustomerFollowUp: mock(async () => {
+        throw Object.assign(new Error("follow up failed"), {
+          statusCode: 500,
+          code: "DB_ERROR",
+        });
+      }),
+    });
+    const { service } = await createService({ repository });
+
+    const result = await service.getDailyDashboard(
+      authContextWithPermissions([{ code: "dashboard.read", scope: "all" }]),
+      { date: "2026-08-26", timezone: "Asia/Shanghai" },
+    );
+
+    expect(result.customer_follow_up).toEqual({
+      total: 0,
+      due_today_count: 0,
+      overdue_count: 0,
+      completed_today_count: 0,
+      new_customer_count: 0,
+      items: [],
+    });
+    expect(result.partial_errors).toContainEqual({
+      module: "customer_follow_up",
+      code: "DB_ERROR",
+      message: "客户跟进数据暂不可用",
+    });
   });
 
   test("lists paginated gantt projects using workflow progress timeline nodes", async () => {

@@ -4,6 +4,7 @@ import {
 import type {
   TenantOwnerActionItem,
   TenantOwnerConstructionActivity,
+  TenantOwnerCustomerFollowUpSnapshot,
   TenantOwnerFinanceSnapshot,
   TenantOwnerGanttProjectRow,
   TenantOwnerGanttRiskSummary,
@@ -74,6 +75,13 @@ type TenantOwnerDailyDashboardRepositoryPort = {
     endAt: string;
     limit: number;
   }): Promise<TenantOwnerConstructionActivity>;
+  getCustomerFollowUp(input: {
+    tenantId: string;
+    businessDate: string;
+    startAt: string;
+    endAt: string;
+    limit: number;
+  }): Promise<TenantOwnerCustomerFollowUpSnapshot>;
   listGanttProjects(input: {
     tenantId: string;
     page: number;
@@ -101,6 +109,7 @@ export type TenantOwnerDashboardPartialError = {
     | "projects"
     | "risk_projects"
     | "construction_activity"
+    | "customer_follow_up"
     | "workflow_progress";
   code: string;
   message: string;
@@ -142,6 +151,7 @@ export class TenantOwnerDailyDashboardService {
       projects,
       riskProjects,
       constructionActivity,
+      customerFollowUp,
     ] = await Promise.all([
       this.loadSection(
         "owner_actions",
@@ -204,6 +214,19 @@ export class TenantOwnerDailyDashboardService {
         }),
         emptyConstructionActivity(),
       ),
+      this.loadSection(
+        "customer_follow_up",
+        "客户跟进数据暂不可用",
+        partialErrors,
+        () => this.repository.getCustomerFollowUp({
+          tenantId,
+          businessDate: businessDay.businessDate,
+          startAt: businessDay.startAt,
+          endAt: businessDay.endAt,
+          limit: TOP_LIST_LIMIT,
+        }),
+        emptyCustomerFollowUp(),
+      ),
     ]);
 
     return {
@@ -224,6 +247,10 @@ export class TenantOwnerDailyDashboardService {
         ...constructionActivity,
         latest_logs: constructionActivity.latest_logs.slice(0, TOP_LIST_LIMIT),
         missing_logs: constructionActivity.missing_logs.slice(0, TOP_LIST_LIMIT),
+      },
+      customer_follow_up: {
+        ...customerFollowUp,
+        items: customerFollowUp.items.slice(0, TOP_LIST_LIMIT),
       },
       partial_errors: partialErrors,
     };
@@ -466,6 +493,17 @@ function emptyConstructionActivity(): TenantOwnerConstructionActivity {
     photo_count: 0,
     latest_logs: [],
     missing_logs: [],
+  };
+}
+
+function emptyCustomerFollowUp(): TenantOwnerCustomerFollowUpSnapshot {
+  return {
+    total: 0,
+    due_today_count: 0,
+    overdue_count: 0,
+    completed_today_count: 0,
+    new_customer_count: 0,
+    items: [],
   };
 }
 

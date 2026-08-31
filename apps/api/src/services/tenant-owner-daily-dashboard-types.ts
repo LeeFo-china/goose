@@ -81,6 +81,29 @@ export type TenantOwnerConstructionActivity = {
   }>;
 };
 
+export type TenantOwnerCustomerFollowUpItem = {
+  customer_id: string;
+  customer_name: string;
+  owner_employee_name: string | null;
+  status_label: string | null;
+  last_follow_up_at: string | null;
+  next_follow_up_at: string | null;
+  reason: string | null;
+  target: {
+    path: string;
+    query?: Record<string, string | number | boolean | null>;
+  } | null;
+};
+
+export type TenantOwnerCustomerFollowUpSnapshot = {
+  total: number;
+  due_today_count: number;
+  overdue_count: number;
+  completed_today_count: number;
+  new_customer_count: number;
+  items: TenantOwnerCustomerFollowUpItem[];
+};
+
 export type TenantOwnerGanttProjectRow = {
   id: string;
   name: string;
