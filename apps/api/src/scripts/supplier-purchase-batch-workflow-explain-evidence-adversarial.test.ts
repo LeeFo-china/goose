@@ -218,6 +218,31 @@ describe("workflow EXPLAIN adversarial planner evidence", () => {
     expect(assertWorkflowExplainGate(input)).toBe(true);
   });
 
+  test("accepts only the exact dev role search path reported by EXPLAIN", () => {
+    const input = passingInput();
+    input.plannerSettings.push({
+      name: "search_path",
+      current: "\"\\$user\", public, extensions",
+      rawValue: "\"\\$user\", public, extensions",
+      bootValue: "\"$user\", public",
+      category: "Client Connection Defaults / Statement Behavior",
+      source: "user",
+    });
+    input.plans[0] = parsed("running_instance", directScan(
+      "running_instance",
+    ), { Settings: { search_path: "\"\\$user\", public, extensions" } });
+
+    expect(assertWorkflowExplainGate(input)).toBe(true);
+
+    const changed = structuredClone(input);
+    changed.plannerSettings[2]!.current = "public";
+    changed.plannerSettings[2]!.rawValue = "public";
+    changed.plans[0] = parsed("running_instance", directScan(
+      "running_instance",
+    ), { Settings: { search_path: "public" } });
+    expectCode(() => assertWorkflowExplainGate(changed), "NON_DEFAULT_PLANNER");
+  });
+
   test("rejects unregistered or transient planner overrides", () => {
     for (const plannerSetting of [
       {

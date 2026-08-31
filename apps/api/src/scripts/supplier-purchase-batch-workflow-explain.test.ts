@@ -259,7 +259,7 @@ describe("supplier purchase workflow EXPLAIN SQL", () => {
     expect(planner).toContain('boot_val AS "bootValue"');
     expect(planner).toContain("category, source");
     expect(planner).toContain("category LIKE 'Query Tuning /%'");
-    expect(planner).toContain("OR name = 'plan_cache_mode'");
+    expect(planner).toContain("OR name IN ('plan_cache_mode', 'search_path')");
     expect(planner.toLowerCase()).toContain("order by name");
 
     const metadata = harness.calls.find((call) => call.event === "metadata")!.text;

@@ -210,6 +210,9 @@ describe("supplier purchase batch workflow EXPLAIN documentation", () => {
       "128MB",
       "16384",
       "524288",
+      "search_path",
+      "source=user",
+      "extensions",
     ]) {
       expect(runbook).toContain(value);
     }

@@ -128,10 +128,11 @@ LIMIT 2;
   30 秒进程等待上限；
 - 不执行 `SET enable_seqscan=off`。在同一事务内读取 `pg_settings` 中所有
   `category LIKE 'Query Tuning /%'` 的项目以及 `plan_cache_mode`，覆盖 planner method、
-  cost constants、GEQO、统计和其他 planner 选项。来源只允许 `default` 或
-  `configuration file`；通常 `setting` 必须等于 `boot_val`，唯一已登记的受管偏移是来源为
+  cost constants、GEQO、统计和其他 planner 选项。来源通常只允许 `default` 或
+  `configuration file`，逐值登记的受管项除外；通常 `setting` 必须等于 `boot_val`。已登记项为
   `configuration file` 的 `effective_cache_size`（展示值 `128MB`、raw `16384`、boot
-  `524288`）。`session/client` 等临时来源和其他偏移均以
+  `524288`），以及 dev 角色 `search_path`（current/raw `"\$user", public, extensions`、
+  boot `"$user", public`、`source=user`）。`session/client` 等临时来源和其他偏移均以
   非默认 planner 失败。EXPLAIN 根对象的 `Settings` 缺失时按空对象处理，存在时必须是对象并
   写入脱敏证据；其中任何 planner 项必须与 `current_setting(name)` 的展示值完全一致；
 - 清单列出的每个预期索引都必须在 `pg_index` 中证明属于 `public` 下对应目标 relation，且

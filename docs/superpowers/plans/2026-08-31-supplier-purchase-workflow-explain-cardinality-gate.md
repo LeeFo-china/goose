@@ -11,6 +11,9 @@
 The permanent gate therefore accepts only this registered managed override, rejects all other
 boot-value drift and transient `session/client` sources, and compares EXPLAIN Settings with
 `current_setting(name)` so PostgreSQL unit formatting remains canonical.
+Protected runs `33421831850` and `33422018634` further proved that EXPLAIN reports the dev role's
+exact `search_path` (`"\$user", public, extensions`, source `user`); the gate registers that exact
+role baseline instead of ignoring an unrecognized EXPLAIN setting.
 
 **Tech Stack:** Bun 1.3.2, TypeScript 5, Bun SQL/PostgreSQL, Bun test, GitHub Actions, Supabase CLI 2.99.0, shell/jq.
 

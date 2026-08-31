@@ -49,7 +49,8 @@ const PLANNER_SETTINGS_QUERY = `
   select name, current_setting(name) AS "current", setting AS "rawValue",
     boot_val AS "bootValue", category, source
   from pg_settings
-  where category LIKE 'Query Tuning /%' OR name = 'plan_cache_mode'
+  where category LIKE 'Query Tuning /%'
+    OR name IN ('plan_cache_mode', 'search_path')
   order by name
 `;
 

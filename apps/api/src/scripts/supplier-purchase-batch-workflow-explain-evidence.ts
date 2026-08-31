@@ -9,10 +9,12 @@ export const WORKFLOW_EXPLAIN_THRESHOLDS = {
 } as const;
 
 export const WORKFLOW_EXPLAIN_CARDINALITY_LIMIT = 1_000;
-const MANAGED_PLANNER_OVERRIDE = {
-  name: "effective_cache_size", current: "128MB",
-  rawValue: "16384", bootValue: "524288",
-} as const;
+const MANAGED_SETTING_OVERRIDES = new Set([
+  ["effective_cache_size", "128MB", "16384", "524288",
+    "configuration file"].join("\0"),
+  ["search_path", "\"\\$user\", public, extensions",
+    "\"\\$user\", public, extensions", "\"$user\", public", "user"].join("\0"),
+]);
 
 export const WORKFLOW_EXPLAIN_QUERY_NAMES = [
   "running_instance",
@@ -353,13 +355,12 @@ export function assertWorkflowExplainCurrentPlannerSettings(
     if (registry.has(setting.name)) {
       fail("NON_DEFAULT_PLANNER", "planner setting names must be unique");
     }
+    const managedOverride = MANAGED_SETTING_OVERRIDES.has([
+      setting.name, setting.current, setting.rawValue,
+      setting.bootValue, setting.source,
+    ].join("\0"));
     const sourceAllowed = setting.source === "default" ||
-      setting.source === "configuration file";
-    const managedOverride = setting.source === "configuration file" &&
-      setting.name === MANAGED_PLANNER_OVERRIDE.name &&
-      setting.current === MANAGED_PLANNER_OVERRIDE.current &&
-      setting.rawValue === MANAGED_PLANNER_OVERRIDE.rawValue &&
-      setting.bootValue === MANAGED_PLANNER_OVERRIDE.bootValue;
+      setting.source === "configuration file" || managedOverride;
     if (!sourceAllowed ||
       (setting.rawValue !== setting.bootValue && !managedOverride)) {
       fail("NON_DEFAULT_PLANNER", "current planner setting is not default");
@@ -402,7 +403,8 @@ function plannerSetting(value: unknown): WorkflowExplainPlannerSetting {
     typeof source !== "string") {
     fail("NON_DEFAULT_PLANNER", "planner setting row is malformed");
   }
-  if (!category.startsWith("Query Tuning /") && name !== "plan_cache_mode") {
+  if (!category.startsWith("Query Tuning /") &&
+    name !== "plan_cache_mode" && name !== "search_path") {
     fail("NON_DEFAULT_PLANNER", "planner setting scope is invalid");
   }
   return { name, current, rawValue, bootValue, category, source };

@@ -149,9 +149,10 @@ bun --env-file=.env test \
 
 这里的默认 planner 包含受保护 dev 集群的已登记受管基线：runner 同时读取
 `pg_settings.setting`、`boot_val`、`source` 和 `current_setting(name)`。只有来源为
-`default` 或 `configuration file` 才可继续；偏离 boot value 时仅允许已登记的
-`effective_cache_size` 配置文件基线（展示值 `128MB`、raw `16384`、boot `524288`）。
-`session/client` 等临时来源、其他参数偏移以及
+`default`、`configuration file` 或逐值登记的受管项才可继续。受管项固定为
+`effective_cache_size` 配置文件基线（展示值 `128MB`、raw `16384`、boot `524288`），以及
+dev 角色 `search_path` 基线（current/raw `"\$user", public, extensions`、boot
+`"$user", public`、`source=user`）。`session/client` 等临时来源、其他参数偏移以及
 EXPLAIN `Settings` 与 `current_setting(name)` 不一致均返回 `NON_DEFAULT_PLANNER`。
 
 证据来源固定为 GitHub Actions run `33359680214` 的 immutable artifact
