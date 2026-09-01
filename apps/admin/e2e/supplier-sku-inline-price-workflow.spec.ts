@@ -8,6 +8,7 @@ import {
 import {
   assertCreateSeriesVersion,
   assertCreateSourceSeed,
+  assertNoUnrelatedFutureLeak,
 } from "./supplier-sku-inline-price-series-assertions";
 
 import {
@@ -96,6 +97,7 @@ test("全权限租户一次创建可采购 SKU 与即时未税价", async ({ pag
   const before = await readState(request);
   const sourceSeed = assertCreateSourceSeed(before);
   expect(before.items.some(({ supplier_sku_id }) => supplier_sku_id === tenantSkuId)).toBe(false);
+  await assertNoUnrelatedFutureLeak(request);
   const mutationStart = (await readMutations(request)).length;
   await page.getByRole("button", { name: "新增 SKU" }).click();
   const dialog = page.getByRole("dialog", { name: "新增供应商 SKU" });
@@ -134,7 +136,11 @@ test("全权限租户一次创建可采购 SKU 与即时未税价", async ({ pag
         tax_inclusive: false,
       },
     },
-    result: { price_version_created: true },
+    result: {
+      price_version_created: true,
+      current_price: { effective_until: null },
+      next_scheduled_effective_from: null,
+    },
   });
   const state = await readState(request);
   expect(state.products.find(({ id }) => id === tenantProductId)?.status).toBe("active");
@@ -216,14 +222,15 @@ test("即时调价止于未来计划且不改写未来版本", async ({ page, re
   const futureItemBefore = before.items.find((item) =>
     item.supplier_price_list_id === futureBefore?.id &&
     item.supplier_sku_id === tenantSkuId);
-  const secondarySku = before.skus.find(({ name }) =>
-    name === "租户私有辅材 标准装");
-  const currentBefore = before.priceLists.find(({ version_number }) => version_number === 1);
-  const secondaryItemBefore = before.items.find((item) =>
-    item.supplier_price_list_id === currentBefore?.id &&
-    item.supplier_sku_id === secondarySku?.id);
-  expect(secondarySku).toBeDefined();
-  expect(secondaryItemBefore).toMatchObject({ unit_price: "96.00" });
+  const context = await request.get(
+    `${mockBackendBaseUrl}/supplier-products/${tenantProductId}` +
+    `/purchasable-skus/${tenantSkuId}/price?tenantSupplierId=${relationshipId}`,
+  );
+  expect(context.ok()).toBe(true);
+  expect(await context.json()).toMatchObject({ data: {
+    current_price: { effective_until: futureBefore?.effective_from },
+    next_scheduled_effective_from: futureBefore?.effective_from,
+  } });
   const row = page.getByRole("row").filter({ hasText: "租户私有瓷砖 600×600" });
   await row.getByRole("button", { name: "编辑 SKU" }).click();
   const dialog = page.getByRole("dialog", { name: "编辑供应商 SKU" });
@@ -240,29 +247,40 @@ test("即时调价止于未来计划且不改写未来版本", async ({ page, re
     lifecycle_status: "published",
     effective_until: futureBefore?.effective_from,
   });
-  const copiedSecondaryItem = after.items.find((item) =>
-    item.supplier_price_list_id === immediate?.id &&
-    item.supplier_sku_id === secondarySku?.id);
-  expect(copiedSecondaryItem).toMatchObject({
-    unit_price: "96.00",
-    tax_rate: "0.13",
-    tax_inclusive: false,
+  const mutation = compositeMutations(await readMutations(request)).at(-1);
+  expect(mutation?.result).toMatchObject({
+    current_price: { effective_until: futureBefore?.effective_from },
+    next_scheduled_effective_from: futureBefore?.effective_from,
   });
-  expect(copiedSecondaryItem?.id).not.toBe(secondaryItemBefore?.id);
-  const resolver = await request.get(
-    `${mockBackendBaseUrl}/supplier-purchase-order-catalog` +
-    `?tenantSupplierId=${relationshipId}&page=1&pageSize=20&keyword=辅材`,
-  );
-  expect(resolver.ok()).toBe(true);
-  expect(await resolver.json()).toMatchObject({
-    data: {
-      list: [expect.objectContaining({
-        supplier_sku_id: secondarySku?.id,
-        supplier_price_list_id: immediate?.id,
-        supplier_price_list_item_id: copiedSecondaryItem?.id,
-        unit_price: "96.00",
-      })],
-    },
+  assertNoBrowserErrors();
+});
+
+test("未来计划存在时拒绝从多 SKU source 创建即时版本", async ({ page, request }) => {
+  const assertNoBrowserErrors = monitorBrowser(page, [{
+    status: 409,
+    path: `/purchasable-skus/${tenantSkuId}`,
+  }]);
+  await openTenantSkuWorkspace(page, request, { priceScenario: "future-multi-item" });
+  const before = await readState(request);
+  const row = page.getByRole("row").filter({ hasText: "租户私有瓷砖 600×600" });
+  await row.getByRole("button", { name: "编辑 SKU" }).click();
+  const dialog = page.getByRole("dialog", { name: "编辑供应商 SKU" });
+  await priceInput(dialog).fill("158.00");
+  const responsePromise = page.waitForResponse((response) =>
+    response.request().method() === "PATCH" &&
+    response.url().includes(`/purchasable-skus/${tenantSkuId}`));
+  await dialog.getByRole("button", { name: "保存并生效" }).click();
+  const response = await responsePromise;
+  expect(response.status()).toBe(409);
+  expect(await response.json()).toMatchObject({
+    success: false,
+    code: "SUPPLIER_PRICE_PERIOD_CONFLICT",
+  });
+  await expect(dialog).toBeVisible();
+  await expect(priceInput(dialog)).toHaveValue("158.00");
+  expect(await readState(request)).toEqual(before);
+  expect(compositeMutations(await readMutations(request)).at(-1)?.result).toEqual({
+    error_code: "SUPPLIER_PRICE_PERIOD_CONFLICT",
   });
   assertNoBrowserErrors();
 });

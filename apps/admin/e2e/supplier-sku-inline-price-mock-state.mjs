@@ -25,7 +25,8 @@ const sequence = { list: 2, item: 4 };
 export function resetInlinePriceState(config = {}) {
   sequence.list = 2;
   sequence.item = 4;
-  if (!["create-source", "current", "future"].includes(config.priceScenario)) return;
+  if (!["create-source", "current", "future", "future-multi-item"]
+    .includes(config.priceScenario)) return;
   const supplierId = platformSuppliers().at(-1).id;
   const targetSku = skuById(ids.tenantSku);
   const { secondarySku, futureOnlySku } = seedSecondaryCatalog();
@@ -34,7 +35,9 @@ export function resetInlinePriceState(config = {}) {
     supplierId,
     version: 1,
     effectiveFrom: "2026-08-01T00:00:00.000Z",
-    effectiveUntil: config.priceScenario === "future" ? futureStart : null,
+    effectiveUntil: ["future", "future-multi-item"].includes(config.priceScenario)
+      ? futureStart
+      : null,
     rowVersion: 4,
   });
   mockStore.state.priceLists.push(currentList);
@@ -46,13 +49,15 @@ export function resetInlinePriceState(config = {}) {
       unitPrice: "128.00",
     }));
   }
-  mockStore.state.items.push(priceItemRecord({
-    id: inlineIds.secondaryCurrentItem,
-    priceListId: currentList.id,
-    sku: secondarySku,
-    unitPrice: config.priceScenario === "create-source" ? "76.00" : "96.00",
-  }));
-  if (config.priceScenario !== "future" && config.priceScenario !== "create-source") return;
+  if (config.priceScenario !== "future") {
+    mockStore.state.items.push(priceItemRecord({
+      id: inlineIds.secondaryCurrentItem,
+      priceListId: currentList.id,
+      sku: secondarySku,
+      unitPrice: config.priceScenario === "create-source" ? "76.00" : "96.00",
+    }));
+  }
+  if (!["create-source", "future", "future-multi-item"].includes(config.priceScenario)) return;
   const futureList = priceListRecord({
     id: inlineIds.futureList,
     supplierId,
@@ -76,11 +81,6 @@ export function resetInlinePriceState(config = {}) {
     priceListId: futureList.id,
     sku: targetSku,
     unitPrice: "188.00",
-  }), priceItemRecord({
-    id: inlineIds.secondaryFutureItem,
-    priceListId: futureList.id,
-    sku: secondarySku,
-    unitPrice: "118.00",
   }));
 }
 
@@ -115,15 +115,37 @@ export function resolveCurrentPrice(skuId) {
 }
 
 export function earliestFutureList(skuId = null) {
+  if (!skuId) return null;
+  const sku = skuById(skuId);
+  if (!sku) return null;
   return mockStore.state.items
-    .filter((item) => !skuId || item.supplier_sku_id === skuId)
+    .filter((item) => item.supplier_sku_id === skuId)
     .map((item) => mockStore.state.priceLists.find(({ id }) =>
       id === item.supplier_price_list_id))
-    .filter((record) => record?.lifecycle_status === "published" &&
+    .filter((record) => isSeriesList(record, sku) &&
+      record.lifecycle_status === "published" &&
       Date.parse(record.effective_from) > Date.parse(now))
     .sort((left, right) => Date.parse(left.effective_from) -
       Date.parse(right.effective_from) || left.version_number - right.version_number ||
       left.id.localeCompare(right.id))[0];
+}
+
+export function cannotPreserveFutureVersion(skuId) {
+  const sku = skuById(skuId);
+  if (!sku) return false;
+  const current = resolveCurrentPrice(skuId);
+  const source = current
+    ? mockStore.state.priceLists.find(({ id }) => id === current.supplier_price_list_id)
+    : selectSeriesSource(sku);
+  const future = earliestFutureList(skuId);
+  if (!future) return false;
+  const nextVersionOccupied = source && mockStore.state.priceLists.some((list) =>
+    list.id !== source.id && isSeriesList(list, sku) &&
+    list.version_number === source.version_number + 1);
+  const sourceHasOtherSku = source && mockStore.state.items.some((item) =>
+    item.supplier_price_list_id === source.id && item.supplier_sku_id !== skuId);
+  return !current || source?.id !== current.supplier_price_list_id ||
+    nextVersionOccupied || sourceHasOtherSku;
 }
 
 export function advanceCurrentPriceRowVersion(skuId) {
@@ -222,16 +244,21 @@ function seedSecondaryCatalog() {
 function selectSeriesSource(sku) {
   const pricedAt = Date.parse(now);
   return mockStore.state.priceLists
-    .filter((list) => list.tenant_id === currentTenantId() &&
-      list.tenant_supplier_id === "23000000-0000-4000-8000-000000000021" &&
-      list.supplier_id === sku.supplier_id && list.price_list_code.trim().toUpperCase() === "DEFAULT" &&
-      list.scope_type === "default" && list.currency === "CNY" &&
+    .filter((list) => isSeriesList(list, sku) &&
       ((list.lifecycle_status === "published" && Date.parse(list.effective_from) <= pricedAt &&
         (list.effective_until === null || Date.parse(list.effective_until) > pricedAt)) ||
         list.lifecycle_status === "retired"))
     .sort((left, right) => Number(left.lifecycle_status !== "published") -
       Number(right.lifecycle_status !== "published") ||
       right.version_number - left.version_number || right.id.localeCompare(left.id))[0] ?? null;
+}
+
+function isSeriesList(list, sku) {
+  return list?.tenant_id === currentTenantId() &&
+    list.tenant_supplier_id === "23000000-0000-4000-8000-000000000021" &&
+    list.supplier_id === sku.supplier_id &&
+    list.price_list_code.trim().toUpperCase() === "DEFAULT" &&
+    list.scope_type === "default" && list.currency === "CNY";
 }
 
 function skuById(skuId) {

@@ -1,8 +1,32 @@
 import { expect } from "@playwright/test";
+import type { APIRequestContext } from "@playwright/test";
 
+import {
+  mockBackendBaseUrl,
+  relationshipId,
+  tenantProductId,
+  tenantSkuId,
+} from "./supplier-sku-inline-price-test-helpers";
 import type { MockState } from "./supplier-sku-inline-price-test-helpers";
 
 const pricedAt = Date.parse("2026-08-19T00:00:00.000Z");
+
+export async function assertNoUnrelatedFutureLeak(request: APIRequestContext) {
+  const query = `tenantSupplierId=${relationshipId}`;
+  const [defaults, current] = await Promise.all([
+    request.get(`${mockBackendBaseUrl}/supplier-products/${tenantProductId}` +
+      `/purchasable-skus/price-defaults?${query}`),
+    request.get(`${mockBackendBaseUrl}/supplier-products/${tenantProductId}` +
+      `/purchasable-skus/${tenantSkuId}/price?${query}`),
+  ]);
+  expect(defaults.ok()).toBe(true);
+  expect(current.ok()).toBe(true);
+  for (const response of [defaults, current]) {
+    expect(await response.json()).toMatchObject({
+      data: { current_price: null, next_scheduled_effective_from: null },
+    });
+  }
+}
 
 export function assertCreateSourceSeed(state: MockState) {
   const source = state.priceLists.find((list) =>

@@ -7,6 +7,7 @@ import {
 } from "./supplier-product-pricing-mock-state.mjs";
 import {
   advanceCurrentPriceRowVersion,
+  cannotPreserveFutureVersion,
   createImmediatePriceVersion,
   earliestFutureList,
   resetInlinePriceState,
@@ -81,7 +82,7 @@ function sendPriceDefaults(response, productId, url) {
     currency: "CNY",
     recommended_tax_rate: current?.tax_rate ?? "0.13",
     recommended_tax_inclusive: false,
-    next_scheduled_effective_from: earliestFutureList()?.effective_from ?? null,
+    next_scheduled_effective_from: null,
     current_price: null,
   });
   return true;
@@ -99,11 +100,12 @@ function sendCurrentPrice(response, productId, skuId, url) {
 
 function priceContext(skuId) {
   const current = resolveCurrentPrice(skuId);
+  const future = earliestFutureList(skuId);
   return {
     currency: "CNY",
     recommended_tax_rate: current?.tax_rate ?? "0.13",
     recommended_tax_inclusive: false,
-    next_scheduled_effective_from: earliestFutureList()?.effective_from ?? null,
+    next_scheduled_effective_from: future?.effective_from ?? null,
     current_price: current,
   };
 }
@@ -174,6 +176,14 @@ function validateSave(url, productId, skuId, payload, method) {
       message: "价格版本已变化，请重试",
     };
   }
+  const priceChanged = !current || !samePrice(current, price);
+  if (priceChanged && cannotPreserveFutureVersion(skuId)) {
+    return {
+      status: 409,
+      code: "SUPPLIER_PRICE_PERIOD_CONFLICT",
+      message: "未来计划价格无法由即时版本安全保留",
+    };
+  }
   return null;
 }
 
@@ -224,6 +234,7 @@ function applySave(productId, skuId, payload, method) {
     createImmediatePriceVersion(sku, payload.price, before, method === "POST" ? "create" : "update");
   }
   const current = resolveCurrentPrice(skuId);
+  const future = earliestFutureList(skuId);
   const result = {
     status: "saved",
     idempotent: false,
@@ -233,7 +244,7 @@ function applySave(productId, skuId, payload, method) {
     sku: structuredClone(sku),
     current_price: current,
     catalog_item: buildCatalogItem(sku, current),
-    next_scheduled_effective_from: earliestFutureList()?.effective_from ?? null,
+    next_scheduled_effective_from: future?.effective_from ?? null,
     available_actions: ["edit", "deactivate"],
   };
   return result;
