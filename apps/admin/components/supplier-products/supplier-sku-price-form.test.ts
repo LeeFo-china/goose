@@ -118,6 +118,32 @@ describe("供应商 SKU 即时价格模型", () => {
     });
   });
 
+  test("组合 payload 去除价格输入空白但保留小数文本精度", () => {
+    const payload = buildPurchasableSkuCreatePayload({
+      sku: {
+        name: "18L",
+        purchase_unit_id: "unit-1",
+        specification: null,
+        model: null,
+        batch_managed: false,
+        color_managed: false,
+        serial_managed: false,
+        spec_values: {},
+      },
+      priceForm: {
+        unitPrice: " 318.00 ",
+        taxRate: " 0.130000 ",
+        taxInclusive: false,
+      },
+    });
+
+    expect(payload.price).toEqual({
+      unit_price: "318.00",
+      tax_rate: "0.130000",
+      tax_inclusive: false,
+    });
+  });
+
   test("更新 payload 使用 SKU 版本和当前价格簿行版本", () => {
     expect(buildPurchasableSkuUpdatePayload({
       sku: { expectedVersion: 3, name: "18L" },
@@ -279,7 +305,7 @@ describe("供应商 SKU 即时价格模型", () => {
     expect(getSupplierSkuPriceEffectiveUntilNotice(priceContext())).toBeNull();
     expect(getSupplierSkuPriceEffectiveUntilNotice(priceContext({
       next_scheduled_effective_from: "2026-09-02T08:30:00+08:00",
-    }))).toMatch(/^当前价格有效至 .+$/);
+    }))).toMatch(/^本次价格有效至 .+$/);
   });
 
   test("非法未来价格时间不生成提示", () => {

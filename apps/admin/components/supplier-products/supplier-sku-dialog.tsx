@@ -28,9 +28,12 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 
 import {
+  buildPurchasableSkuPath,
   buildSkuResourcePath,
   createSupplierResource,
   loadAllSpecDefinitions,
+  loadSupplierSkuCurrentPrice,
+  loadSupplierSkuPriceDefaults,
   mutateSupplierResource,
 } from "./supplier-product-api";
 import { CatalogSearchSelect } from "./catalog-search-select";
@@ -39,25 +42,43 @@ import {
   type SupplierCommandAttempt,
 } from "./supplier-command-attempt";
 import { buildSuggestedSkuName } from "./supplier-product-rules";
+import { SupplierSkuPriceFields } from "./supplier-sku-price-fields";
+import {
+  buildPurchasableSkuCreatePayload,
+  buildPurchasableSkuUpdatePayload,
+  createInitialSkuPriceForm,
+  getSupplierSkuPriceEffectiveUntilNotice,
+  isSupplierSkuPriceFormValid,
+  type SupplierSkuPriceForm,
+} from "./supplier-sku-price-form";
 import { SupplierSpecFields } from "./supplier-spec-fields";
 import type {
   CatalogSpecDefinition,
   ProductApiScope,
   SupplierProduct,
   SupplierSku,
+  SupplierSkuPriceContext,
 } from "./supplier-product-types";
+
+const emptyPriceForm: SupplierSkuPriceForm = {
+  unitPrice: "",
+  taxRate: "",
+  taxInclusive: false,
+};
 
 export function SupplierSkuDialog({
   scope,
   product,
   sku,
   disabled,
+  inlinePriceEnabled = false,
   onSaved,
 }: {
   scope: ProductApiScope;
   product: SupplierProduct;
   sku?: SupplierSku;
   disabled?: boolean;
+  inlinePriceEnabled?: boolean;
   onSaved: () => void | Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
@@ -74,7 +95,15 @@ export function SupplierSkuDialog({
   const [specValues, setSpecValues] = useState<Record<string, CatalogSpecValue>>(
     sku?.spec_values ?? {},
   );
+  const [priceContext, setPriceContext] = useState<SupplierSkuPriceContext | null>(null);
+  const [priceForm, setPriceForm] = useState<SupplierSkuPriceForm>(emptyPriceForm);
+  const [priceTouched, setPriceTouched] = useState(false);
   const attemptRef = useRef<SupplierCommandAttempt | null>(null);
+  const saveMode = !inlinePriceEnabled || scope.kind !== "tenant"
+    ? "legacy"
+    : sku?.status === "inactive"
+      ? "metadata-only"
+      : "inline-price";
 
   useEffect(() => {
     if (!open) return;
@@ -86,12 +115,29 @@ export function SupplierSkuDialog({
     setColorManaged(sku?.color_managed ?? false);
     setSerialManaged(sku?.serial_managed ?? false);
     setSpecValues(sku?.spec_values ?? {});
+    setPriceContext(null);
+    setPriceForm(emptyPriceForm);
+    setPriceTouched(false);
     let active = true;
     setLoading(true);
-    void loadAllSpecDefinitions(product.category.id, scope).then((specDefinitions) => {
+    const priceRequest = inlinePriceEnabled && scope.kind === "tenant"
+      ? sku
+        ? sku.status !== "inactive"
+          ? loadSupplierSkuCurrentPrice(scope, product.id, sku.id)
+          : Promise.resolve(null)
+        : loadSupplierSkuPriceDefaults(scope, product.id)
+      : Promise.resolve(null);
+    void Promise.all([
+      loadAllSpecDefinitions(product.category.id, scope),
+      priceRequest,
+    ]).then(([specDefinitions, nextPriceContext]) => {
       if (!active) return;
       setDefinitions(specDefinitions);
       setSpecValues((current) => withSpecDefaults(current, specDefinitions));
+      setPriceContext(nextPriceContext);
+      if (nextPriceContext) {
+        setPriceForm(createInitialSkuPriceForm(nextPriceContext));
+      }
     }).catch((error) => {
       if (active) toast.error(error instanceof Error ? error.message : "SKU 表单资料加载失败");
     }).finally(() => {
@@ -102,12 +148,13 @@ export function SupplierSkuDialog({
     };
   }, [open, product.category.id, scope, sku]);
 
-  const invalid = loading || !name.trim() ||
-    !purchaseUnitId || !requiredSpecsPresent(definitions, specValues);
+  const priceInvalid = saveMode === "inline-price" &&
+    (!priceContext || !isSupplierSkuPriceFormValid(priceForm));
+  const invalid = loading || !name.trim() || !purchaseUnitId ||
+    !requiredSpecsPresent(definitions, specValues) || priceInvalid;
 
   async function submit() {
     if (invalid) return;
-    setSaving(true);
     const fields = {
       name: name.trim(),
       specification: specification.trim() || null,
@@ -117,12 +164,27 @@ export function SupplierSkuDialog({
       serial_managed: serialManaged,
       spec_values: specValues,
     };
-    const payload = sku
+    const legacyPayload = sku
       ? { ...fields, expected_version: sku.version }
       : { ...fields, purchase_unit_id: purchaseUnitId };
-    const resourcePath = sku
-      ? buildSkuResourcePath(scope, product.id, sku.id)
-      : `${buildSkuResourcePath(scope, product.id, ":skuId")}`;
+    let payload: unknown = legacyPayload;
+    if (saveMode === "inline-price") {
+      if (!priceContext) return;
+      payload = sku
+        ? buildPurchasableSkuUpdatePayload({
+          sku: { ...fields, expectedVersion: sku.version },
+          priceForm,
+          context: priceContext,
+        })
+        : buildPurchasableSkuCreatePayload({
+          sku: { ...fields, purchase_unit_id: purchaseUnitId },
+          priceForm,
+        });
+    }
+    const resourcePath = saveMode === "inline-price"
+      ? buildPurchasableSkuPath(product.id, sku?.id ?? ":skuId")
+      : buildSkuResourcePath(scope, product.id, sku?.id ?? ":skuId");
+    setSaving(true);
     try {
       const attempt = resolveSupplierCommandAttempt(attemptRef.current, {
         scope: `${scope.kind}-supplier-sku-${sku ? "update" : "create"}`,
@@ -133,7 +195,7 @@ export function SupplierSkuDialog({
       attemptRef.current = attempt;
       if (sku) {
         await mutateSupplierResource(
-          buildSkuResourcePath(scope, product.id, sku.id),
+          resourcePath,
           scope,
           payload,
           attempt.idempotencyKey,
@@ -141,14 +203,18 @@ export function SupplierSkuDialog({
         );
       } else {
         await createSupplierResource(
-          buildSkuResourcePath(scope, product.id, attempt.resourceId!),
+          saveMode === "inline-price"
+            ? buildPurchasableSkuPath(product.id, attempt.resourceId!)
+            : buildSkuResourcePath(scope, product.id, attempt.resourceId!),
           scope,
           payload,
           attempt.idempotencyKey,
         );
       }
       attemptRef.current = null;
-      toast.success(sku ? "供应商 SKU 已更新" : "供应商 SKU 已创建");
+      toast.success(saveMode === "inline-price"
+        ? "SKU 与供货价已生效"
+        : sku ? "供应商 SKU 已更新" : "供应商 SKU 已创建");
       setOpen(false);
       await onSaved();
     } catch (error) {
@@ -227,7 +293,11 @@ export function SupplierSkuDialog({
                   value={`${sku.purchase_unit.name}（${sku.purchase_unit.symbol}）`}
                   disabled
                 />
-                <FieldDescription>采购单位和库存基本单位请在“单位换算”中原子维护。</FieldDescription>
+                <FieldDescription>
+                  {saveMode === "legacy"
+                    ? "采购单位和库存基本单位请在“单位换算”中原子维护。"
+                    : "单位变更请使用专用单位换算流程。"}
+                </FieldDescription>
               </Field>
             ) : (
               <CatalogSearchSelect
@@ -249,12 +319,32 @@ export function SupplierSkuDialog({
               <BooleanField id="supplier-sku-serial" label="序列号管理" checked={serialManaged} onCheckedChange={setSerialManaged} />
             </FieldGroup>
           </FieldSet>
+          {inlinePriceEnabled && scope.kind === "tenant" ? (
+            <SupplierSkuPriceFields
+              idPrefix={`supplier-sku-price-${sku?.id ?? "new"}`}
+              value={priceForm}
+              purchaseUnitSymbol={sku?.purchase_unit.symbol ?? "所选采购单位"}
+              disabled={saveMode === "metadata-only"}
+              effectiveUntilNotice={priceContext
+                ? getSupplierSkuPriceEffectiveUntilNotice(priceContext)
+                : null}
+              unitPriceError={priceTouched && priceInvalid
+                ? "请输入大于 0 且最多两位小数的基础供货价"
+                : null}
+              onChange={(nextPriceForm) => {
+                setPriceTouched(true);
+                setPriceForm(nextPriceForm);
+              }}
+            />
+          ) : null}
         </FieldGroup>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => setOpen(false)}>取消</Button>
           <Button type="button" disabled={saving || invalid} onClick={() => void submit()}>
             {saving ? <Spinner data-icon="inline-start" /> : null}
-            保存 SKU
+            {saveMode === "inline-price"
+              ? "保存并生效"
+              : saveMode === "metadata-only" ? "保存修改" : "保存 SKU"}
           </Button>
         </DialogFooter>
       </DialogContent>

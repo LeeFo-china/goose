@@ -17,15 +17,13 @@ export function canReadSupplierProductWorkspace({
   canViewProducts,
   canManageProducts,
   canViewCostPrice,
-  canManageCostPrice,
 }: {
   canViewProducts: boolean;
   canManageProducts: boolean;
   canViewCostPrice: boolean;
   canManageCostPrice: boolean;
 }) {
-  return canViewProducts || canManageProducts || canViewCostPrice ||
-    canManageCostPrice;
+  return canViewProducts || canManageProducts || canViewCostPrice;
 }
 
 export function shouldLoadPriceLists(

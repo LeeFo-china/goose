@@ -177,13 +177,13 @@ export function getSupplierSkuPriceEffectiveUntilNotice(
     hour12: false,
     timeZone: "Asia/Shanghai",
   }).format(date);
-  return `当前价格有效至 ${effectiveUntil}`;
+  return `本次价格有效至 ${effectiveUntil}`;
 }
 
 function pricePayload(form: SupplierSkuPriceForm) {
   return {
-    unit_price: form.unitPrice,
-    tax_rate: form.taxRate,
+    unit_price: form.unitPrice.trim(),
+    tax_rate: form.taxRate.trim(),
     tax_inclusive: form.taxInclusive,
   };
 }

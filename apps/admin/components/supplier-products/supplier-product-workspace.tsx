@@ -59,7 +59,9 @@ export function SupplierProductWorkspace({
   const productRequests = useRef(createLatestRequestGate());
   const requestedRelationshipId = searchParams.get("tenantSupplierId");
   const search = searchParams.toString();
-  const canReadCostPrice = canViewCostPrice || canManageCostPrice;
+  const canReadCostPrice = canViewCostPrice;
+  const canUseInlineSkuPrice = canManageProducts &&
+    canViewCostPrice && canManageCostPrice;
   const canReadWorkspace = canReadSupplierProductWorkspace({
     canViewProducts,
     canManageProducts,
@@ -247,7 +249,7 @@ export function SupplierProductWorkspace({
                 </CardHeader>
               ) : null}
               <CardContent className="p-0">
-                <SupplierProductList key={relationshipId} scope={scope} relationship={relationship} products={products} loading={loadingProducts} canManage={canManageProducts} onRefresh={loadProducts} onAvailableSkusChange={setAvailableSkus} onSkuWorkspaceChange={setSkuWorkspaceVisible} />
+                <SupplierProductList key={relationshipId} scope={scope} relationship={relationship} products={products} loading={loadingProducts} canManage={canManageProducts} inlinePriceEnabled={canUseInlineSkuPrice} onRefresh={loadProducts} onAvailableSkusChange={setAvailableSkus} onSkuWorkspaceChange={setSkuWorkspaceVisible} />
                 {!skuWorkspaceVisible ? <Paginator page={productPage} totalPages={totalPages} total={products.pagination.total} loading={loadingProducts} onPageChange={setProductPage} /> : null}
               </CardContent>
             </Card>
