@@ -230,20 +230,28 @@ async function verifyFutureBoundaries(
     await snapshotFutureSupplierPrice(database, fixture),
   )) throw new Error("SMOKE_FUTURE_VERSION_MUTATED");
 
-  await addMultiItemSourceFixture(
-    database,
+  await database.begin((transaction) => addMultiItemSourceFixture(
+    transaction as unknown as TransactionSQL,
     fixture,
     futureSaved.current_price.supplier_price_list_id,
+  ));
+  const conflictContext = await getSupplierPurchasableSkuSmokeContext(
+    database,
+    fixture,
   );
+  if (!conflictContext.current_price) {
+    throw new Error("SMOKE_MULTI_ITEM_CURRENT_PRICE_MISSING");
+  }
   const beforeConflict = await snapshotSupplierPriceSeries(database, fixture);
   const conflict = await commandWithTimeout(
     database,
     createSupplierPurchasableSkuSmokeCommand(fixture, {
       action: "update",
       expectedSkuVersion: futureSaved.sku.version,
-      expectedPriceListId: futureSaved.current_price.supplier_price_list_id,
+      expectedPriceListId:
+        conflictContext.current_price.supplier_price_list_id,
       expectedPriceListVersion:
-        futureSaved.current_price.supplier_price_list_row_version,
+        conflictContext.current_price.supplier_price_list_row_version,
       unitPrice: "140.00",
       idempotencyKey: `task8:${fixture.token}:future-conflict`,
     }),

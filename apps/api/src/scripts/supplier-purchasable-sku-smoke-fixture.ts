@@ -68,6 +68,7 @@ export async function seedSupplierPurchasableSkuSmokeFixture(
   fixture: SupplierPurchasableSkuSmokeFixture,
 ): Promise<void> {
   const label = `task8-${fixture.token}`;
+  const supplierCode = `T8${fixture.token}S`.toUpperCase();
   await sql`
     insert into public.tenants(id, name, slug, status) values
       (${fixture.tenantId}::uuid, ${label}, ${label}, 'active'),
@@ -139,7 +140,7 @@ export async function seedSupplierPurchasableSkuSmokeFixture(
       reviewed_by_employee_id, reviewed_at,
       created_by_employee_id, updated_by_employee_id
     ) values
-      (${fixture.supplierId}::uuid, ${`T8${fixture.token}S`}, ${label},
+      (${fixture.supplierId}::uuid, ${supplierCode}, ${label},
         ${`${label} Ltd`}, 'manufacturer', 'tenant', ${fixture.tenantId}::uuid,
         'approved', 'active', ${fixture.actorEmployeeId}::uuid, now(),
         ${fixture.actorEmployeeId}::uuid, ${fixture.actorEmployeeId}::uuid),
@@ -156,7 +157,7 @@ export async function seedSupplierPurchasableSkuSmokeFixture(
       internal_supplier_code, started_at,
       created_by_employee_id, updated_by_employee_id
     ) values (${fixture.relationshipId}::uuid, ${fixture.tenantId}::uuid,
-      ${fixture.supplierId}::uuid, 'active', 'CNY', ${`T8-${fixture.token}`},
+      ${fixture.supplierId}::uuid, 'active', 'CNY', ${supplierCode},
       current_date, ${fixture.actorEmployeeId}::uuid,
       ${fixture.actorEmployeeId}::uuid)
   `;
@@ -187,7 +188,7 @@ export async function seedSupplierPurchasableSkuSmokeFixture(
       (${fixture.platformProductId}::uuid, ${fixture.platformSupplierId}::uuid,
         ${`T8-${fixture.token}-PLATFORM`}, ${`${label}-platform`},
         ${fixture.platformCategoryId}::uuid, ${fixture.platformBrandId}::uuid,
-        'active', 'platform', null, null, ${fixture.platformEmployeeId}::uuid,
+        'draft', 'platform', null, null, ${fixture.platformEmployeeId}::uuid,
         'platform', ${fixture.platformEmployeeId}::uuid,
         ${fixture.platformEmployeeId}::uuid)
   `;
@@ -215,45 +216,60 @@ export async function seedSupplierPurchasableSkuSmokeFixture(
         ${fixture.platformEmployeeId}::uuid,
         ${fixture.platformEmployeeId}::uuid, '{}'::jsonb)
   `;
+  await sql`
+    update public.supplier_products
+    set status = 'active', updated_at = now()
+    where id = ${fixture.platformProductId}::uuid
+  `;
 }
 
 export async function cleanupSupplierPurchasableSkuSmokeFixture(
-  sql: SupplierPurchasableSkuSmokeSql,
+  sql: Bun.SQL,
   fixture: SupplierPurchasableSkuSmokeFixture,
 ): Promise<void> {
-  const users = [fixture.actorUserId, fixture.otherUserId, fixture.platformUserId];
-  const suppliers = [fixture.supplierId, fixture.platformSupplierId];
-  await sql`delete from public.supplier_command_events
-    where actor_user_id = any(${sql.array(users, "UUID")}) or tenant_id = any(
-      ${sql.array([fixture.tenantId, fixture.otherTenantId], "UUID")})`;
-  await sql`delete from public.supplier_sku_unit_conversions where
-    supplier_sku_id in (select id from public.supplier_skus
-      where supplier_id = any(${sql.array(suppliers, "UUID")}))`;
-  await sql`delete from public.supplier_price_list_items
-    where supplier_id = any(${sql.array(suppliers, "UUID")})`;
-  await sql`delete from public.supplier_price_lists
-    where supplier_id = any(${sql.array(suppliers, "UUID")})`;
-  await sql`delete from public.supplier_skus where supplier_id = any(
-    ${sql.array(suppliers, "UUID")})`;
-  await sql`delete from public.supplier_products where supplier_id = any(
-    ${sql.array(suppliers, "UUID")})`;
-  await sql`delete from public.tenant_suppliers
-    where id = ${fixture.relationshipId}::uuid`;
-  await sql`delete from public.tenant_supplier_settings where tenant_id in
-    (${fixture.tenantId}::uuid, ${fixture.otherTenantId}::uuid)`;
-  await sql`delete from public.suppliers where id = any(
-    ${sql.array(suppliers, "UUID")})`;
-  await sql`delete from public.catalog_brands where id = any(
-    ${sql.array([fixture.brandId, fixture.platformBrandId], "UUID")})`;
-  await sql`delete from public.catalog_categories where id = any(
-    ${sql.array([fixture.categoryId, fixture.platformCategoryId], "UUID")})`;
-  await sql`delete from public.catalog_units where id = ${fixture.unitId}::uuid`;
-  await sql`delete from public.employees where id = any(
-    ${sql.array([fixture.actorEmployeeId, fixture.otherEmployeeId,
-      fixture.platformEmployeeId], "UUID")})`;
-  await sql`delete from auth.users where id = any(${sql.array(users, "UUID")})`;
-  await sql`delete from public.tenants where id = any(
-    ${sql.array([fixture.tenantId, fixture.otherTenantId], "UUID")})`;
+  await sql.begin(async (transaction) => {
+    const tx = transaction as unknown as TransactionSQL;
+    const users = [
+      fixture.actorUserId,
+      fixture.otherUserId,
+      fixture.platformUserId,
+    ];
+    const suppliers = [fixture.supplierId, fixture.platformSupplierId];
+    await tx`set local session_replication_role = replica`.simple();
+    await tx`delete from public.supplier_command_events
+      where actor_user_id = any(${tx.array(users, "UUID")}) or tenant_id = any(
+        ${tx.array([fixture.tenantId, fixture.otherTenantId], "UUID")})`;
+    await tx`delete from public.supplier_sku_unit_conversions where
+      supplier_sku_id in (select id from public.supplier_skus
+        where supplier_id = any(${tx.array(suppliers, "UUID")}))`;
+    await tx`delete from public.supplier_price_list_items
+      where supplier_id = any(${tx.array(suppliers, "UUID")})`;
+    await tx`delete from public.supplier_price_lists
+      where supplier_id = any(${tx.array(suppliers, "UUID")})`;
+    await tx`delete from public.supplier_skus where supplier_id = any(
+      ${tx.array(suppliers, "UUID")})`;
+    await tx`delete from public.supplier_products where supplier_id = any(
+      ${tx.array(suppliers, "UUID")})`;
+    await tx`delete from public.tenant_suppliers
+      where id = ${fixture.relationshipId}::uuid`;
+    await tx`delete from public.tenant_supplier_settings where tenant_id in
+      (${fixture.tenantId}::uuid, ${fixture.otherTenantId}::uuid)`;
+    await tx`delete from public.suppliers where id = any(
+      ${tx.array(suppliers, "UUID")})`;
+    await tx`delete from public.catalog_brands where id = any(
+      ${tx.array([fixture.brandId, fixture.platformBrandId], "UUID")})`;
+    await tx`delete from public.catalog_categories where id = any(
+      ${tx.array([fixture.categoryId, fixture.platformCategoryId], "UUID")})`;
+    await tx`delete from public.catalog_units
+      where id = ${fixture.unitId}::uuid`;
+    await tx`delete from public.employees where id = any(
+      ${tx.array([fixture.actorEmployeeId, fixture.otherEmployeeId,
+        fixture.platformEmployeeId], "UUID")})`;
+    await tx`delete from auth.users where id = any(
+      ${tx.array(users, "UUID")})`;
+    await tx`delete from public.tenants where id = any(
+      ${tx.array([fixture.tenantId, fixture.otherTenantId], "UUID")})`;
+  });
 }
 
 export async function countSupplierPurchasableSkuSmokeResiduals(
@@ -264,11 +280,24 @@ export async function countSupplierPurchasableSkuSmokeResiduals(
     select (
       (select count(*) from public.tenants where id in
         (${fixture.tenantId}::uuid, ${fixture.otherTenantId}::uuid)) +
+      (select count(*) from auth.users where id = any(
+        ${sql.array([fixture.actorUserId, fixture.otherUserId,
+          fixture.platformUserId], "UUID")})) +
       (select count(*) from public.employees where id = any(
         ${sql.array([fixture.actorEmployeeId, fixture.otherEmployeeId,
           fixture.platformEmployeeId], "UUID")})) +
+      (select count(*) from public.catalog_categories where id = any(
+        ${sql.array([fixture.categoryId, fixture.platformCategoryId], "UUID")})) +
+      (select count(*) from public.catalog_brands where id = any(
+        ${sql.array([fixture.brandId, fixture.platformBrandId], "UUID")})) +
+      (select count(*) from public.catalog_units
+        where id = ${fixture.unitId}::uuid) +
       (select count(*) from public.suppliers where id = any(
         ${sql.array([fixture.supplierId, fixture.platformSupplierId], "UUID")})) +
+      (select count(*) from public.tenant_suppliers
+        where id = ${fixture.relationshipId}::uuid) +
+      (select count(*) from public.tenant_supplier_settings where tenant_id in
+        (${fixture.tenantId}::uuid, ${fixture.otherTenantId}::uuid)) +
       (select count(*) from public.supplier_products where supplier_id = any(
         ${sql.array([fixture.supplierId, fixture.platformSupplierId], "UUID")})) +
       (select count(*) from public.supplier_skus where supplier_id = any(
@@ -278,7 +307,9 @@ export async function countSupplierPurchasableSkuSmokeResiduals(
       (select count(*) from public.supplier_price_list_items where supplier_id =
         ${fixture.supplierId}::uuid) +
       (select count(*) from public.supplier_command_events where tenant_id in
-        (${fixture.tenantId}::uuid, ${fixture.otherTenantId}::uuid))
+        (${fixture.tenantId}::uuid, ${fixture.otherTenantId}::uuid)
+        or actor_user_id = any(${sql.array([fixture.actorUserId,
+          fixture.otherUserId, fixture.platformUserId], "UUID")}))
     )::integer as count
   `;
   return rows[0]?.count ?? -1;

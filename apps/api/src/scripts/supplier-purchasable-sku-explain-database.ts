@@ -70,6 +70,9 @@ implements SupplierPurchasableSkuExplainGateway {
     this.currentListId = context.current_price.supplier_price_list_id;
     this.currentItemId = context.current_price.supplier_price_list_item_id;
     await this.createCopyTarget(reserved, this.currentListId);
+    await this.seedPlannerNoise(reserved, this.currentListId, this.currentItemId);
+    await reserved`analyze public.supplier_price_lists`.simple();
+    await reserved`analyze public.supplier_price_list_items`.simple();
     return reserved;
   }
 
@@ -86,6 +89,7 @@ implements SupplierPurchasableSkuExplainGateway {
           'version_number', source.version_number + 20,
           'row_version', 1,
           'lifecycle_status', 'draft',
+          'published_at', null,
           'effective_from', now() + interval '20 days',
           'effective_until', null,
           'created_at', now(), 'updated_at', now()
@@ -93,6 +97,83 @@ implements SupplierPurchasableSkuExplainGateway {
       )).*
       from public.supplier_price_lists as source
       where source.id = ${currentListId}::uuid
+    `;
+  }
+
+  private async seedPlannerNoise(
+    sql: SupplierPurchasableSkuSmokeSql,
+    currentListId: string,
+    currentItemId: string,
+  ): Promise<void> {
+    await sql`
+      insert into public.supplier_skus
+      select (jsonb_populate_record(
+        null::public.supplier_skus,
+        to_jsonb(source) || jsonb_build_object(
+          'id', gen_random_uuid(),
+          'sku_code', ${`TS-T8N-${this.fixture.token}-`} ||
+            lpad(series.value::text, 4, '0'),
+          'name', ${`task8-${this.fixture.token}-noise-`} ||
+            series.value::text,
+          'version', 1,
+          'created_at', now(), 'updated_at', now()
+        )
+      )).*
+      from public.supplier_skus as source
+      cross join generate_series(1, 512) as series(value)
+      where source.id = ${this.fixture.skuId}::uuid
+    `;
+    await sql`
+      insert into public.supplier_price_lists
+      select (jsonb_populate_record(
+        null::public.supplier_price_lists,
+        to_jsonb(source) || jsonb_build_object(
+          'id', gen_random_uuid(),
+          'price_list_code', ${`T8N-${this.fixture.token}-`} ||
+            lpad(series.value::text, 4, '0'),
+          'version_number', 1,
+          'row_version', 1,
+          'lifecycle_status', 'draft',
+          'effective_from', now() + interval '30 days',
+          'effective_until', null,
+          'supersedes_price_list_id', null,
+          'published_at', null,
+          'created_at', now(), 'updated_at', now()
+        )
+      )).*
+      from public.supplier_price_lists as source
+      cross join generate_series(1, 512) as series(value)
+      where source.id = ${currentListId}::uuid
+    `;
+    await sql`
+      insert into public.supplier_price_list_items
+      select (jsonb_populate_record(
+        null::public.supplier_price_list_items,
+        to_jsonb(source_item) || jsonb_build_object(
+          'id', gen_random_uuid(),
+          'supplier_price_list_id', price_list.id,
+          'supplier_sku_id', sku.id,
+          'created_at', now(), 'updated_at', now()
+        )
+      )).*
+      from public.supplier_price_list_items as source_item
+      cross join generate_series(1, 512) as series(value)
+      join public.supplier_price_lists as price_list
+        on price_list.price_list_code = ${`T8N-${this.fixture.token}-`} ||
+          lpad(series.value::text, 4, '0')
+        and price_list.supplier_id = ${this.fixture.supplierId}::uuid
+      join public.supplier_skus as sku
+        on sku.sku_code = ${`TS-T8N-${this.fixture.token}-`} ||
+          lpad(series.value::text, 4, '0')
+        and sku.supplier_id = ${this.fixture.supplierId}::uuid
+      where source_item.id = ${currentItemId}::uuid
+    `;
+    await sql`
+      update public.supplier_price_lists
+      set lifecycle_status = 'retired', published_at = now(),
+        row_version = row_version + 1, updated_at = now()
+      where supplier_id = ${this.fixture.supplierId}::uuid
+        and price_list_code like ${`T8N-${this.fixture.token}-%`}
     `;
   }
 
@@ -197,6 +278,8 @@ implements SupplierPurchasableSkuExplainGateway {
         this.reserved.release();
         this.reserved = undefined;
       }
+      await this.database`analyze public.supplier_price_lists`.simple();
+      await this.database`analyze public.supplier_price_list_items`.simple();
       residuals = await countSupplierPurchasableSkuSmokeResiduals(
         this.database,
         this.fixture,

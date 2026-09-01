@@ -187,11 +187,53 @@ export async function createFutureSupplierPriceVersion(
   fixture: SupplierPurchasableSkuSmokeFixture,
   currentListId: string,
 ): Promise<void> {
+  const replacementCurrentListId = crypto.randomUUID();
+  const futureFrom = new Date(Date.now() + 2 * 24 * 60 * 60 * 1_000)
+    .toISOString();
   await sql`
     update public.supplier_price_lists
-    set effective_until = now() + interval '2 days',
+    set lifecycle_status = 'retired', row_version = row_version + 1,
       updated_at = now(), updated_by_employee_id = ${fixture.actorEmployeeId}::uuid
     where id = ${currentListId}::uuid
+  `;
+  await sql`
+    insert into public.supplier_price_lists
+    select (jsonb_populate_record(
+      null::public.supplier_price_lists,
+      to_jsonb(source) || jsonb_build_object(
+        'id', ${replacementCurrentListId}::uuid,
+        'version_number', source.version_number + 1,
+        'row_version', 1,
+        'lifecycle_status', 'draft',
+        'effective_until', ${futureFrom}::timestamptz,
+        'supersedes_price_list_id', source.id,
+        'published_at', null,
+        'created_at', now(), 'updated_at', now()
+      )
+    )).*
+    from public.supplier_price_lists as source
+    where source.id = ${currentListId}::uuid
+  `;
+  await sql`
+    insert into public.supplier_price_list_items
+    select (jsonb_populate_record(
+      null::public.supplier_price_list_items,
+      to_jsonb(source_item) || jsonb_build_object(
+        'id', gen_random_uuid(),
+        'supplier_price_list_id', ${replacementCurrentListId}::uuid,
+        'created_at', now(), 'updated_at', now()
+      )
+    )).*
+    from public.supplier_price_list_items as source_item
+    where source_item.supplier_price_list_id = ${currentListId}::uuid
+      and source_item.supplier_sku_id = ${fixture.skuId}::uuid
+  `;
+  await sql`
+    update public.supplier_price_lists
+    set lifecycle_status = 'published', published_at = now(),
+      row_version = row_version + 1, updated_at = now(),
+      updated_by_employee_id = ${fixture.actorEmployeeId}::uuid
+    where id = ${replacementCurrentListId}::uuid
   `;
   await sql`
     insert into public.supplier_price_lists
@@ -201,14 +243,16 @@ export async function createFutureSupplierPriceVersion(
         'id', ${fixture.futurePriceListId}::uuid,
         'version_number', source.version_number + 2,
         'row_version', 1,
-        'lifecycle_status', 'published',
-        'effective_from', source.effective_until,
+        'lifecycle_status', 'draft',
+        'effective_from', ${futureFrom}::timestamptz,
         'effective_until', null,
+        'supersedes_price_list_id', source.id,
+        'published_at', null,
         'created_at', now(), 'updated_at', now()
       )
     )).*
     from public.supplier_price_lists as source
-    where source.id = ${currentListId}::uuid
+    where source.id = ${replacementCurrentListId}::uuid
   `;
   await sql`
     insert into public.supplier_price_list_items
@@ -222,8 +266,15 @@ export async function createFutureSupplierPriceVersion(
       )
     )).*
     from public.supplier_price_list_items as source_item
-    where source_item.supplier_price_list_id = ${currentListId}::uuid
+    where source_item.supplier_price_list_id = ${replacementCurrentListId}::uuid
       and source_item.supplier_sku_id = ${fixture.skuId}::uuid
+  `;
+  await sql`
+    update public.supplier_price_lists
+    set lifecycle_status = 'published', published_at = now(),
+      row_version = row_version + 1, updated_at = now(),
+      updated_by_employee_id = ${fixture.actorEmployeeId}::uuid
+    where id = ${fixture.futurePriceListId}::uuid
   `;
 }
 
@@ -232,6 +283,7 @@ export async function addMultiItemSourceFixture(
   fixture: SupplierPurchasableSkuSmokeFixture,
   currentListId: string,
 ): Promise<void> {
+  const multiItemCurrentListId = crypto.randomUUID();
   await sql`
     insert into public.supplier_skus(
       id, supplier_id, supplier_product_id, sku_code, name,
@@ -250,6 +302,48 @@ export async function addMultiItemSourceFixture(
       '{}'::jsonb)
   `;
   await sql`
+    update public.supplier_price_lists
+    set lifecycle_status = 'retired', row_version = row_version + 1,
+      updated_at = now(), updated_by_employee_id = ${fixture.actorEmployeeId}::uuid
+    where id = ${currentListId}::uuid
+  `;
+  await sql`
+    insert into public.supplier_price_lists
+    select (jsonb_populate_record(
+      null::public.supplier_price_lists,
+      to_jsonb(source) || jsonb_build_object(
+        'id', ${multiItemCurrentListId}::uuid,
+        'version_number', (
+          select max(candidate.version_number) + 1
+          from public.supplier_price_lists as candidate
+          where candidate.tenant_id = ${fixture.tenantId}::uuid
+            and candidate.supplier_id = ${fixture.supplierId}::uuid
+            and upper(btrim(candidate.price_list_code)) = 'DEFAULT'
+        ),
+        'row_version', 1,
+        'lifecycle_status', 'draft',
+        'supersedes_price_list_id', source.id,
+        'published_at', null,
+        'created_at', now(), 'updated_at', now()
+      )
+    )).*
+    from public.supplier_price_lists as source
+    where source.id = ${currentListId}::uuid
+  `;
+  await sql`
+    insert into public.supplier_price_list_items
+    select (jsonb_populate_record(
+      null::public.supplier_price_list_items,
+      to_jsonb(source_item) || jsonb_build_object(
+        'id', gen_random_uuid(),
+        'supplier_price_list_id', ${multiItemCurrentListId}::uuid,
+        'created_at', now(), 'updated_at', now()
+      )
+    )).*
+    from public.supplier_price_list_items as source_item
+    where source_item.supplier_price_list_id = ${currentListId}::uuid
+  `;
+  await sql`
     insert into public.supplier_price_list_items
     select (jsonb_populate_record(
       null::public.supplier_price_list_items,
@@ -259,8 +353,15 @@ export async function addMultiItemSourceFixture(
       )
     )).*
     from public.supplier_price_list_items as source_item
-    where source_item.supplier_price_list_id = ${currentListId}::uuid
+    where source_item.supplier_price_list_id = ${multiItemCurrentListId}::uuid
       and source_item.supplier_sku_id = ${fixture.skuId}::uuid
+  `;
+  await sql`
+    update public.supplier_price_lists
+    set lifecycle_status = 'published', published_at = now(),
+      row_version = row_version + 1, updated_at = now(),
+      updated_by_employee_id = ${fixture.actorEmployeeId}::uuid
+    where id = ${multiItemCurrentListId}::uuid
   `;
 }
 
