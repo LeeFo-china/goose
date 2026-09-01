@@ -136,12 +136,17 @@ describe("TenantOwnerDailyDashboardController routes", () => {
     });
   });
 
-  test("passes parsed gantt pagination query to service", async () => {
+  test("passes parsed gantt filters to service", async () => {
     const controller = await getController();
     const response = await controller.listProjectGantt(
       createRequest({
         page: "2",
         pageSize: "20",
+        keyword: " 星河湾 ",
+        window_start: "2026-09-01",
+        window_end: "2026-09-30",
+        timezone: "Asia/Shanghai",
+        risk: "blocked",
       }) as never,
       {} as never,
     );
@@ -149,6 +154,11 @@ describe("TenantOwnerDailyDashboardController routes", () => {
     expect(listProjectGantt).toHaveBeenCalledWith(authContext, {
       page: 2,
       pageSize: 20,
+      keyword: "星河湾",
+      window_start: "2026-09-01",
+      window_end: "2026-09-30",
+      timezone: "Asia/Shanghai",
+      risk: "blocked",
     });
     expect(response).toEqual({
       data: expect.objectContaining({
