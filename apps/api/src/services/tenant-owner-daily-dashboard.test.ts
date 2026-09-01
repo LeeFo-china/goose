@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { AuthContext } from "@/services/authorization";
+import type { TenantOwnerGanttWorkflowProgress } from "@/services/tenant-owner-dashboard-workflow-progress";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
@@ -142,7 +143,9 @@ function createRepository(overrides: Record<string, unknown> = {}) {
 
 function createWorkflowProgressReader() {
   return {
-    listProjectProgress: mock(async () =>
+    listProjectProgress: mock(async (): Promise<
+      Map<string, TenantOwnerGanttWorkflowProgress>
+    > =>
       new Map([[
         "project-1",
         {
@@ -286,13 +289,18 @@ describe("TenantOwnerDailyDashboardService", () => {
 
     const result = await service.listProjectGantt(
       authContextWithPermissions([{ code: "dashboard.read", scope: "all" }]),
-      { page: 1, pageSize: 20 },
+      { page: 1, pageSize: 20, timezone: "Asia/Shanghai" },
     );
 
     expect(repository.listGanttProjects).toHaveBeenCalledWith({
       tenantId: TENANT_ID,
       page: 1,
       pageSize: 20,
+      keyword: undefined,
+      windowStart: undefined,
+      windowEnd: undefined,
+      timezone: "Asia/Shanghai",
+      risk: undefined,
     });
     expect(workflowProgressReader.listProjectProgress).toHaveBeenCalledWith({
       tenantId: TENANT_ID,
@@ -324,5 +332,155 @@ describe("TenantOwnerDailyDashboardService", () => {
       total: 1,
       totalPages: 1,
     });
+    expect(result.list[0]?.risk_summary).toEqual({
+      risk_level: "warning",
+      risk_types: ["unscheduled_workflow"],
+      reason: "水电 尚未排期",
+    });
+  });
+
+  test("forwards filters and resolves workflow business date in the requested timezone", async () => {
+    const { service, repository, workflowProgressReader } = await createService();
+
+    await service.listProjectGantt(
+      authContextWithPermissions([{ code: "dashboard.read", scope: "all" }]),
+      {
+        page: 2,
+        pageSize: 50,
+        keyword: "星河湾",
+        window_start: "2026-09-01",
+        window_end: "2026-09-30",
+        timezone: "Pacific/Kiritimati",
+        risk: "unscheduled",
+      },
+    );
+
+    expect(repository.listGanttProjects).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      page: 2,
+      pageSize: 50,
+      keyword: "星河湾",
+      windowStart: "2026-09-01",
+      windowEnd: "2026-09-30",
+      timezone: "Pacific/Kiritimati",
+      risk: "unscheduled",
+    });
+    expect(workflowProgressReader.listProjectProgress).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      projectIds: ["project-1"],
+      businessDate: getExpectedDateInTimezone("Pacific/Kiritimati"),
+    });
+  });
+
+  test("fails filtered requests when workflow progress cannot be explained", async () => {
+    const workflowProgressReader = createWorkflowProgressReader();
+    workflowProgressReader.listProjectProgress.mockImplementation(async () => {
+      throw Object.assign(new Error("workflow failed"), {
+        statusCode: 500,
+        code: "DB_ERROR",
+      });
+    });
+    const { service } = await createService({ workflowProgressReader });
+
+    await expect(service.listProjectGantt(
+      authContextWithPermissions([{ code: "dashboard.read", scope: "all" }]),
+      {
+        page: 1,
+        pageSize: 20,
+        timezone: "Asia/Shanghai",
+        risk: "blocked",
+      },
+    )).rejects.toMatchObject({ statusCode: 500, code: "DB_ERROR" });
+  });
+
+  test("keeps workflow progress as a partial error without workflow filters", async () => {
+    const workflowProgressReader = createWorkflowProgressReader();
+    workflowProgressReader.listProjectProgress.mockImplementation(async () => {
+      throw Object.assign(new Error("workflow failed"), {
+        statusCode: 500,
+        code: "DB_ERROR",
+      });
+    });
+    const { service } = await createService({ workflowProgressReader });
+
+    const result = await service.listProjectGantt(
+      authContextWithPermissions([{ code: "dashboard.read", scope: "all" }]),
+      { page: 1, pageSize: 20, timezone: "Asia/Shanghai" },
+    );
+
+    expect(result.list[0]?.workflow_progress.source).toBe("unavailable");
+    expect(result.partial_errors).toEqual([{
+      module: "workflow_progress",
+      code: "DB_ERROR",
+      message: "项目流程进度暂不可用",
+    }]);
+  });
+
+  test("explains blocked filter matches from the returned timeline", async () => {
+    const workflowProgressReader = createWorkflowProgressReader();
+    workflowProgressReader.listProjectProgress.mockImplementation(async () =>
+      new Map([[
+        "project-1",
+        {
+          source: "workflow_runtime" as const,
+          instance_id: "instance-1",
+          instance_status: "running" as const,
+          current_node_key: "tiling",
+          current_node_title: "瓦工",
+          timeline_nodes: [{
+            node_key: "plumbing",
+            node_title: "水电",
+            node_type: "procedure",
+            business_kind: "procedure",
+            status: "blocked" as const,
+            group: { key: "construction", label: "施工阶段", order: 10 },
+            display: {
+              label: "水电",
+              status_label: "待业主确认",
+              status_variant: "warning" as const,
+            },
+            attributes: {
+              stage_code: "plumbing_electrical",
+              acceptance_enabled: true,
+              acceptance_required: true,
+              acceptance_status: "leader_approved",
+              planned_start_date: "2026-08-01",
+              planned_end_date: "2026-08-10",
+              schedule_status: "completed",
+            },
+            actions: [],
+          }],
+        },
+      ]])
+    );
+    const { service } = await createService({ workflowProgressReader });
+
+    const result = await service.listProjectGantt(
+      authContextWithPermissions([{ code: "dashboard.read", scope: "all" }]),
+      {
+        page: 1,
+        pageSize: 20,
+        timezone: "Asia/Shanghai",
+        risk: "blocked",
+      },
+    );
+
+    expect(result.list[0]?.risk_summary).toEqual({
+      risk_level: "high",
+      risk_types: ["blocked_workflow"],
+      reason: "水电 待业主确认",
+    });
+    expect(result.list[0]?.workflow_progress.timeline_nodes[0]?.status).toBe(
+      "blocked",
+    );
   });
 });
+
+function getExpectedDateInTimezone(timezone: string) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}

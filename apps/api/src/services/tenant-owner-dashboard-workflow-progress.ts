@@ -1,4 +1,7 @@
-import { tenantOwnerDashboardWorkflowRepository } from "@/repositories/tenant-owner-dashboard-workflow";
+import {
+  tenantOwnerDashboardWorkflowRepository,
+  type TenantOwnerDashboardAcceptanceRow,
+} from "@/repositories/tenant-owner-dashboard-workflow";
 import {
   workflowRepository,
   type WorkflowGraphResult,
@@ -11,6 +14,10 @@ import {
   buildProjectWorkflowProgressProjection,
   type ProjectWorkflowProgress,
 } from "@/services/project-workflow-progress";
+import {
+  enrichWorkflowTimelineNodesWithConstructionStages,
+  type WorkflowTimelineNode,
+} from "@/services/project-workflow-timeline-contract";
 
 export type TenantOwnerGanttWorkflowProgress = Pick<
   ProjectWorkflowProgress,
@@ -24,7 +31,8 @@ export type TenantOwnerGanttWorkflowProgress = Pick<
 
 type TenantOwnerDashboardWorkflowRepositoryPort = Pick<
   typeof tenantOwnerDashboardWorkflowRepository,
-  "listProcedureAssignmentsForRuntimeIds"
+  | "listProcedureAssignmentsForRuntimeIds"
+  | "listLatestAcceptancesForProjects"
 >;
 
 export type TenantOwnerDashboardWorkflowProgressReaderPort = {
@@ -50,7 +58,7 @@ class TenantOwnerDashboardWorkflowProgressReader
     const projectIds = Array.from(new Set(input.projectIds));
     if (projectIds.length === 0) return new Map();
 
-    const [subjectStates, runtimeInstances] = await Promise.all([
+    const [subjectStates, runtimeInstances, acceptances] = await Promise.all([
       workflowSubjectStateRepository.listBySubjectIds({
         tenantId: input.tenantId,
         subjectType: "project",
@@ -60,6 +68,10 @@ class TenantOwnerDashboardWorkflowProgressReader
         tenantId: input.tenantId,
         subjectType: "project",
         subjectIds: projectIds,
+      }),
+      this.repository.listLatestAcceptancesForProjects({
+        tenantId: input.tenantId,
+        projectIds,
       }),
     ]);
 
@@ -87,6 +99,10 @@ class TenantOwnerDashboardWorkflowProgressReader
     const assignmentsByInstanceId = groupBy(
       procedureAssignments,
       (assignment) => assignment.workflow_instance_id,
+    );
+    const acceptancesByProjectId = groupBy(
+      acceptances,
+      (acceptance) => acceptance.project_id,
     );
 
     return new Map(projectIds.map((projectId) => {
@@ -118,13 +134,19 @@ class TenantOwnerDashboardWorkflowProgressReader
         pendingActions: [],
       });
 
+      const timelineNodes = enrichProjectTimelineWithAcceptanceEvidence({
+        projectId,
+        nodes: progress.timeline_nodes,
+        acceptances: acceptancesByProjectId.get(projectId) ?? [],
+      });
+
       return [projectId, {
         source: progress.source,
         instance_id: progress.instance_id,
         instance_status: progress.instance_status,
         current_node_key: progress.current_node_key,
         current_node_title: progress.current_node_title,
-        timeline_nodes: progress.timeline_nodes,
+        timeline_nodes: timelineNodes,
       }];
     }));
   }
@@ -154,6 +176,36 @@ class TenantOwnerDashboardWorkflowProgressReader
 
     return new Map(graphs);
   }
+}
+
+export function enrichProjectTimelineWithAcceptanceEvidence(input: {
+  projectId: string;
+  nodes: WorkflowTimelineNode[];
+  acceptances: TenantOwnerDashboardAcceptanceRow[];
+}) {
+  const latestAcceptanceByStage = new Map<string, TenantOwnerDashboardAcceptanceRow>();
+  for (const acceptance of input.acceptances) {
+    if (
+      acceptance.project_id === input.projectId &&
+      !latestAcceptanceByStage.has(acceptance.stage_code)
+    ) {
+      latestAcceptanceByStage.set(acceptance.stage_code, acceptance);
+    }
+  }
+
+  const stages = input.nodes.flatMap((node) => {
+    const stageCode = node.attributes.stage_code;
+    if (!stageCode || node.attributes.acceptance_enabled !== true) return [];
+    const acceptance = latestAcceptanceByStage.get(stageCode);
+    return [{
+      stage_code: stageCode,
+      acceptance_id: acceptance?.id ?? null,
+      acceptance_status: acceptance?.status ?? null,
+      acceptance_action: null,
+    }];
+  });
+
+  return enrichWorkflowTimelineNodesWithConstructionStages(input.nodes, { stages });
 }
 
 function runtimeGraphKey(
