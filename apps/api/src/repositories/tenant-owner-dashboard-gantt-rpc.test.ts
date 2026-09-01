@@ -67,6 +67,11 @@ describe("tenant owner project gantt RPC migration", () => {
       /coalesce\([\s\S]*planned_end_date,[\s\S]*planned_start_date[\s\S]*\) >= \(select window_start from valid_input\)/,
     );
     expect(sql).toContain("assignment_status not in ('completed', 'canceled')");
+    expect(sql).toContain("active_projects.id::text = workflow_instances.subject_id");
+    expect(sql).toContain("latest_runtime.subject_id::uuid as project_id");
+    expect(sql).toContain(
+      "project_procedure_assignments.status in ('planned', 'in_progress', 'completed')",
+    );
     expect(sql).toContain("planned_end_date < (select business_date from valid_input)");
     expect(sql).toContain("node_status in ('current', 'pending')");
     expect(sql).toMatch(

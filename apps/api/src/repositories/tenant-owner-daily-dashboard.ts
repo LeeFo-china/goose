@@ -11,26 +11,30 @@ import type {
 import { SupabaseDB } from "@/utils/supabase/index";
 import { getTenantOwnerFinanceSnapshot } from "./tenant-owner-dashboard-finance";
 
-const ACTIVE_PROJECT_STATUSES = [
-  "designing",
-  "proposal_confirmed",
-  "signed",
-  "design_finalized",
-  "pending_start",
-  "started",
-  "constructing",
-  "on_hold",
-  "acceptance",
-];
-
 type ProjectRelation = { id: string; name: string | null; status?: string | null } |
   Array<{ id: string; name: string | null; status?: string | null }> |
   null;
-type CustomerRelation = { name: string | null } | Array<{ name: string | null }> | null;
-type PropertyRelation = { community: string | null; building_info?: string | null } |
-  Array<{ community: string | null; building_info?: string | null }> |
-  null;
 type EmployeeRelation = { name: string | null } | Array<{ name: string | null }> | null;
+
+type TenantOwnerGanttRisk = "delayed" | "blocked" | "unscheduled";
+
+type TenantOwnerGanttRpcRow = {
+  project_id: string | null;
+  project_name: string | null;
+  customer_name: string | null;
+  address_summary: string | null;
+  owner_employee_name: string | null;
+  project_status: string | null;
+  updated_at: string | null;
+  total_count: number | string | null;
+};
+
+type UntypedRpcClient = {
+  rpc: (
+    name: string,
+    params: Record<string, unknown>,
+  ) => PromiseLike<{ data: unknown; error: unknown }>;
+};
 
 class TenantOwnerDailyDashboardRepository {
   private readonly adminClient = SupabaseDB.getAdminClient();
@@ -309,6 +313,11 @@ class TenantOwnerDailyDashboardRepository {
     tenantId: string;
     page: number;
     pageSize: number;
+    keyword?: string;
+    windowStart?: string;
+    windowEnd?: string;
+    timezone: string;
+    risk?: TenantOwnerGanttRisk;
   }): Promise<{
     list: TenantOwnerGanttProjectRow[];
     pagination: {
@@ -319,62 +328,44 @@ class TenantOwnerDailyDashboardRepository {
     };
   }> {
     const pageSize = Math.min(input.pageSize, 100);
-    const from = (input.page - 1) * pageSize;
-    const to = from + pageSize - 1;
-    const { data, error, count } = await this.adminClient
-      .from("projects")
-      .select(`
-        id,
-        name,
-        status,
-        address,
-        customer:customers!projects_customer_id_fkey(name),
-        property:properties!projects_property_id_fkey(community, building_info)
-      `, { count: "exact" })
-      .eq("tenant_id", input.tenantId)
-      .in("status", ACTIVE_PROJECT_STATUSES)
-      .order("updated_at", { ascending: false })
-      .range(from, to);
+    const { data, error } = await (this.adminClient as unknown as UntypedRpcClient)
+      .rpc("list_tenant_owner_project_gantt", {
+        p_tenant_id: input.tenantId,
+        p_page: input.page,
+        p_page_size: pageSize,
+        p_keyword: input.keyword ?? null,
+        p_window_start: input.windowStart ?? null,
+        p_window_end: input.windowEnd ?? null,
+        p_timezone: input.timezone,
+        p_risk: input.risk ?? null,
+      });
 
     if (error) {
       throw Errors.dbError("查询老板项目甘特图失败", error);
     }
 
-    const list = ((data as unknown[] | null) ?? []).map((row) => {
-      const record = asRecord(row);
-      const customerName = getRelationValue(
-        record.customer as CustomerRelation,
-        "name",
-      );
-      const propertyCommunity = getRelationValue(
-        record.property as PropertyRelation,
-        "community",
-      );
-      const buildingInfo = getRelationValue(
-        record.property as PropertyRelation,
-        "building_info",
-      );
-      return {
-        id: readString(record.id) ?? "",
-        name: readString(record.name) ?? "未命名项目",
-        customer_name: typeof customerName === "string" ? customerName : null,
-        address_summary: resolveAddressSummary({
-          address: record.address,
-          propertyCommunity,
-          buildingInfo,
-        }),
-        owner_employee_name: null,
-        status: readString(record.status) ?? "unknown",
-      };
-    });
+    const rows = (data as TenantOwnerGanttRpcRow[] | null) ?? [];
+    const total = toInteger(rows[0]?.total_count);
+    const list = rows
+      .filter((row): row is TenantOwnerGanttRpcRow & { project_id: string } =>
+        typeof row.project_id === "string" && Boolean(row.project_id.trim())
+      )
+      .map((row) => ({
+        id: row.project_id,
+        name: readString(row.project_name) ?? "未命名项目",
+        customer_name: readString(row.customer_name),
+        address_summary: readString(row.address_summary),
+        owner_employee_name: readString(row.owner_employee_name),
+        status: readString(row.project_status) ?? "unknown",
+      }));
 
     return {
       list,
       pagination: {
         page: input.page,
         pageSize,
-        total: count ?? 0,
-        totalPages: count ? Math.ceil(count / pageSize) : 0,
+        total,
+        totalPages: total ? Math.ceil(total / pageSize) : 0,
       },
     };
   }
@@ -405,20 +396,6 @@ function toInteger(value: unknown, fallback = 0) {
   return Number.isInteger(numericValue) && numericValue >= 0
     ? numericValue
     : fallback;
-}
-
-function resolveAddressSummary(input: {
-  address: unknown;
-  propertyCommunity: unknown;
-  buildingInfo: unknown;
-}) {
-  const address = readString(input.address);
-  if (address) return address;
-
-  const propertyAddress = [input.propertyCommunity, input.buildingInfo]
-    .filter((item): item is string => typeof item === "string" && !!item.trim())
-    .join(" ");
-  return propertyAddress || null;
 }
 
 function getRelationValue<T extends Record<string, unknown>, K extends keyof T>(

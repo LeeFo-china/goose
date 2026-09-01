@@ -78,6 +78,11 @@ type TenantOwnerDailyDashboardRepositoryPort = {
     tenantId: string;
     page: number;
     pageSize: number;
+    keyword?: string;
+    windowStart?: string;
+    windowEnd?: string;
+    timezone: string;
+    risk?: "delayed" | "blocked" | "unscheduled";
   }): Promise<{
     list: TenantOwnerGanttProjectRow[];
     pagination: {
@@ -235,12 +240,18 @@ export class TenantOwnerDailyDashboardService {
       tenantId,
       page: query.page,
       pageSize,
+      keyword: query.keyword,
+      windowStart: query.window_start,
+      windowEnd: query.window_end,
+      timezone: query.timezone,
+      risk: query.risk,
     });
     const workflowProgressByProjectId = await this.loadProjectProgressMap({
       tenantId,
-      businessDate: getDateInTimezone("Asia/Shanghai"),
+      businessDate: getDateInTimezone(query.timezone),
       projectIds: projects.list.map((project) => project.id),
       partialErrors,
+      required: Boolean(query.window_start || query.risk),
     });
 
     const list = projects.list.map((project) => {
@@ -290,6 +301,7 @@ export class TenantOwnerDailyDashboardService {
     projectIds: string[];
     businessDate: string;
     partialErrors: TenantOwnerDashboardPartialError[],
+    required: boolean;
   }) {
     try {
       const progressByProjectId =
@@ -312,6 +324,8 @@ export class TenantOwnerDailyDashboardService {
         ]),
       );
     } catch (error) {
+      if (input.required) throw error;
+
       input.partialErrors.push({
         module: "workflow_progress",
         code: readErrorCode(error),
@@ -348,10 +362,24 @@ function serializeGanttNode(node: WorkflowTimelineNode) {
 function buildGanttRiskSummary(
   timelineNodes: Array<ReturnType<typeof serializeGanttNode>>,
 ): TenantOwnerGanttRiskSummary {
-  const delayedNode = timelineNodes.find((node) =>
-    node.schedule_status === "delayed"
+  const blockedNode = timelineNodes.find((node) =>
+    node.node_type === "procedure" && node.status === "blocked"
   );
-  if (!delayedNode) {
+  const delayedNode = timelineNodes.find((node) =>
+    node.node_type === "procedure" && node.schedule_status === "delayed"
+  );
+  const unscheduledNode = timelineNodes.find((node) =>
+    node.node_type === "procedure" &&
+    (node.status === "current" || node.status === "pending") &&
+    node.schedule_status === "unscheduled"
+  );
+  const riskTypes = [
+    ...(blockedNode ? ["blocked_workflow"] : []),
+    ...(delayedNode ? ["delayed_workflow"] : []),
+    ...(unscheduledNode ? ["unscheduled_workflow"] : []),
+  ];
+
+  if (riskTypes.length === 0) {
     return {
       risk_level: "normal",
       risk_types: [],
@@ -360,9 +388,13 @@ function buildGanttRiskSummary(
   }
 
   return {
-    risk_level: "warning",
-    risk_types: ["delayed_workflow"],
-    reason: `${delayedNode.node_title} 已逾期`,
+    risk_level: blockedNode ? "high" : "warning",
+    risk_types: riskTypes,
+    reason: blockedNode
+      ? `${blockedNode.node_title} ${blockedNode.blocked_reason ?? "流程受阻"}`
+      : delayedNode
+        ? `${delayedNode.node_title} 已逾期`
+        : `${unscheduledNode?.node_title ?? "施工工序"} 尚未排期`,
   };
 }
 

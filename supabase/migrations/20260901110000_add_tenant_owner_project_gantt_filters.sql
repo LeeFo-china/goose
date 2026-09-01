@@ -158,7 +158,7 @@ AS $$
       ) AS runtime_rank
     FROM public.workflow_instances
     JOIN active_projects
-      ON active_projects.id = workflow_instances.subject_id
+      ON active_projects.id::text = workflow_instances.subject_id
     WHERE workflow_instances.tenant_id = p_tenant_id
       AND workflow_instances.subject_type = 'project'
       AND workflow_instances.status IN ('running', 'completed')
@@ -170,7 +170,7 @@ AS $$
   ),
   procedure_nodes AS (
     SELECT
-      latest_runtime.subject_id AS project_id,
+      latest_runtime.subject_id::uuid AS project_id,
       latest_runtime.id AS workflow_instance_id,
       latest_runtime.current_node_key,
       node.value->>'node_key' AS node_key,
@@ -216,6 +216,7 @@ AS $$
     JOIN latest_runtime
       ON latest_runtime.id = project_procedure_assignments.workflow_instance_id
     WHERE project_procedure_assignments.tenant_id = p_tenant_id
+      AND project_procedure_assignments.status IN ('planned', 'in_progress', 'completed')
     ORDER BY
       project_procedure_assignments.workflow_instance_id,
       project_procedure_assignments.node_key,

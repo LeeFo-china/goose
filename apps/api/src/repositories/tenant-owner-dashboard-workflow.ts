@@ -27,6 +27,22 @@ const ASSIGNMENT_SELECT = [
   "assignee_employee:employees!project_procedure_assignments_assignee_employee_id_fkey(id, name, avatar)",
 ].join(", ");
 
+const ACCEPTANCE_SELECT = [
+  "id",
+  "project_id",
+  "stage_code",
+  "status",
+  "updated_at",
+].join(", ");
+
+export type TenantOwnerDashboardAcceptanceRow = {
+  id: string;
+  project_id: string;
+  stage_code: string;
+  status: string;
+  updated_at: string;
+};
+
 class TenantOwnerDashboardWorkflowRepository {
   private readonly adminClient = SupabaseDB.getAdminClient();
 
@@ -51,6 +67,29 @@ class TenantOwnerDashboardWorkflowRepository {
     }
 
     return (data ?? []) as unknown as ProcedureAssignmentRow[];
+  }
+
+  async listLatestAcceptancesForProjects(input: {
+    tenantId: string;
+    projectIds: string[];
+  }): Promise<TenantOwnerDashboardAcceptanceRow[]> {
+    const projectIds = Array.from(new Set(input.projectIds));
+    if (projectIds.length === 0) return [];
+
+    const { data, error } = await this.adminClient
+      .from("project_acceptances")
+      .select(ACCEPTANCE_SELECT)
+      .eq("tenant_id", input.tenantId)
+      .in("project_id", projectIds)
+      .order("updated_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(Math.min(projectIds.length * 100, 10_000));
+
+    if (error) {
+      throw Errors.dbError("批量查询老板看板项目验收状态失败", error);
+    }
+
+    return (data ?? []) as unknown as TenantOwnerDashboardAcceptanceRow[];
   }
 }
 
