@@ -18,10 +18,21 @@ export const CLIENT_ANALYTICS_EVENT_NAMES = [
   "site_view",
   "lead_cta_click",
   "phone_call_click",
+  "material_preview",
+  "material_copy",
+  "material_budget_click",
+  "material_lead_click",
 ] as const;
 
 export type ClientAnalyticsEventName =
   (typeof CLIENT_ANALYTICS_EVENT_NAMES)[number];
+
+const CLIENT_MATERIAL_ANALYTICS_EVENT_NAMES = new Set<ClientAnalyticsEventName>([
+  "material_preview",
+  "material_copy",
+  "material_budget_click",
+  "material_lead_click",
+]);
 
 export type AnalyticsEventInput = {
   event_id: string;
@@ -245,6 +256,8 @@ function parseEventInput(value: unknown, now: number): StoredAnalyticsEvent | nu
   const parsedAttribution = parseAttribution(value.attribution);
   if (!parsedAttribution) return null;
   if (value.entity_id !== undefined && !isUuid(value.entity_id)) return null;
+  if (CLIENT_MATERIAL_ANALYTICS_EVENT_NAMES.has(value.event_name)
+    && !isUuid(value.entity_id)) return null;
   return {
     event_id: value.event_id,
     event_name: value.event_name,

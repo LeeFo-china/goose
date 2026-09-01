@@ -14,6 +14,21 @@
     <button class="qa-action ui-pressable" hover-class="ui-pressable--pressed" style="background: {{primaryColor}}; color: {{primaryTextColor}}" bindtap="onAskQuestion">去提问</button>
   </view>
 
+  <view tt:if="{{materialStatus !== 'empty'}}" class="home-section">
+    <view class="section-heading">
+      <view class="ui-section-title">装修资料</view>
+      <view class="section-actions">
+        <button class="section-link ui-pressable" hover-class="ui-pressable--pressed" style="color: {{primaryColor}}" bindtap="onViewMaterials">查看全部</button>
+        <button class="section-link ui-pressable" hover-class="ui-pressable--pressed" style="color: {{primaryColor}}" bindtap="onViewMyMaterials">我的资料</button>
+      </view>
+    </view>
+    <view tt:if="{{materialStatus === 'loading'}}" class="material-module-loading" aria-label="装修资料加载中"><view class="material-loading-bar"></view><view class="material-loading-bar material-loading-bar--short"></view></view>
+    <view tt:elif="{{materialStatus === 'ready'}}" class="card-list">
+      <material-card tt:for="{{materialItems}}" tt:key="id" item="{{item}}" bindselect="onMaterialSelect" />
+    </view>
+    <view tt:else class="material-module-error ui-hint-surface" role="alert"><view>装修资料暂时加载失败，不影响其他功能。</view><button class="material-retry ui-pressable" hover-class="ui-pressable--pressed" bindtap="onRetryMaterials">重试</button></view>
+  </view>
+
   <view class="home-section">
     <view class="section-heading"><view class="ui-section-title">项目实景</view><button class="section-link ui-pressable" hover-class="ui-pressable--pressed" style="color: {{primaryColor}}" bindtap="onViewProjects">查看全部项目</button></view>
     <view tt:if="{{featuredProjects.length}}" class="card-list">

@@ -1,0 +1,24 @@
+<page-skeleton tt:if="{{firstLoading}}" />
+<error-state tt:elif="{{firstError}}" title="我的资料加载失败" description="请检查网络后重试。" bindretry="onRetry" />
+<view tt:else class="page-content owned-page">
+  <view class="owned-header">
+    <view>
+      <view class="ui-page-title">我的资料</view>
+      <view class="ui-page-description">这里只保存匿名领取记录，用于恢复已领取正文。</view>
+    </view>
+    <view class="owned-header-actions">
+      <button class="browse-action ui-pressable" hover-class="ui-pressable--pressed" bindtap="onBrowseMaterials">浏览资料</button>
+      <button tt:if="{{items.length}}" class="clear-action ui-pressable" hover-class="ui-pressable--pressed" disabled="{{mutating}}" bindtap="onConfirmClear">清空全部</button>
+    </view>
+  </view>
+  <view tt:if="{{items.length}}" class="owned-list">
+    <view tt:for="{{items}}" tt:key="claim_id" class="owned-item">
+      <material-card item="{{item}}" bindselect="onMaterialSelect" />
+      <view class="item-actions">
+        <button class="item-action item-action--danger ui-pressable" hover-class="ui-pressable--pressed" data-claimid="{{item.claim_id}}" disabled="{{mutating}}" bindtap="onConfirmRemove">移出我的资料</button>
+      </view>
+    </view>
+  </view>
+  <empty-state tt:elif="{{empty}}" title="还没有领取资料" description="前往资料中心，免费领取需要的文本笔记。" action-label="浏览装修资料" bindaction="onBrowseMaterials" />
+  <pagination-loader tt:if="{{items.length}}" status="{{paginationStatus}}" bindloadmore="onLoadMore" bindretry="onRetry" />
+</view>

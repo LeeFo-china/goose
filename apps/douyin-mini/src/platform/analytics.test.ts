@@ -103,7 +103,7 @@ describe("AnalyticsQueue", () => {
     expect(getStored()).toBeNull();
   });
 
-  test("exposes only the six client-writable marketing events", () => {
+  test("exposes the ten client-writable events without material claim", () => {
     expect(CLIENT_ANALYTICS_EVENT_NAMES).toEqual([
       "app_launch",
       "page_view",
@@ -111,7 +111,47 @@ describe("AnalyticsQueue", () => {
       "site_view",
       "lead_cta_click",
       "phone_call_click",
+      "material_preview",
+      "material_copy",
+      "material_budget_click",
+      "material_lead_click",
     ]);
+  });
+
+  test("accepts material interaction events with a material UUID and rejects client claims", () => {
+    const { analytics, getStored } = harness();
+    for (const [index, eventName] of ([
+      "material_preview",
+      "material_copy",
+      "material_budget_click",
+      "material_lead_click",
+    ] as const).entries()) {
+      expect(analytics.record({
+        event_id: eventId(index + 1),
+        event_name: eventName,
+        attribution,
+        entity_id: ENTITY_ID,
+      }).status).toBe("queued");
+    }
+    expect(analytics.record({
+      event_id: eventId(10),
+      event_name: "material_claim" as never,
+      attribution,
+      entity_id: ENTITY_ID,
+    })).toEqual({ status: "rejected", queue_size: 4 });
+    expect(analytics.record({
+      event_id: eventId(11),
+      event_name: "material_copy",
+      attribution,
+      entity_id: "not-a-material-uuid",
+    })).toEqual({ status: "rejected", queue_size: 4 });
+    expect(analytics.record({
+      event_id: eventId(12),
+      event_name: "material_preview",
+      attribution,
+    })).toEqual({ status: "rejected", queue_size: 4 });
+    const snapshot = getStored() as { events: Array<{ event_name: string }> };
+    expect(snapshot.events.map((event) => event.event_name)).not.toContain("material_claim");
   });
 
   test("rejects arbitrary launch query and extra event fields", () => {

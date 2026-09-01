@@ -1,0 +1,17 @@
+<page-skeleton tt:if="{{firstLoading}}" />
+<error-state tt:elif="{{firstError}}" title="装修资料加载失败" description="请检查网络后重试。" bindretry="onRetry" />
+<view tt:else class="page-content materials-page">
+  <view class="materials-header">
+    <view>
+      <view class="ui-page-title">装修资料</view>
+      <view class="ui-page-description">领取实用文本笔记，不需要填写手机号。</view>
+    </view>
+    <button class="mine-action ui-pressable" hover-class="ui-pressable--pressed" style="color: {{primaryColor}}" bindtap="onOpenMine">我的资料</button>
+  </view>
+  <input class="search-input ui-control" value="{{keyword}}" maxlength="120" placeholder="搜索标题、分类或适用场景" confirm-type="search" aria-label="搜索装修资料" bindinput="onKeywordInput" />
+  <view tt:if="{{items.length}}" class="material-list">
+    <material-card tt:for="{{items}}" tt:key="id" item="{{item}}" bindselect="onMaterialSelect" />
+  </view>
+  <empty-state tt:elif="{{empty}}" title="暂无匹配资料" description="可以换个关键词，或稍后再来查看。" />
+  <pagination-loader tt:if="{{items.length}}" status="{{paginationStatus}}" bindloadmore="onLoadMore" bindretry="onRetry" />
+</view>

@@ -8,6 +8,7 @@
     "site-card": "/components/site-card/index",
     "empty-state": "/components/empty-state/index",
     "error-state": "/components/error-state/index",
-    "page-skeleton": "/components/page-skeleton/index"
+    "page-skeleton": "/components/page-skeleton/index",
+    "material-card": "/components/material-card/index"
   }
 }

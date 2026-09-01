@@ -1,0 +1,11 @@
+{
+  "navigationBarTitleText": "我的资料",
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "material-card": "/components/material-card/index",
+    "empty-state": "/components/empty-state/index",
+    "error-state": "/components/error-state/index",
+    "page-skeleton": "/components/page-skeleton/index",
+    "pagination-loader": "/components/pagination-loader/index"
+  }
+}

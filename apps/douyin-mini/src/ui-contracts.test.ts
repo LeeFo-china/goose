@@ -250,3 +250,59 @@ test("primary mini-program surfaces contain no fixed terracotta brand palette", 
     expect(source).not.toContain(bannedColor);
   }
 });
+
+test("material claim experience keeps three non-tab pages and safe home entrances", async () => {
+  const [appConfig, homeTemplate, materialsTemplate, detailTemplate, ownedTemplate] =
+    await Promise.all([
+      readSource("app.json"),
+      readSource("pages/home/index.ttml"),
+      readSource("pages/materials/index.ttml"),
+      readSource("pages/material-detail/index.ttml"),
+      readSource("pages/my-materials/index.ttml"),
+    ]);
+  for (const page of ["materials", "material-detail", "my-materials"]) {
+    expect(appConfig).toContain(`"pages/${page}/index"`);
+    expect(appConfig).not.toMatch(new RegExp(`"pagePath": "pages/${page}/index"`));
+  }
+  expect(homeTemplate).toContain("装修资料");
+  expect(homeTemplate).toContain("查看全部");
+  expect(homeTemplate).toContain("我的资料");
+  expect(materialsTemplate).toContain("我的资料");
+  expect(ownedTemplate).toContain('bindtap="onBrowseMaterials"');
+  expect(`${materialsTemplate}\n${ownedTemplate}`).toContain("pagination-loader");
+  expect(detailTemplate).toContain("免费领取");
+  expect(detailTemplate).toContain("复制全文");
+  expect(detailTemplate).toContain("预算初算");
+  expect(detailTemplate).toContain("免费量房");
+});
+
+test("material templates expose only five text blocks and never persist protected content", async () => {
+  const source = (await Promise.all([
+    readSource("pages/materials/index.ts"),
+    readSource("pages/materials/index.ttml"),
+    readSource("pages/material-detail/index.ts"),
+    readSource("pages/material-detail/index.ttml"),
+    readSource("pages/my-materials/index.ts"),
+    readSource("pages/my-materials/index.ttml"),
+  ])).join("\n");
+  for (const blockType of ["heading", "paragraph", "list", "quote", "callout"]) {
+    expect(source).toContain(blockType);
+  }
+  expect(source).not.toMatch(
+    /setStorageSync|tenant_id|installation_id|subject_hash|app_id|appid/,
+  );
+  expect(source).not.toContain('recordAnalytics("material_claim"');
+  expect(source).not.toMatch(/submitLead|sendLeadSms|createMeasurement/);
+});
+
+test("privacy explains anonymous claim history without overstating removal as deletion", async () => {
+  const policy = await readSource("pages/privacy/index.ttml");
+  expect(policy).toContain("匿名领取记录");
+  expect(policy).toContain("我的资料");
+  expect(policy).toContain("不会自动转为销售线索");
+  expect(policy).toContain("移除单篇");
+  expect(policy).toContain("清空全部");
+  expect(policy).toContain("不等同于删除个人信息");
+  expect(policy).toContain("公开电话");
+  expect(policy).not.toMatch(/邮箱|微信客服|在线客服/);
+});

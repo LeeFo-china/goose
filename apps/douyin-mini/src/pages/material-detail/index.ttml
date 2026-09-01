@@ -1,0 +1,46 @@
+<page-skeleton tt:if="{{status === 'idle' || status === 'loading' || status === 'recovering'}}" />
+<error-state tt:elif="{{status === 'error'}}" title="资料暂时无法查看" description="请检查网络后重新加载。" bindretry="load" />
+<empty-state tt:elif="{{status === 'not-found'}}" title="资料不存在" description="资料可能已移除，返回资料中心查看其他内容。" action-label="返回资料中心" bindaction="onBackToMaterials" />
+<empty-state tt:elif="{{status === 'unavailable'}}" title="资料暂不可领取" description="这篇资料目前没有开放新领取。" action-label="返回资料中心" bindaction="onBackToMaterials" />
+<empty-state tt:elif="{{status === 'withdrawn'}}" title="资料已停止提供" description="因内容调整，正文已不可查看。" action-label="返回资料中心" bindaction="onBackToMaterials" />
+<view tt:else class="page-content material-detail-page">
+  <view class="detail-meta">{{(content && content.category) || (preview && preview.category) || '装修资料'}}</view>
+  <view class="detail-title">{{(content && content.title) || (preview && preview.title)}}</view>
+  <view class="detail-summary">{{(content && content.summary) || (preview && preview.summary)}}</view>
+  <view tt:if="{{(content && content.applicable_to) || (preview && preview.applicable_to)}}" class="applicable">适合：{{(content && content.applicable_to) || (preview && preview.applicable_to)}}</view>
+
+  <view tt:if="{{status === 'preview'}}" class="claim-panel ui-card">
+    <view class="claim-title">免费领取全文</view>
+    <view class="claim-copy">领取后立即阅读，并加入“我的资料”。不需要填写手机号，也不会自动提交咨询。</view>
+    <button class="primary-action ui-pressable" hover-class="ui-pressable--pressed" style="background: {{primaryColor}}; color: {{primaryTextColor}}" bindtap="onClaim">免费领取</button>
+  </view>
+  <view tt:elif="{{status === 'claiming'}}" class="claim-panel ui-card">
+    <view class="claim-title">正在领取</view>
+    <view class="claim-copy">请稍候，不要重复点击。</view>
+    <button class="primary-action" style="background: {{primaryColor}}; color: {{primaryTextColor}}" loading="true" disabled="true">领取中</button>
+  </view>
+  <view tt:elif="{{status === 'recovery-required'}}" class="claim-panel ui-card">
+    <view class="claim-title">已领取，正文待恢复</view>
+    <view class="claim-copy">服务端已确认领取状态。可单次重新加载正文，或前往“我的资料”查看。</view>
+    <button class="primary-action ui-pressable" hover-class="ui-pressable--pressed" style="background: {{primaryColor}}; color: {{primaryTextColor}}" bindtap="onClaim">重新加载正文</button>
+    <button class="secondary-action ui-pressable" hover-class="ui-pressable--pressed" bindtap="onOpenMine">去我的资料</button>
+  </view>
+
+  <view tt:if="{{status === 'claimed' && content}}" class="claimed-content">
+    <view class="claimed-badge">已加入我的资料</view>
+    <view class="body-blocks">
+      <view tt:for="{{blocks}}" tt:key="key" tt:for-item="block" class="body-block body-block--{{block.type}}">
+        <view tt:if="{{block.type === 'heading'}}" class="body-heading body-heading--{{block.level}}">{{block.text}}</view>
+        <view tt:elif="{{block.type === 'paragraph'}}" class="body-paragraph">{{block.text}}</view>
+        <view tt:elif="{{block.type === 'list'}}" class="body-list"><view tt:for="{{block.items}}" tt:key="*this" tt:for-item="listItem" tt:for-index="listIndex" class="body-list-item"><text class="body-list-marker">{{block.style === 'ordered' ? (listIndex + 1) + '.' : '•'}}</text><text>{{listItem}}</text></view></view>
+        <view tt:elif="{{block.type === 'quote'}}" class="body-quote"><view>“{{block.text}}”</view><view tt:if="{{block.attribution}}" class="quote-attribution">——{{block.attribution}}</view></view>
+        <view tt:elif="{{block.type === 'callout'}}" class="body-callout body-callout--{{block.tone}}"><view class="callout-title">{{block.title}}</view><view class="callout-text">{{block.text}}</view></view>
+      </view>
+    </view>
+    <view class="reader-actions">
+      <button class="secondary-action ui-pressable" hover-class="ui-pressable--pressed" bindtap="onCopy">复制全文</button>
+      <button class="primary-action ui-pressable" hover-class="ui-pressable--pressed" style="background: {{primaryColor}}; color: {{primaryTextColor}}" bindtap="onBudget">预算初算</button>
+      <button class="secondary-action ui-pressable" hover-class="ui-pressable--pressed" bindtap="onLead">免费量房</button>
+    </view>
+  </view>
+</view>

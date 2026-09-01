@@ -5,9 +5,10 @@
   <view class="version-card"><view class="version-label">当前展示版本</view><view class="version-value">{{version}}</view></view>
   <view class="policy-section"><view class="section-title">1. 服务提供方</view><view class="policy-copy">本小程序由平台提供技术能力，由 {{companyName}} 向你提供装修内容浏览和咨询服务。</view></view>
   <view class="policy-section"><view class="section-title">2. 信息处理范围</view><view class="policy-copy">浏览公开内容时，小程序会使用必要的会话、安全和入口信息。只有当你主动提交免费咨询时，才会按表单提示处理联系方式、装修需求、验证码校验结果及必要的入口归因信息。</view></view>
-  <view class="policy-section"><view class="section-title">3. 使用目的</view><view class="policy-copy">相关信息仅用于完成身份校验、响应装修咨询、安排后续沟通、保障服务安全，以及统计不包含业主私密内容的服务效果。</view></view>
-  <view class="policy-section"><view class="section-title">4. 你的选择与权利</view><view class="policy-copy">你可以选择不提交咨询信息；不提交不会影响公开案例和工地内容浏览。如需查询、更正或删除已提交的信息，可通过下方公开电话联系服务提供方。</view></view>
-  <view class="policy-section"><view class="section-title">5. 用户使用约定</view><view class="policy-copy">请勿提交违法、有害或侵犯他人权益的内容。案例、报价和服务流程仅供沟通参考，具体权利义务以你与装修公司最终确认的合同或服务文件为准。</view></view>
-  <view class="policy-section"><view class="section-title">6. 联系方式</view><view class="policy-copy"><view>服务提供方：{{companyName}}</view><view tt:if="{{servicePhone}}">公开电话：{{servicePhone}}</view></view></view>
+  <view class="policy-section"><view class="section-title">3. 匿名领取记录</view><view class="policy-copy">当你主动领取装修资料时，小程序会保存与当前匿名会话主体关联的匿名领取记录，仅用于提供“我的资料”和恢复已领取正文。领取资料不会自动转为销售线索，也不会自动提交手机号、量房预约或咨询。</view></view>
+  <view class="policy-section"><view class="section-title">4. 使用目的</view><view class="policy-copy">相关信息仅用于完成身份校验、恢复领取记录、响应你主动提交的装修咨询、安排后续沟通、保障服务安全，以及统计不包含业主私密内容的服务效果。</view></view>
+  <view class="policy-section"><view class="section-title">5. 你的选择与权利</view><view class="policy-copy">你可以在“我的资料”中移除单篇资料或清空全部领取记录，使其不再出现在列表中。移除或清空不等同于删除个人信息；如需查询、更正或申请删除相关信息，可继续通过下方已经公开的电话联系服务提供方。合规、安全或法定义务要求保留的最小审计数据，将按本政策和适用规则处理。</view></view>
+  <view class="policy-section"><view class="section-title">6. 用户使用约定</view><view class="policy-copy">请勿提交违法、有害或侵犯他人权益的内容。案例、报价和服务流程仅供沟通参考，具体权利义务以你与装修公司最终确认的合同或服务文件为准。</view></view>
+  <view class="policy-section"><view class="section-title">7. 联系方式</view><view class="policy-copy"><view>服务提供方：{{companyName}}</view><view tt:if="{{servicePhone}}">公开电话：{{servicePhone}}</view></view></view>
   <view class="policy-note">本政策以当前展示版本为准；如规则更新，小程序将同步展示新的版本信息。</view>
 </view>

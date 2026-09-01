@@ -1,0 +1,30 @@
+@import "../../styles/tokens.ttss";
+
+.material-detail-page { padding-top: 8rpx; padding-bottom: 64rpx; }
+.detail-meta { display: inline-flex; padding: 7rpx 14rpx; border-radius: 999rpx; background: #eceae6; color: #625f5b; font-size: 22rpx; }
+.detail-title { margin-top: 20rpx; overflow-wrap: anywhere; color: #191817; font-size: 42rpx; font-weight: 700; line-height: 1.35; }
+.detail-summary { margin-top: 18rpx; overflow-wrap: anywhere; color: #625f5b; font-size: 27rpx; line-height: 1.75; }
+.applicable { margin-top: 16rpx; color: #706c67; font-size: 23rpx; line-height: 1.6; }
+.claim-panel { margin-top: 36rpx; padding: 32rpx; }
+.claim-title { color: #191817; font-size: 30rpx; font-weight: 650; }
+.claim-copy { margin-top: 12rpx; color: #625f5b; font-size: 24rpx; line-height: 1.7; }
+.primary-action, .secondary-action { box-sizing: border-box; width: 100%; min-height: 88rpx; margin: 22rpx 0 0; border-radius: 16rpx; font-size: 28rpx; font-weight: 650; line-height: 88rpx; }
+.secondary-action { border: 1rpx solid #dddad5; background: #fff; color: #191817; }
+.claimed-content { margin-top: 36rpx; }
+.claimed-badge { display: inline-flex; padding: 8rpx 16rpx; border-radius: 999rpx; background: #eceae6; color: #191817; font-size: 22rpx; font-weight: 650; }
+.body-blocks { margin-top: 30rpx; }
+.body-block { margin-top: 28rpx; overflow-wrap: anywhere; }
+.body-heading { color: #191817; font-weight: 700; line-height: 1.45; }
+.body-heading--2 { font-size: 34rpx; }
+.body-heading--3 { font-size: 30rpx; }
+.body-paragraph, .body-list, .body-quote, .callout-text { color: #383532; font-size: 27rpx; line-height: 1.9; white-space: pre-wrap; }
+.body-list { display: flex; flex-direction: column; gap: 12rpx; }
+.body-list-item { display: flex; align-items: flex-start; gap: 14rpx; }
+.body-list-marker { width: 38rpx; flex: none; color: #706c67; }
+.body-quote { padding: 24rpx 28rpx; border-left: 6rpx solid #c8c4be; background: #f5f5f3; }
+.quote-attribution { margin-top: 12rpx; color: #706c67; font-size: 23rpx; }
+.body-callout { padding: 24rpx 28rpx; border-radius: 14rpx; background: #eceae6; }
+.body-callout--warning { background: #fff4df; }
+.callout-title { color: #191817; font-size: 27rpx; font-weight: 700; }
+.callout-text { margin-top: 8rpx; }
+.reader-actions { margin-top: 44rpx; padding-top: 10rpx; border-top: 1rpx solid #dddad5; }

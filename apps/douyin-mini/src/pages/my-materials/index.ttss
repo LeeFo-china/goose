@@ -1,0 +1,13 @@
+@import "../../styles/tokens.ttss";
+
+.owned-page { padding-bottom: 48rpx; }
+.owned-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24rpx; padding-top: 8rpx; }
+.owned-header-actions { display: flex; flex-direction: column; align-items: flex-end; }
+.browse-action, .clear-action { min-width: 144rpx; min-height: 88rpx; margin: 0; padding: 0 12rpx; background: transparent; font-size: 25rpx; line-height: 88rpx; }
+.browse-action { color: #191817; }
+.clear-action { color: #8e1b13; }
+.owned-list { display: flex; flex-direction: column; gap: 24rpx; margin-top: 28rpx; }
+.owned-item { overflow: hidden; border-radius: 16rpx; background: #fff; }
+.item-actions { display: flex; justify-content: flex-end; gap: 12rpx; padding: 8rpx 18rpx 18rpx; }
+.item-action { min-height: 88rpx; margin: 0; padding: 0 18rpx; background: transparent; color: #625f5b; font-size: 23rpx; line-height: 88rpx; }
+.item-action--danger { color: #8e1b13; }
