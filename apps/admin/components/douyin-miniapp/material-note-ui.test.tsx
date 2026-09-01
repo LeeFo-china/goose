@@ -118,6 +118,13 @@ describe("抖音资料后台工作台 UI 合同", () => {
     expect(detail).toContain("resolvedVersionDetail");
   });
 
+  test("详情页在后台固定视口内提供唯一纵向滚动区域", () => {
+    const detail = read("components/douyin-miniapp/material-note-detail.tsx");
+    expect(detail).toContain(
+      'className="flex h-full min-h-0 flex-col gap-5 overflow-y-auto pb-6 pr-1 [scrollbar-gutter:stable]"',
+    );
+  });
+
   test("编辑器按字段路径映射中文错误并关联可访问属性", () => {
     const result = validateMaterialNoteEditorDraft({
       title: "",

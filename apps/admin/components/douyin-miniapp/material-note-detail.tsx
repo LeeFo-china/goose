@@ -141,7 +141,7 @@ export function MaterialNoteDetail({
   }
 
   return (
-    <div className="flex flex-col gap-5 pb-6">
+    <div className="flex h-full min-h-0 flex-col gap-5 overflow-y-auto pb-6 pr-1 [scrollbar-gutter:stable]">
       <div className="flex flex-col justify-between gap-3 border-b pb-4 md:flex-row md:items-end">
         <div className="min-w-0">
           <Button asChild variant="ghost" className="mb-2 px-0"><Link href="/douyin-miniapp/materials">
