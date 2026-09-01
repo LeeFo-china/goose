@@ -174,6 +174,14 @@ describe("supplier purchasable SKU atomic command migration", () => {
     expect(normalizedCommand).toContain(
       "p_action = 'update' AND COALESCE(p_expected_sku_version, 0) < 1",
     );
+    const updateUnitRejectionAt = normalizedCommand.indexOf(
+      "p_action = 'update' AND (p_sku ? 'purchase_unit_id')",
+    );
+    expect(updateUnitRejectionAt).toBeGreaterThanOrEqual(0);
+    expect(updateUnitRejectionAt).toBeLessThan(parentLockAt);
+    expect(normalizedCommand).toMatch(
+      /p_action = 'update'[\s\S]*p_sku \? 'purchase_unit_id'[\s\S]*'status', 'validation_error'[\s\S]*'reason', 'purchase_unit_update_not_allowed'/,
+    );
     expect(normalizedCommand).toContain(
       "v_parent_key := 'supplier-purchasable-sku:' || pg_catalog.md5(btrim(p_idempotency_key))",
     );
@@ -249,12 +257,11 @@ describe("supplier purchasable SKU atomic command migration", () => {
     );
   });
 
-  test("locks the final active purchase unit before any SKU child write", () => {
+  test("locks the required active purchase unit on create before any SKU write", () => {
     expectOrdered(command, [
       /FROM public\.supplier_skus AS sku[\s\S]*?FOR UPDATE/,
-      /v_purchase_unit_id := CASE/,
-      /WHEN p_sku \? 'purchase_unit_id'[\s\S]*?\(p_sku ->> 'purchase_unit_id'\)::uuid/,
-      /ELSE v_sku\.purchase_unit_id/,
+      /IF p_action = 'create' THEN/,
+      /v_purchase_unit_id := \(p_sku ->> 'purchase_unit_id'\)::uuid/,
       /FROM public\.catalog_units AS unit_record/,
       /unit_record\.id = v_purchase_unit_id/,
       /unit_record\.status = 'active'/,
@@ -275,28 +282,19 @@ describe("supplier purchasable SKU atomic command migration", () => {
     expect(unitLockAt).toBeLessThan(firstSkuWriteAt);
   });
 
-  test("replaces unit conversions before chaining a metadata update", () => {
+  test("keeps unit conversion changes out of the composite update", () => {
     expect(normalizedCommand).toContain(
       "v_sku_payload := (v_effective_sku - 'sku_code') - 'purchase_unit_id'",
     );
-    expect(normalizedCommand).toContain(
-      "v_purchase_unit_changed := p_action = 'update' AND (p_sku ? 'purchase_unit_id')",
+    expect(normalizedCommand).not.toContain(
+      "replace_supplier_sku_unit_conversions_v3",
     );
-    expectOrdered(command, [
-      /FROM public\.catalog_units AS unit_record[\s\S]*?FOR SHARE/,
-      /IF v_purchase_unit_changed THEN/,
-      /v_parent_key \|\| ':sku-unit-conversions'/,
-      /replace_supplier_sku_unit_conversions_v3/,
-      /p_expected_sku_version => v_sku\.version/,
-      /p_purchase_unit_id => v_purchase_unit_id/,
-      /p_base_unit_id => v_purchase_unit_id/,
-      /p_edges => jsonb_build_array\(\)/,
-      /v_sku\.version := \(v_child_response ->> 'version'\)::integer/,
-      /ELSIF v_sku_fields_changed THEN|IF v_sku_fields_changed THEN/,
-      /command_supplier_sku_v3/,
-      /p_expected_version => v_sku\.version/,
-      /p_payload => v_sku_payload/,
-    ]);
+    expect(normalizedCommand).not.toContain(":sku-unit-conversions");
+    expect(normalizedCommand).not.toContain("v_purchase_unit_changed");
+    expect(normalizedCommand).not.toContain("p_edges => jsonb_build_array()");
+    expect(normalizedCommand).not.toContain(
+      "p_base_unit_id => v_purchase_unit_id",
+    );
     const skuUpdateAt = normalizedCommand.indexOf(
       "v_child_key := v_parent_key || ':sku-update'",
     );

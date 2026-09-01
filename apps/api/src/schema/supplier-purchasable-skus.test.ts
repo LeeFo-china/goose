@@ -129,7 +129,6 @@ describe("supplier purchasable SKU schemas", () => {
       sku: {
         expected_version: 3,
         name: "净味乳胶漆 18L 新包装",
-        purchase_unit_id: SECOND_UUID,
         specification: null,
         model: "A-18",
         batch_managed: true,
@@ -148,7 +147,6 @@ describe("supplier purchasable SKU schemas", () => {
       sku: {
         expected_version: 3,
         name: "净味乳胶漆 18L 新包装",
-        purchase_unit_id: SECOND_UUID,
         specification: null,
         model: "A-18",
         batch_managed: true,
@@ -179,7 +177,7 @@ describe("supplier purchasable SKU schemas", () => {
     }
   });
 
-  test("allows every SKU field to be updated optionally", () => {
+  test("allows every editable SKU field to be updated optionally", () => {
     const price = {
       unit_price: "318.00",
       tax_rate: "0.13",
@@ -190,7 +188,6 @@ describe("supplier purchasable SKU schemas", () => {
 
     for (const patch of [
       { name: "新名称" },
-      { purchase_unit_id: SECOND_UUID },
       { specification: null },
       { model: null },
       { batch_managed: true },
@@ -203,6 +200,16 @@ describe("supplier purchasable SKU schemas", () => {
         price,
       }).success).toBe(true);
     }
+  });
+
+  test("strictly rejects purchase unit changes in the composite update", () => {
+    expect(SupplierPurchasableSkuUpdateSchema.safeParse({
+      ...updatePayload,
+      sku: {
+        ...updatePayload.sku,
+        purchase_unit_id: SECOND_UUID,
+      },
+    }).success).toBe(false);
   });
 
   test("pairs nullable expected price identity fields", () => {

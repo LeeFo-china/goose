@@ -58,7 +58,6 @@ const SupplierPurchasableSkuCreateFieldsSchema = z.object({
 const SupplierPurchasableSkuUpdateFieldsSchema = z.object({
   expected_version: z.number().int().positive("SKU 版本号必须是正整数"),
   name: skuFields.name.optional(),
-  purchase_unit_id: skuFields.purchase_unit_id.optional(),
   specification: skuFields.specification,
   model: skuFields.model,
   batch_managed: skuFields.batch_managed.optional(),

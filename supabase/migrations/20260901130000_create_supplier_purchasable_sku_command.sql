@@ -284,7 +284,6 @@ DECLARE
   v_effective_until timestamptz;
   v_current_count integer;
   v_sku_fields_changed boolean := false;
-  v_purchase_unit_changed boolean := false;
   v_price_changed boolean := true;
   v_price_version_created boolean := false;
   v_constraint_name text;
@@ -337,6 +336,15 @@ BEGIN
       'idempotent', false,
       'error_code', 'SUPPLIER_PRICE_LIST_VERSION_CONFLICT',
       'reason', 'invalid_expected_price_version'
+    );
+  END IF;
+
+  IF p_action = 'update' AND (p_sku ? 'purchase_unit_id') THEN
+    RETURN jsonb_build_object(
+      'status', 'validation_error',
+      'idempotent', false,
+      'error_code', 'SUPPLIER_SKU_STATE_CONFLICT',
+      'reason', 'purchase_unit_update_not_allowed'
     );
   END IF;
 
@@ -911,28 +919,23 @@ BEGIN
     );
   END IF;
 
-  v_purchase_unit_id := CASE
-    WHEN p_sku ? 'purchase_unit_id'
-      THEN (p_sku ->> 'purchase_unit_id')::uuid
-    ELSE v_sku.purchase_unit_id
-  END;
-  v_purchase_unit_changed := p_action = 'update'
-    AND (p_sku ? 'purchase_unit_id')
-    AND v_purchase_unit_id IS DISTINCT FROM v_sku.purchase_unit_id;
+  IF p_action = 'create' THEN
+    v_purchase_unit_id := (p_sku ->> 'purchase_unit_id')::uuid;
 
-  PERFORM unit_record.id
-  FROM public.catalog_units AS unit_record
-  WHERE unit_record.id = v_purchase_unit_id
-    AND unit_record.status = 'active'
-  FOR SHARE;
+    PERFORM unit_record.id
+    FROM public.catalog_units AS unit_record
+    WHERE unit_record.id = v_purchase_unit_id
+      AND unit_record.status = 'active'
+    FOR SHARE;
 
-  IF NOT FOUND THEN
-    RETURN jsonb_build_object(
-      'status', 'state_conflict',
-      'idempotent', false,
-      'error_code', 'SUPPLIER_PURCHASABLE_SKU_SAVE_FAILED',
-      'reason', 'purchase_unit_not_found'
-    );
+    IF NOT FOUND THEN
+      RETURN jsonb_build_object(
+        'status', 'state_conflict',
+        'idempotent', false,
+        'error_code', 'SUPPLIER_PURCHASABLE_SKU_SAVE_FAILED',
+        'reason', 'purchase_unit_not_found'
+      );
+    END IF;
   END IF;
 
   IF v_current_price_item.id IS NULL THEN
@@ -996,7 +999,6 @@ BEGIN
     AND v_current_price_item.purchase_unit_id = v_sku.purchase_unit_id
     AND v_current_price_item.base_unit_id = v_sku.base_unit_id
     AND v_current_price_item.base_unit_conversion = v_sku.base_unit_conversion
-    AND NOT v_purchase_unit_changed
     AND v_current_price_item.unit_price = v_unit_price
     AND v_current_price_item.tax_rate = v_tax_rate
     AND v_current_price_item.tax_inclusive =
@@ -1032,35 +1034,6 @@ BEGIN
           DETAIL = COALESCE(v_child_response ->> 'error_code', 'sku_create_failed');
       END IF;
     ELSE
-      IF v_purchase_unit_changed THEN
-        v_child_key := v_parent_key || ':sku-unit-conversions';
-        SELECT public.replace_supplier_sku_unit_conversions_v3(
-          p_ownership_scope => 'tenant',
-          p_tenant_id => p_tenant_id,
-          p_tenant_supplier_id => p_tenant_supplier_id,
-          p_supplier_id => p_supplier_id,
-          p_supplier_product_id => p_supplier_product_id,
-          p_supplier_sku_id => p_supplier_sku_id,
-          p_expected_sku_version => v_sku.version,
-          p_purchase_unit_id => v_purchase_unit_id,
-          p_base_unit_id => v_purchase_unit_id,
-          p_edges => jsonb_build_array(),
-          p_actor_user_id => p_actor_user_id,
-          p_actor_employee_id => p_actor_employee_id,
-          p_idempotency_key => v_child_key
-        ) INTO v_child_response;
-        IF v_child_response ->> 'status' IS DISTINCT FROM 'updated' THEN
-          RAISE EXCEPTION USING
-            ERRCODE = 'P0001',
-            MESSAGE = 'SUPPLIER_PURCHASABLE_SKU_SAVE_FAILED',
-            DETAIL = COALESCE(
-              v_child_response ->> 'error_code',
-              'sku_unit_conversion_failed'
-            );
-        END IF;
-        v_sku.version := (v_child_response ->> 'version')::integer;
-      END IF;
-
       IF v_sku_fields_changed THEN
         v_child_key := v_parent_key || ':sku-update';
         SELECT public.command_supplier_sku_v3(
@@ -1672,8 +1645,7 @@ BEGIN
         'TENANT_SUPPLIER_NOT_FOUND',
         'SUPPLIER_ORDER_NOT_ELIGIBLE',
         'SUPPLIER_PROXY_ACTOR_INVALID',
-        'SHARED_RESOURCE_READ_ONLY',
-        'UNIT_CONVERSION_INVALID'
+        'SHARED_RESOURCE_READ_ONLY'
       ) THEN
         RETURN jsonb_build_object(
           'status', 'state_conflict',
