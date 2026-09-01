@@ -102,7 +102,7 @@ export class TenantDouyinMaterialNotesService {
     });
     if (result.total === 0) {
       if (result.rows.length > 0) throwInvalidResponse();
-      throwNotFound();
+      if (query.page === 1) throwNotFound();
     }
     return parseOutput(TenantDouyinMaterialNoteVersionListResponseSchema, {
       list: result.rows.map(mapVersionSummary),

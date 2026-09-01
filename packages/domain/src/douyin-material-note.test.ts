@@ -620,6 +620,42 @@ describe('Douyin material note domain contracts', () => {
     }
   });
 
+  test('accepts total-zero empty pages for every material list schema', () => {
+    const emptyPastEndPagination = {
+      page: 2,
+      pageSize: 20,
+      total: 0,
+      totalPages: 0,
+    };
+    for (const [schema, item] of [
+      [DouyinMaterialNotePublicListSchema, publicPreview],
+      [DouyinMaterialNoteOwnedListSchema, ownedSummary],
+      [DouyinMaterialNoteTenantListSchema, tenantSummary],
+      [DouyinMaterialNoteTenantVersionListSchema, tenantVersionSummary],
+    ] as const) {
+      expect(schema.safeParse({
+        list: [],
+        pagination: emptyPastEndPagination,
+      }).success).toBe(true);
+      expect(schema.safeParse({
+        list: [item],
+        pagination: emptyPastEndPagination,
+      }).success).toBe(false);
+      expect(schema.safeParse({
+        list: [],
+        pagination: { ...emptyPastEndPagination, totalPages: 1 },
+      }).success).toBe(false);
+      expect(schema.safeParse({
+        list: [],
+        pagination: { ...emptyPastEndPagination, page: 0 },
+      }).success).toBe(false);
+      expect(schema.safeParse({
+        list: [],
+        pagination: { ...emptyPastEndPagination, pageSize: 101 },
+      }).success).toBe(false);
+    }
+  });
+
   test('re-exports material contracts from the domain root', () => {
     expect(domain.DOUYIN_MATERIAL_NOTE_STATUS_VALUES).toBe(
       DOUYIN_MATERIAL_NOTE_STATUS_VALUES,

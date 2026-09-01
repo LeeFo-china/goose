@@ -115,9 +115,9 @@ function fixture(overrides: Partial<Record<string, unknown>> = {}) {
 
 describe('TenantDouyinMaterialNotesService access and mapping', () => {
   test('gates all read endpoints with the read permission', async () => {
-  const context = fixture();
-  const user = auth(['douyin_material_note.read']);
-  await context.service.list(user, { page: 1, pageSize: 20 });
+    const context = fixture();
+    const user = auth(['douyin_material_note.read']);
+    await context.service.list(user, { page: 1, pageSize: 20 });
     await context.service.getDetail(user, NOTE_ID);
     await context.service.listVersions(user, NOTE_ID, { page: 1, pageSize: 20 });
     await context.service.getVersionDetail(user, NOTE_ID, VERSION_ID);
@@ -339,16 +339,16 @@ describe('TenantDouyinMaterialNotesService access and mapping', () => {
     });
   });
 
-  test('returns legal empty tenant and version pages after the last page', async () => {
+  test('returns total-zero empty tenant and version pages after the last page', async () => {
     const context = fixture({
-      listTenant: mock(async () => ({ rows: [], total: 1 })),
-      listVersions: mock(async () => ({ rows: [], total: 1 })),
+      listTenant: mock(async () => ({ rows: [], total: 0 })),
+      listVersions: mock(async () => ({ rows: [], total: 0 })),
     });
     const user = auth(['douyin_material_note.read']);
     await expect(context.service.list(user, { page: 2, pageSize: 20 }))
       .resolves.toEqual({
         list: [],
-        pagination: { page: 2, pageSize: 20, total: 1, totalPages: 1 },
+        pagination: { page: 2, pageSize: 20, total: 0, totalPages: 0 },
       });
     await expect(context.service.listVersions(
       user,
@@ -356,7 +356,7 @@ describe('TenantDouyinMaterialNotesService access and mapping', () => {
       { page: 2, pageSize: 20 },
     )).resolves.toEqual({
       list: [],
-      pagination: { page: 2, pageSize: 20, total: 1, totalPages: 1 },
+      pagination: { page: 2, pageSize: 20, total: 0, totalPages: 0 },
     });
   });
 

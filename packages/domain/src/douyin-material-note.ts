@@ -210,13 +210,6 @@ const createMaterialNoteListSchema = <ItemSchema extends z.ZodType>(
       }
 
       if (total === 0) {
-        if (page !== 1) {
-          context.addIssue({
-            code: 'custom',
-            path: ['pagination', 'page'],
-            message: '空列表页码必须为 1',
-          });
-        }
         if (list.length !== 0) {
           context.addIssue({
             code: 'custom',
