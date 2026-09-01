@@ -196,17 +196,101 @@ function validAuditFields(record: {
     : record.proxy_reason !== null;
 }
 
-export const SupplierPurchasableSkuCommandFailureSchema = z.object({
-  status: z.enum([
-    "validation_error", "not_found", "version_conflict", "state_conflict",
-  ]),
+const commandFailureFields = {
   idempotent: z.literal(false),
-  error_code: z.string().min(1),
-  reason: z.string().min(1).optional(),
-  version: z.number().int().positive().optional(),
-  current_price_list_id: uuid.optional(),
-  current_status: z.string().min(1).optional(),
+};
+const commandFailureReason = z.string().trim().min(1);
+const validationFailureSchema = z.union([
+  z.object({ ...commandFailureFields,
+    status: z.literal("validation_error"),
+    error_code: z.literal("SUPPLIER_PURCHASABLE_SKU_SAVE_FAILED"),
+    reason: z.literal("invalid_request") }).strict(),
+  z.object({ ...commandFailureFields,
+    status: z.literal("validation_error"),
+    error_code: z.literal("SUPPLIER_PRICE_LIST_VERSION_CONFLICT"),
+    reason: z.literal("invalid_expected_price_version") }).strict(),
+  z.object({ ...commandFailureFields,
+    status: z.literal("validation_error"),
+    error_code: z.literal("SUPPLIER_SKU_STATE_CONFLICT"),
+    reason: z.enum(["purchase_unit_update_not_allowed", "invalid_sku"]),
+  }).strict(),
+  z.object({ ...commandFailureFields,
+    status: z.literal("validation_error"),
+    error_code: z.literal("SUPPLIER_PRICE_LIST_INVALID_ACTION"),
+    reason: z.literal("invalid_price") }).strict(),
+  z.object({ ...commandFailureFields,
+    status: z.literal("validation_error"),
+    error_code: z.literal("SUPPLIER_PROXY_ACTOR_INVALID"),
+    reason: z.literal("actor_invalid") }).strict(),
+]);
+const notFoundFailureSchema = z.object({
+  ...commandFailureFields,
+  status: z.literal("not_found"),
+  error_code: z.enum(["SUPPLIER_PRODUCT_NOT_FOUND", "SUPPLIER_SKU_NOT_FOUND"]),
 }).strict();
+const versionFailureSchema = z.union([
+  z.object({ ...commandFailureFields,
+    status: z.literal("version_conflict"),
+    error_code: z.literal("SUPPLIER_PRICE_LIST_VERSION_CONFLICT"),
+    reason: z.literal("current_price_missing") }).strict(),
+  z.object({ ...commandFailureFields,
+    status: z.literal("version_conflict"),
+    error_code: z.literal("SUPPLIER_PRICE_LIST_VERSION_CONFLICT"),
+    version: z.number().int().positive(), current_price_list_id: uuid,
+  }).strict(),
+  z.object({ ...commandFailureFields,
+    status: z.literal("version_conflict"),
+    error_code: z.literal("SUPPLIER_SKU_VERSION_CONFLICT"),
+    version: z.number().int().positive(),
+    current_status: z.enum(SUPPLIER_SKU_STATUS_VALUES),
+  }).strict(),
+]);
+const stateFailureSchema = z.union([
+  z.object({ ...commandFailureFields,
+    status: z.literal("state_conflict"),
+    error_code: z.literal("SUPPLIER_PRICE_PERIOD_CONFLICT"),
+    reason: commandFailureReason.optional() }).strict(),
+  z.object({ ...commandFailureFields,
+    status: z.literal("state_conflict"),
+    error_code: z.literal("SHARED_RESOURCE_READ_ONLY"),
+    reason: commandFailureReason.optional() }).strict(),
+  z.object({ ...commandFailureFields,
+    status: z.literal("state_conflict"),
+    error_code: z.literal("SUPPLIER_PRODUCT_STATE_CONFLICT"),
+    current_status: z.literal("inactive") }).strict(),
+  z.object({ ...commandFailureFields,
+    status: z.literal("state_conflict"),
+    error_code: z.literal("SUPPLIER_SKU_STATE_CONFLICT"),
+    current_status: z.enum(SUPPLIER_SKU_STATUS_VALUES) }).strict(),
+  z.object({ ...commandFailureFields,
+    status: z.literal("state_conflict"),
+    error_code: z.literal("SUPPLIER_SKU_STATE_CONFLICT"),
+    version: z.number().int().positive(),
+    current_status: z.literal("inactive") }).strict(),
+  z.object({ ...commandFailureFields,
+    status: z.literal("state_conflict"),
+    error_code: z.enum([
+      "SUPPLIER_PRODUCT_STATE_CONFLICT",
+      "SUPPLIER_SKU_STATE_CONFLICT",
+      "SUPPLIER_PRICE_LIST_INVALID_ACTION",
+      "SUPPLIER_PRICE_LIST_VERSION_CONFLICT",
+      "TENANT_SUPPLIER_NOT_FOUND",
+      "SUPPLIER_ORDER_NOT_ELIGIBLE",
+      "SUPPLIER_PROXY_ACTOR_INVALID",
+    ]),
+    reason: commandFailureReason }).strict(),
+  z.object({ ...commandFailureFields,
+    status: z.literal("state_conflict"),
+    error_code: z.literal("SUPPLIER_PURCHASABLE_SKU_SAVE_FAILED"),
+    reason: commandFailureReason }).strict(),
+]);
+
+export const SupplierPurchasableSkuCommandFailureSchema = z.union([
+  validationFailureSchema,
+  notFoundFailureSchema,
+  versionFailureSchema,
+  stateFailureSchema,
+]);
 
 export type SupplierPurchasableSkuPriceContext = {
   currency: "CNY";

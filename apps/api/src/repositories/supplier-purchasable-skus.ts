@@ -131,7 +131,7 @@ export class SupplierPurchasableSkusRepository {
     if (failure.success) {
       const mapped = mapSupplierCommandDatabaseError(
         failure.data.error_code,
-      ) ?? mapSupplierCommandDatabaseError(failure.data.reason);
+      );
       if (mapped) throw mapped;
     }
     throw Errors.business(500, SAVE_ERROR, SAVE_ERROR_CODE);

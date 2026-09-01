@@ -237,23 +237,128 @@ describe("SupplierPurchasableSkusRepository composite save", () => {
     }
   });
 
-  test("maps stable envelopes and uses composite failure for unknown envelopes", async () => {
+  test("maps every real migration failure status and code combination", async () => {
     const { SupplierPurchasableSkusRepository } = await import(
       "./supplier-purchasable-skus"
     );
-    for (const [data, expected] of [
+    const failures: Array<readonly [Record<string, unknown>, number]> = [
+      [{ status: "validation_error", idempotent: false,
+        error_code: "SUPPLIER_PURCHASABLE_SKU_SAVE_FAILED",
+        reason: "invalid_request" }, 409],
+      [{ status: "validation_error", idempotent: false,
+        error_code: "SUPPLIER_PRICE_LIST_VERSION_CONFLICT",
+        reason: "invalid_expected_price_version" }, 409],
+      [{ status: "validation_error", idempotent: false,
+        error_code: "SUPPLIER_SKU_STATE_CONFLICT",
+        reason: "invalid_sku" }, 409],
+      [{ status: "validation_error", idempotent: false,
+        error_code: "SUPPLIER_PRICE_LIST_INVALID_ACTION",
+        reason: "invalid_price" }, 409],
+      [{ status: "validation_error", idempotent: false,
+        error_code: "SUPPLIER_PROXY_ACTOR_INVALID",
+        reason: "actor_invalid" }, 403],
+      [{ status: "not_found", idempotent: false,
+        error_code: "SUPPLIER_PRODUCT_NOT_FOUND" }, 404],
+      [{ status: "not_found", idempotent: false,
+        error_code: "SUPPLIER_SKU_NOT_FOUND" }, 404],
+      [{ status: "version_conflict", idempotent: false,
+        error_code: "SUPPLIER_PRICE_LIST_VERSION_CONFLICT",
+        reason: "current_price_missing" }, 409],
       [{ status: "version_conflict", idempotent: false,
         error_code: "SUPPLIER_PRICE_LIST_VERSION_CONFLICT", version: 7,
-        current_price_list_id: PRICE_LIST_ID },
-      { statusCode: 409, code: "SUPPLIER_PRICE_LIST_VERSION_CONFLICT" }],
+        current_price_list_id: PRICE_LIST_ID }, 409],
+      [{ status: "version_conflict", idempotent: false,
+        error_code: "SUPPLIER_SKU_VERSION_CONFLICT", version: 4,
+        current_status: "active" }, 409],
       [{ status: "state_conflict", idempotent: false,
-        error_code: "UNKNOWN_SQL_FAILURE", reason: "select secret" },
-      { statusCode: 500, code: "SUPPLIER_PURCHASABLE_SKU_SAVE_FAILED" }],
-    ] as const) {
+        error_code: "TENANT_SUPPLIER_NOT_FOUND",
+        reason: "tenant_supplier_unavailable" }, 404],
+      [{ status: "state_conflict", idempotent: false,
+        error_code: "SUPPLIER_PRICE_PERIOD_CONFLICT" }, 409],
+      [{ status: "state_conflict", idempotent: false,
+        error_code: "SHARED_RESOURCE_READ_ONLY" }, 403],
+      [{ status: "state_conflict", idempotent: false,
+        error_code: "SUPPLIER_PRODUCT_STATE_CONFLICT",
+        current_status: "inactive" }, 409],
+      [{ status: "state_conflict", idempotent: false,
+        error_code: "SUPPLIER_SKU_STATE_CONFLICT",
+        current_status: "active" }, 409],
+      [{ status: "state_conflict", idempotent: false,
+        error_code: "SUPPLIER_PURCHASABLE_SKU_SAVE_FAILED",
+        reason: "purchase_unit_not_found" }, 409],
+      [{ status: "state_conflict", idempotent: false,
+        error_code: "SUPPLIER_PRICE_LIST_INVALID_ACTION",
+        reason: "child_state" }, 409],
+      [{ status: "state_conflict", idempotent: false,
+        error_code: "SUPPLIER_PRICE_LIST_VERSION_CONFLICT",
+        reason: "child_state" }, 409],
+      [{ status: "state_conflict", idempotent: false,
+        error_code: "SUPPLIER_ORDER_NOT_ELIGIBLE",
+        reason: "child_state" }, 409],
+      [{ status: "state_conflict", idempotent: false,
+        error_code: "SUPPLIER_PROXY_ACTOR_INVALID",
+        reason: "child_state" }, 403],
+    ];
+    const childHandlerCodes = [
+      "SUPPLIER_PRODUCT_STATE_CONFLICT",
+      "SUPPLIER_SKU_STATE_CONFLICT",
+      "SUPPLIER_PRICE_LIST_INVALID_ACTION",
+      "SUPPLIER_PRICE_LIST_VERSION_CONFLICT",
+      "TENANT_SUPPLIER_NOT_FOUND",
+      "SUPPLIER_ORDER_NOT_ELIGIBLE",
+      "SUPPLIER_PROXY_ACTOR_INVALID",
+      "SHARED_RESOURCE_READ_ONLY",
+    ] as const;
+
+    for (const code of childHandlerCodes) {
+      const statusCode = code === "SUPPLIER_PROXY_ACTOR_INVALID" ||
+        code === "SHARED_RESOURCE_READ_ONLY"
+        ? 403
+        : code === "TENANT_SUPPLIER_NOT_FOUND" ? 404 : 409;
+      failures.push([{ status: "state_conflict", idempotent: false,
+        error_code: code, reason: "child_exception_detail" }, statusCode]);
+    }
+    for (const [data, statusCode] of failures) {
       const rpc = mock(async () => ({ data, error: null }));
       await expect(new SupplierPurchasableSkusRepository(
         () => ({ rpc } as never),
-      ).save(updateInput)).rejects.toMatchObject(expected);
+      ).save(updateInput)).rejects.toMatchObject({ statusCode,
+        code: data.error_code });
+    }
+  });
+
+  test("rejects impossible and unknown failure envelopes without leaking reason", async () => {
+    const invalidFailures = [
+      { status: "not_found", idempotent: false,
+        error_code: "SUPPLIER_PRICE_PERIOD_CONFLICT" },
+      { status: "state_conflict", idempotent: false,
+        error_code: "UNKNOWN_SQL_FAILURE" },
+      { status: "state_conflict", idempotent: false,
+        error_code: "UNKNOWN_SQL_FAILURE",
+        reason: "SUPPLIER_SKU_VERSION_CONFLICT select secret" },
+      { status: "validation_error", idempotent: false,
+        error_code: "SUPPLIER_SKU_STATE_CONFLICT", reason: "not_real" },
+      { status: "version_conflict", idempotent: false,
+        error_code: "SUPPLIER_PRICE_LIST_VERSION_CONFLICT", version: 7 },
+      { status: "not_found", idempotent: false,
+        error_code: "SUPPLIER_PRODUCT_NOT_FOUND", reason: "select secret" },
+    ];
+    const { SupplierPurchasableSkusRepository } = await import(
+      "./supplier-purchasable-skus"
+    );
+
+    for (const data of invalidFailures) {
+      const rpc = mock(async () => ({ data, error: null }));
+      const caught = await new SupplierPurchasableSkusRepository(
+        () => ({ rpc } as never),
+      ).save(updateInput).then(() => null, (error) => error);
+      expect(caught).toMatchObject({ statusCode: 500,
+        code: "SUPPLIER_PURCHASABLE_SKU_SAVE_FAILED",
+        message: "保存供应商 SKU 与供货价失败" });
+      expect((caught as { details?: unknown }).details).toBeUndefined();
+      expect(JSON.stringify(caught)).not.toMatch(
+        /SUPPLIER_SKU_VERSION_CONFLICT|select secret/,
+      );
     }
   });
 
