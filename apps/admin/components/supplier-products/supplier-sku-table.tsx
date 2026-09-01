@@ -24,6 +24,7 @@ export function SupplierSkuTable({
   skus,
   loading,
   canManage,
+  inlinePriceEnabled = false,
   onMutate,
   onRefresh,
   onPageChange,
@@ -33,6 +34,7 @@ export function SupplierSkuTable({
   skus: SupplierSkuPage;
   loading: boolean;
   canManage: boolean;
+  inlinePriceEnabled?: boolean;
   onMutate: (target: MutationTarget) => void;
   onRefresh: () => void | Promise<void>;
   onPageChange: (page: number) => void | Promise<void>;
@@ -69,7 +71,7 @@ export function SupplierSkuTable({
         return (
           <div className="flex flex-wrap gap-1">
             {writable ? (
-              <SupplierSkuDialog scope={scope} product={product} sku={row.original} onSaved={onRefresh} />
+              <SupplierSkuDialog scope={scope} product={product} sku={row.original} inlinePriceEnabled={inlinePriceEnabled} onSaved={onRefresh} />
             ) : null}
             <SupplierUnitConversionDialog
               scope={scope}
@@ -99,7 +101,7 @@ export function SupplierSkuTable({
         );
       },
     },
-  ], [canManage, onMutate, onRefresh, product, scope]);
+  ], [canManage, inlinePriceEnabled, onMutate, onRefresh, product, scope]);
 
   if (loading) return <Skeleton className="h-32 w-full" />;
   const totalPages = Math.max(1, skus.pagination.totalPages || 1);

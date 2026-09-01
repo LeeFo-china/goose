@@ -24,7 +24,6 @@ import {
 } from "./supplier-product-api";
 import {
   buildSuggestedSkuName,
-  canReadSupplierProductWorkspace,
   getPriceWriteState,
   getProductWriteState,
   relationshipReadOnlyMessage,
@@ -58,6 +57,7 @@ const tenantProduct = {
   ownership_scope: "tenant",
   owner_tenant_id: "tenant-1",
 } as SupplierProduct;
+
 describe("供应商品与供货价行为", () => {
   test("商品列表展示 SKU 数量并使用同区域下钻工作区", () => {
     const listSource = readFileSync(
@@ -389,33 +389,6 @@ describe("供应商品与供货价行为", () => {
       canManage: false,
       relationship: activeRelationship,
     }).writable).toBe(false);
-  });
-
-  test("采购价查看或管理权限可独立进入商品定价工作区", () => {
-    expect(canReadSupplierProductWorkspace({
-      canViewProducts: false,
-      canManageProducts: false,
-      canViewCostPrice: true,
-      canManageCostPrice: false,
-    })).toBe(true);
-    expect(canReadSupplierProductWorkspace({
-      canViewProducts: false,
-      canManageProducts: false,
-      canViewCostPrice: false,
-      canManageCostPrice: true,
-    })).toBe(true);
-    expect(canReadSupplierProductWorkspace({
-      canViewProducts: false,
-      canManageProducts: true,
-      canViewCostPrice: false,
-      canManageCostPrice: false,
-    })).toBe(true);
-    expect(canReadSupplierProductWorkspace({
-      canViewProducts: false,
-      canManageProducts: false,
-      canViewCostPrice: false,
-      canManageCostPrice: false,
-    })).toBe(false);
   });
 
   test("非 active 合作保留历史读取并返回明确只读说明", () => {

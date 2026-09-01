@@ -15,15 +15,14 @@ import {
   tenantRelationships,
   units,
 } from "./supplier-product-pricing-mock-state.mjs";
+import { handleSupplierSkuInlinePriceMock, resetSupplierSkuInlinePriceMock } from "./supplier-sku-inline-price-mock-handlers.mjs";
 
 function sendJson(response, status, payload) {
   response.writeHead(status, { "content-type": "application/json; charset=utf-8" });
   response.end(JSON.stringify(payload));
 }
 
-function sendData(response, data, status = 200) {
-  sendJson(response, status, { success: true, data });
-}
+function sendData(response, data, status = 200) { sendJson(response, status, { success: true, data }); }
 
 function readBody(request) {
   return new Promise((resolve) => {
@@ -36,10 +35,7 @@ function readBody(request) {
   });
 }
 
-function idempotencyKey(request) {
-  const value = request.headers["idempotency-key"];
-  return Array.isArray(value) ? value[0] : value ?? null;
-}
+function idempotencyKey(request) { const value = request.headers["idempotency-key"]; return Array.isArray(value) ? value[0] : value ?? null; }
 
 function requireIdempotency(request, response) {
   if (idempotencyKey(request)?.trim()) return true;
@@ -69,9 +65,7 @@ function recordMutation(request, url, payload) {
   });
 }
 
-function notFound(response, message) {
-  sendJson(response, 404, { success: false, code: "NOT_FOUND", message });
-}
+function notFound(response, message) { sendJson(response, 404, { success: false, code: "NOT_FOUND", message }); }
 
 function conflict(response, record, field = "version") {
   sendJson(response, 409, {
@@ -432,10 +426,12 @@ export async function handleSupplierProductPricingMock(request, response) {
   if (request.method === "POST" && url.pathname === "/__test/reset") {
     const config = await readBody(request);
     resetMockStore(config);
+    resetSupplierSkuInlinePriceMock(config);
     return sendData(response, {});
   }
   if (request.method === "GET" && url.pathname === "/__test/mutations") return sendJson(response, 200, { mutations: mockStore.mutations });
   if (request.method === "GET" && url.pathname === "/__test/requests") return sendJson(response, 200, { requests: mockStore.requests });
+  if (request.method === "GET" && url.pathname === "/__test/state") return sendJson(response, 200, { state: structuredClone(mockStore.state) });
   if (request.method === "POST" && url.pathname === "/admin/auth/login") {
     await readBody(request);
     return sendData(response, currentSession());
@@ -473,6 +469,7 @@ export async function handleSupplierProductPricingMock(request, response) {
   const conversions = url.pathname.match(/^\/(platform\/)?supplier-products\/[^/]+\/skus\/([^/]+)\/unit-conversions$/);
   if (request.method === "GET" && conversions) return listConversions(response, conversions[2], Boolean(conversions[1]));
   if (request.method === "PUT" && conversions) return replaceConversions(request, response, url, conversions[2], Boolean(conversions[1]));
+  if (await handleSupplierSkuInlinePriceMock(request, response, url)) return;
   const skuResource = url.pathname.match(/^\/(platform\/)?supplier-products\/([^/]+)\/skus\/([^/]+)$/);
   if (request.method === "POST" && skuResource) return createSku(request, response, url, skuResource[2], skuResource[3], Boolean(skuResource[1]));
   if (request.method === "PATCH" && skuResource) return updateSku(request, response, url, skuResource[3], Boolean(skuResource[1]));
@@ -499,9 +496,5 @@ export async function handleSupplierProductPricingMock(request, response) {
   if (request.method === "POST" && priceCreate) return createPriceList(request, response, url, priceCreate[1]);
   if (request.method === "GET" && url.pathname === "/notifications/summary") return sendData(response, { unread_count: 0 });
   if (request.method === "GET" && url.pathname === "/notifications") return sendData(response, paginate([], url));
-  sendJson(response, 404, {
-    success: false,
-    code: "MOCK_ROUTE_NOT_FOUND",
-    message: `Mock route not found: ${request.method} ${url.pathname}`,
-  });
+  sendJson(response, 404, { success: false, code: "MOCK_ROUTE_NOT_FOUND", message: `Mock route not found: ${request.method} ${url.pathname}` });
 }

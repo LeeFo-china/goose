@@ -218,7 +218,14 @@ export const specDefinitions = [
 ];
 
 export const mockStore = {
-  config: { sessionMode: "tenant", relationshipStatus: "active" },
+  config: {
+    sessionMode: "tenant",
+    relationshipStatus: "active",
+    tenantProductStatus: "active",
+    tenantSkuStatus: "active",
+    priceScenario: "none",
+    compositeConflictOnce: false,
+  },
   state: { products: [], skus: [], conversions: [], priceLists: [], items: [] },
   catalogSequence: 0,
   createdCatalogIds: [],
@@ -237,6 +244,10 @@ export function resetMockStore(config = {}) {
   mockStore.config = {
     sessionMode: config.sessionMode || "tenant",
     relationshipStatus: config.relationshipStatus || "active",
+    tenantProductStatus: config.tenantProductStatus || "active",
+    tenantSkuStatus: config.tenantSkuStatus || "active",
+    priceScenario: config.priceScenario || "none",
+    compositeConflictOnce: config.compositeConflictOnce === true,
   };
   const supplierId = platformSuppliers().at(-1).id;
   const category = categories.find(({ id }) => id === ids.category);
@@ -256,6 +267,10 @@ export function resetMockStore(config = {}) {
     priceLists: [],
     items: [],
   };
+  mockStore.state.products.find(({ id }) => id === ids.tenantProduct).status =
+    mockStore.config.tenantProductStatus;
+  mockStore.state.skus.find(({ id }) => id === ids.tenantSku).status =
+    mockStore.config.tenantSkuStatus;
   mockStore.catalogSequence = 0;
   mockStore.createdCatalogIds = [];
   mockStore.mutations = [];
@@ -288,7 +303,14 @@ function skuRecord(id, productId, supplierId, code, name, scope, owner) {
     name,
     specification: null,
     model: null,
-    spec_values: { size: "600×600", color: "灰色" },
+    spec_values: {
+      size: "600×600",
+      color: "灰色",
+      thickness: 10,
+      anti_slip: true,
+      finishes: ["哑光"],
+      available_on: "2026-08-19",
+    },
     purchase_unit_id: ids.box,
     base_unit_id: ids.box,
     base_unit_conversion: "1",
@@ -361,6 +383,7 @@ export function currentSession() {
   const denied = mockStore.config.sessionMode === "platform-denied";
   const platformStaff = mockStore.config.sessionMode === "platform-staff" || denied;
   const priceOnly = mockStore.config.sessionMode === "tenant-price-only";
+  const productOnly = mockStore.config.sessionMode === "tenant-product-only";
   const tenantId = currentTenantId();
   return {
     user_id: "21000000-0000-4000-8000-000000000010",
@@ -394,8 +417,8 @@ export function currentSession() {
           { code: "supplier.view", scope: "all" },
           ...(!priceOnly ? [{ code: "supplier.product.view", scope: "all" }] : []),
           ...(!priceOnly ? [{ code: "supplier.product.manage", scope: "all" }] : []),
-          { code: "supplier.cost-price.view", scope: "all" },
-          { code: "supplier.cost-price.manage", scope: "all" },
+          ...(!productOnly ? [{ code: "supplier.cost-price.view", scope: "all" }] : []),
+          ...(!productOnly ? [{ code: "supplier.cost-price.manage", scope: "all" }] : []),
         ],
     token: "supplier-product-pricing-token",
     expires_at: "2099-12-31T23:59:59+08:00",

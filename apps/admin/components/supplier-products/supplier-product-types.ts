@@ -68,6 +68,26 @@ export type SupplierSku = {
   updated_at: string;
 };
 
+export type SupplierSkuCurrentPrice = {
+  supplier_price_list_id: string;
+  supplier_price_list_version: number;
+  supplier_price_list_row_version: number;
+  supplier_price_list_item_id: string;
+  unit_price: string;
+  tax_rate: string;
+  tax_inclusive: boolean;
+  effective_from: string;
+  effective_until: string | null;
+};
+
+export type SupplierSkuPriceContext = {
+  currency: "CNY";
+  recommended_tax_rate: string;
+  recommended_tax_inclusive: false;
+  next_scheduled_effective_from: string | null;
+  current_price: SupplierSkuCurrentPrice | null;
+};
+
 export type SupplierPriceList = {
   id: string;
   supplier_id: string;

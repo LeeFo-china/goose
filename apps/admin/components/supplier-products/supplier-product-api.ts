@@ -11,6 +11,7 @@ import type {
   SupplierPriceListPage,
   SupplierProduct,
   SupplierProductPage,
+  SupplierSkuPriceContext,
   SupplierSkuPage,
   SupplierSkuUnitConversion,
   TenantSupplierRelationship,
@@ -108,6 +109,35 @@ export function buildSkuResourcePath(
   skuId: string,
 ) {
   return `${buildProductResourcePath(scope, productId)}/skus/${skuId}`;
+}
+
+export function buildPurchasableSkuPath(productId: string, skuId: string) {
+  return `${purchasableSkuBasePath(productId)}/${encodeURIComponent(skuId)}`;
+}
+
+export function loadSupplierSkuPriceDefaults(
+  scope: Extract<ProductApiScope, { kind: "tenant" }>,
+  productId: string,
+) {
+  return requestBackendJson<SupplierSkuPriceContext>(
+    `${purchasableSkuBasePath(productId)}/price-defaults?${scopeOnly(scope)}`,
+    { fallbackMessage: "基础供货价默认值加载失败" },
+  );
+}
+
+export function loadSupplierSkuCurrentPrice(
+  scope: Extract<ProductApiScope, { kind: "tenant" }>,
+  productId: string,
+  skuId: string,
+) {
+  return requestBackendJson<SupplierSkuPriceContext>(
+    `${buildPurchasableSkuPath(productId, skuId)}/price?${scopeOnly(scope)}`,
+    { fallbackMessage: "SKU 当前供货价加载失败" },
+  );
+}
+
+function purchasableSkuBasePath(productId: string) {
+  return `/supplier-products/${encodeURIComponent(productId)}/purchasable-skus`;
 }
 
 export function loadSupplierSkus(

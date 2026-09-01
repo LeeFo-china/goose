@@ -44,6 +44,7 @@ export function SupplierProductList({
   products,
   loading,
   canManage,
+  inlinePriceEnabled = false,
   onRefresh,
   onAvailableSkusChange,
   onSkuWorkspaceChange,
@@ -53,6 +54,7 @@ export function SupplierProductList({
   products: SupplierProductPage;
   loading: boolean;
   canManage: boolean;
+  inlinePriceEnabled?: boolean;
   onRefresh: () => void | Promise<void>;
   onAvailableSkusChange: (skus: SupplierSku[]) => void;
   onSkuWorkspaceChange?: (visible: boolean) => void;
@@ -379,6 +381,7 @@ export function SupplierProductList({
             <SupplierSkuDialog
               scope={scope}
               product={selected}
+              inlinePriceEnabled={inlinePriceEnabled}
               disabled={skuLoading || selected.status === "inactive"}
               onSaved={async () => {
                 await refreshSkuWorkspace(selected, 1);
@@ -393,6 +396,7 @@ export function SupplierProductList({
         skus={skus}
         loading={skuLoading}
         canManage={selectedWritable}
+        inlinePriceEnabled={inlinePriceEnabled}
         onMutate={setMutation}
         onRefresh={() => loadSkus(selected)}
         onPageChange={(nextPage) => loadSkus(selected, nextPage)}

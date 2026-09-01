@@ -25267,6 +25267,25 @@ export type Database = {
         }
         Returns: Json
       }
+      command_supplier_purchasable_sku_v1: {
+        Args: {
+          p_action: string
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_price_list_id: string
+          p_expected_price_list_version: number
+          p_expected_sku_version: number
+          p_idempotency_key: string
+          p_price: Json
+          p_sku: Json
+          p_supplier_id: string
+          p_supplier_product_id: string
+          p_supplier_sku_id: string
+          p_tenant_id: string
+          p_tenant_supplier_id: string
+        }
+        Returns: Json
+      }
       command_supplier_sku_v2: {
         Args: {
           p_action: string
@@ -26896,6 +26915,16 @@ export type Database = {
         Args: { p_payment_request_id: string; p_tenant_id: string }
         Returns: Json
       }
+      get_supplier_purchasable_sku_price_context_v1: {
+        Args: {
+          p_supplier_id: string
+          p_supplier_product_id: string
+          p_supplier_sku_id: string
+          p_tenant_id: string
+          p_tenant_supplier_id: string
+        }
+        Returns: Json
+      }
       get_supplier_purchase_order_financial_summary: {
         Args: { p_supplier_purchase_order_id: string; p_tenant_id: string }
         Returns: Json
@@ -27545,6 +27574,28 @@ export type Database = {
           project_id: string
           project_name: string
           total_count: number
+        }[]
+      }
+      list_tenant_owner_project_gantt: {
+        Args: {
+          p_keyword?: string
+          p_page?: number
+          p_page_size?: number
+          p_risk?: string
+          p_tenant_id: string
+          p_timezone?: string
+          p_window_end?: string
+          p_window_start?: string
+        }
+        Returns: {
+          address_summary: string
+          customer_name: string
+          owner_employee_name: string
+          project_id: string
+          project_name: string
+          project_status: string
+          total_count: number
+          updated_at: string
         }[]
       }
       list_tenant_owner_risk_projects: {
