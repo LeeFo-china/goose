@@ -26,8 +26,18 @@ describe("supplier purchasable SKU smoke command", () => {
       SUPPLIER_PURCHASABLE_SKU_SMOKE_DB_URL: DATABASE_URL,
     });
 
-    expect(config.databaseUrl).toBe(DATABASE_URL);
     expect(config.databaseHost).toBe("api-dev.goodcms.cn");
+    expect(config.databaseConnection).toEqual({
+      adapter: "postgres",
+      hostname: "api-dev.goodcms.cn",
+      port: 5432,
+      database: "postgres",
+      username: "fixture-user",
+      password: "fixture-password",
+      tls: true,
+      url: "postgresql://api-dev.goodcms.cn:5432?sslmode=require",
+    });
+    expect(config).not.toHaveProperty("databaseUrl");
     expect(config.redactedDatabaseUrl).toBe(
       "postgresql://***:***@api-dev.goodcms.cn:5432/postgres?sslmode=require",
     );
@@ -55,6 +65,33 @@ describe("supplier purchasable SKU smoke command", () => {
       SUPPLIER_PURCHASABLE_SKU_SMOKE_DB_URL:
         "postgresql://fixture:fixture@127.0.0.1:5432/postgres",
     }).databaseHost).toBe("127.0.0.1");
+  });
+
+  test.each([
+    [
+      "postgresql://fixture:fixture@api-dev.goodcms.cn:5432/postgres?path=%2Ftmp%2Fpostgres",
+      "SUPPLIER_PURCHASABLE_SKU_SMOKE_DB_URL 不允许数据库 URL 查询参数 path",
+    ],
+    [
+      "postgresql://fixture:fixture@api-dev.goodcms.cn:5432/postgres",
+      "SUPPLIER_PURCHASABLE_SKU_SMOKE_DB_URL 远程开发数据库必须显式使用安全 sslmode",
+    ],
+    [
+      "postgresql://fixture:fixture@api-dev.goodcms.cn:5432/postgres?sslmode=disable",
+      "SUPPLIER_PURCHASABLE_SKU_SMOKE_DB_URL 远程开发数据库必须显式使用安全 sslmode",
+    ],
+    [
+      "postgresql://fixture:fixture@api-dev.goodcms.cn:5432/postgres?sslmode=prefer",
+      "SUPPLIER_PURCHASABLE_SKU_SMOKE_DB_URL 远程开发数据库必须显式使用安全 sslmode",
+    ],
+    [
+      "postgresql://fixture:fixture@api-dev.goodcms.cn:5432/postgres?sslmode=require&application_name=task8",
+      "SUPPLIER_PURCHASABLE_SKU_SMOKE_DB_URL 不允许数据库 URL 查询参数 application_name",
+    ],
+  ])("rejects unsafe database routing or TLS input %#", (databaseUrl, error) => {
+    expect(() => resolveSmokeConfig({
+      SUPPLIER_PURCHASABLE_SKU_SMOKE_DB_URL: databaseUrl,
+    })).toThrowError(error);
   });
 
   test("returns the complete structured verification summary", () => {

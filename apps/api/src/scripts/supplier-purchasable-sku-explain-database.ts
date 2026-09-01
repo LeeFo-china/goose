@@ -6,6 +6,11 @@ import type {
   SupplierPurchasableSkuExplainGateway,
 } from "./supplier-purchasable-sku-explain";
 import {
+  SUPPLIER_PURCHASABLE_SKU_CLOSE_OPTIONS,
+  createSupplierPurchasableSkuDatabaseOptions,
+  type SupplierPurchasableSkuDatabaseConnection,
+} from "./supplier-purchasable-sku-development-database";
+import {
   countSupplierPurchasableSkuSmokeResiduals,
   createSupplierPurchasableSkuSmokeFixture,
   seedSupplierPurchasableSkuSmokeFixture,
@@ -18,12 +23,6 @@ import {
   getSupplierPurchasableSkuSmokeContext,
 } from "./supplier-purchasable-sku-smoke-queries";
 
-const CONNECTION_OPTIONS = {
-  max: 1,
-  prepare: false,
-  connectionTimeout: 10,
-} as const;
-
 export class DirectSupplierPurchasableSkuExplainGateway
 implements SupplierPurchasableSkuExplainGateway {
   private readonly database: Bun.SQL;
@@ -33,8 +32,10 @@ implements SupplierPurchasableSkuExplainGateway {
   private currentListId: string | undefined;
   private currentItemId: string | undefined;
 
-  constructor(private readonly databaseUrl: string) {
-    this.database = new Bun.SQL(databaseUrl, CONNECTION_OPTIONS);
+  constructor(databaseConnection: SupplierPurchasableSkuDatabaseConnection) {
+    this.database = new Bun.SQL(
+      createSupplierPurchasableSkuDatabaseOptions(databaseConnection, 1),
+    );
   }
 
   private async initialize(): Promise<ReservedSQL> {
@@ -278,9 +279,13 @@ implements SupplierPurchasableSkuExplainGateway {
     let residuals = -1;
     try {
       if (this.reserved) {
-        await this.reserved`rollback`.simple();
-        this.reserved.release();
+        const reserved = this.reserved;
         this.reserved = undefined;
+        try {
+          await reserved`rollback`.simple();
+        } finally {
+          reserved.release();
+        }
       }
       await this.database`analyze public.supplier_price_lists`.simple();
       await this.database`analyze public.supplier_price_list_items`.simple();
@@ -289,7 +294,7 @@ implements SupplierPurchasableSkuExplainGateway {
         this.fixture,
       );
     } finally {
-      await this.database.close();
+      await this.database.close(SUPPLIER_PURCHASABLE_SKU_CLOSE_OPTIONS);
     }
     if (residuals !== 0) throw new Error("EXPLAIN_ROLLBACK_RESIDUAL_FOUND");
   }

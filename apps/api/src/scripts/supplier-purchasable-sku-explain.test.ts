@@ -8,9 +8,11 @@ import {
   runSupplierPurchasableSkuExplainCli,
   resolveExplainConfig,
 } from "./supplier-purchasable-sku-explain";
+import { DirectSupplierPurchasableSkuExplainGateway } from
+  "./supplier-purchasable-sku-explain-database";
 
 const DATABASE_URL =
-  "postgresql://fixture-user:fixture-password@api-dev.goodcms.cn:5432/postgres";
+  "postgresql://fixture-user:fixture-password@api-dev.goodcms.cn:5432/postgres?sslmode=require";
 
 function explainRows(plan: Record<string, unknown>) {
   return [{
@@ -20,6 +22,28 @@ function explainRows(plan: Record<string, unknown>) {
       "Execution Time": 0.2,
     }],
   }];
+}
+
+function indexedPlanFor(
+  name: typeof SUPPLIER_PURCHASABLE_SKU_EXPLAIN_QUERY_NAMES[number],
+): Record<string, unknown> {
+  const item = {
+    "Node Type": "Index Scan",
+    "Relation Name": "supplier_price_list_items",
+    "Index Name": `${name}_item_idx`,
+    "Shared Hit Blocks": 2,
+    "Shared Read Blocks": 1,
+  };
+  if (name === "targetCurrentItem" || name === "setBasedCopy") return item;
+  return {
+    "Node Type": "Nested Loop",
+    Plans: [{
+      "Node Type": "Index Scan",
+      "Relation Name": "supplier_price_lists",
+      "Index Name": `${name}_list_idx`,
+      "Shared Hit Blocks": 1,
+    }, item],
+  };
 }
 
 describe("supplier purchasable SKU EXPLAIN command", () => {
@@ -34,10 +58,20 @@ describe("supplier purchasable SKU EXPLAIN command", () => {
       SUPPLIER_PURCHASABLE_SKU_EXPLAIN_DB_URL: DATABASE_URL,
     });
 
-    expect(config.databaseUrl).toBe(DATABASE_URL);
     expect(config.databaseHost).toBe("api-dev.goodcms.cn");
+    expect(config.databaseConnection).toEqual({
+      adapter: "postgres",
+      hostname: "api-dev.goodcms.cn",
+      port: 5432,
+      database: "postgres",
+      username: "fixture-user",
+      password: "fixture-password",
+      tls: true,
+      url: "postgresql://api-dev.goodcms.cn:5432?sslmode=require",
+    });
+    expect(config).not.toHaveProperty("databaseUrl");
     expect(config.redactedDatabaseUrl).toBe(
-      "postgresql://***:***@api-dev.goodcms.cn:5432/postgres",
+      "postgresql://***:***@api-dev.goodcms.cn:5432/postgres?sslmode=require",
     );
   });
 
@@ -61,6 +95,30 @@ describe("supplier purchasable SKU EXPLAIN command", () => {
     }).databaseHost).toBe("localhost");
   });
 
+  test.each([
+    "postgresql://fixture:fixture@api-dev.goodcms.cn:5432/postgres",
+    "postgresql://fixture:fixture@api-dev.goodcms.cn:5432/postgres?sslmode=disable",
+    "postgresql://fixture:fixture@api-dev.goodcms.cn:5432/postgres?sslmode=prefer",
+  ])("rejects missing or insecure remote TLS %s", (databaseUrl) => {
+    expect(() => resolveExplainConfig({
+      SUPPLIER_PURCHASABLE_SKU_EXPLAIN_DB_URL: databaseUrl,
+    })).toThrowError(
+      "SUPPLIER_PURCHASABLE_SKU_EXPLAIN_DB_URL 远程开发数据库必须显式使用安全 sslmode",
+    );
+  });
+
+  test.each([
+    ["path", "%2Ftmp%2Fpostgres"],
+    ["application_name", "task8"],
+  ])("rejects non-allowlisted query parameter %s", (key, value) => {
+    expect(() => resolveExplainConfig({
+      SUPPLIER_PURCHASABLE_SKU_EXPLAIN_DB_URL:
+        `${DATABASE_URL}&${key}=${value}`,
+    })).toThrowError(
+      `SUPPLIER_PURCHASABLE_SKU_EXPLAIN_DB_URL 不允许数据库 URL 查询参数 ${key}`,
+    );
+  });
+
   test("keeps EXPLAIN query predicates aligned with the migration", async () => {
     const source = (await Bun.file(new URL(
       "./supplier-purchasable-sku-explain-database.ts",
@@ -70,13 +128,42 @@ describe("supplier purchasable SKU EXPLAIN command", () => {
       "../../../../supabase/migrations/20260901130000_create_supplier_purchasable_sku_command.sql",
       import.meta.url,
     )).text()).toLowerCase();
-    const query = (name: string, next: string) => source.slice(
-      source.indexOf(`case "${name}":`),
-      source.indexOf(`case "${next}":`),
+    const section = (text: string, start: string, end: string) => {
+      const startIndex = text.indexOf(start);
+      const endIndex = text.indexOf(end, startIndex + start.length);
+      expect(startIndex).toBeGreaterThanOrEqual(0);
+      expect(endIndex).toBeGreaterThan(startIndex);
+      return text.slice(startIndex, endIndex);
+    };
+    const query = (name: string, next: string) => section(
+      source,
+      `case "${name}":`,
+      `case "${next}":`,
     );
+    const currentDefault = query("currentdefault", "earliestfuture");
     const earliestFuture = query("earliestfuture", "targetcurrentitem");
     const targetCurrentItem = query("targetcurrentitem", "setbasedcopy");
     const setBasedCopy = source.slice(source.indexOf('case "setbasedcopy":'));
+    const migrationCurrent = section(
+      migration,
+      "select price_list.*\n    into v_current_price_list",
+      "v_source_price_list := v_current_price_list",
+    );
+    const migrationFuture = section(
+      migration,
+      "select price_list.*\n    into v_future_price_list",
+      "if v_current_price_list.id is not null then",
+    );
+    const migrationTargetItem = section(
+      migration,
+      "select item.*\n      into v_current_price_item",
+      "end if;",
+    );
+    const migrationSetCopy = section(
+      migration,
+      "-- v2 already copies in one insert ... select",
+      "if exists (",
+    );
     const futurePredicates = [
       "price_list.tenant_id =",
       "price_list.tenant_supplier_id =",
@@ -89,9 +176,20 @@ describe("supplier purchasable SKU EXPLAIN command", () => {
       "item.supplier_product_id =",
       "item.supplier_sku_id =",
     ];
+    for (const predicate of [
+      ...futurePredicates.filter((predicate) =>
+        !predicate.includes("effective_from >")
+      ),
+      "price_list.effective_from <=",
+      "price_list.effective_until is null",
+      "price_list.effective_until >",
+    ]) {
+      expect(currentDefault).toContain(predicate);
+      expect(migrationCurrent).toContain(predicate);
+    }
     for (const predicate of futurePredicates) {
       expect(earliestFuture).toContain(predicate);
-      expect(migration).toContain(predicate);
+      expect(migrationFuture).toContain(predicate);
     }
     expect(targetCurrentItem).not.toContain("where item.id =");
     for (const predicate of [
@@ -102,7 +200,7 @@ describe("supplier purchasable SKU EXPLAIN command", () => {
       "item.supplier_sku_id =",
     ]) {
       expect(targetCurrentItem).toContain(predicate);
-      expect(migration).toContain(predicate);
+      expect(migrationTargetItem).toContain(predicate);
     }
     for (const predicate of [
       "source_item.supplier_price_list_id =",
@@ -114,7 +212,7 @@ describe("supplier purchasable SKU EXPLAIN command", () => {
       "target_item.supplier_sku_id = source_item.supplier_sku_id",
     ]) {
       expect(setBasedCopy).toContain(predicate);
-      expect(migration).toContain(predicate);
+      expect(migrationSetCopy).toContain(predicate);
     }
     expect(setBasedCopy).toContain(
       "select gen_random_uuid(), ${this.fixture.tenantid}::uuid",
@@ -122,7 +220,7 @@ describe("supplier purchasable SKU EXPLAIN command", () => {
     expect(setBasedCopy).toContain(
       "${this.fixture.supplierid}::uuid, ${this.copytargetlistid}::uuid",
     );
-    expect(migration).toContain(
+    expect(migrationSetCopy).toContain(
       "gen_random_uuid(), p_tenant_id, p_supplier_id, v_price_list_id",
     );
   });
@@ -142,8 +240,42 @@ describe("supplier purchasable SKU EXPLAIN command", () => {
       }],
     }));
 
-    expect(() => assertSupplierPurchasableSkuExplainPlan(parsed))
+    expect(() => assertSupplierPurchasableSkuExplainPlan(
+      parsed,
+      "currentDefault",
+    ))
       .toThrowError("supplier_price_lists scoped Seq Scan");
+  });
+
+  test.each([
+    ["empty result", { "Node Type": "Result" }],
+    ["unrelated index", {
+      "Node Type": "Index Scan",
+      "Relation Name": "users",
+      "Index Name": "users_pkey",
+    }],
+  ])("rejects %s without target relation evidence", (_label, plan) => {
+    const parsed = parseSupplierPurchasableSkuExplainPlan(explainRows(plan));
+    expect(() => assertSupplierPurchasableSkuExplainPlan(
+      parsed,
+      "targetCurrentItem",
+    )).toThrowError(
+      "targetCurrentItem requires indexed supplier_price_list_items access",
+    );
+  });
+
+  test("requires both list and item indexed access for resolution plans", () => {
+    const parsed = parseSupplierPurchasableSkuExplainPlan(explainRows({
+      "Node Type": "Index Scan",
+      "Relation Name": "supplier_price_lists",
+      "Index Name": "supplier_price_lists_scope_idx",
+    }));
+    expect(() => assertSupplierPurchasableSkuExplainPlan(
+      parsed,
+      "earliestFuture",
+    )).toThrowError(
+      "earliestFuture requires indexed supplier_price_list_items access",
+    );
   });
 
   test("accepts recursive index plans and records buffers", () => {
@@ -170,13 +302,103 @@ describe("supplier purchasable SKU EXPLAIN command", () => {
       ],
     }));
 
-    expect(assertSupplierPurchasableSkuExplainPlan(parsed)).toBe(true);
+    expect(assertSupplierPurchasableSkuExplainPlan(
+      parsed,
+      "currentDefault",
+    )).toBe(true);
     expect(parsed.indexNames).toEqual([
       "supplier_price_lists_scope_idx",
       "supplier_price_list_items_scope_idx",
     ]);
     expect(parsed.buffers).toEqual({ sharedHit: 14, sharedRead: 4 });
     expect(parsed.hasRuntimeEvidence).toBe(true);
+    expect(parsed.relationAccesses).toEqual({
+      supplier_price_lists: {
+        indexNames: ["supplier_price_lists_scope_idx"],
+        nodeTypes: ["Index Scan"],
+      },
+      supplier_price_list_items: {
+        indexNames: ["supplier_price_list_items_scope_idx"],
+        nodeTypes: ["Index Only Scan"],
+      },
+    });
+  });
+
+  test("releases a reserved connection and bounded-closes after rollback rejects", async () => {
+    const calls: Array<string | { close: unknown }> = [];
+    const gateway = Object.create(
+      DirectSupplierPurchasableSkuExplainGateway.prototype,
+    ) as DirectSupplierPurchasableSkuExplainGateway;
+    const reserved = Object.assign(
+      () => ({
+        async simple() {
+          calls.push("rollback");
+          throw new Error("rollback failed");
+        },
+      }),
+      { release: () => calls.push("release") },
+    );
+    const database = Object.assign(
+      () => { throw new Error("unexpected query"); },
+      {
+        async close(options?: unknown) {
+          calls.push({ close: options });
+        },
+      },
+    );
+    Object.assign(gateway, { reserved, database });
+
+    await expect(gateway.close()).rejects.toThrow("rollback failed");
+    expect(calls).toEqual([
+      "rollback",
+      "release",
+      { close: { timeout: 5 } },
+    ]);
+  });
+
+  test("applies bounded pool and server timeouts to every database connection", async () => {
+    const config = resolveExplainConfig({
+      SUPPLIER_PURCHASABLE_SKU_EXPLAIN_DB_URL: DATABASE_URL,
+    });
+    const gateway = new DirectSupplierPurchasableSkuExplainGateway(
+      config.databaseConnection,
+    );
+    const database = (gateway as unknown as { database: Bun.SQL }).database;
+    const options = database.options as typeof database.options & {
+      query?: string;
+      sslMode?: number;
+    };
+    expect(options).toMatchObject({
+      adapter: "postgres",
+      hostname: "api-dev.goodcms.cn",
+      tls: { serverName: "api-dev.goodcms.cn" },
+      max: 1,
+      prepare: false,
+      connectionTimeout: 10_000,
+    });
+    expect(options.idleTimeout).toBeUndefined();
+    expect(options.maxLifetime).toBeUndefined();
+    expect(options.query).toContain("statement_timeout\u000030s\u0000");
+    expect(options.query).toContain("lock_timeout\u000010s\u0000");
+    expect(options.sslMode).toBe(2);
+    await database.close({ timeout: 0 });
+
+    const smokeSource = await Bun.file(new URL(
+      "./supplier-purchasable-sku-smoke-database.ts",
+      import.meta.url,
+    )).text();
+    const explainSource = await Bun.file(new URL(
+      "./supplier-purchasable-sku-explain-database.ts",
+      import.meta.url,
+    )).text();
+    for (const source of [smokeSource, explainSource]) {
+      expect(source).toContain(
+        "createSupplierPurchasableSkuDatabaseOptions",
+      );
+      expect(source).toContain(
+        ".close(SUPPLIER_PURCHASABLE_SKU_CLOSE_OPTIONS)",
+      );
+    }
   });
 
   test("is import-safe and exposes the exact package command", async () => {
@@ -197,15 +419,7 @@ describe("supplier purchasable SKU EXPLAIN command", () => {
     const summary = await runSupplierPurchasableSkuExplain({
       async explain(name) {
         calls.push(name);
-        return explainRows({
-          "Node Type": "Index Scan",
-          "Relation Name": name === "targetCurrentItem"
-            ? "supplier_price_list_items"
-            : "supplier_price_lists",
-          "Index Name": `${name}_idx`,
-          "Shared Hit Blocks": 2,
-          "Shared Read Blocks": 1,
-        });
+        return explainRows(indexedPlanFor(name));
       },
       async close() {
         calls.push("close");
@@ -218,7 +432,10 @@ describe("supplier purchasable SKU EXPLAIN command", () => {
     ]);
     expect(summary.query_count).toBe(4);
     expect(summary.n_plus_one).toBe(false);
-    expect(summary.indexes.currentDefault).toEqual(["currentDefault_idx"]);
+    expect(summary.indexes.currentDefault).toEqual([
+      "currentDefault_list_idx",
+      "currentDefault_item_idx",
+    ]);
     expect(summary.buffers.setBasedCopy).toEqual({
       sharedHit: 2,
       sharedRead: 1,
@@ -230,11 +447,7 @@ describe("supplier purchasable SKU EXPLAIN command", () => {
     const errors: string[] = [];
     const createGateway = () => ({
       async explain(name: typeof SUPPLIER_PURCHASABLE_SKU_EXPLAIN_QUERY_NAMES[number]) {
-        return explainRows({
-          "Node Type": "Index Scan",
-          "Relation Name": "supplier_price_lists",
-          "Index Name": `${name}_idx`,
-        });
+        return explainRows(indexedPlanFor(name));
       },
       async close() {},
     });

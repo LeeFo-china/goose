@@ -1,10 +1,11 @@
 import {
   parseSupplierPurchasableSkuDevelopmentDatabaseUrl,
   redactSupplierPurchasableSkuDevelopmentDatabaseUrl,
+  type SupplierPurchasableSkuDatabaseConnection,
 } from "./supplier-purchasable-sku-development-database";
 
 export type SupplierPurchasableSkuSmokeConfig = {
-  databaseUrl: string;
+  databaseConnection: SupplierPurchasableSkuDatabaseConnection;
   databaseHost: string;
   redactedDatabaseUrl: string;
 };
@@ -51,8 +52,8 @@ export function resolveSmokeConfig(
     SMOKE_DATABASE_URL,
   );
   return {
-    databaseUrl,
-    databaseHost: parsed.hostname,
+    databaseConnection: parsed.connection,
+    databaseHost: parsed.connection.hostname,
     redactedDatabaseUrl: redactSupplierPurchasableSkuDatabaseUrl(databaseUrl),
   };
 }
@@ -145,7 +146,9 @@ if (import.meta.main) {
       runSupplierPurchasableSkuSmokeCli({
         env: process.env,
         createGateway: (config) =>
-          new DirectSupplierPurchasableSkuSmokeGateway(config.databaseUrl),
+          new DirectSupplierPurchasableSkuSmokeGateway(
+            config.databaseConnection,
+          ),
         writeOutput: console.log,
         writeError: console.error,
       }),
