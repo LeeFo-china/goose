@@ -132,8 +132,15 @@ describe("protected dev material note EXPLAIN workflow", () => {
       'supabase@2.99.0 migration list --db-url "${SUPABASE_DB_DIRECT_URL}"',
     );
     expect(migration).toContain(
-      "migration-history.txt supabase/migrations 20260901120030",
+      '"${RUNNER_TEMP}/douyin-material-note-migration-history.txt" supabase/migrations 20260901120030',
     );
+    expect(migration).toContain(
+      '> "${RUNNER_TEMP}/douyin-material-note-migration-history.txt"',
+    );
+    expect(migration).toContain(
+      '> "${RUNNER_TEMP}/douyin-material-note-migration-evidence.json"',
+    );
+    expect(migration).not.toMatch(/(?:^|[ >])migration-(?:history\.txt|evidence\.json)/m);
   });
 
   test("passes only the protected target and confirmation to CLI", () => {
@@ -176,7 +183,9 @@ describe("protected dev material note EXPLAIN workflow", () => {
     const upload = stepSource("Upload material note EXPLAIN evidence");
     expect(upload).toContain("uses: actions/upload-artifact@v6");
     expect(upload).toContain("material-note-explain-summary.json");
-    expect(upload).toContain("migration-evidence.json");
+    expect(upload).toContain(
+      "${{ runner.temp }}/douyin-material-note-migration-evidence.json",
+    );
     for (const forbidden of [
       "migration-history.txt",
       "SUPABASE_DB_DIRECT_URL",

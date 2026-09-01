@@ -146,12 +146,13 @@ jobs:
             reject_dev_target
           fi
 
-          if ! pnpm dlx supabase@2.99.0 migration list --db-url "${SUPABASE_DB_DIRECT_URL}" > migration-history.txt 2>/dev/null; then
+          if ! pnpm dlx supabase@2.99.0 migration list --db-url "${SUPABASE_DB_DIRECT_URL}" \
+            > "${RUNNER_TEMP}/douyin-material-note-migration-history.txt" 2>/dev/null; then
             reject_migration_history
           fi
           if ! node scripts/verify-migration-history.mjs \
-            migration-history.txt supabase/migrations 20260901120030 \
-            > migration-evidence.json 2>/dev/null; then
+            "${RUNNER_TEMP}/douyin-material-note-migration-history.txt" supabase/migrations 20260901120030 \
+            > "${RUNNER_TEMP}/douyin-material-note-migration-evidence.json" 2>/dev/null; then
             reject_migration_history
           fi
 
@@ -287,6 +288,6 @@ jobs:
           name: douyin-material-note-explain-${{ inputs.commit_sha }}
           path: |
             material-note-explain-summary.json
-            migration-evidence.json
+            ${{ runner.temp }}/douyin-material-note-migration-evidence.json
           if-no-files-found: error
           retention-days: 30
