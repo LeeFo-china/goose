@@ -5,6 +5,8 @@ import { SupplierPurchasableSkuCommandFailureSchema } from
 import { SupplierProductAccessService } from
   "@/services/supplier-product-access";
 import type { AuthContext } from "@/services/authorization";
+import { assertSupplierPurchasableSkuPermissionBoundary } from
+  "./supplier-purchasable-sku-permission-boundary";
 import type {
   SupplierPurchasableSkuSmokeFixture,
   SupplierPurchasableSkuSmokeSql,
@@ -96,18 +98,13 @@ async function verifyMissingPermissionBoundary(
       },
     },
   });
-  let rejected = false;
-  try {
-    await service.requirePurchasableSkuWrite(
+  await assertSupplierPurchasableSkuPermissionBoundary(
+    () => service.requirePurchasableSkuWrite(
       missingPermissionAuth(fixture),
       fixture.relationshipId,
-    );
-  } catch {
-    rejected = true;
-  }
-  if (!rejected || repositoryReads !== 0) {
-    throw new Error("SMOKE_PERMISSION_BOUNDARY_INVALID");
-  }
+    ),
+    () => repositoryReads,
+  );
 }
 
 export async function verifySupplierPurchasableSkuBoundaries(

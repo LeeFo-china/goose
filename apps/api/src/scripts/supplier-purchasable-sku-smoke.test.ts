@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
+import { Errors } from "@/errors/error-factory";
+import { assertSupplierPurchasableSkuPermissionBoundary } from
+  "./supplier-purchasable-sku-permission-boundary";
 import {
   createSupplierPurchasableSkuSmokeSummary,
   redactSupplierPurchasableSkuDatabaseUrl,
@@ -34,6 +37,26 @@ describe("supplier purchasable SKU smoke command", () => {
       .not.toContain("fixture-password");
   });
 
+  test.each([
+    "api.goodcms.cn",
+    "api-dev.goodcms.cn.attacker.invalid",
+    "unknown-db.internal",
+  ])("rejects non-development database host %s", (host) => {
+    expect(() => resolveSmokeConfig({
+      SUPPLIER_PURCHASABLE_SKU_SMOKE_DB_URL:
+        `postgresql://fixture:fixture@${host}:5432/postgres`,
+    })).toThrowError(
+      "SUPPLIER_PURCHASABLE_SKU_SMOKE_DB_URL 仅允许连接开发数据库主机",
+    );
+  });
+
+  test("accepts an explicitly allowlisted local database host", () => {
+    expect(resolveSmokeConfig({
+      SUPPLIER_PURCHASABLE_SKU_SMOKE_DB_URL:
+        "postgresql://fixture:fixture@127.0.0.1:5432/postgres",
+    }).databaseHost).toBe("127.0.0.1");
+  });
+
   test("returns the complete structured verification summary", () => {
     expect(createSupplierPurchasableSkuSmokeSummary()).toEqual({
       created: true,
@@ -57,6 +80,21 @@ describe("supplier purchasable SKU smoke command", () => {
     expect(source).toContain("if (import.meta.main)");
     expect(packageJson.scripts?.["supplier:purchasable-sku:smoke"])
       .toBe("bun src/scripts/supplier-purchasable-sku-smoke.ts");
+  });
+
+  test("requires the exact access denial before any repository read", async () => {
+    await expect(assertSupplierPurchasableSkuPermissionBoundary(
+      async () => { throw Errors.forbidden(); },
+      () => 0,
+    )).resolves.toBeUndefined();
+    await expect(assertSupplierPurchasableSkuPermissionBoundary(
+      async () => { throw new Error("unrelated failure"); },
+      () => 0,
+    )).rejects.toThrow("SMOKE_PERMISSION_BOUNDARY_INVALID");
+    await expect(assertSupplierPurchasableSkuPermissionBoundary(
+      async () => { throw Errors.forbidden(); },
+      () => 1,
+    )).rejects.toThrow("SMOKE_PERMISSION_BOUNDARY_INVALID");
   });
 
   test("always verifies cleanup and records exact concurrency evidence", async () => {

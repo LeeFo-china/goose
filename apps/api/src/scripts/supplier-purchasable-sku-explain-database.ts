@@ -220,6 +220,9 @@ implements SupplierPurchasableSkuExplainGateway {
           where price_list.tenant_id = ${this.fixture.tenantId}::uuid
             and price_list.tenant_supplier_id = ${this.fixture.relationshipId}::uuid
             and price_list.supplier_id = ${this.fixture.supplierId}::uuid
+            and upper(btrim(price_list.price_list_code)) = 'DEFAULT'
+            and price_list.scope_type = 'default'
+            and price_list.currency = 'CNY'
             and price_list.lifecycle_status = 'published'
             and price_list.effective_from > now()
             and item.supplier_product_id = ${this.fixture.productId}::uuid
@@ -230,12 +233,11 @@ implements SupplierPurchasableSkuExplainGateway {
         return sql`explain (analyze, buffers, format json)
           select item.id, item.unit_price, item.tax_rate
           from public.supplier_price_list_items as item
-          where item.id = ${currentItemId}::uuid
-            and item.supplier_price_list_id = ${currentListId}::uuid
+          where item.supplier_price_list_id = ${currentListId}::uuid
             and item.tenant_id = ${this.fixture.tenantId}::uuid
             and item.supplier_id = ${this.fixture.supplierId}::uuid
             and item.supplier_product_id = ${this.fixture.productId}::uuid
-            and item.supplier_sku_id = ${this.fixture.skuId}::uuid limit 1`;
+            and item.supplier_sku_id = ${this.fixture.skuId}::uuid`;
       case "setBasedCopy":
         return sql`explain (analyze, buffers, format json)
           insert into public.supplier_price_list_items(
@@ -247,16 +249,16 @@ implements SupplierPurchasableSkuExplainGateway {
             acting_tenant_id, acting_employee_id, operation_source, proxy_reason,
             created_by_employee_id, updated_by_employee_id
           )
-          select gen_random_uuid(), source_item.tenant_id,
-            source_item.supplier_id, ${this.copyTargetListId}::uuid,
+          select gen_random_uuid(), ${this.fixture.tenantId}::uuid,
+            ${this.fixture.supplierId}::uuid, ${this.copyTargetListId}::uuid,
             source_item.supplier_product_id, source_item.supplier_sku_id,
             source_item.minimum_quantity, source_item.maximum_quantity,
             source_item.purchase_unit_id, source_item.base_unit_id,
             source_item.base_unit_conversion, source_item.unit_price,
             source_item.tax_rate, source_item.tax_inclusive,
-            source_item.acting_tenant_id, source_item.acting_employee_id,
-            source_item.operation_source, source_item.proxy_reason,
-            source_item.created_by_employee_id, source_item.updated_by_employee_id
+            ${this.fixture.tenantId}::uuid, ${this.fixture.actorEmployeeId}::uuid,
+            'tenant', null, ${this.fixture.actorEmployeeId}::uuid,
+            ${this.fixture.actorEmployeeId}::uuid
           from public.supplier_price_list_items as source_item
           where source_item.supplier_price_list_id = ${currentListId}::uuid
             and source_item.tenant_id = ${this.fixture.tenantId}::uuid
@@ -265,6 +267,8 @@ implements SupplierPurchasableSkuExplainGateway {
               select 1 from public.supplier_price_list_items as target_item
               where target_item.supplier_price_list_id =
                 ${this.copyTargetListId}::uuid
+                and target_item.tenant_id = ${this.fixture.tenantId}::uuid
+                and target_item.supplier_id = ${this.fixture.supplierId}::uuid
                 and target_item.supplier_sku_id = source_item.supplier_sku_id
             )`;
     }

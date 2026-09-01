@@ -1,3 +1,8 @@
+import {
+  parseSupplierPurchasableSkuDevelopmentDatabaseUrl,
+  redactSupplierPurchasableSkuDevelopmentDatabaseUrl,
+} from "./supplier-purchasable-sku-development-database";
+
 export type SupplierPurchasableSkuSmokeConfig = {
   databaseUrl: string;
   databaseHost: string;
@@ -30,32 +35,21 @@ export type SupplierPurchasableSkuSmokeGateway = {
 
 const SMOKE_DATABASE_URL = "SUPPLIER_PURCHASABLE_SKU_SMOKE_DB_URL";
 
-function parsePostgresUrl(value: string, missingMessage: string): URL {
-  if (!value) throw new Error(missingMessage);
-  let parsed: URL;
-  try {
-    parsed = new URL(value);
-  } catch {
-    throw new Error(`${SMOKE_DATABASE_URL} 必须是 PostgreSQL URL`);
-  }
-  if (parsed.protocol !== "postgres:" && parsed.protocol !== "postgresql:") {
-    throw new Error(`${SMOKE_DATABASE_URL} 必须是 PostgreSQL URL`);
-  }
-  return parsed;
-}
-
 export function redactSupplierPurchasableSkuDatabaseUrl(value: string): string {
-  const parsed = parsePostgresUrl(value, `缺少 ${SMOKE_DATABASE_URL}`);
-  if (parsed.username) parsed.username = "***";
-  if (parsed.password) parsed.password = "***";
-  return parsed.toString();
+  return redactSupplierPurchasableSkuDevelopmentDatabaseUrl(
+    value,
+    SMOKE_DATABASE_URL,
+  );
 }
 
 export function resolveSmokeConfig(
   env: Record<string, string | undefined>,
 ): SupplierPurchasableSkuSmokeConfig {
   const databaseUrl = env[SMOKE_DATABASE_URL] ?? "";
-  const parsed = parsePostgresUrl(databaseUrl, `缺少 ${SMOKE_DATABASE_URL}`);
+  const parsed = parseSupplierPurchasableSkuDevelopmentDatabaseUrl(
+    databaseUrl,
+    SMOKE_DATABASE_URL,
+  );
   return {
     databaseUrl,
     databaseHost: parsed.hostname,

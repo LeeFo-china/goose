@@ -1,5 +1,7 @@
-import { redactSupplierPurchasableSkuDatabaseUrl } from
-  "./supplier-purchasable-sku-smoke";
+import {
+  parseSupplierPurchasableSkuDevelopmentDatabaseUrl,
+  redactSupplierPurchasableSkuDevelopmentDatabaseUrl,
+} from "./supplier-purchasable-sku-development-database";
 
 export type SupplierPurchasableSkuExplainConfig = {
   databaseUrl: string;
@@ -100,20 +102,17 @@ export function resolveExplainConfig(
   env: Record<string, string | undefined>,
 ): SupplierPurchasableSkuExplainConfig {
   const databaseUrl = env[EXPLAIN_DATABASE_URL] ?? "";
-  if (!databaseUrl) throw new Error(`缺少 ${EXPLAIN_DATABASE_URL}`);
-  let parsed: URL;
-  try {
-    parsed = new URL(databaseUrl);
-  } catch {
-    throw new Error(`${EXPLAIN_DATABASE_URL} 必须是 PostgreSQL URL`);
-  }
-  if (parsed.protocol !== "postgres:" && parsed.protocol !== "postgresql:") {
-    throw new Error(`${EXPLAIN_DATABASE_URL} 必须是 PostgreSQL URL`);
-  }
+  const parsed = parseSupplierPurchasableSkuDevelopmentDatabaseUrl(
+    databaseUrl,
+    EXPLAIN_DATABASE_URL,
+  );
   return {
     databaseUrl,
     databaseHost: parsed.hostname,
-    redactedDatabaseUrl: redactSupplierPurchasableSkuDatabaseUrl(databaseUrl),
+    redactedDatabaseUrl: redactSupplierPurchasableSkuDevelopmentDatabaseUrl(
+      databaseUrl,
+      EXPLAIN_DATABASE_URL,
+    ),
   };
 }
 

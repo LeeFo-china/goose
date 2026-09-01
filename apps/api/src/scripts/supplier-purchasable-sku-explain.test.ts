@@ -41,6 +41,92 @@ describe("supplier purchasable SKU EXPLAIN command", () => {
     );
   });
 
+  test.each([
+    "api.goodcms.cn",
+    "api-dev.goodcms.cn.attacker.invalid",
+    "unknown-db.internal",
+  ])("rejects non-development database host %s", (host) => {
+    expect(() => resolveExplainConfig({
+      SUPPLIER_PURCHASABLE_SKU_EXPLAIN_DB_URL:
+        `postgresql://fixture:fixture@${host}:5432/postgres`,
+    })).toThrowError(
+      "SUPPLIER_PURCHASABLE_SKU_EXPLAIN_DB_URL 仅允许连接开发数据库主机",
+    );
+  });
+
+  test("accepts an explicitly allowlisted local database host", () => {
+    expect(resolveExplainConfig({
+      SUPPLIER_PURCHASABLE_SKU_EXPLAIN_DB_URL:
+        "postgresql://fixture:fixture@localhost:5432/postgres",
+    }).databaseHost).toBe("localhost");
+  });
+
+  test("keeps EXPLAIN query predicates aligned with the migration", async () => {
+    const source = (await Bun.file(new URL(
+      "./supplier-purchasable-sku-explain-database.ts",
+      import.meta.url,
+    )).text()).toLowerCase();
+    const migration = (await Bun.file(new URL(
+      "../../../../supabase/migrations/20260901130000_create_supplier_purchasable_sku_command.sql",
+      import.meta.url,
+    )).text()).toLowerCase();
+    const query = (name: string, next: string) => source.slice(
+      source.indexOf(`case "${name}":`),
+      source.indexOf(`case "${next}":`),
+    );
+    const earliestFuture = query("earliestfuture", "targetcurrentitem");
+    const targetCurrentItem = query("targetcurrentitem", "setbasedcopy");
+    const setBasedCopy = source.slice(source.indexOf('case "setbasedcopy":'));
+    const futurePredicates = [
+      "price_list.tenant_id =",
+      "price_list.tenant_supplier_id =",
+      "price_list.supplier_id =",
+      "upper(btrim(price_list.price_list_code)) = 'default'",
+      "price_list.scope_type = 'default'",
+      "price_list.currency = 'cny'",
+      "price_list.lifecycle_status = 'published'",
+      "price_list.effective_from >",
+      "item.supplier_product_id =",
+      "item.supplier_sku_id =",
+    ];
+    for (const predicate of futurePredicates) {
+      expect(earliestFuture).toContain(predicate);
+      expect(migration).toContain(predicate);
+    }
+    expect(targetCurrentItem).not.toContain("where item.id =");
+    for (const predicate of [
+      "item.supplier_price_list_id =",
+      "item.tenant_id =",
+      "item.supplier_id =",
+      "item.supplier_product_id =",
+      "item.supplier_sku_id =",
+    ]) {
+      expect(targetCurrentItem).toContain(predicate);
+      expect(migration).toContain(predicate);
+    }
+    for (const predicate of [
+      "source_item.supplier_price_list_id =",
+      "source_item.tenant_id =",
+      "source_item.supplier_id =",
+      "target_item.supplier_price_list_id =",
+      "target_item.tenant_id =",
+      "target_item.supplier_id =",
+      "target_item.supplier_sku_id = source_item.supplier_sku_id",
+    ]) {
+      expect(setBasedCopy).toContain(predicate);
+      expect(migration).toContain(predicate);
+    }
+    expect(setBasedCopy).toContain(
+      "select gen_random_uuid(), ${this.fixture.tenantid}::uuid",
+    );
+    expect(setBasedCopy).toContain(
+      "${this.fixture.supplierid}::uuid, ${this.copytargetlistid}::uuid",
+    );
+    expect(migration).toContain(
+      "gen_random_uuid(), p_tenant_id, p_supplier_id, v_price_list_id",
+    );
+  });
+
   test("recursively rejects scoped price-list sequential scans", () => {
     const parsed = parseSupplierPurchasableSkuExplainPlan(explainRows({
       "Node Type": "Nested Loop",
