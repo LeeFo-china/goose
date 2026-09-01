@@ -692,6 +692,8 @@ WHERE removed_at IS NULL;
 CREATE INDEX douyin_material_note_claims_tenant_note_active_idx
 ON public.douyin_material_note_claims(tenant_id, note_id)
 WHERE removed_at IS NULL;
+CREATE INDEX douyin_material_note_claims_tenant_note_history_idx
+ON public.douyin_material_note_claims(tenant_id, note_id);
 CREATE INDEX douyin_material_note_versions_tenant_note_idx
 ON public.douyin_material_note_versions(tenant_id, note_id, version_no DESC);
 CREATE INDEX douyin_material_note_versions_title_trgm_idx

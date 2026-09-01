@@ -9,9 +9,15 @@ const swapEventConstraintMigrationFile = migrationUrl('20260901120020_swap_douyi
 const eventErasureIndexMigrationFile = migrationUrl('20260901120030_index_douyin_material_note_event_erasure.sql');
 const siteContentDomainFile = new URL('../../../../../packages/domain/src/site-content.ts', import.meta.url);
 const migrationSource = readFileSync(migrationFile, 'utf8');
+const EVENT_NAMES = [
+  'page_view', 'button_click', 'phone_click', 'form_submit', 'app_launch', 'case_view', 'site_view', 'lead_cta_click', 'sms_send', 'lead_submit', 'lead_submit_success',
+  'phone_call_click', 'material_preview', 'material_claim', 'material_copy', 'material_budget_click', 'material_lead_click',
+];
+const PG17_EVENT_CHECK = `check (event_name = any (array[${EVENT_NAMES.map((event) => `'${event}'::text`).join(', ')}]))`;
 function normalize(sql: string): string {
   return sql.replace(/--[^\n]*/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
 }
+const normalizedMigration = normalize(migrationSource);
 function tableDefinition(sql: string, tableName: string): string {
   const normalized = normalize(sql);
   const start = normalized.indexOf(`create table public.${tableName}`);
@@ -59,10 +65,9 @@ function expectContains(source: string, fragments: readonly string[]): void { fr
 function expectOmits(source: string, fragments: readonly string[]): void { fragments.forEach((fragment) => expect(source).not.toContain(fragment)); }
 describe('douyin material note migration', () => {
   test('is an explicit forward-only transaction', async () => {
-    const sql = normalize(migrationSource);
     const lowerSource = migrationSource.toLowerCase();
-    expect(sql).toStartWith('begin;');
-    expect(sql).toEndWith('commit;');
+    expect(normalizedMigration).toStartWith('begin;');
+    expect(normalizedMigration).toEndWith('commit;');
     expectContains(lowerSource, [
       'rollback', 'forward-only', 'revoke api and rpc privileges',
       'existing claim data must not be dropped', 'reviewed forward migration',
@@ -88,18 +93,10 @@ describe('douyin material note migration', () => {
       expect(notes).toContain(fragment);
     }
     expect(notes).toContain("status in ('draft', 'published', 'archived', 'withdrawn')");
-    const shapeStart = notes.indexOf(
-      'constraint douyin_material_notes_publication_shape_check check (',
-    );
+    const shapeStart = notes.indexOf('constraint douyin_material_notes_publication_shape_check check (');
     expect(shapeStart).toBeGreaterThanOrEqual(0);
-    const publicationShape = notes.slice(shapeStart);
-    expectInOrder(publicationShape, [
-      "status = 'draft' and published_version_id is null and published_at is null",
-      "status = 'published' and published_version_id is not null and published_at is not null",
-      "status in ('archived', 'withdrawn')",
-      'published_version_id is null and published_at is null',
-      'published_version_id is not null and published_at is not null',
-    ]);
+    const publicationShape = notes.slice(shapeStart).replace(/\s*([(),])\s*/g, '$1');
+    expect(publicationShape).toBe("constraint douyin_material_notes_publication_shape_check check((status = 'draft' and published_version_id is null and published_at is null)or(status = 'published' and published_version_id is not null and published_at is not null)or(status in('archived','withdrawn')and((published_version_id is null and published_at is null)or(published_version_id is not null and published_at is not null)))));");
     for (const fragment of [
       'id uuid primary key default gen_random_uuid()',
       'tenant_id uuid not null',
@@ -124,13 +121,12 @@ describe('douyin material note migration', () => {
     expect(versions).toContain('char_length(btrim(summary)) between 1 and 1000');
     expect(versions).toContain('char_length(btrim(category)) between 1 and 100');
     expect(versions).toContain('applicable_to is null or char_length(btrim(applicable_to)) between 1 and 300');
-    const sql = normalize(migrationSource);
-    expect(sql).toContain('foreign key (published_version_id, id, tenant_id) references public.douyin_material_note_versions(id, note_id, tenant_id)');
-    expect(sql).toContain('material_note_version_immutable');
-    expect(sql).toContain("message = 'material_note_version_immutable'");
-    expect(sql).toContain('before update or delete on public.douyin_material_note_versions');
-    expect(sql).toContain('material_note_delete_forbidden');
-    expect(sql).toContain('before delete on public.douyin_material_notes');
+    expectContains(normalizedMigration, [
+      'foreign key (published_version_id, id, tenant_id) references public.douyin_material_note_versions(id, note_id, tenant_id)',
+      'material_note_version_immutable', "message = 'material_note_version_immutable'",
+      'before update or delete on public.douyin_material_note_versions', 'material_note_delete_forbidden',
+      'before delete on public.douyin_material_notes',
+    ]);
   });
   test('validates bounded strict text-only content blocks in SQL', async () => {
     const validator = functionDefinition(migrationSource, 'is_valid_douyin_material_note_content_blocks');
@@ -169,7 +165,7 @@ describe('douyin material note migration', () => {
     const elseStart = typeCase.lastIndexOf('else');
     expect(elseStart).toBeGreaterThanOrEqual(0);
     expect(typeCase.slice(elseStart)).toBe('else return false; end case;');
-    expect(normalize(migrationSource)).toContain('check (public.is_valid_douyin_material_note_content_blocks(content_blocks))');
+    expect(normalizedMigration).toContain('check (public.is_valid_douyin_material_note_content_blocks(content_blocks))');
   });
   test('creates scoped claims and an immutable state-command ledger', async () => {
     const claims = tableDefinition(migrationSource, 'douyin_material_note_claims');
@@ -196,24 +192,21 @@ describe('douyin material note migration', () => {
       "jsonb_typeof(result) = 'object'", 'unique (tenant_id, idempotency_key)',
       'foreign key (note_id, tenant_id)', 'foreign key (created_by, tenant_id)',
     ]);
-    expect(normalize(migrationSource)).toContain('before update or delete on public.douyin_material_note_command_events');
+    expect(normalizedMigration).toContain('before update or delete on public.douyin_material_note_command_events');
   });
   test('creates bounded listing, owned-claim and tenant-filtered search indexes', async () => {
-    const sql = normalize(migrationSource);
-    const compact = sql.replace(/\s*([(),])\s*/g, '$1');
+    const compact = normalizedMigration.replace(/\s*([(),])\s*/g, '$1');
     expect(compact).toContain('on public.douyin_material_notes(tenant_id,status,published_at desc,id desc)');
     expect(compact).toContain('on public.douyin_material_notes(tenant_id,updated_at desc,id desc)');
     expect(compact).toContain('on public.douyin_material_note_claims(douyin_miniapp_installation_id,subject_hash,claimed_at desc,id desc)where removed_at is null');
-    expect(compact).toContain(
-      'on public.douyin_material_note_claims(tenant_id,note_id)where removed_at is null',
-    );
+    expect(compact).toContain('create index douyin_material_note_claims_tenant_note_active_idx on public.douyin_material_note_claims(tenant_id,note_id)where removed_at is null');
+    expect(compact).toContain('create index douyin_material_note_claims_tenant_note_history_idx on public.douyin_material_note_claims(tenant_id,note_id);');
     for (const column of ['title', 'summary', 'category']) {
-      expect(sql).toContain(`on public.douyin_material_note_versions using gin (${column} extensions.gin_trgm_ops)`);
+      expect(normalizedMigration).toContain(`on public.douyin_material_note_versions using gin (${column} extensions.gin_trgm_ops)`);
     }
     expect(compact).toContain('on public.douyin_material_note_versions(tenant_id,note_id,version_no desc)');
   });
   test('enables RLS and grants only the service API role', async () => {
-    const sql = normalize(migrationSource);
     const tables = [
       'douyin_material_notes',
       'douyin_material_note_versions',
@@ -221,11 +214,11 @@ describe('douyin material note migration', () => {
       'douyin_material_note_command_events',
     ];
     for (const table of tables) {
-      expect(sql).toContain(`alter table public.${table} enable row level security`);
-      expect(sql).toContain(`revoke all on table public.${table} from public, anon, authenticated, service_role`);
-      expect(sql).toContain(`grant select on table public.${table} to service_role`);
+      expect(normalizedMigration).toContain(`alter table public.${table} enable row level security`);
+      expect(normalizedMigration).toContain(`revoke all on table public.${table} from public, anon, authenticated, service_role`);
+      expect(normalizedMigration).toContain(`grant select on table public.${table} to service_role`);
     }
-    expect(sql).not.toContain('create policy');
+    expect(normalizedMigration).not.toContain('create policy');
     const functions = [
       'create_douyin_material_note',
       'append_douyin_material_note_version',
@@ -239,67 +232,66 @@ describe('douyin material note migration', () => {
       const definition = functionDefinition(migrationSource, name);
       expect(definition).toContain('security definer');
       expect(definition).toContain('set search_path = pg_catalog, public');
-      expect(sql).toMatch(new RegExp(`revoke all on function public\\.${name}\\([^;]+from public, anon, authenticated, service_role`));
-      expect(sql).toMatch(new RegExp(`grant execute on function public\\.${name}\\([^;]+to service_role`));
+      expect(normalizedMigration).toMatch(new RegExp(`revoke all on function public\\.${name}\\([^;]+from public, anon, authenticated, service_role`));
+      expect(normalizedMigration).toMatch(new RegExp(`grant execute on function public\\.${name}\\([^;]+to service_role`));
     }
   });
   test('seeds the three domain permissions for active tenant system admins', async () => {
-    const sql = normalize(migrationSource);
     for (const [code, name, action] of [
       ['douyin_material_note.read', '查看抖音资料', 'read'],
       ['douyin_material_note.manage', '管理抖音资料', 'manage'],
       ['douyin_material_note.publish', '发布抖音资料', 'publish'],
     ]) {
-      expect(sql).toContain(`'${code}', '${name}', 'douyin_miniapp', 'douyin_material_note', '${action}'`);
+      expect(normalizedMigration).toContain(`'${code}', '${name}', 'douyin_miniapp', 'douyin_material_note', '${action}'`);
     }
-    expect(sql).toContain('on conflict (code) do update set');
-    expect(sql).toContain("roles.code = 'system_admin'");
-    expect(sql).toContain('roles.tenant_id is not null');
-    expect(sql).toContain("roles.status = 'active'");
-    expect(sql).toContain("tenants.status = 'active'");
-    expect(sql).toContain("permissions.status = 'active'");
-    expect(sql).toContain("select roles.id, permissions.id, 'all'");
-    expect(sql).toContain('on conflict (role_id, permission_id) do update set access_scope = excluded.access_scope');
+    expectContains(normalizedMigration, [
+      'on conflict (code) do update set', "roles.code = 'system_admin'", 'roles.tenant_id is not null',
+      "roles.status = 'active'", "tenants.status = 'active'", "permissions.status = 'active'",
+      "select roles.id, permissions.id, 'all'",
+      'on conflict (role_id, permission_id) do update set access_scope = excluded.access_scope',
+    ]);
   });
   test('adds every historical and material event through an unvalidated shadow check', async () => {
-    const sql = normalize(migrationSource);
     const eventCheck = addedCheckConstraint(migrationSource, 'marketing_events_event_name_check_material_notes');
-    const expectedEvents = [
-      'page_view', 'button_click', 'phone_click', 'form_submit', 'app_launch',
-      'case_view', 'site_view', 'lead_cta_click', 'sms_send', 'lead_submit',
-      'lead_submit_success', 'phone_call_click', 'material_preview', 'material_claim',
-      'material_copy', 'material_budget_click', 'material_lead_click',
-    ];
-    expect(stringLiterals(eventCheck)).toEqual(expectedEvents);
+    expect(stringLiterals(eventCheck)).toEqual(EVENT_NAMES);
     expect(eventCheck).toEndWith(') not valid;');
-    expect(sql).not.toContain('drop constraint if exists marketing_events_event_name_check');
+    expect(normalizedMigration).not.toContain('drop constraint if exists marketing_events_event_name_check');
   });
   test('validates, swaps and indexes marketing events in release-safe stages', async () => {
     const validateSql = normalize(await Bun.file(validateEventConstraintMigrationFile).text());
     const swapSql = normalize(await Bun.file(swapEventConstraintMigrationFile).text());
     const indexSource = await Bun.file(eventErasureIndexMigrationFile).text();
     const indexSql = normalize(indexSource);
+    const validateGuard = validateSql.slice(validateSql.indexOf('do $migration$'), validateSql.indexOf('$migration$;') + 12);
+    const swapGuard = swapSql.slice(swapSql.indexOf('do $migration$'), swapSql.indexOf('$migration$;') + 12);
     expect(validateSql).toStartWith('begin;');
     expect(validateSql).toEndWith('commit;');
     expectInOrder(validateSql, [
-      "set local statement_timeout = '5min'",
-      'validate constraint marketing_events_event_name_check_material_notes',
+      "set local lock_timeout = '5s'", "set local statement_timeout = '5min'", 'lock table public.marketing_events in share update exclusive mode',
+      'do $migration$', 'pg_catalog.pg_get_constraintdef', '$migration$;',
+      'alter table public.marketing_events validate constraint marketing_events_event_name_check_material_notes',
       'reset statement_timeout',
       'reset lock_timeout',
       'commit;',
     ]);
-    expectOmits(validateSql, ['rename constraint', 'drop constraint']);
+    expectOmits(validateSql, ['rename constraint', 'drop constraint', 'constraint_definition.convalidated']);
     expect(swapSql).toStartWith('begin;');
     expect(swapSql).toEndWith('commit;');
-    expect(swapSql).toContain('constraint_definition.convalidated');
+    expect(swapGuard.match(/constraint_definition\.convalidated/g)?.length).toBe(2);
     expectInOrder(swapSql, [
-      "set local lock_timeout = '5s'",
-      'drop constraint marketing_events_event_name_check',
+      "set local lock_timeout = '5s'", "set local statement_timeout = '30s'", 'lock table public.marketing_events in access exclusive mode',
+      'do $migration$', 'pg_catalog.pg_get_constraintdef', '$migration$;',
+      'alter table public.marketing_events drop constraint marketing_events_event_name_check',
       'rename constraint marketing_events_event_name_check_material_notes to marketing_events_event_name_check',
       'reset statement_timeout',
       'reset lock_timeout',
       'commit;',
     ]);
+    for (const guard of [validateGuard, swapGuard]) {
+      expectContains(guard, ["constraint_definition.contype = 'c'", 'constraint_definition.conname',
+        "'marketing_events_event_name_check_material_notes'", 'pg_catalog.regexp_replace(', 'pg_catalog.pg_get_constraintdef(constraint_definition.oid, true)', ') = v_expected_definition']);
+      expect(stringLiterals(guard)).toContain(PG17_EVENT_CHECK);
+    }
     expect(swapSql).not.toContain('validate constraint');
     const indexLines = indexSource.split(/\r?\n/);
     expect(indexLines[0]).toBe('-- gooes:migration-mode=nontransactional');
@@ -419,6 +411,15 @@ describe('douyin material note migration', () => {
   });
   test('writes claim analytics only behind the mutation guard', async () => {
     const body = functionDefinition(migrationSource, 'claim_douyin_material_note');
+    const reviveStart = body.indexOf('if found then'), insertStart = body.indexOf('else', reviveStart);
+    const mutationEnd = body.indexOf('end if;', insertStart);
+    expect(reviveStart).toBeGreaterThanOrEqual(0);
+    expect(insertStart).toBeGreaterThan(reviveStart);
+    expect(mutationEnd).toBeGreaterThan(insertStart);
+    expectInOrder(body.slice(reviveStart, insertStart), ['update public.douyin_material_note_claims',
+      'returning * into v_claim', 'v_write_event := true;']);
+    expectInOrder(body.slice(insertStart, mutationEnd), ['insert into public.douyin_material_note_claims',
+      'returning * into v_claim', 'v_write_event := true;']);
     const eventStart = body.indexOf('insert into public.marketing_events');
     expect(eventStart).toBeGreaterThanOrEqual(0);
     const eventGuardStart = body.lastIndexOf('if ', eventStart);
