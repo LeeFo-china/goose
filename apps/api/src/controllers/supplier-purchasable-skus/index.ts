@@ -118,7 +118,8 @@ class SupplierPurchasableSkusController extends TenantBaseController {
     for (let index = 0; index < rawHeaders.length; index += 2) {
       if (rawHeaders[index]?.toLowerCase() === "idempotency-key") count += 1;
     }
-    if (Array.isArray(header) || count > 1) {
+    if (Array.isArray(header) || count > 1 ||
+      (typeof header === "string" && header.includes(","))) {
       throw Errors.business(
         400,
         "缺少有效的 Idempotency-Key",

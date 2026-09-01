@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
+import Fastify from "fastify";
 
 import { Errors } from "@/errors/error-factory";
 
@@ -169,6 +170,26 @@ describe("SupplierPurchasableSkusController", () => {
     await expect(value.createPurchasableSku(request(override) as never)).rejects
       .toMatchObject({ statusCode: 400, code: "VALIDATION_ERROR" });
     expect(create).not.toHaveBeenCalled();
+  });
+
+  test("rejects duplicate idempotency headers after real Fastify normalization", async () => {
+    const value = await controller();
+    const app = Fastify();
+    value.registerExtraRoutes(app);
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: `/supplier-products/${PRODUCT_ID}/purchasable-skus/${SKU_ID}` +
+          `?tenantSupplierId=${TENANT_SUPPLIER_ID}`,
+        headers: { "idempotency-key": ["one", "two"] },
+        payload: createBody,
+      });
+      expect(response.statusCode).toBe(400);
+      expect(create).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+    }
   });
 
   test.each([

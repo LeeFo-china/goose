@@ -62,8 +62,8 @@ const SpecValueSchema = z.union([
 const commandRecordFields = {
   acting_tenant_id: uuid,
   acting_employee_id: uuid,
-  operation_source: z.literal("tenant"),
-  proxy_reason: z.null(),
+  operation_source: z.enum(["tenant", "tenant_proxy"]),
+  proxy_reason: z.string().trim().min(1).nullable(),
   created_by_employee_id: uuid,
   updated_by_employee_id: uuid,
   created_at: timestamp,
@@ -149,6 +149,8 @@ export const SupplierPurchasableSkuCommandResultSchema = z.object({
 }).strict().superRefine((result, context) => {
   const { product, sku, current_price: price, catalog_item: item } = result;
   const identitiesMatch = [
+    validAuditFields(product),
+    validAuditFields(sku),
     product.id === sku.supplier_product_id,
     product.id === item.supplier_product_id,
     product.supplier_id === sku.supplier_id,
@@ -184,6 +186,15 @@ export const SupplierPurchasableSkuCommandResultSchema = z.object({
   }
   context.addIssue({ code: "custom", message: "供应商 SKU 命令响应关联不一致" });
 });
+
+function validAuditFields(record: {
+  operation_source: "tenant" | "tenant_proxy";
+  proxy_reason: string | null;
+}): boolean {
+  return record.operation_source === "tenant"
+    ? record.proxy_reason === null
+    : record.proxy_reason !== null;
+}
 
 export const SupplierPurchasableSkuCommandFailureSchema = z.object({
   status: z.enum([

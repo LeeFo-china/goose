@@ -11,10 +11,13 @@ const migrationChain = readdirSync(migrationsDirectory)
   .sort()
   .map((name) => readFileSync(new URL(name, migrationsDirectory), "utf8"))
   .join("\n");
-const commandErrorMapper = readFileSync(
-  new URL("../repositories/supplier-command-errors.ts", import.meta.url),
+const commandErrorSources = [
+  "supplier-command-errors.ts",
+  "supplier-command-business-errors.ts",
+].map((name) => readFileSync(
+  new URL(`../repositories/${name}`, import.meta.url),
   "utf8",
-);
+)).join("\n");
 
 const historicalHashes = new Map([
   [
@@ -366,7 +369,7 @@ describe("supplier price tenant ownership migration contract", () => {
         .map((match) => match[1]),
     );
     for (const code of codes) {
-      expect(commandErrorMapper).toContain(`${code}:`);
+      expect(commandErrorSources).toContain(`${code}:`);
     }
   });
 });
