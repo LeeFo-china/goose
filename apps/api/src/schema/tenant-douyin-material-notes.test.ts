@@ -5,6 +5,7 @@ import {
   CreateTenantDouyinMaterialNoteVersionSchema,
   TenantDouyinMaterialNoteArchiveSchema,
   TenantDouyinMaterialNoteCommandHeadersSchema,
+  TenantDouyinMaterialNoteDetailResponseSchema,
   TenantDouyinMaterialNoteListQuerySchema,
   TenantDouyinMaterialNotePublishSchema,
   TenantDouyinMaterialNoteVersionDetailResponseSchema,
@@ -118,5 +119,39 @@ describe('Tenant Douyin material note schemas', () => {
       created_by: '33333333-3333-4333-8333-333333333333',
       created_at: '2026-09-01T08:00:00.000Z',
     })).toMatchObject({ id: params.versionId, note_id: ID, version: 1 });
+  });
+
+  test('keeps the ordinary detail body-free and the version detail full', () => {
+    const version = {
+      id: '22222222-2222-4222-8222-222222222222',
+      note_id: ID,
+      version: 1,
+      ...draft,
+      created_by: '33333333-3333-4333-8333-333333333333',
+      created_at: '2026-09-01T08:00:00.000Z',
+    };
+    const { content_blocks: _body, ...versionSummary } = version;
+    const detail = {
+      id: ID,
+      status: 'published',
+      title: '装修开工清单',
+      category: '施工避坑',
+      current_version: 1,
+      claim_count: 3,
+      published_at: '2026-09-01T08:00:00.000Z',
+      updated_at: '2026-09-01T08:00:00.000Z',
+      published_version_id: version.id,
+      latest_version: versionSummary,
+      created_at: '2026-09-01T08:00:00.000Z',
+    };
+
+    expect(TenantDouyinMaterialNoteDetailResponseSchema.safeParse(detail).success)
+      .toBe(true);
+    expect(TenantDouyinMaterialNoteDetailResponseSchema.safeParse({
+      ...detail,
+      latest_version: version,
+    }).success).toBe(false);
+    expect(TenantDouyinMaterialNoteVersionDetailResponseSchema.safeParse(version).success)
+      .toBe(true);
   });
 });

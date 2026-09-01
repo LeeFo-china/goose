@@ -1,12 +1,11 @@
 import { beforeAll, describe, expect, mock, test } from 'bun:test';
+import { Errors } from '@/errors/error-factory';
 import type { AuthContext } from '@/services/authorization';
 
 process.env.SUPABASE_URL ??= 'http://127.0.0.1:54321';
 process.env.SUPABASE_PUBLISH ??= 'test-publish-key';
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= 'test-service-role-key';
-
 let Service: typeof import('./tenant-douyin-material-notes').TenantDouyinMaterialNotesService;
-
 beforeAll(async () => {
   ({ TenantDouyinMaterialNotesService: Service } = await import(
     './tenant-douyin-material-notes'
@@ -14,6 +13,7 @@ beforeAll(async () => {
 });
 
 const TENANT_ID = '11111111-1111-4111-8111-111111111111';
+const AUTH_TENANT_ID = '99999999-9999-4999-8999-999999999999';
 const NOTE_ID = '22222222-2222-4222-8222-222222222222';
 const VERSION_ID = '33333333-3333-4333-8333-333333333333';
 const EMPLOYEE_ID = '44444444-4444-4444-8444-444444444444';
@@ -35,6 +35,7 @@ const version = {
   created_by: EMPLOYEE_ID,
   created_at: NOW,
 };
+const { content_blocks: _contentBlocks, ...versionSummary } = version;
 const detailRow = {
   id: NOTE_ID,
   status: 'published' as const,
@@ -42,7 +43,7 @@ const detailRow = {
   published_at: NOW,
   created_at: NOW,
   updated_at: NOW,
-  latest_versions: [version],
+  latest_versions: [versionSummary],
   claims: [{ count: 7 }],
 };
 const listRow = {
@@ -57,11 +58,13 @@ const listRow = {
   }],
   claims: [{ count: 7 }],
 };
-const versionSummary = (({ content_blocks: _body, ...summary }) => summary)(version);
-
-function auth(permissionCodes: string[], employeeId: string | null = EMPLOYEE_ID) {
+function auth(
+  permissionCodes: string[],
+  employeeId: string | null = EMPLOYEE_ID,
+  tenantId = TENANT_ID,
+) {
   return {
-    tenantId: TENANT_ID,
+    tenantId,
     employeeId,
     permissions: permissionCodes.map((code) => ({ code, scope: 'all' })),
   } as AuthContext;
@@ -112,10 +115,9 @@ function fixture(overrides: Partial<Record<string, unknown>> = {}) {
 
 describe('TenantDouyinMaterialNotesService access and mapping', () => {
   test('gates all read endpoints with the read permission', async () => {
-    const context = fixture();
-    const user = auth(['douyin_material_note.read']);
-
-    await context.service.list(user, { page: 1, pageSize: 20 });
+  const context = fixture();
+  const user = auth(['douyin_material_note.read']);
+  await context.service.list(user, { page: 1, pageSize: 20 });
     await context.service.getDetail(user, NOTE_ID);
     await context.service.listVersions(user, NOTE_ID, { page: 1, pageSize: 20 });
     await context.service.getVersionDetail(user, NOTE_ID, VERSION_ID);
@@ -186,7 +188,7 @@ describe('TenantDouyinMaterialNotesService access and mapping', () => {
 
   test('uses only authenticated tenant and employee identities for writes', async () => {
     const context = fixture();
-    const user = auth(['douyin_material_note.manage']);
+    const user = auth(['douyin_material_note.manage'], EMPLOYEE_ID, AUTH_TENANT_ID);
     await context.service.appendVersion(user, NOTE_ID, draft);
 
     expect(context.repository.appendVersion).toHaveBeenCalledWith({
@@ -195,22 +197,71 @@ describe('TenantDouyinMaterialNotesService access and mapping', () => {
       actorEmployeeId: EMPLOYEE_ID,
       draft,
     });
+  });
 
-    const missingEmployee = fixture();
-    await expect(missingEmployee.service.create(
-      auth(['douyin_material_note.manage'], null),
-      draft,
-    )).rejects.toMatchObject({
-      statusCode: 403,
-      code: 'MATERIAL_NOTE_EMPLOYEE_REQUIRED',
-    });
-    expect(missingEmployee.repository.create).not.toHaveBeenCalled();
+  test('denies every write without its permission before repository access', async () => {
+    const cases = [
+      ['create', (context: ReturnType<typeof fixture>) =>
+        context.service.create(auth([]), draft)],
+      ['appendVersion', (context: ReturnType<typeof fixture>) =>
+        context.service.appendVersion(auth([]), NOTE_ID, draft)],
+      ['transition', (context: ReturnType<typeof fixture>) =>
+        context.service.publish(auth([]), NOTE_ID, {
+          version_id: VERSION_ID,
+          expected_status: 'draft',
+        }, IDEMPOTENCY_KEY)],
+      ['transition', (context: ReturnType<typeof fixture>) =>
+        context.service.archive(auth([]), NOTE_ID, {
+          expected_status: 'published', reason: '归档原因',
+        }, IDEMPOTENCY_KEY)],
+      ['transition', (context: ReturnType<typeof fixture>) =>
+        context.service.withdraw(auth([]), NOTE_ID, {
+          expected_status: 'published', reason: '撤回原因',
+        }, IDEMPOTENCY_KEY)],
+    ] as const;
+
+    for (const [repositoryMethod, operation] of cases) {
+      const context = fixture();
+      await expect(operation(context)).rejects.toMatchObject({ statusCode: 403 });
+      expect(context.repository[repositoryMethod]).not.toHaveBeenCalled();
+    }
+  });
+
+  test('denies every write when the authenticated employee is missing', async () => {
+    const manager = auth(['douyin_material_note.manage'], null);
+    const publisher = auth(['douyin_material_note.publish'], null);
+    const cases = [
+      ['create', (context: ReturnType<typeof fixture>) =>
+        context.service.create(manager, draft)],
+      ['appendVersion', (context: ReturnType<typeof fixture>) =>
+        context.service.appendVersion(manager, NOTE_ID, draft)],
+      ['transition', (context: ReturnType<typeof fixture>) =>
+        context.service.publish(publisher, NOTE_ID, {
+          version_id: VERSION_ID, expected_status: 'draft',
+        }, IDEMPOTENCY_KEY)],
+      ['transition', (context: ReturnType<typeof fixture>) =>
+        context.service.archive(publisher, NOTE_ID, {
+          expected_status: 'published', reason: '归档原因',
+        }, IDEMPOTENCY_KEY)],
+      ['transition', (context: ReturnType<typeof fixture>) =>
+        context.service.withdraw(publisher, NOTE_ID, {
+          expected_status: 'published', reason: '撤回原因',
+        }, IDEMPOTENCY_KEY)],
+    ] as const;
+
+    for (const [repositoryMethod, operation] of cases) {
+      const context = fixture();
+      await expect(operation(context)).rejects.toMatchObject({
+        statusCode: 403,
+        code: 'MATERIAL_NOTE_EMPLOYEE_REQUIRED',
+      });
+      expect(context.repository[repositoryMethod]).not.toHaveBeenCalled();
+    }
   });
 
   test('maps aggregate-only list, detail and body-free version history DTOs', async () => {
     const context = fixture();
     const user = auth(['douyin_material_note.read']);
-
     const list = await context.service.list(user, { page: 1, pageSize: 20 });
     const detail = await context.service.getDetail(user, NOTE_ID);
     const history = await context.service.listVersions(
@@ -237,8 +288,9 @@ describe('TenantDouyinMaterialNotesService access and mapping', () => {
     expect(detail).toMatchObject({
       id: NOTE_ID,
       claim_count: 7,
-      latest_version: { version: 2, content_blocks: blocks },
+      latest_version: { version: 2 },
     });
+    expect(JSON.stringify(detail)).not.toContain('content_blocks');
     const { version_no: _historyVersionNo, ...historyFields } = versionSummary;
     expect(history.list[0]).toEqual({ ...historyFields, version: 2 });
     expect(JSON.stringify(history)).not.toContain('content_blocks');
@@ -277,7 +329,6 @@ describe('TenantDouyinMaterialNotesService access and mapping', () => {
     const context = fixture({
       listVersions: mock(async () => ({ rows: [versionSummary], total: 0 })),
     });
-
     await expect(context.service.listVersions(
       auth(['douyin_material_note.read']),
       NOTE_ID,
@@ -286,6 +337,54 @@ describe('TenantDouyinMaterialNotesService access and mapping', () => {
       statusCode: 500,
       code: 'MATERIAL_NOTE_RESPONSE_INVALID',
     });
+  });
+
+  test('returns legal empty tenant and version pages after the last page', async () => {
+    const context = fixture({
+      listTenant: mock(async () => ({ rows: [], total: 1 })),
+      listVersions: mock(async () => ({ rows: [], total: 1 })),
+    });
+    const user = auth(['douyin_material_note.read']);
+    await expect(context.service.list(user, { page: 2, pageSize: 20 }))
+      .resolves.toEqual({
+        list: [],
+        pagination: { page: 2, pageSize: 20, total: 1, totalPages: 1 },
+      });
+    await expect(context.service.listVersions(
+      user,
+      NOTE_ID,
+      { page: 2, pageSize: 20 },
+    )).resolves.toEqual({
+      list: [],
+      pagination: { page: 2, pageSize: 20, total: 1, totalPages: 1 },
+    });
+  });
+
+  test('preserves scoped repository AppErrors for append and transition', async () => {
+    const notFound = Errors.business(404, '资料不存在', 'MATERIAL_NOTE_NOT_FOUND');
+    const versionConflict = Errors.business(
+      409,
+      '资料版本冲突',
+      'MATERIAL_NOTE_VERSION_CONFLICT',
+    );
+    const append = fixture({
+      appendVersion: mock(async () => { throw notFound; }),
+    });
+    await expect(append.service.appendVersion(
+      auth(['douyin_material_note.manage']),
+      NOTE_ID,
+      draft,
+    )).rejects.toBe(notFound);
+
+    const transition = fixture({
+      transition: mock(async () => { throw versionConflict; }),
+    });
+    await expect(transition.service.publish(
+      auth(['douyin_material_note.publish']),
+      NOTE_ID,
+      { version_id: VERSION_ID, expected_status: 'draft' },
+      IDEMPOTENCY_KEY,
+    )).rejects.toBe(versionConflict);
   });
 });
 
@@ -332,11 +431,18 @@ describe('TenantDouyinMaterialNotesService state commands', () => {
     ['publish', 'withdrawn'],
     ['archive', 'withdrawn'],
     ['withdraw', 'withdrawn'],
-  ] as const)('rejects impossible %s from %s before the RPC', async (
+  ] as const)('passes impossible %s from %s to the atomic RPC', async (
     command,
     expectedStatus,
   ) => {
-    const context = fixture();
+    const stateConflict = Errors.business(
+      409,
+      '资料状态已变化',
+      'MATERIAL_NOTE_STATE_CONFLICT',
+    );
+    const context = fixture({
+      transition: mock(async () => { throw stateConflict; }),
+    });
     const body = command === 'publish'
       ? { version_id: VERSION_ID, expected_status: expectedStatus }
       : { expected_status: expectedStatus, reason: '状态变更原因' };
@@ -346,11 +452,26 @@ describe('TenantDouyinMaterialNotesService state commands', () => {
       NOTE_ID,
       body as never,
       IDEMPOTENCY_KEY,
-    )).rejects.toMatchObject({
-      statusCode: 409,
-      code: 'MATERIAL_NOTE_STATE_CONFLICT',
+    )).rejects.toBe(stateConflict);
+    expect(context.repository.transition).toHaveBeenCalledTimes(1);
+  });
+
+  test('lets the atomic RPC prioritize idempotency conflict over an invalid transition', async () => {
+    const idempotencyConflict = Errors.business(
+      409,
+      '幂等键已用于不同请求',
+      'MATERIAL_NOTE_IDEMPOTENCY_CONFLICT',
+    );
+    const context = fixture({
+      transition: mock(async () => { throw idempotencyConflict; }),
     });
-    expect(context.repository.transition).not.toHaveBeenCalled();
+    await expect(context.service.withdraw(
+      auth(['douyin_material_note.publish']),
+      NOTE_ID,
+      { expected_status: 'draft', reason: '与原请求不同' },
+      IDEMPOTENCY_KEY,
+    )).rejects.toBe(idempotencyConflict);
+    expect(context.repository.transition).toHaveBeenCalledTimes(1);
   });
 
   test('preserves version, stale-state and idempotency conflicts from the atomic RPC', async () => {

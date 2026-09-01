@@ -288,6 +288,43 @@ describe('DouyinMaterialNotesRepository query boundaries', () => {
       { method: 'eq', args: ['id', VERSION_ID] },
     ]);
   });
+
+  test('tenant note detail is body-free while version detail remains triple scoped', async () => {
+    const tenantDetailRow = {
+      id: NOTE_ID,
+      status: 'published' as const,
+      published_version_id: VERSION_ID,
+      published_at: NOW,
+      created_at: NOW,
+      updated_at: NOW,
+      latest_versions: [versionSummary],
+      claims: [{ count: 3 }],
+    };
+    const context = clientWith([
+      { data: tenantDetailRow, error: null },
+      { data: version, error: null },
+    ]);
+    const repository = new Repository(context.client);
+
+    await expect(repository.findTenantDetail({
+      tenantId: TENANT_ID,
+      noteId: NOTE_ID,
+    })).resolves.toEqual(tenantDetailRow);
+    await expect(repository.findTenantVersionDetail({
+      tenantId: TENANT_ID,
+      noteId: NOTE_ID,
+      versionId: VERSION_ID,
+    })).resolves.toEqual(version);
+
+    const [noteSelect, versionSelect] = selects(context.calls);
+    expect(noteSelect).not.toContain('content_blocks');
+    expect(versionSelect).toContain('content_blocks');
+    expectScope(context.calls, [
+      { method: 'eq', args: ['tenant_id', TENANT_ID] },
+      { method: 'eq', args: ['note_id', NOTE_ID] },
+      { method: 'eq', args: ['id', VERSION_ID] },
+    ]);
+  });
 });
 
 describe('DouyinMaterialNotesRepository RPC gateway', () => {

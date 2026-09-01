@@ -483,16 +483,22 @@ describe('Douyin material note domain contracts', () => {
       DouyinMaterialNoteTenantDetailSchema.parse({
         ...tenantSummary,
         published_version_id: versionId,
-        latest_version: tenantVersion,
+        latest_version: tenantVersionSummary,
         created_at: occurredAt,
       }).latest_version,
-    ).toEqual(tenantVersion);
+    ).toEqual(tenantVersionSummary);
+    expect(DouyinMaterialNoteTenantDetailSchema.safeParse({
+      ...tenantSummary,
+      published_version_id: versionId,
+      latest_version: tenantVersion,
+      created_at: occurredAt,
+    }).success).toBe(false);
     const mismatchedLatestVersion =
       DouyinMaterialNoteTenantDetailSchema.safeParse({
         ...tenantSummary,
         published_version_id: versionId,
         latest_version: {
-          ...tenantVersion,
+          ...tenantVersionSummary,
           note_id: '550e8400-e29b-41d4-a716-446655440004',
         },
         created_at: occurredAt,
@@ -513,7 +519,7 @@ describe('Douyin material note domain contracts', () => {
         {
           ...tenantSummary,
           published_version_id: versionId,
-          latest_version: tenantVersion,
+          latest_version: tenantVersionSummary,
           created_at: occurredAt,
         },
       ],
@@ -584,6 +590,34 @@ describe('Douyin material note domain contracts', () => {
         subject_hash: 'server-only',
       }).success,
     ).toBe(false);
+  });
+
+  test('accepts empty tenant pages after the last page without weakening counts', () => {
+    const pastEndPagination = {
+      page: 2,
+      pageSize: 20,
+      total: 1,
+      totalPages: 1,
+    };
+    for (const schema of [
+      DouyinMaterialNoteTenantListSchema,
+      DouyinMaterialNoteTenantVersionListSchema,
+    ]) {
+      expect(schema.safeParse({
+        list: [],
+        pagination: pastEndPagination,
+      }).success).toBe(true);
+      expect(schema.safeParse({
+        list: schema === DouyinMaterialNoteTenantListSchema
+          ? [tenantSummary]
+          : [tenantVersionSummary],
+        pagination: pastEndPagination,
+      }).success).toBe(false);
+      expect(schema.safeParse({
+        list: [],
+        pagination: { ...pastEndPagination, totalPages: 2 },
+      }).success).toBe(false);
+    }
   });
 
   test('re-exports material contracts from the domain root', () => {

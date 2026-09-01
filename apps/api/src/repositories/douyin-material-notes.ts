@@ -89,7 +89,7 @@ const VERSION_DETAIL_SELECT =
   'id,note_id,version_no,title,summary,category,applicable_to,content_blocks,created_by,created_at';
 const TENANT_DETAIL_SELECT = [
   'id,status,published_version_id,published_at,created_at,updated_at',
-  `latest_versions:douyin_material_note_versions!douyin_material_note_versions_note_tenant_fkey(${VERSION_DETAIL_SELECT})`,
+  `latest_versions:douyin_material_note_versions!douyin_material_note_versions_note_tenant_fkey(${VERSION_SUMMARY_SELECT})`,
   'claims:douyin_material_note_claims!douyin_material_note_claims_note_tenant_fkey(count)',
 ].join(',');
 const OWNED_SELECT = [

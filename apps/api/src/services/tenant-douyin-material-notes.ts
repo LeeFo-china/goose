@@ -1,5 +1,4 @@
 import {
-  type DouyinMaterialNoteStatus,
   type DouyinMaterialNoteTenantDetail,
   type DouyinMaterialNoteTenantSummary,
   type DouyinMaterialNoteTenantVersion,
@@ -55,13 +54,6 @@ type TenantVersionRow = NonNullable<Awaited<
 type TenantVersionSummaryRow = Awaited<
   ReturnType<RepositoryPort['listVersions']>
 >['rows'][number];
-
-const ALLOWED_EXPECTED_STATUS: Readonly<Record<TransitionCommand,
-  ReadonlySet<DouyinMaterialNoteStatus>>> = {
-  publish: new Set(['draft', 'published', 'archived']),
-  archive: new Set(['draft', 'published']),
-  withdraw: new Set(['published', 'archived']),
-};
 
 type TransitionCommand = 'publish' | 'archive' | 'withdraw';
 
@@ -203,9 +195,6 @@ export class TenantDouyinMaterialNotesService {
     const headers = parseInput(TenantDouyinMaterialNoteCommandHeadersSchema, {
       'idempotency-key': idempotencyKey,
     });
-    if (!ALLOWED_EXPECTED_STATUS[command].has(input.expected_status)) {
-      throw Errors.business(409, '资料状态已变化', 'MATERIAL_NOTE_STATE_CONFLICT');
-    }
     return await this.dependencies.repository.transition({
       ...identity,
       noteId: id,
@@ -270,7 +259,7 @@ function mapTenantDetail(row: TenantDetailRow): DouyinMaterialNoteTenantDetail {
       claims: row.claims,
     }),
     published_version_id: row.published_version_id,
-    latest_version: mapVersion(latest),
+    latest_version: mapVersionSummary(latest),
     created_at: row.created_at,
   };
 }

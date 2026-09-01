@@ -145,7 +145,9 @@ export const TenantDouyinMaterialNoteRepositoryDetailRowSchema = z.strictObject(
   published_at: RepositoryDateTimeSchema.nullable(),
   created_at: RepositoryDateTimeSchema,
   updated_at: RepositoryDateTimeSchema,
-  latest_versions: z.array(TenantDouyinMaterialNoteRepositoryVersionSchema).length(1),
+  latest_versions: z.array(
+    TenantDouyinMaterialNoteRepositoryVersionSummarySchema,
+  ).length(1),
   claims: z.array(RepositoryCountRelationSchema).length(1),
 });
 

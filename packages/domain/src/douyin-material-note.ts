@@ -166,7 +166,7 @@ export const DouyinMaterialNoteTenantDetailSchema = z
   .strictObject({
     ...TenantSummaryShape,
     published_version_id: IdSchema.nullable(),
-    latest_version: DouyinMaterialNoteTenantVersionSchema,
+    latest_version: DouyinMaterialNoteTenantVersionSummarySchema,
     created_at: TimestampSchema,
   })
   .superRefine(({ id, latest_version }, context) => {
@@ -227,33 +227,32 @@ const createMaterialNoteListSchema = <ItemSchema extends z.ZodType>(
         return;
       }
 
-      if (page > expectedTotalPages) {
-        context.addIssue({
-          code: 'custom',
-          path: ['pagination', 'page'],
-          message: '页码不能超过总页数',
-        });
-      }
-      if (list.length === 0 || list.length > total) {
+      if (list.length > total) {
         context.addIssue({
           code: 'custom',
           path: ['list'],
-          message:
-            list.length === 0
-              ? '总条数大于 0 时列表不能为空'
-              : '列表条数不能超过总条数',
+          message: '列表条数不能超过总条数',
         });
       }
-      if (page <= expectedTotalPages) {
-        const remainingItemCount = total - (page - 1) * pageSize;
-        const expectedItemCount = Math.min(pageSize, remainingItemCount);
-        if (list.length !== expectedItemCount) {
+      if (page > expectedTotalPages) {
+        if (list.length !== 0) {
           context.addIssue({
             code: 'custom',
             path: ['list'],
-            message: '列表条数必须与当前页应返回条数一致',
+            message: '超过总页数时列表必须为空',
           });
         }
+        return;
+      }
+
+      const remainingItemCount = total - (page - 1) * pageSize;
+      const expectedItemCount = Math.min(pageSize, remainingItemCount);
+      if (list.length !== expectedItemCount) {
+        context.addIssue({
+          code: 'custom',
+          path: ['list'],
+          message: '列表条数必须与当前页应返回条数一致',
+        });
       }
     });
 
