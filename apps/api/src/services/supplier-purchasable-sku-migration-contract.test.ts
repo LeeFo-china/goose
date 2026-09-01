@@ -74,7 +74,7 @@ describe("supplier purchasable SKU atomic command migration", () => {
     );
   });
 
-  test("reads one tenant-owned current price context and a separate future boundary", () => {
+  test("reads target-SKU current and future price context without global period conflicts", () => {
     expectOrdered(readContext, [
       /p_tenant_id IS NULL[\s\S]*p_supplier_product_id IS NULL/,
       /v_priced_at := pg_catalog\.transaction_timestamp\(\)/,
@@ -104,6 +104,12 @@ describe("supplier purchasable SKU atomic command migration", () => {
     expect(normalizedReadContext).toContain("price_list.currency = 'CNY'");
     expect(normalizedReadContext).toContain(
       "price_list.lifecycle_status = 'published'",
+    );
+    expect(normalizedReadContext).toMatch(
+      /FROM public\.supplier_price_lists AS price_list JOIN public\.supplier_price_list_items AS item ON item\.supplier_price_list_id = price_list\.id[\s\S]*item\.supplier_sku_id = p_supplier_sku_id/,
+    );
+    expect(normalizedReadContext).toMatch(
+      /SELECT count\(\*\)[\s\S]*FROM public\.supplier_price_lists AS price_list JOIN public\.supplier_price_list_items AS item[\s\S]*item\.supplier_sku_id = p_supplier_sku_id[\s\S]*IF v_current_count > 1/,
     );
     expect(normalizedReadContext).toMatch(
       /'recommended_tax_rate',[\s\S]*COALESCE\([\s\S]*'0\.13'/,
@@ -195,15 +201,17 @@ describe("supplier purchasable SKU atomic command migration", () => {
     ]);
   });
 
-  test("locks mutable scope in order before composing existing commands", () => {
+  test("uses the cross-entry price lock order before product and SKU locks", () => {
     expectOrdered(command, [
       /pg_catalog\.hashtextextended\(v_parent_key, 20260901130000\)/,
       /FROM public\.employees AS employee[\s\S]*?FOR SHARE/,
-      /FROM public\.tenant_suppliers AS relationship[\s\S]*?FOR UPDATE/,
+      /FROM public\.tenant_suppliers AS relationship[\s\S]*?FOR UPDATE OF relationship[\s\S]*?FOR SHARE OF supplier/,
+      /pg_advisory_xact_lock[\s\S]*?'supplier-price-publish:'/,
+      /INTO v_source_price_list[\s\S]*?FROM public\.supplier_price_lists AS price_list[\s\S]*?FOR UPDATE OF price_list/,
+      /pg_advisory_xact_lock[\s\S]*?'supplier-price-series:'/,
+      /FROM public\.supplier_price_lists AS price_list[\s\S]*?JOIN public\.supplier_price_list_items AS item[\s\S]*?ORDER BY price_list\.version_number, price_list\.id[\s\S]*?FOR UPDATE OF price_list/,
       /FROM public\.supplier_products AS product[\s\S]*?FOR UPDATE/,
       /FROM public\.supplier_skus AS sku[\s\S]*?FOR UPDATE/,
-      /pg_advisory_xact_lock[\s\S]*?'supplier-price-series:'/,
-      /FROM public\.supplier_price_lists AS price_list[\s\S]*?ORDER BY price_list\.version_number, price_list\.id[\s\S]*?FOR UPDATE/,
       /command_supplier_sku_v3/,
       /INSERT INTO public\.supplier_price_list_items[\s\S]*?SELECT/,
       /command_supplier_price_item_v2/,
@@ -214,6 +222,31 @@ describe("supplier purchasable SKU atomic command migration", () => {
     ]);
     expect(normalizedCommand).toContain("command_supplier_product_v2(");
     expect(normalizedCommand).toContain("command_supplier_price_list_v2(");
+
+    const remainingPriceRowLocks = normalizedCommand.match(
+      /PERFORM price_list\.id FROM public\.supplier_price_lists AS price_list[\s\S]*?FOR UPDATE OF price_list;/g,
+    ) ?? [];
+    expect(remainingPriceRowLocks).toHaveLength(1);
+    expect(remainingPriceRowLocks[0]).toContain(
+      "JOIN public.supplier_price_list_items AS item",
+    );
+    expect(remainingPriceRowLocks[0]).toContain(
+      "item.supplier_sku_id = p_supplier_sku_id",
+    );
+  });
+
+  test("locks the supplier row and maps stable child context failures", () => {
+    expect(normalizedCommand).toMatch(
+      /FROM public\.tenant_suppliers AS relationship JOIN public\.suppliers AS supplier[\s\S]*FOR UPDATE OF relationship FOR SHARE OF supplier/,
+    );
+    expectOrdered(command, [
+      /FROM public\.tenant_suppliers AS relationship[\s\S]*?FOR SHARE OF supplier/,
+      /command_supplier_sku_v3/,
+    ]);
+    expect(normalizedCommand).toContain("'TENANT_SUPPLIER_NOT_FOUND'");
+    expect(normalizedCommand).toMatch(
+      /v_error_message IN \([\s\S]*'TENANT_SUPPLIER_NOT_FOUND'[\s\S]*\)[\s\S]*'error_code', v_error_message/,
+    );
   });
 
   test("locks the final active purchase unit before any SKU child write", () => {
@@ -242,6 +275,41 @@ describe("supplier purchasable SKU atomic command migration", () => {
     expect(unitLockAt).toBeLessThan(firstSkuWriteAt);
   });
 
+  test("replaces unit conversions before chaining a metadata update", () => {
+    expect(normalizedCommand).toContain(
+      "v_sku_payload := (v_effective_sku - 'sku_code') - 'purchase_unit_id'",
+    );
+    expect(normalizedCommand).toContain(
+      "v_purchase_unit_changed := p_action = 'update' AND (p_sku ? 'purchase_unit_id')",
+    );
+    expectOrdered(command, [
+      /FROM public\.catalog_units AS unit_record[\s\S]*?FOR SHARE/,
+      /IF v_purchase_unit_changed THEN/,
+      /v_parent_key \|\| ':sku-unit-conversions'/,
+      /replace_supplier_sku_unit_conversions_v3/,
+      /p_expected_sku_version => v_sku\.version/,
+      /p_purchase_unit_id => v_purchase_unit_id/,
+      /p_base_unit_id => v_purchase_unit_id/,
+      /p_edges => jsonb_build_array\(\)/,
+      /v_sku\.version := \(v_child_response ->> 'version'\)::integer/,
+      /ELSIF v_sku_fields_changed THEN|IF v_sku_fields_changed THEN/,
+      /command_supplier_sku_v3/,
+      /p_expected_version => v_sku\.version/,
+      /p_payload => v_sku_payload/,
+    ]);
+    const skuUpdateAt = normalizedCommand.indexOf(
+      "v_child_key := v_parent_key || ':sku-update'",
+    );
+    const skuUpdateEnd = normalizedCommand.indexOf(
+      ") INTO v_child_response",
+      skuUpdateAt,
+    );
+    expect(skuUpdateAt).toBeGreaterThanOrEqual(0);
+    expect(normalizedCommand.slice(skuUpdateAt, skuUpdateEnd)).not.toContain(
+      "purchase_unit_id",
+    );
+  });
+
   test("enforces tenant-owned SKU lifecycle and exact optimistic concurrency", () => {
     expect(normalizedCommand).toContain(
       "product.ownership_scope = 'tenant' AND product.owner_tenant_id = p_tenant_id",
@@ -261,7 +329,7 @@ describe("supplier purchasable SKU atomic command migration", () => {
     );
     expect(normalizedCommand).toContain("v_sku.status = 'draft'");
     expect(normalizedCommand).toMatch(
-      /ELSIF v_sku_fields_changed THEN[\s\S]*p_action => 'update'/,
+      /IF v_sku_fields_changed THEN[\s\S]*p_action => 'update'/,
     );
     expect(normalizedCommand).toContain("v_product.status = 'draft'");
     expect(normalizedCommand).toMatch(
@@ -317,6 +385,27 @@ describe("supplier purchasable SKU atomic command migration", () => {
       "p_price_list_id => v_future_price_list.id",
     );
     expect(normalizedCommand).toContain("'SUPPLIER_PRICE_PERIOD_CONFLICT'");
+  });
+
+  test("scopes write-time periods and overlap checks to the target SKU", () => {
+    expect(normalizedCommand).toMatch(
+      /SELECT count\(\*\)[\s\S]*FROM public\.supplier_price_lists AS price_list JOIN public\.supplier_price_list_items AS item[\s\S]*item\.supplier_sku_id = p_supplier_sku_id[\s\S]*IF v_current_count > 1/,
+    );
+    expect(normalizedCommand).toMatch(
+      /INTO v_current_price_list[\s\S]*JOIN public\.supplier_price_list_items AS item[\s\S]*item\.supplier_sku_id = p_supplier_sku_id/,
+    );
+    expect(normalizedCommand).toMatch(
+      /INTO v_future_price_list[\s\S]*JOIN public\.supplier_price_list_items AS item[\s\S]*item\.supplier_sku_id = p_supplier_sku_id/,
+    );
+    expect(normalizedCommand).toContain(
+      "later_item.supplier_sku_id = earlier_item.supplier_sku_id",
+    );
+    expect(normalizedCommand).not.toContain(
+      "FROM public.supplier_price_lists AS earlier JOIN public.supplier_price_lists AS later",
+    );
+    expect(normalizedCommand).not.toContain(
+      "p_price_list_id => v_future_price_list.id",
+    );
   });
 
   test("verifies one exact catalog fact and persists the strict saved envelope", () => {

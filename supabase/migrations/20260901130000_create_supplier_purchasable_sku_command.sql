@@ -87,65 +87,82 @@ BEGIN
     END IF;
   END IF;
 
-  SELECT count(*)
-  INTO v_current_count
-  FROM public.supplier_price_lists AS price_list
-  WHERE price_list.tenant_id = p_tenant_id
-    AND price_list.tenant_supplier_id = p_tenant_supplier_id
-    AND price_list.supplier_id = p_supplier_id
-    AND upper(btrim(price_list.price_list_code)) = 'DEFAULT'
-    AND price_list.scope_type = 'default'
-    AND price_list.currency = 'CNY'
-    AND price_list.lifecycle_status = 'published'
-    AND price_list.effective_from <= v_priced_at
-    AND (
-      price_list.effective_until IS NULL
-      OR price_list.effective_until > v_priced_at
-    );
+  IF p_supplier_sku_id IS NOT NULL THEN
+    SELECT count(*)
+    INTO v_current_count
+    FROM public.supplier_price_lists AS price_list
+    JOIN public.supplier_price_list_items AS item
+      ON item.supplier_price_list_id = price_list.id
+      AND item.tenant_id = p_tenant_id
+      AND item.supplier_id = p_supplier_id
+    WHERE price_list.tenant_id = p_tenant_id
+      AND price_list.tenant_supplier_id = p_tenant_supplier_id
+      AND price_list.supplier_id = p_supplier_id
+      AND upper(btrim(price_list.price_list_code)) = 'DEFAULT'
+      AND price_list.scope_type = 'default'
+      AND price_list.currency = 'CNY'
+      AND price_list.lifecycle_status = 'published'
+      AND price_list.effective_from <= v_priced_at
+      AND (
+        price_list.effective_until IS NULL
+        OR price_list.effective_until > v_priced_at
+      )
+      AND item.supplier_product_id = p_supplier_product_id
+      AND item.supplier_sku_id = p_supplier_sku_id;
 
-  IF v_current_count > 1 THEN
-    RAISE EXCEPTION USING
-      ERRCODE = 'P0001', MESSAGE = 'SUPPLIER_PRICE_PERIOD_CONFLICT';
-  END IF;
+    IF v_current_count > 1 THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001', MESSAGE = 'SUPPLIER_PRICE_PERIOD_CONFLICT';
+    END IF;
 
-  SELECT price_list.*
-  INTO v_current_price_list
-  FROM public.supplier_price_lists AS price_list
-  WHERE price_list.tenant_id = p_tenant_id
-    AND price_list.tenant_supplier_id = p_tenant_supplier_id
-    AND price_list.supplier_id = p_supplier_id
-    AND upper(btrim(price_list.price_list_code)) = 'DEFAULT'
-    AND price_list.scope_type = 'default'
-    AND price_list.currency = 'CNY'
-    AND price_list.lifecycle_status = 'published'
-    AND price_list.effective_from <= v_priced_at
-    AND (
-      price_list.effective_until IS NULL
-      OR price_list.effective_until > v_priced_at
-    )
-  ORDER BY price_list.version_number DESC, price_list.id DESC
-  LIMIT 1;
+    SELECT price_list.*
+    INTO v_current_price_list
+    FROM public.supplier_price_lists AS price_list
+    JOIN public.supplier_price_list_items AS item
+      ON item.supplier_price_list_id = price_list.id
+      AND item.tenant_id = p_tenant_id
+      AND item.supplier_id = p_supplier_id
+    WHERE price_list.tenant_id = p_tenant_id
+      AND price_list.tenant_supplier_id = p_tenant_supplier_id
+      AND price_list.supplier_id = p_supplier_id
+      AND upper(btrim(price_list.price_list_code)) = 'DEFAULT'
+      AND price_list.scope_type = 'default'
+      AND price_list.currency = 'CNY'
+      AND price_list.lifecycle_status = 'published'
+      AND price_list.effective_from <= v_priced_at
+      AND (
+        price_list.effective_until IS NULL
+        OR price_list.effective_until > v_priced_at
+      )
+      AND item.supplier_product_id = p_supplier_product_id
+      AND item.supplier_sku_id = p_supplier_sku_id
+    ORDER BY price_list.version_number DESC, price_list.id DESC
+    LIMIT 1;
 
-  SELECT price_list.*
-  INTO v_future_price_list
-  FROM public.supplier_price_lists AS price_list
-  WHERE price_list.tenant_id = p_tenant_id
-    AND price_list.tenant_supplier_id = p_tenant_supplier_id
-    AND price_list.supplier_id = p_supplier_id
-    AND upper(btrim(price_list.price_list_code)) = 'DEFAULT'
-    AND price_list.scope_type = 'default'
-    AND price_list.currency = 'CNY'
-    AND price_list.lifecycle_status = 'published'
-    AND price_list.effective_from > v_priced_at
-  ORDER BY
-    price_list.effective_from,
-    price_list.version_number,
-    price_list.id
-  LIMIT 1;
+    SELECT price_list.*
+    INTO v_future_price_list
+    FROM public.supplier_price_lists AS price_list
+    JOIN public.supplier_price_list_items AS item
+      ON item.supplier_price_list_id = price_list.id
+      AND item.tenant_id = p_tenant_id
+      AND item.supplier_id = p_supplier_id
+    WHERE price_list.tenant_id = p_tenant_id
+      AND price_list.tenant_supplier_id = p_tenant_supplier_id
+      AND price_list.supplier_id = p_supplier_id
+      AND upper(btrim(price_list.price_list_code)) = 'DEFAULT'
+      AND price_list.scope_type = 'default'
+      AND price_list.currency = 'CNY'
+      AND price_list.lifecycle_status = 'published'
+      AND price_list.effective_from > v_priced_at
+      AND item.supplier_product_id = p_supplier_product_id
+      AND item.supplier_sku_id = p_supplier_sku_id
+    ORDER BY
+      price_list.effective_from,
+      price_list.version_number,
+      price_list.id
+    LIMIT 1;
 
-  IF p_supplier_sku_id IS NOT NULL
-    AND v_current_price_list.id IS NOT NULL
-  THEN
+    IF v_current_price_list.id IS NOT NULL THEN
     SELECT item.*
     INTO v_current_price_item
     FROM public.supplier_price_list_items AS item
@@ -154,6 +171,7 @@ BEGIN
       AND item.supplier_id = p_supplier_id
       AND item.supplier_product_id = p_supplier_product_id
       AND item.supplier_sku_id = p_supplier_sku_id;
+    END IF;
   END IF;
 
   SELECT item.tax_rate::text
@@ -266,6 +284,7 @@ DECLARE
   v_effective_until timestamptz;
   v_current_count integer;
   v_sku_fields_changed boolean := false;
+  v_purchase_unit_changed boolean := false;
   v_price_changed boolean := true;
   v_price_version_created boolean := false;
   v_constraint_name text;
@@ -468,7 +487,7 @@ BEGIN
   v_effective_sku := (p_sku - 'sku_code') || jsonb_build_object(
     'sku_code', 'TS-' || upper(replace(p_supplier_sku_id::text, '-', ''))
   );
-  v_sku_payload := v_effective_sku - 'sku_code';
+  v_sku_payload := (v_effective_sku - 'sku_code') - 'purchase_unit_id';
   v_effective_price := jsonb_build_object(
     'unit_price', v_unit_price::text,
     'tax_rate', v_tax_rate::text,
@@ -563,16 +582,236 @@ BEGIN
         AND supplier.owner_tenant_id = p_tenant_id
       )
     )
-  FOR UPDATE OF relationship;
+  FOR UPDATE OF relationship
+  FOR SHARE OF supplier;
 
   IF NOT FOUND THEN
     RETURN jsonb_build_object(
       'status', 'state_conflict',
       'idempotent', false,
-      'error_code', 'SUPPLIER_ORDER_NOT_ELIGIBLE',
+      'error_code', 'TENANT_SUPPLIER_NOT_FOUND',
       'reason', 'tenant_supplier_unavailable'
     );
   END IF;
+
+  -- command_supplier_price_list_v2(publish) takes this advisory before its row
+  -- lock. Taking it here first prevents a row-to-advisory inversion later.
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      'supplier-price-publish:' || p_tenant_id::text || ':' ||
+        p_supplier_id::text,
+      6720240729160000
+    )
+  );
+
+  IF p_action = 'update' THEN
+    SELECT price_list.*
+    INTO v_current_price_list
+    FROM public.supplier_price_lists AS price_list
+    JOIN public.supplier_price_list_items AS item
+      ON item.supplier_price_list_id = price_list.id
+      AND item.tenant_id = p_tenant_id
+      AND item.supplier_id = p_supplier_id
+    WHERE price_list.tenant_id = p_tenant_id
+      AND price_list.tenant_supplier_id = p_tenant_supplier_id
+      AND price_list.supplier_id = p_supplier_id
+      AND upper(btrim(price_list.price_list_code)) = 'DEFAULT'
+      AND price_list.scope_type = 'default'
+      AND price_list.currency = 'CNY'
+      AND price_list.lifecycle_status = 'published'
+      AND price_list.effective_from <= v_priced_at
+      AND (
+        price_list.effective_until IS NULL
+        OR price_list.effective_until > v_priced_at
+      )
+      AND item.supplier_product_id = p_supplier_product_id
+      AND item.supplier_sku_id = p_supplier_sku_id
+    ORDER BY price_list.version_number DESC, price_list.id DESC
+    LIMIT 1
+    FOR UPDATE OF price_list;
+
+    v_source_price_list := v_current_price_list;
+  END IF;
+
+  IF v_source_price_list.id IS NULL THEN
+    -- A SKU without a current item still needs a deterministic source so the
+    -- list-level v2 command can preserve existing prices for other SKUs.
+    SELECT price_list.*
+    INTO v_source_price_list
+    FROM public.supplier_price_lists AS price_list
+    WHERE price_list.tenant_id = p_tenant_id
+      AND price_list.tenant_supplier_id = p_tenant_supplier_id
+      AND price_list.supplier_id = p_supplier_id
+      AND upper(btrim(price_list.price_list_code)) = 'DEFAULT'
+      AND price_list.scope_type = 'default'
+      AND price_list.currency = 'CNY'
+      AND (
+        (
+          price_list.lifecycle_status = 'published'
+          AND price_list.effective_from <= v_priced_at
+          AND (
+            price_list.effective_until IS NULL
+            OR price_list.effective_until > v_priced_at
+          )
+        )
+        OR price_list.lifecycle_status = 'retired'
+      )
+    ORDER BY
+      CASE WHEN price_list.lifecycle_status = 'published' THEN 0 ELSE 1 END,
+      price_list.version_number DESC,
+      price_list.id DESC
+    LIMIT 1
+    FOR UPDATE OF price_list;
+  END IF;
+
+  -- new_version takes its source row before this series advisory. The source
+  -- above follows that order; a first list has no source and starts here.
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      'supplier-price-series:' || p_tenant_id::text || ':' ||
+        p_supplier_id::text || ':default',
+      6720240729160000
+    )
+  );
+
+  -- Lock only rows relevant to this SKU. Locking every series row here would
+  -- deadlock two SKU saves that each already hold a different source row.
+  PERFORM price_list.id
+  FROM public.supplier_price_lists AS price_list
+  JOIN public.supplier_price_list_items AS item
+    ON item.supplier_price_list_id = price_list.id
+    AND item.tenant_id = p_tenant_id
+    AND item.supplier_id = p_supplier_id
+  WHERE price_list.tenant_id = p_tenant_id
+    AND price_list.tenant_supplier_id = p_tenant_supplier_id
+    AND price_list.supplier_id = p_supplier_id
+    AND upper(btrim(price_list.price_list_code)) = 'DEFAULT'
+    AND price_list.scope_type = 'default'
+    AND price_list.currency = 'CNY'
+    AND price_list.id IS DISTINCT FROM v_source_price_list.id
+    AND item.supplier_product_id = p_supplier_product_id
+    AND item.supplier_sku_id = p_supplier_sku_id
+  ORDER BY price_list.version_number, price_list.id
+  FOR UPDATE OF price_list;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.supplier_price_lists AS draft
+    WHERE draft.tenant_id = p_tenant_id
+      AND draft.tenant_supplier_id = p_tenant_supplier_id
+      AND draft.supplier_id = p_supplier_id
+      AND upper(btrim(draft.price_list_code)) = 'DEFAULT'
+      AND draft.scope_type = 'default'
+      AND draft.currency = 'CNY'
+      AND draft.lifecycle_status = 'draft'
+  ) OR EXISTS (
+    SELECT 1
+    FROM public.supplier_price_list_items AS earlier_item
+    JOIN public.supplier_price_lists AS earlier
+      ON earlier.id = earlier_item.supplier_price_list_id
+      AND earlier.tenant_id = p_tenant_id
+      AND earlier.tenant_supplier_id = p_tenant_supplier_id
+      AND earlier.supplier_id = p_supplier_id
+      AND upper(btrim(earlier.price_list_code)) = 'DEFAULT'
+      AND earlier.scope_type = 'default'
+      AND earlier.currency = 'CNY'
+      AND earlier.lifecycle_status = 'published'
+    JOIN public.supplier_price_list_items AS later_item
+      ON later_item.supplier_sku_id = earlier_item.supplier_sku_id
+      AND later_item.tenant_id = earlier_item.tenant_id
+      AND later_item.supplier_id = earlier_item.supplier_id
+      AND later_item.supplier_price_list_id <>
+        earlier_item.supplier_price_list_id
+    JOIN public.supplier_price_lists AS later
+      ON later.id = later_item.supplier_price_list_id
+      AND later.tenant_id = earlier.tenant_id
+      AND later.tenant_supplier_id = earlier.tenant_supplier_id
+      AND later.supplier_id = earlier.supplier_id
+      AND upper(btrim(later.price_list_code)) =
+        upper(btrim(earlier.price_list_code))
+      AND later.scope_type = earlier.scope_type
+      AND later.currency = earlier.currency
+      AND later.lifecycle_status = 'published'
+      AND (earlier.effective_from, earlier.id) <
+        (later.effective_from, later.id)
+    WHERE earlier.effective_from <
+        COALESCE(later.effective_until, 'infinity'::timestamptz)
+      AND COALESCE(
+        earlier.effective_until,
+        'infinity'::timestamptz
+      ) > later.effective_from
+  ) THEN
+    RETURN jsonb_build_object(
+      'status', 'state_conflict',
+      'idempotent', false,
+      'error_code', 'SUPPLIER_PRICE_PERIOD_CONFLICT'
+    );
+  END IF;
+
+  IF p_action = 'update' THEN
+    SELECT count(*)
+    INTO v_current_count
+    FROM public.supplier_price_lists AS price_list
+    JOIN public.supplier_price_list_items AS item
+      ON item.supplier_price_list_id = price_list.id
+      AND item.tenant_id = p_tenant_id
+      AND item.supplier_id = p_supplier_id
+    WHERE price_list.tenant_id = p_tenant_id
+      AND price_list.tenant_supplier_id = p_tenant_supplier_id
+      AND price_list.supplier_id = p_supplier_id
+      AND upper(btrim(price_list.price_list_code)) = 'DEFAULT'
+      AND price_list.scope_type = 'default'
+      AND price_list.currency = 'CNY'
+      AND price_list.lifecycle_status = 'published'
+      AND price_list.effective_from <= v_priced_at
+      AND (
+        price_list.effective_until IS NULL
+        OR price_list.effective_until > v_priced_at
+      )
+      AND item.supplier_product_id = p_supplier_product_id
+      AND item.supplier_sku_id = p_supplier_sku_id;
+
+    IF v_current_count > 1 THEN
+      RETURN jsonb_build_object(
+        'status', 'state_conflict',
+        'idempotent', false,
+        'error_code', 'SUPPLIER_PRICE_PERIOD_CONFLICT'
+      );
+    END IF;
+
+    SELECT price_list.*
+    INTO v_future_price_list
+    FROM public.supplier_price_lists AS price_list
+    JOIN public.supplier_price_list_items AS item
+      ON item.supplier_price_list_id = price_list.id
+      AND item.tenant_id = p_tenant_id
+      AND item.supplier_id = p_supplier_id
+    WHERE price_list.tenant_id = p_tenant_id
+      AND price_list.tenant_supplier_id = p_tenant_supplier_id
+      AND price_list.supplier_id = p_supplier_id
+      AND upper(btrim(price_list.price_list_code)) = 'DEFAULT'
+      AND price_list.scope_type = 'default'
+      AND price_list.currency = 'CNY'
+      AND price_list.lifecycle_status = 'published'
+      AND price_list.effective_from > v_priced_at
+      AND item.supplier_product_id = p_supplier_product_id
+      AND item.supplier_sku_id = p_supplier_sku_id
+    ORDER BY price_list.effective_from, price_list.version_number, price_list.id
+    LIMIT 1;
+
+    IF v_current_price_list.id IS NOT NULL THEN
+      SELECT item.*
+      INTO v_current_price_item
+      FROM public.supplier_price_list_items AS item
+      WHERE item.supplier_price_list_id = v_current_price_list.id
+        AND item.tenant_id = p_tenant_id
+        AND item.supplier_id = p_supplier_id
+        AND item.supplier_product_id = p_supplier_product_id
+        AND item.supplier_sku_id = p_supplier_sku_id;
+    END IF;
+  END IF;
+
+  v_immediate_effective_until := v_future_price_list.effective_from;
 
   SELECT product.*
   INTO v_product
@@ -677,6 +916,9 @@ BEGIN
       THEN (p_sku ->> 'purchase_unit_id')::uuid
     ELSE v_sku.purchase_unit_id
   END;
+  v_purchase_unit_changed := p_action = 'update'
+    AND (p_sku ? 'purchase_unit_id')
+    AND v_purchase_unit_id IS DISTINCT FROM v_sku.purchase_unit_id;
 
   PERFORM unit_record.id
   FROM public.catalog_units AS unit_record
@@ -691,139 +933,6 @@ BEGIN
       'error_code', 'SUPPLIER_PURCHASABLE_SKU_SAVE_FAILED',
       'reason', 'purchase_unit_not_found'
     );
-  END IF;
-
-  PERFORM pg_catalog.pg_advisory_xact_lock(
-    pg_catalog.hashtextextended(
-      'supplier-price-series:' || p_tenant_id::text || ':' ||
-        p_supplier_id::text || ':default',
-      6720240729160000
-    )
-  );
-
-  PERFORM price_list.id
-  FROM public.supplier_price_lists AS price_list
-  WHERE price_list.tenant_id = p_tenant_id
-    AND price_list.tenant_supplier_id = p_tenant_supplier_id
-    AND price_list.supplier_id = p_supplier_id
-    AND upper(btrim(price_list.price_list_code)) = 'DEFAULT'
-    AND price_list.scope_type = 'default'
-    AND price_list.currency = 'CNY'
-  ORDER BY price_list.version_number, price_list.id
-  FOR UPDATE;
-
-  IF EXISTS (
-    SELECT 1
-    FROM public.supplier_price_lists AS draft
-    WHERE draft.tenant_id = p_tenant_id
-      AND draft.tenant_supplier_id = p_tenant_supplier_id
-      AND draft.supplier_id = p_supplier_id
-      AND upper(btrim(draft.price_list_code)) = 'DEFAULT'
-      AND draft.scope_type = 'default'
-      AND draft.currency = 'CNY'
-      AND draft.lifecycle_status = 'draft'
-  ) OR EXISTS (
-    SELECT 1
-    FROM public.supplier_price_lists AS earlier
-    JOIN public.supplier_price_lists AS later
-      ON (earlier.effective_from, earlier.id) <
-        (later.effective_from, later.id)
-      AND later.tenant_id = earlier.tenant_id
-      AND later.tenant_supplier_id = earlier.tenant_supplier_id
-      AND later.supplier_id = earlier.supplier_id
-      AND upper(btrim(later.price_list_code)) =
-        upper(btrim(earlier.price_list_code))
-      AND later.scope_type = earlier.scope_type
-      AND later.currency = earlier.currency
-      AND later.lifecycle_status = 'published'
-    WHERE earlier.tenant_id = p_tenant_id
-      AND earlier.tenant_supplier_id = p_tenant_supplier_id
-      AND earlier.supplier_id = p_supplier_id
-      AND upper(btrim(earlier.price_list_code)) = 'DEFAULT'
-      AND earlier.scope_type = 'default'
-      AND earlier.currency = 'CNY'
-      AND earlier.lifecycle_status = 'published'
-      AND earlier.effective_from <
-        COALESCE(later.effective_until, 'infinity'::timestamptz)
-      AND COALESCE(
-        earlier.effective_until,
-        'infinity'::timestamptz
-      ) > later.effective_from
-  ) THEN
-    RETURN jsonb_build_object(
-      'status', 'state_conflict',
-      'idempotent', false,
-      'error_code', 'SUPPLIER_PRICE_PERIOD_CONFLICT'
-    );
-  END IF;
-
-  SELECT count(*)
-  INTO v_current_count
-  FROM public.supplier_price_lists AS price_list
-  WHERE price_list.tenant_id = p_tenant_id
-    AND price_list.tenant_supplier_id = p_tenant_supplier_id
-    AND price_list.supplier_id = p_supplier_id
-    AND upper(btrim(price_list.price_list_code)) = 'DEFAULT'
-    AND price_list.scope_type = 'default'
-    AND price_list.currency = 'CNY'
-    AND price_list.lifecycle_status = 'published'
-    AND price_list.effective_from <= v_priced_at
-    AND (
-      price_list.effective_until IS NULL
-      OR price_list.effective_until > v_priced_at
-    );
-
-  IF v_current_count > 1 THEN
-    RETURN jsonb_build_object(
-      'status', 'state_conflict',
-      'idempotent', false,
-      'error_code', 'SUPPLIER_PRICE_PERIOD_CONFLICT'
-    );
-  END IF;
-
-  SELECT price_list.*
-  INTO v_current_price_list
-  FROM public.supplier_price_lists AS price_list
-  WHERE price_list.tenant_id = p_tenant_id
-    AND price_list.tenant_supplier_id = p_tenant_supplier_id
-    AND price_list.supplier_id = p_supplier_id
-    AND upper(btrim(price_list.price_list_code)) = 'DEFAULT'
-    AND price_list.scope_type = 'default'
-    AND price_list.currency = 'CNY'
-    AND price_list.lifecycle_status = 'published'
-    AND price_list.effective_from <= v_priced_at
-    AND (
-      price_list.effective_until IS NULL
-      OR price_list.effective_until > v_priced_at
-    )
-  ORDER BY price_list.version_number DESC, price_list.id DESC
-  LIMIT 1;
-
-  SELECT price_list.*
-  INTO v_future_price_list
-  FROM public.supplier_price_lists AS price_list
-  WHERE price_list.tenant_id = p_tenant_id
-    AND price_list.tenant_supplier_id = p_tenant_supplier_id
-    AND price_list.supplier_id = p_supplier_id
-    AND upper(btrim(price_list.price_list_code)) = 'DEFAULT'
-    AND price_list.scope_type = 'default'
-    AND price_list.currency = 'CNY'
-    AND price_list.lifecycle_status = 'published'
-    AND price_list.effective_from > v_priced_at
-  ORDER BY price_list.effective_from, price_list.version_number, price_list.id
-  LIMIT 1;
-
-  v_immediate_effective_until := v_future_price_list.effective_from;
-
-  IF v_current_price_list.id IS NOT NULL THEN
-    SELECT item.*
-    INTO v_current_price_item
-    FROM public.supplier_price_list_items AS item
-    WHERE item.supplier_price_list_id = v_current_price_list.id
-      AND item.tenant_id = p_tenant_id
-      AND item.supplier_id = p_supplier_id
-      AND item.supplier_product_id = p_supplier_product_id
-      AND item.supplier_sku_id = p_supplier_sku_id;
   END IF;
 
   IF v_current_price_item.id IS NULL THEN
@@ -861,11 +970,6 @@ BEGIN
         AND p_sku ->> 'model' IS DISTINCT FROM v_sku.model
       )
       OR (
-        p_sku ? 'purchase_unit_id'
-        AND (p_sku ->> 'purchase_unit_id')::uuid IS DISTINCT FROM
-          v_sku.purchase_unit_id
-      )
-      OR (
         p_sku ? 'batch_managed'
         AND (p_sku ->> 'batch_managed')::boolean IS DISTINCT FROM
           v_sku.batch_managed
@@ -892,11 +996,7 @@ BEGIN
     AND v_current_price_item.purchase_unit_id = v_sku.purchase_unit_id
     AND v_current_price_item.base_unit_id = v_sku.base_unit_id
     AND v_current_price_item.base_unit_conversion = v_sku.base_unit_conversion
-    AND NOT (
-      p_sku ? 'purchase_unit_id'
-      AND (p_sku ->> 'purchase_unit_id')::uuid IS DISTINCT FROM
-        v_sku.purchase_unit_id
-    )
+    AND NOT v_purchase_unit_changed
     AND v_current_price_item.unit_price = v_unit_price
     AND v_current_price_item.tax_rate = v_tax_rate
     AND v_current_price_item.tax_inclusive =
@@ -931,27 +1031,61 @@ BEGIN
           MESSAGE = 'SUPPLIER_PURCHASABLE_SKU_SAVE_FAILED',
           DETAIL = COALESCE(v_child_response ->> 'error_code', 'sku_create_failed');
       END IF;
-    ELSIF v_sku_fields_changed THEN
-      v_child_key := v_parent_key || ':sku-update';
-      SELECT public.command_supplier_sku_v3(
-        p_action => 'update',
-        p_ownership_scope => 'tenant',
-        p_tenant_id => p_tenant_id,
-        p_tenant_supplier_id => p_tenant_supplier_id,
-        p_supplier_id => p_supplier_id,
-        p_supplier_product_id => p_supplier_product_id,
-        p_sku_id => p_supplier_sku_id,
-        p_expected_version => v_sku.version,
-        p_payload => v_sku_payload,
-        p_actor_user_id => p_actor_user_id,
-        p_actor_employee_id => p_actor_employee_id,
-        p_idempotency_key => v_child_key
-      ) INTO v_child_response;
-      IF v_child_response ->> 'status' IS DISTINCT FROM 'updated' THEN
-        RAISE EXCEPTION USING
-          ERRCODE = 'P0001',
-          MESSAGE = 'SUPPLIER_PURCHASABLE_SKU_SAVE_FAILED',
-          DETAIL = COALESCE(v_child_response ->> 'error_code', 'sku_update_failed');
+    ELSE
+      IF v_purchase_unit_changed THEN
+        v_child_key := v_parent_key || ':sku-unit-conversions';
+        SELECT public.replace_supplier_sku_unit_conversions_v3(
+          p_ownership_scope => 'tenant',
+          p_tenant_id => p_tenant_id,
+          p_tenant_supplier_id => p_tenant_supplier_id,
+          p_supplier_id => p_supplier_id,
+          p_supplier_product_id => p_supplier_product_id,
+          p_supplier_sku_id => p_supplier_sku_id,
+          p_expected_sku_version => v_sku.version,
+          p_purchase_unit_id => v_purchase_unit_id,
+          p_base_unit_id => v_purchase_unit_id,
+          p_edges => jsonb_build_array(),
+          p_actor_user_id => p_actor_user_id,
+          p_actor_employee_id => p_actor_employee_id,
+          p_idempotency_key => v_child_key
+        ) INTO v_child_response;
+        IF v_child_response ->> 'status' IS DISTINCT FROM 'updated' THEN
+          RAISE EXCEPTION USING
+            ERRCODE = 'P0001',
+            MESSAGE = 'SUPPLIER_PURCHASABLE_SKU_SAVE_FAILED',
+            DETAIL = COALESCE(
+              v_child_response ->> 'error_code',
+              'sku_unit_conversion_failed'
+            );
+        END IF;
+        v_sku.version := (v_child_response ->> 'version')::integer;
+      END IF;
+
+      IF v_sku_fields_changed THEN
+        v_child_key := v_parent_key || ':sku-update';
+        SELECT public.command_supplier_sku_v3(
+          p_action => 'update',
+          p_ownership_scope => 'tenant',
+          p_tenant_id => p_tenant_id,
+          p_tenant_supplier_id => p_tenant_supplier_id,
+          p_supplier_id => p_supplier_id,
+          p_supplier_product_id => p_supplier_product_id,
+          p_sku_id => p_supplier_sku_id,
+          p_expected_version => v_sku.version,
+          p_payload => v_sku_payload,
+          p_actor_user_id => p_actor_user_id,
+          p_actor_employee_id => p_actor_employee_id,
+          p_idempotency_key => v_child_key
+        ) INTO v_child_response;
+        IF v_child_response ->> 'status' IS DISTINCT FROM 'updated' THEN
+          RAISE EXCEPTION USING
+            ERRCODE = 'P0001',
+            MESSAGE = 'SUPPLIER_PURCHASABLE_SKU_SAVE_FAILED',
+            DETAIL = COALESCE(
+              v_child_response ->> 'error_code',
+              'sku_update_failed'
+            );
+        END IF;
       END IF;
     END IF;
 
@@ -1046,25 +1180,10 @@ BEGIN
     FOR UPDATE;
 
     IF v_price_changed THEN
-      v_source_price_list := v_current_price_list;
-      IF v_source_price_list.id IS NULL THEN
-        SELECT price_list.*
-        INTO v_source_price_list
-        FROM public.supplier_price_lists AS price_list
-        WHERE price_list.tenant_id = p_tenant_id
-          AND price_list.tenant_supplier_id = p_tenant_supplier_id
-          AND price_list.supplier_id = p_supplier_id
-          AND upper(btrim(price_list.price_list_code)) = 'DEFAULT'
-          AND price_list.scope_type = 'default'
-          AND price_list.currency = 'CNY'
-          AND price_list.lifecycle_status = 'retired'
-        ORDER BY price_list.version_number DESC, price_list.id DESC
-        LIMIT 1;
-      END IF;
-
       IF v_future_price_list.id IS NOT NULL
         AND (
-          v_source_price_list.id IS NULL
+          v_current_price_list.id IS NULL
+          OR v_source_price_list.id IS DISTINCT FROM v_current_price_list.id
           OR EXISTS (
             SELECT 1
             FROM public.supplier_price_lists AS occupied
@@ -1076,6 +1195,14 @@ BEGIN
               AND occupied.currency = 'CNY'
               AND occupied.version_number =
                 v_source_price_list.version_number + 1
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM public.supplier_price_list_items AS source_item
+            WHERE source_item.supplier_price_list_id = v_source_price_list.id
+              AND source_item.tenant_id = p_tenant_id
+              AND source_item.supplier_id = p_supplier_id
+              AND source_item.supplier_sku_id <> p_supplier_sku_id
           )
         )
       THEN
@@ -1272,16 +1399,23 @@ BEGIN
       END IF;
       v_price_list_version := (v_child_response ->> 'version')::integer;
 
-      IF v_current_price_list.id IS NOT NULL THEN
+      IF v_source_price_list.id IS NOT NULL
+        AND v_source_price_list.lifecycle_status = 'published'
+        AND v_source_price_list.effective_from <= v_priced_at
+        AND (
+          v_source_price_list.effective_until IS NULL
+          OR v_source_price_list.effective_until > v_priced_at
+        )
+      THEN
         v_child_key := v_parent_key || ':price-list-retire-source';
         SELECT public.command_supplier_price_list_v2(
           p_action => 'retire',
-          p_price_list_id => v_current_price_list.id,
+          p_price_list_id => v_source_price_list.id,
           p_new_price_list_id => NULL::uuid,
           p_tenant_id => p_tenant_id,
           p_tenant_supplier_id => p_tenant_supplier_id,
           p_supplier_id => p_supplier_id,
-          p_expected_version => v_current_price_list.row_version,
+          p_expected_version => v_source_price_list.row_version,
           p_payload => '{}'::jsonb,
           p_actor_user_id => p_actor_user_id,
           p_actor_employee_id => p_actor_employee_id,
@@ -1535,6 +1669,7 @@ BEGIN
         'SUPPLIER_SKU_STATE_CONFLICT',
         'SUPPLIER_PRICE_LIST_INVALID_ACTION',
         'SUPPLIER_PRICE_LIST_VERSION_CONFLICT',
+        'TENANT_SUPPLIER_NOT_FOUND',
         'SUPPLIER_ORDER_NOT_ELIGIBLE',
         'SUPPLIER_PROXY_ACTOR_INVALID',
         'SHARED_RESOURCE_READ_ONLY',
