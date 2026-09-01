@@ -87,6 +87,29 @@ describe("tenant service capability map", () => {
       .toEqual(expected);
   });
 
+  test.each([
+    ["GET", "/tenant/douyin-material-notes", "read"],
+    ["POST", "/tenant/douyin-material-notes", "write"],
+    ["GET", "/tenant/douyin-material-notes/:id", "read"],
+    ["GET", "/tenant/douyin-material-notes/:id/versions", "read"],
+    ["GET", "/tenant/douyin-material-notes/:id/versions/:versionId", "read"],
+    ["POST", "/tenant/douyin-material-notes/:id/versions", "write"],
+    ["POST", "/tenant/douyin-material-notes/:id/publish", "write"],
+    ["POST", "/tenant/douyin-material-notes/:id/archive", "write"],
+    ["POST", "/tenant/douyin-material-notes/:id/withdraw", "write"],
+  ] as const)("excludes tenant material note route %s %s from trial capabilities", async (
+    method,
+    url,
+    access,
+  ) => {
+    const { resolveTenantServiceRouteCapability } = await import(
+      "./tenant-service-capability-map"
+    );
+
+    expect(resolveTenantServiceRouteCapability(route(method, url, access)))
+      .toEqual({ kind: "excluded", reason: "not_trial_capability" });
+  });
+
   test("classifies every registered read/write route exactly once", async () => {
     const { default: routes } = await import("@/routes");
     const { matchTenantServiceRouteCapabilityRules } = await import(
