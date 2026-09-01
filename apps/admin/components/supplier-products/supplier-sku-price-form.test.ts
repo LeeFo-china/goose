@@ -1,6 +1,11 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
+import {
+  buildPurchasableSkuPath,
+  loadSupplierSkuCurrentPrice,
+  loadSupplierSkuPriceDefaults,
+} from "./supplier-product-api";
 import {
   buildPurchasableSkuCreatePayload,
   buildPurchasableSkuUpdatePayload,
@@ -29,6 +34,7 @@ const permissions = {
   canViewCostPrice: true,
   canManageCostPrice: true,
 };
+const originalFetch = globalThis.fetch;
 const currentPrice = {
   supplier_price_list_id: "price-list-1",
   supplier_price_list_version: 7,
@@ -40,6 +46,10 @@ const currentPrice = {
   effective_from: "2026-09-01T08:00:00+08:00",
   effective_until: null,
 } as const;
+
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+});
 
 function priceContext(
   overrides: Partial<SupplierSkuPriceContext> = {},
@@ -256,22 +266,59 @@ describe("供应商 SKU 即时价格模型", () => {
     }))).toMatch(/^当前价格有效至 .+$/);
   });
 
-  test("路径与读取错误文案遵循现有 Admin API client 契约", () => {
-    const source = readFileSync(
-      new URL("./supplier-product-api.ts", import.meta.url),
-      "utf8",
+  test("价格读取实际发送仅含租户供应商范围的 GET 并返回上下文", async () => {
+    const currentContext = priceContext({ current_price: currentPrice });
+    const calls = installPriceContextFetch([priceContext(), currentContext]);
+    const scope = {
+      kind: "tenant",
+      tenantSupplierId: "relationship/id ?",
+    } as const;
+
+    const defaults = await loadSupplierSkuPriceDefaults(scope, "product-1");
+    const current = await loadSupplierSkuCurrentPrice(
+      scope,
+      "product-1",
+      "sku-1",
     );
-    expect(source).toContain(
-      "return `/supplier-products/${productId}/purchasable-skus/${skuId}`;",
+
+    expect(defaults).toEqual(priceContext());
+    expect(current).toEqual(currentContext);
+    expect(buildPurchasableSkuPath("product-1", "sku-1")).toBe(
+      "/supplier-products/product-1/purchasable-skus/sku-1",
     );
-    expect(source).toContain(
-      "`/supplier-products/${productId}/purchasable-skus/price-defaults?${scopeOnly(scope)}`",
-    );
-    expect(source).toContain(
-      "`${buildPurchasableSkuPath(productId, skuId)}/price?${scopeOnly(scope)}`",
-    );
-    expect(source).toContain("基础供货价默认值加载失败");
-    expect(source).toContain("SKU 当前供货价加载失败");
+    expect(calls.map(({ input }) => String(input))).toEqual([
+      "/api/backend/supplier-products/product-1/purchasable-skus/price-defaults?tenantSupplierId=relationship%2Fid+%3F",
+      "/api/backend/supplier-products/product-1/purchasable-skus/sku-1/price?tenantSupplierId=relationship%2Fid+%3F",
+    ]);
+    for (const { input, init } of calls) {
+      const url = new URL(String(input), "http://admin.local");
+      expect(Object.fromEntries(url.searchParams)).toEqual({
+        tenantSupplierId: "relationship/id ?",
+      });
+      expect(init?.method).toBeUndefined();
+      expect(init?.body).toBeUndefined();
+    }
+  });
+
+  test("价格读取失败时分别使用稳定 fallback message", async () => {
+    globalThis.fetch = (async () =>
+      jsonResponse({ success: false }, 500)) as unknown as typeof fetch;
+
+    await expect(loadSupplierSkuPriceDefaults(
+      tenantScope,
+      "product-1",
+    )).rejects.toMatchObject({
+      message: "基础供货价默认值加载失败",
+      status: 500,
+    });
+    await expect(loadSupplierSkuCurrentPrice(
+      tenantScope,
+      "product-1",
+      "sku-1",
+    )).rejects.toMatchObject({
+      message: "SKU 当前供货价加载失败",
+      status: 500,
+    });
   });
 
   test("纯模型源码不使用 Number 转换价格字符串", () => {
@@ -282,3 +329,24 @@ describe("供应商 SKU 即时价格模型", () => {
     expect(source).not.toContain("Number(");
   });
 });
+
+type FetchCall = { input: RequestInfo | URL; init?: RequestInit };
+
+function installPriceContextFetch(
+  contexts: readonly SupplierSkuPriceContext[],
+): FetchCall[] {
+  const calls: FetchCall[] = [];
+  globalThis.fetch = (async (input, init) => {
+    const context = contexts[calls.length];
+    calls.push({ input, init });
+    return jsonResponse({ success: true, data: context });
+  }) as typeof fetch;
+  return calls;
+}
+
+function jsonResponse(payload: unknown, status = 200) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
