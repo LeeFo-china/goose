@@ -20,6 +20,7 @@ import { canReadSupplierProductWorkspace, getPriceWriteState, getProductWriteSta
 import { createLatestRequestGate } from "./supplier-request-gate";
 import { SupplierPriceListPanel } from "./supplier-price-list-panel";
 import { SupplierSearchSelect } from "./supplier-search-select";
+import { canUseInlineSkuPrice } from "./supplier-sku-price-form";
 import type { PageData, ProductApiScope, SupplierProductPage, SupplierSku, TenantSupplierRelationship } from "./supplier-product-types";
 
 const page = <T,>(): PageData<T> => ({
@@ -60,8 +61,6 @@ export function SupplierProductWorkspace({
   const requestedRelationshipId = searchParams.get("tenantSupplierId");
   const search = searchParams.toString();
   const canReadCostPrice = canViewCostPrice;
-  const canUseInlineSkuPrice = canManageProducts &&
-    canViewCostPrice && canManageCostPrice;
   const canReadWorkspace = canReadSupplierProductWorkspace({
     canViewProducts,
     canManageProducts,
@@ -144,6 +143,12 @@ export function SupplierProductWorkspace({
   const scope = useMemo<ProductApiScope | null>(() => relationshipId
     ? { kind: "tenant", tenantSupplierId: relationshipId }
     : null, [relationshipId]);
+  const inlineSkuPriceEnabled = scope ? canUseInlineSkuPrice({
+    scope,
+    canManageProducts,
+    canViewCostPrice,
+    canManageCostPrice,
+  }) : false;
 
   useEffect(() => {
     setProductPage(1);
@@ -249,7 +254,7 @@ export function SupplierProductWorkspace({
                 </CardHeader>
               ) : null}
               <CardContent className="p-0">
-                <SupplierProductList key={relationshipId} scope={scope} relationship={relationship} products={products} loading={loadingProducts} canManage={canManageProducts} inlinePriceEnabled={canUseInlineSkuPrice} onRefresh={loadProducts} onAvailableSkusChange={setAvailableSkus} onSkuWorkspaceChange={setSkuWorkspaceVisible} />
+                <SupplierProductList key={relationshipId} scope={scope} relationship={relationship} products={products} loading={loadingProducts} canManage={canManageProducts} inlinePriceEnabled={inlineSkuPriceEnabled} onRefresh={loadProducts} onAvailableSkusChange={setAvailableSkus} onSkuWorkspaceChange={setSkuWorkspaceVisible} />
                 {!skuWorkspaceVisible ? <Paginator page={productPage} totalPages={totalPages} total={products.pagination.total} loading={loadingProducts} onPageChange={setProductPage} /> : null}
               </CardContent>
             </Card>

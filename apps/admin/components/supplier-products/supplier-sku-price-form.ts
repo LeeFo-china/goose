@@ -165,6 +165,24 @@ export function getSupplierSkuSaveMode({
   return skuStatus === "inactive" ? "metadata-only" : "inline-price";
 }
 
+export function getSupplierSkuDialogSaveMode({
+  inlinePriceEnabled,
+  scope,
+  skuStatus,
+}: {
+  inlinePriceEnabled: boolean;
+  scope: ProductApiScope;
+  skuStatus?: SupplierSku["status"];
+}): SupplierSkuSaveMode {
+  return getSupplierSkuSaveMode({
+    scope,
+    skuStatus,
+    canManageProducts: inlinePriceEnabled,
+    canViewCostPrice: inlinePriceEnabled,
+    canManageCostPrice: inlinePriceEnabled,
+  });
+}
+
 export function getSupplierSkuPriceEffectiveUntilNotice(
   context: SupplierSkuPriceContext,
 ): string | null {

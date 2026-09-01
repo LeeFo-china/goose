@@ -191,9 +191,63 @@ type SaveDependencies = {
   onSuccess: () => void | Promise<void>;
 };
 
+type SaveTransport = Omit<SaveDependencies, "onSuccess">;
+
+type SaveCallbacks = {
+  onSuccess: () => void | Promise<void>;
+  onError: (error: unknown) => void | Promise<void>;
+  onSettled: () => void | Promise<void>;
+};
+
+export function createSupplierSkuDialogSaveWorkflow() {
+  let generation = 0;
+
+  return {
+    beginSession() {
+      generation += 1;
+    },
+    beginSave() {
+      generation += 1;
+      return generation;
+    },
+    invalidate() {
+      generation += 1;
+    },
+    async execute(
+      token: number,
+      plan: SupplierSkuDialogSavePlan,
+      dependencies: SaveTransport,
+      callbacks: SaveCallbacks,
+    ) {
+      try {
+        await sendSupplierSkuDialogSave(plan, dependencies);
+      } catch (error) {
+        if (token !== generation) return;
+        await callbacks.onError(error);
+        if (token === generation) await callbacks.onSettled();
+        return;
+      }
+      if (token !== generation) return;
+      try {
+        await callbacks.onSuccess();
+      } finally {
+        if (token === generation) await callbacks.onSettled();
+      }
+    },
+  };
+}
+
 export async function executeSupplierSkuDialogSave(
   plan: SupplierSkuDialogSavePlan,
   dependencies: SaveDependencies,
+) {
+  await sendSupplierSkuDialogSave(plan, dependencies);
+  await dependencies.onSuccess();
+}
+
+async function sendSupplierSkuDialogSave(
+  plan: SupplierSkuDialogSavePlan,
+  dependencies: SaveTransport,
 ) {
   if (plan.method === "PATCH") {
     await dependencies.mutate(
@@ -211,7 +265,16 @@ export async function executeSupplierSkuDialogSave(
       plan.attempt.idempotencyKey,
     );
   }
-  await dependencies.onSuccess();
+}
+
+export function isSupplierSkuPriceFieldsDisabled({
+  loading,
+  saveMode,
+}: {
+  loading: boolean;
+  saveMode: SupplierSkuSaveMode;
+}) {
+  return loading || saveMode === "metadata-only";
 }
 
 export function resolveSupplierSkuPurchaseUnitLabel(

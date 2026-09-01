@@ -30,6 +30,7 @@ export function SupplierSkuPriceFields({
   value,
   purchaseUnitSymbol,
   disabled,
+  disabledNotice = disabled ? "启用 SKU 后可调整供货价" : null,
   effectiveUntilNotice,
   unitPriceError,
   onChange,
@@ -38,6 +39,7 @@ export function SupplierSkuPriceFields({
   value: SupplierSkuPriceForm;
   purchaseUnitSymbol: string;
   disabled: boolean;
+  disabledNotice?: string | null;
   effectiveUntilNotice: string | null;
   unitPriceError?: string | null;
   onChange: (value: SupplierSkuPriceForm) => void;
@@ -46,6 +48,11 @@ export function SupplierSkuPriceFields({
   const taxRateId = `${idPrefix}-tax-rate`;
   const taxInclusiveId = `${idPrefix}-tax-inclusive`;
   const priceErrorId = `${priceId}-error`;
+  const priceRequirementId = `${priceId}-requirement`;
+  const taxRateRequirementId = `${taxRateId}-requirement`;
+  const priceDescriptionIds = unitPriceError
+    ? `${priceRequirementId} ${priceErrorId}`
+    : priceRequirementId;
 
   return (
     <FieldSet className="border-t pt-5">
@@ -53,7 +60,9 @@ export function SupplierSkuPriceFields({
       <FieldDescription>保存后立即用于新的采购业务。</FieldDescription>
       <FieldGroup className="grid gap-4 md:grid-cols-2">
         <Field data-invalid={Boolean(unitPriceError)} data-disabled={disabled}>
-          <FieldLabel htmlFor={priceId}>基础供货价</FieldLabel>
+          <FieldLabel htmlFor={priceId}>
+            基础供货价<RequiredMarker />
+          </FieldLabel>
           <div className="relative">
             <Input
               id={priceId}
@@ -61,8 +70,10 @@ export function SupplierSkuPriceFields({
               className="pr-28 tabular-nums"
               value={value.unitPrice}
               disabled={disabled}
+              required
+              aria-required="true"
               aria-invalid={Boolean(unitPriceError)}
-              aria-describedby={unitPriceError ? priceErrorId : undefined}
+              aria-describedby={priceDescriptionIds}
               onChange={(event) => onChange({
                 ...value,
                 unitPrice: event.target.value,
@@ -72,16 +83,26 @@ export function SupplierSkuPriceFields({
               元 / {purchaseUnitSymbol}
             </span>
           </div>
-          <FieldError id={priceErrorId}>{unitPriceError}</FieldError>
+          <FieldDescription id={priceRequirementId} className="sr-only">
+            基础供货价为必填项，必须大于 0 且最多保留两位小数。
+          </FieldDescription>
+          <FieldError id={priceErrorId} role="alert">{unitPriceError}</FieldError>
         </Field>
         <Field data-disabled={disabled}>
-          <FieldLabel htmlFor={taxRateId}>税率</FieldLabel>
+          <FieldLabel htmlFor={taxRateId}>
+            税率<RequiredMarker />
+          </FieldLabel>
           <Select
             value={value.taxRate}
             disabled={disabled}
+            required
             onValueChange={(taxRate) => onChange({ ...value, taxRate })}
           >
-            <SelectTrigger id={taxRateId}>
+            <SelectTrigger
+              id={taxRateId}
+              aria-required="true"
+              aria-describedby={taxRateRequirementId}
+            >
               <SelectValue placeholder="选择税率" />
             </SelectTrigger>
             <SelectContent>
@@ -94,6 +115,9 @@ export function SupplierSkuPriceFields({
               </SelectGroup>
             </SelectContent>
           </Select>
+          <FieldDescription id={taxRateRequirementId} className="sr-only">
+            税率为必填项。
+          </FieldDescription>
         </Field>
       </FieldGroup>
       <Field orientation="horizontal" data-disabled={disabled}>
@@ -110,11 +134,20 @@ export function SupplierSkuPriceFields({
           含税价格
         </FieldLabel>
       </Field>
-      {disabled ? (
-        <FieldDescription>启用 SKU 后可调整供货价</FieldDescription>
-      ) : effectiveUntilNotice ? (
+      {disabledNotice ? (
+        <FieldDescription>{disabledNotice}</FieldDescription>
+      ) : !disabled && effectiveUntilNotice ? (
         <FieldDescription>{effectiveUntilNotice}</FieldDescription>
       ) : null}
     </FieldSet>
+  );
+}
+
+function RequiredMarker() {
+  return (
+    <>
+      <span aria-hidden="true" className="text-destructive"> *</span>
+      <span className="sr-only">（必填）</span>
+    </>
   );
 }
