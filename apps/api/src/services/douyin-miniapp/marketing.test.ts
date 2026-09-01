@@ -1,8 +1,21 @@
-import { describe, expect, mock, test } from "bun:test";
+import { beforeAll, describe, expect, mock, test } from "bun:test";
 import { Errors } from "@/errors/error-factory";
-import type { DouyinLeadRequest } from "@/schema/douyin-miniapp";
-import { getTemplateConfigKey } from "@/services/sms/legacy/config";
-import { DouyinMiniappMarketingService } from "./marketing";
+import {
+  DouyinAnalyticsRequestSchema,
+  type DouyinLeadRequest,
+} from "@/schema/douyin-miniapp";
+
+process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
+process.env.SUPABASE_PUBLISH ??= "test-publish-key";
+process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
+
+let MarketingService: typeof import("./marketing").DouyinMiniappMarketingService;
+let getTemplateConfigKey: typeof import("@/services/sms/legacy/config").getTemplateConfigKey;
+
+beforeAll(async () => {
+  ({ DouyinMiniappMarketingService: MarketingService } = await import("./marketing"));
+  ({ getTemplateConfigKey } = await import("@/services/sms/legacy/config"));
+});
 
 const TENANT_ID = "11111111-1111-4111-8111-111111111111";
 const INSTALLATION_ID = "22222222-2222-4222-8222-222222222222";
@@ -88,7 +101,7 @@ function harness(features = { sms_lead: true }) {
   const sendCode = mock(async (_input: unknown) => (
     { success: true as const, cooldown_seconds: 60 }
   ));
-  const service = new DouyinMiniappMarketingService({
+  const service = new MarketingService({
     contextRepository: { findActiveInstallation } as never,
     marketingRepository: { submitMeasurementAppointment, insertEvents } as never,
     notificationService: { createTenantAdminNotifications } as never,
@@ -252,7 +265,7 @@ describe("DouyinMiniappMarketingService", () => {
 
   test("delegates past-date validation to the atomic command so replay remains possible", async () => {
     const afterMidnight = harness();
-    const service = new DouyinMiniappMarketingService({
+    const service = new MarketingService({
       contextRepository: { findActiveInstallation: afterMidnight.findActiveInstallation } as never,
       marketingRepository: {
         submitMeasurementAppointment: afterMidnight.submitMeasurementAppointment,
@@ -307,5 +320,50 @@ describe("DouyinMiniappMarketingService", () => {
       events: [{ eventName: "case_view", occurredAt: "2026-07-19T09:59:30.000Z",
         attribution, entityId: "55555555-5555-4555-8555-555555555555" }],
     });
+  });
+
+  test("accepts client material engagement but keeps material claims server-only", async () => {
+    const eventNames = [
+      "material_preview",
+      "material_copy",
+      "material_budget_click",
+      "material_lead_click",
+    ] as const;
+    const events = eventNames.map((event_name) => ({
+      event_name,
+      occurred_at: "2026-07-19T09:59:30.000Z",
+      attribution,
+      entity_id: "55555555-5555-4555-8555-555555555555",
+    }));
+    const parsed = DouyinAnalyticsRequestSchema.safeParse({ events });
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+
+    const { insertEvents, service } = harness();
+    await expect(service.recordEvents(
+      user,
+      parsed.data,
+      { requestIp: null, userAgent: null },
+    )).resolves.toEqual({ accepted: 4 });
+    expect(insertEvents).toHaveBeenCalledTimes(1);
+    expect(insertEvents.mock.calls[0]?.[0]).toMatchObject({
+      tenantId: TENANT_ID,
+      installationId: INSTALLATION_ID,
+      subjectHash: SUBJECT_HASH,
+      events: eventNames.map((eventName) => ({ eventName })),
+    });
+
+    expect(DouyinAnalyticsRequestSchema.safeParse({ events: [{
+      ...events[0],
+      event_name: "material_claim",
+    }] }).success).toBe(false);
+    await expect(service.recordEvents(user, { events: [{
+      ...events[0],
+      event_name: "material_claim",
+    }] } as never, { requestIp: null, userAgent: null })).rejects.toMatchObject({
+      statusCode: 400,
+      code: "DOUYIN_EVENT_NOT_CLIENT_WRITABLE",
+    });
+    expect(insertEvents).toHaveBeenCalledTimes(1);
   });
 });

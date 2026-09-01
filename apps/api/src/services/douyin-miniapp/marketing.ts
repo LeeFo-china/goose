@@ -57,6 +57,7 @@ const APPOINTMENT_SUBMITTED_MESSAGE = "量房申请已提交，工作人员将�
 const CLIENT_EVENTS = new Set([
   "app_launch", "page_view", "case_view", "site_view",
   "lead_cta_click", "phone_call_click",
+  "material_preview", "material_copy", "material_budget_click", "material_lead_click",
 ]);
 
 export class DouyinMiniappMarketingService {

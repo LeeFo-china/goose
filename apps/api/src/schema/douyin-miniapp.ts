@@ -85,6 +85,10 @@ const DOUYIN_CLIENT_EVENT_VALUES = [
   "site_view",
   "lead_cta_click",
   "phone_call_click",
+  "material_preview",
+  "material_copy",
+  "material_budget_click",
+  "material_lead_click",
 ] as const;
 
 export const DouyinAnalyticsRequestSchema = z.strictObject({

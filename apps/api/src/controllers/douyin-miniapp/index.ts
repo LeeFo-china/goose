@@ -12,6 +12,12 @@ import {
   DouyinProjectListQuerySchema,
 } from "@/schema/douyin-miniapp";
 import {
+  DouyinMaterialNoteClaimIdParamsSchema,
+  DouyinMaterialNoteEmptyCommandSchema,
+  DouyinMaterialNoteIdParamsSchema,
+  DouyinMaterialNoteListQuerySchema,
+} from "@/schema/douyin-material-notes";
+import {
   getDouyinMiniappContentService,
   type DouyinMiniappContentService,
 } from "@/services/douyin-miniapp/content";
@@ -27,6 +33,10 @@ import {
   getDouyinMiniappQaService,
   type DouyinMiniappQaService,
 } from "@/services/douyin-miniapp/qa";
+import {
+  getDouyinMiniappMaterialNotesService,
+  type DouyinMiniappMaterialNotesService,
+} from "@/services/douyin-miniapp/material-notes";
 import { ResponseHandler } from "@/utils/response";
 import { resolveTrustedClientIp } from "@/utils/trusted-proxy-client-ip";
 
@@ -38,6 +48,9 @@ type ContentService = Pick<DouyinMiniappContentService,
 type MarketingService = Pick<DouyinMiniappMarketingService,
   "sendCode" | "submitLead" | "recordEvents">;
 type QaService = Pick<DouyinMiniappQaService, "ask">;
+type MaterialNotesService = Pick<DouyinMiniappMaterialNotesService,
+  "listPublic" | "getPublicPreview" | "claim" | "listOwned" |
+  "getOwnedDetail" | "remove" | "clear">;
 
 export class DouyinMiniappController {
   constructor(
@@ -45,6 +58,7 @@ export class DouyinMiniappController {
     private readonly contentService?: ContentService,
     private readonly marketingService?: MarketingService,
     private readonly qaService?: QaService,
+    private readonly materialNotesService?: MaterialNotesService,
   ) {}
 
   registerExtraRoutes(fastify: FastifyInstance): void {
@@ -59,6 +73,16 @@ export class DouyinMiniappController {
     fastify.get("/douyin-mini/projects", this.listProjects);
     fastify.get("/douyin-mini/projects/:id", this.getProject);
     fastify.get("/douyin-mini/projects/:id/logs", this.listProjectLogs);
+    fastify.get("/douyin-mini/material-notes", this.listMaterialNotes);
+    fastify.get("/douyin-mini/material-notes/:id", this.getMaterialNote);
+    fastify.post("/douyin-mini/material-notes/:id/claim", this.claimMaterialNote);
+    fastify.get("/douyin-mini/my-material-notes", this.listOwnedMaterialNotes);
+    fastify.get("/douyin-mini/my-material-notes/:claimId", this.getOwnedMaterialNote);
+    fastify.post(
+      "/douyin-mini/my-material-notes/:claimId/remove",
+      this.removeOwnedMaterialNote,
+    );
+    fastify.post("/douyin-mini/my-material-notes/clear", this.clearOwnedMaterialNotes);
     fastify.post("/douyin-mini/qa", this.askQuestion);
     fastify.post("/douyin-mini/sms/send", this.sendLeadCode);
     fastify.post("/douyin-mini/leads", this.submitLead);
@@ -126,6 +150,59 @@ export class DouyinMiniappController {
     );
   };
 
+  listMaterialNotes = async (request: FastifyRequest) => {
+    const query = parse(DouyinMaterialNoteListQuerySchema, request.query || {});
+    return ResponseHandler.success(
+      await this.materialNotes().listPublic(request.user, query),
+    );
+  };
+
+  getMaterialNote = async (request: FastifyRequest) => {
+    const { id } = parse(DouyinMaterialNoteIdParamsSchema, request.params || {});
+    return ResponseHandler.success(
+      await this.materialNotes().getPublicPreview(request.user, id),
+    );
+  };
+
+  claimMaterialNote = async (request: FastifyRequest) => {
+    const { id } = parse(DouyinMaterialNoteIdParamsSchema, request.params || {});
+    parse(DouyinMaterialNoteEmptyCommandSchema, request.body || {});
+    return ResponseHandler.success(await this.materialNotes().claim(request.user, id));
+  };
+
+  listOwnedMaterialNotes = async (request: FastifyRequest) => {
+    const query = parse(DouyinContentPageQuerySchema, request.query || {});
+    return ResponseHandler.success(
+      await this.materialNotes().listOwned(request.user, query),
+    );
+  };
+
+  getOwnedMaterialNote = async (request: FastifyRequest) => {
+    const { claimId } = parse(
+      DouyinMaterialNoteClaimIdParamsSchema,
+      request.params || {},
+    );
+    return ResponseHandler.success(
+      await this.materialNotes().getOwnedDetail(request.user, claimId),
+    );
+  };
+
+  removeOwnedMaterialNote = async (request: FastifyRequest) => {
+    const { claimId } = parse(
+      DouyinMaterialNoteClaimIdParamsSchema,
+      request.params || {},
+    );
+    parse(DouyinMaterialNoteEmptyCommandSchema, request.body || {});
+    return ResponseHandler.success(
+      await this.materialNotes().remove(request.user, claimId),
+    );
+  };
+
+  clearOwnedMaterialNotes = async (request: FastifyRequest) => {
+    parse(DouyinMaterialNoteEmptyCommandSchema, request.body || {});
+    return ResponseHandler.success(await this.materialNotes().clear(request.user));
+  };
+
   askQuestion = async (request: FastifyRequest) => ResponseHandler.success(
     await this.qa().ask(
       request.user,
@@ -167,6 +244,10 @@ export class DouyinMiniappController {
 
   private qa(): QaService {
     return this.qaService ?? getDouyinMiniappQaService();
+  }
+
+  private materialNotes(): MaterialNotesService {
+    return this.materialNotesService ?? getDouyinMiniappMaterialNotesService();
   }
 }
 

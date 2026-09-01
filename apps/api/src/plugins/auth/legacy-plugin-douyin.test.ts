@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, test } from "bun:test";
 import { createHmac } from "node:crypto";
 import Fastify from "fastify";
 import errorHandler from "@/plugins/error-handler";
+import { shouldBypassDouyinAuth } from "./legacy/douyin-routes";
 
 const JWT_SECRET = "douyin-session-jwt-secret-at-least-32-bytes";
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
@@ -24,6 +25,14 @@ async function createApp() {
   authPlugin(app);
   app.post("/douyin-mini/auth/session", async () => ({ session: true }));
   app.get("/douyin-mini/bootstrap", async (request) => ({ user: request.user }));
+  app.get("/douyin-mini/material-notes", async (request) => ({ user: request.user }));
+  app.get("/douyin-mini/material-notes/:id", async (request) => ({ user: request.user }));
+  app.post("/douyin-mini/material-notes/:id/claim", async (request) => ({ user: request.user }));
+  app.get("/douyin-mini/my-material-notes", async (request) => ({ user: request.user }));
+  app.get("/douyin-mini/my-material-notes/:claimId", async (request) => ({ user: request.user }));
+  app.post("/douyin-mini/my-material-notes/:claimId/remove", async (request) =>
+    ({ user: request.user }));
+  app.post("/douyin-mini/my-material-notes/clear", async (request) => ({ user: request.user }));
   app.get("/ordinary", async () => ({ ordinary: true }));
   await app.ready();
   return app;
@@ -104,6 +113,39 @@ describe("auth plugin Douyin miniapp isolation", () => {
     expect(douyinResponse.json()).toMatchObject({ code: "TOKEN_EXPIRED" });
     expect(regularResponse.statusCode).toBe(401);
     expect(regularResponse.json()).toMatchObject({ code: "TOKEN_EXPIRED" });
+    await app.close();
+  });
+
+  test("keeps all seven material routes behind the mini-session policy", async () => {
+    const app = await createApp();
+    const douyinToken = signDouyinMiniappToken(douyinPayload);
+    const regularToken = signToken({ sub: "employee-auth-user", token_type: "auth" });
+    const noteId = "11111111-1111-4111-8111-111111111111";
+    const claimId = "33333333-3333-4333-8333-333333333333";
+    const routes = [
+      ["GET", "/douyin-mini/material-notes"],
+      ["GET", `/douyin-mini/material-notes/${noteId}`],
+      ["POST", `/douyin-mini/material-notes/${noteId}/claim`],
+      ["GET", "/douyin-mini/my-material-notes"],
+      ["GET", `/douyin-mini/my-material-notes/${claimId}`],
+      ["POST", `/douyin-mini/my-material-notes/${claimId}/remove`],
+      ["POST", "/douyin-mini/my-material-notes/clear"],
+    ] as const;
+
+    for (const [method, url] of routes) {
+      expect(shouldBypassDouyinAuth(method, url)).toBe(false);
+      expect((await app.inject({ method, url })).statusCode).toBe(401);
+      expect((await app.inject({
+        method,
+        url,
+        headers: { authorization: `Bearer ${regularToken}` },
+      })).statusCode).toBe(401);
+      expect((await app.inject({
+        method,
+        url,
+        headers: { authorization: `Bearer ${douyinToken}` },
+      })).statusCode).toBe(200);
+    }
     await app.close();
   });
 });

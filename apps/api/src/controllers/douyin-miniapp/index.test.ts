@@ -10,6 +10,10 @@ import {
   DouyinProjectListQuerySchema,
 } from "@/schema/douyin-miniapp";
 
+process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
+process.env.SUPABASE_PUBLISH ??= "test-publish-key";
+process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
+
 let DouyinMiniappController: typeof import(".").DouyinMiniappController;
 
 beforeAll(async () => {
@@ -81,6 +85,13 @@ describe("DouyinMiniappController", () => {
       "GET /douyin-mini/projects",
       "GET /douyin-mini/projects/:id",
       "GET /douyin-mini/projects/:id/logs",
+      "GET /douyin-mini/material-notes",
+      "GET /douyin-mini/material-notes/:id",
+      "POST /douyin-mini/material-notes/:id/claim",
+      "GET /douyin-mini/my-material-notes",
+      "GET /douyin-mini/my-material-notes/:claimId",
+      "POST /douyin-mini/my-material-notes/:claimId/remove",
+      "POST /douyin-mini/my-material-notes/clear",
       "POST /douyin-mini/qa",
       "POST /douyin-mini/sms/send",
       "POST /douyin-mini/leads",
@@ -311,6 +322,103 @@ describe("DouyinMiniappController", () => {
         .rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
     }
     expect(ask).toHaveBeenCalledTimes(1);
+  });
+
+  test("validates and wraps all seven material note operations", async () => {
+    const materialList = { list: [], pagination: {
+      page: 1, pageSize: 20, total: 0, totalPages: 0,
+    } };
+    const preview = {
+      id: "11111111-1111-4111-8111-111111111111",
+      title: "开工清单",
+      summary: "开工检查事项",
+      category: "施工避坑",
+      applicable_to: null,
+      published_at: "2026-09-01T08:00:00.000Z",
+      claimed: false,
+    };
+    const claimResult = {
+      claim_id: "22222222-2222-4222-8222-222222222222",
+      already_claimed: false,
+      claimed_at: "2026-09-01T08:00:00.000Z",
+      material: {
+        id: preview.id,
+        version: 1,
+        title: preview.title,
+        summary: preview.summary,
+        category: preview.category,
+        applicable_to: null,
+        content_blocks: [],
+      },
+    };
+    const listPublic = mock(async () => materialList);
+    const getPublicPreview = mock(async () => preview);
+    const claim = mock(async () => claimResult);
+    const listOwned = mock(async () => materialList);
+    const getOwnedDetail = mock(async () => ({
+      claim_id: claimResult.claim_id,
+      id: preview.id,
+      version: 1,
+      title: preview.title,
+      summary: preview.summary,
+      category: preview.category,
+      applicable_to: null,
+      claimed_at: claimResult.claimed_at,
+      content_blocks: [],
+    }));
+    const remove = mock(async () => ({ removed: true }));
+    const clear = mock(async () => ({ removed_count: 1 }));
+    const controller = new DouyinMiniappController(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { listPublic, getPublicPreview, claim, listOwned, getOwnedDetail, remove, clear } as never,
+    );
+    const user = { token_type: "douyin_miniapp", tenant_id:
+      "33333333-3333-4333-8333-333333333333" };
+    const noteId = preview.id;
+    const claimId = claimResult.claim_id;
+
+    await expect(controller.listMaterialNotes({ user, query: {} } as never))
+      .resolves.toEqual({ data: materialList, message: "success" });
+    await expect(controller.getMaterialNote({ user, params: { id: noteId } } as never))
+      .resolves.toEqual({ data: preview, message: "success" });
+    await expect(controller.claimMaterialNote({
+      user, params: { id: noteId }, body: undefined,
+    } as never)).resolves.toEqual({ data: claimResult, message: "success" });
+    await expect(controller.listOwnedMaterialNotes({ user, query: {} } as never))
+      .resolves.toEqual({ data: materialList, message: "success" });
+    await controller.getOwnedMaterialNote({ user, params: { claimId } } as never);
+    await controller.removeOwnedMaterialNote({
+      user, params: { claimId }, body: {},
+    } as never);
+    await controller.clearOwnedMaterialNotes({ user, body: undefined } as never);
+
+    expect(listPublic).toHaveBeenCalledWith(user, { page: 1, pageSize: 20 });
+    expect(getPublicPreview).toHaveBeenCalledWith(user, noteId);
+    expect(claim).toHaveBeenCalledWith(user, noteId);
+    expect(listOwned).toHaveBeenCalledWith(user, { page: 1, pageSize: 20 });
+    expect(getOwnedDetail).toHaveBeenCalledWith(user, claimId);
+    expect(remove).toHaveBeenCalledWith(user, claimId);
+    expect(clear).toHaveBeenCalledWith(user);
+
+    await expect(controller.listMaterialNotes({ user, query: {
+      pageSize: 101,
+    } } as never)).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
+    await expect(controller.listMaterialNotes({ user, query: {
+      tenant_id: "33333333-3333-4333-8333-333333333333",
+    } } as never)).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
+    await expect(controller.claimMaterialNote({
+      user,
+      params: { id: noteId },
+      body: { subject_hash: "a".repeat(64) },
+    } as never)).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
+    await expect(controller.removeOwnedMaterialNote({
+      user,
+      params: { claimId },
+      body: { installation_id: "44444444-4444-4444-8444-444444444444" },
+    } as never)).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
   });
 
   test("defines strict bounded decoration Q&A request bodies", () => {
