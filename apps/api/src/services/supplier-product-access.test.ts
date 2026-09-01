@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { beforeAll, describe, expect, mock, test } from "bun:test";
 
 import type { AuthContext } from "@/services/authorization";
 import { resolveSupplierRelationshipAccess } from "./supplier-ownership-access";
@@ -6,6 +6,15 @@ import { resolveSupplierRelationshipAccess } from "./supplier-ownership-access";
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
+
+type AccessServiceConstructor = typeof import(
+  "./supplier-product-access"
+)["SupplierProductAccessService"];
+let SupplierProductAccessService: AccessServiceConstructor;
+
+beforeAll(async () => {
+  ({ SupplierProductAccessService } = await import("./supplier-product-access"));
+});
 
 const TENANT_ID = "30000000-0000-4000-8000-000000000001";
 const TENANT_SUPPLIER_ID = "30000000-0000-4000-8000-000000000002";
@@ -71,15 +80,96 @@ function dependencies(overrides: Record<string, unknown> = {}) {
   };
 }
 
+type CompositeAccessCase = {
+  method: "requirePurchasableSkuPriceRead" | "requirePurchasableSkuWrite";
+  permissions: readonly [string, string];
+};
+
+const COMPOSITE_ACCESS_CASES: CompositeAccessCase[] = [
+  {
+    method: "requirePurchasableSkuPriceRead",
+    permissions: ["supplier.product.manage", "supplier.cost-price.view"],
+  },
+  {
+    method: "requirePurchasableSkuWrite",
+    permissions: ["supplier.product.manage", "supplier.cost-price.manage"],
+  },
+];
+
+function service(deps: ReturnType<typeof dependencies>) {
+  return new SupplierProductAccessService(deps as never);
+}
+
+async function assertEachCompositePermissionIsRequired(
+  accessCase: CompositeAccessCase,
+): Promise<void> {
+  for (const grantedPermission of accessCase.permissions) {
+    const deps = dependencies();
+    await expect(service(deps)[accessCase.method](
+      auth(grantedPermission),
+      TENANT_SUPPLIER_ID,
+    )).rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
+    expect(deps.repository.getSettings).not.toHaveBeenCalled();
+    expect(deps.repository.findRelationship).not.toHaveBeenCalled();
+  }
+}
+
+async function assertCompositeWriteRelationshipGate(
+  accessCase: CompositeAccessCase,
+): Promise<void> {
+  const active = dependencies();
+  await expect(service(active)[accessCase.method](
+    auth(accessCase.permissions),
+    TENANT_SUPPLIER_ID,
+  )).resolves.toMatchObject({ tenantSupplierId: TENANT_SUPPLIER_ID });
+  expect(active.repository.getSettings).toHaveBeenCalledTimes(1);
+  expect(active.repository.findRelationship).toHaveBeenCalledTimes(1);
+  expect(active.relationshipAccess).toHaveBeenCalledWith({
+    relationshipStatus: "active",
+    operation: "write",
+    permissionGranted: true,
+  });
+
+  for (const status of ["suspended", "terminated"] as const) {
+    const inactive = dependenciesWithRelationship({
+      relationship_status: status,
+    });
+    await expect(service(inactive)[accessCase.method](
+      auth(accessCase.permissions),
+      TENANT_SUPPLIER_ID,
+    )).rejects.toMatchObject({ code: "SUPPLIER_ORDER_NOT_ELIGIBLE" });
+    expect(inactive.relationshipAccess).toHaveBeenCalledWith({
+      relationshipStatus: status,
+      operation: "write",
+      permissionGranted: true,
+    });
+  }
+}
+
+function dependenciesWithRelationship(
+  relationshipPatch: Record<string, unknown>,
+  overrides: Record<string, unknown> = {},
+) {
+  return dependencies({
+    repository: {
+      getSettings: mock(async () => ({
+        tenant_id: TENANT_ID,
+        module_enabled: true,
+      })),
+      findRelationship: mock(async () => ({
+        ...relationship,
+        ...relationshipPatch,
+      })),
+    },
+    ...overrides,
+  });
+}
+
 describe("SupplierProductAccessService", () => {
   test("preserves tenant-context denial before purchasable product permissions and data reads", async () => {
     const deps = dependencies();
-    const { SupplierProductAccessService } = await import(
-      "./supplier-product-access"
-    );
-    const service = new SupplierProductAccessService(deps as never);
 
-    await expect(service.requirePurchasableProductWrite(
+    await expect(service(deps).requirePurchasableProductWrite(
       { ...auth([]), tenantId: null },
       TENANT_SUPPLIER_ID,
     )).rejects.toMatchObject({
@@ -90,30 +180,16 @@ describe("SupplierProductAccessService", () => {
     expect(deps.repository.findRelationship).not.toHaveBeenCalled();
   });
 
-  test("rejects purchasable product writes with only product permission before data reads", async () => {
+  test.each([
+    ["product", "supplier.product.manage"],
+    ["cost-price", "supplier.cost-price.manage"],
+  ])("rejects purchasable product writes with only %s permission before data reads", async (
+    _label,
+    permission,
+  ) => {
     const deps = dependencies();
-    const { SupplierProductAccessService } = await import(
-      "./supplier-product-access"
-    );
-    const service = new SupplierProductAccessService(deps as never);
-
-    await expect(service.requirePurchasableProductWrite(
-      auth(["supplier.product.manage"]),
-      TENANT_SUPPLIER_ID,
-    )).rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
-    expect(deps.repository.getSettings).not.toHaveBeenCalled();
-    expect(deps.repository.findRelationship).not.toHaveBeenCalled();
-  });
-
-  test("rejects purchasable product writes with only cost-price permission before data reads", async () => {
-    const deps = dependencies();
-    const { SupplierProductAccessService } = await import(
-      "./supplier-product-access"
-    );
-    const service = new SupplierProductAccessService(deps as never);
-
-    await expect(service.requirePurchasableProductWrite(
-      auth(["supplier.cost-price.manage"]),
+    await expect(service(deps).requirePurchasableProductWrite(
+      auth(permission),
       TENANT_SUPPLIER_ID,
     )).rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
     expect(deps.repository.getSettings).not.toHaveBeenCalled();
@@ -122,12 +198,8 @@ describe("SupplierProductAccessService", () => {
 
   test("authorizes purchasable product writes with one settings and relationship read", async () => {
     const deps = dependencies();
-    const { SupplierProductAccessService } = await import(
-      "./supplier-product-access"
-    );
-    const service = new SupplierProductAccessService(deps as never);
 
-    await expect(service.requirePurchasableProductWrite(
+    await expect(service(deps).requirePurchasableProductWrite(
       auth([
         "supplier.product.manage",
         "supplier.cost-price.manage",
@@ -137,58 +209,26 @@ describe("SupplierProductAccessService", () => {
     expect(deps.repository.getSettings).toHaveBeenCalledTimes(1);
     expect(deps.repository.findRelationship).toHaveBeenCalledTimes(1);
   });
-  test("enforces composite SKU permissions and the write relationship gate", async () => {
-    const { SupplierProductAccessService } = await import("./supplier-product-access");
-    const cases = [
-      ["requirePurchasableSkuPriceRead", ["supplier.product.manage", "supplier.cost-price.view"]],
-      ["requirePurchasableSkuWrite", ["supplier.product.manage", "supplier.cost-price.manage"]],
-    ] as const;
-    for (const [method, required] of cases) {
-      for (const partial of required.map((permission) => [permission])) {
-        const deps = dependencies();
-        await expect(new SupplierProductAccessService(deps as never)[method](auth(partial), TENANT_SUPPLIER_ID)).rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
-        expect(deps.repository.getSettings).not.toHaveBeenCalled();
-        expect(deps.repository.findRelationship).not.toHaveBeenCalled();
-      }
-      const deps = dependencies();
-      await expect(new SupplierProductAccessService(deps as never)[method](auth(required), TENANT_SUPPLIER_ID)).resolves.toMatchObject({ tenantSupplierId: TENANT_SUPPLIER_ID });
-      expect(deps.repository.getSettings).toHaveBeenCalledTimes(1);
-      expect(deps.repository.findRelationship).toHaveBeenCalledTimes(1);
-      expect(deps.relationshipAccess).toHaveBeenCalledWith({ relationshipStatus: "active", operation: "write", permissionGranted: true });
-      for (const relationshipStatus of ["suspended", "terminated"] as const) {
-        const inactive = dependencies({ repository: {
-          getSettings: mock(async () => ({ tenant_id: TENANT_ID, module_enabled: true })),
-          findRelationship: mock(async () => ({ ...relationship, relationship_status: relationshipStatus })),
-        } });
-        await expect(new SupplierProductAccessService(inactive as never)[method](auth(required), TENANT_SUPPLIER_ID)).rejects.toMatchObject({ code: "SUPPLIER_ORDER_NOT_ELIGIBLE" });
-        expect(inactive.relationshipAccess).toHaveBeenCalledWith({ relationshipStatus, operation: "write", permissionGranted: true });
-      }
-    }
-  });
+
+  test.each(COMPOSITE_ACCESS_CASES)(
+    "$method requires both permissions and an active write relationship",
+    async (accessCase) => {
+      await assertEachCompositePermissionIsRequired(accessCase);
+      await assertCompositeWriteRelationshipGate(accessCase);
+    },
+  );
+
   test("allows an active tenant-owned private supplier for purchasable product writes", async () => {
-    const deps = dependencies({
-      repository: {
-        getSettings: mock(async () => ({
-          tenant_id: TENANT_ID,
-          module_enabled: true,
-        })),
-        findRelationship: mock(async () => ({
-          ...relationship,
-          supplier: {
-            ...relationship.supplier,
-            ownership_scope: "tenant",
-            owner_tenant_id: TENANT_ID,
-            onboarding_status: "draft",
-            operational_status: "active",
-          },
-        })),
+    const deps = dependenciesWithRelationship({
+      supplier: {
+        ...relationship.supplier,
+        ownership_scope: "tenant",
+        owner_tenant_id: TENANT_ID,
+        onboarding_status: "draft",
+        operational_status: "active",
       },
     });
-    const { SupplierProductAccessService } = await import(
-      "./supplier-product-access"
-    );
-
-    await expect(new SupplierProductAccessService(deps as never)
+    await expect(service(deps)
       .requirePurchasableProductWrite(
         auth([
           "supplier.product.manage",
@@ -204,28 +244,16 @@ describe("SupplierProductAccessService", () => {
   ] as const)(
     "%s platform suppliers have the expected purchasable product eligibility",
     async (onboardingStatus, allowed) => {
-      const deps = dependencies({
-        repository: {
-          getSettings: mock(async () => ({
-            tenant_id: TENANT_ID,
-            module_enabled: true,
-          })),
-          findRelationship: mock(async () => ({
-            ...relationship,
-            supplier: {
-              ...relationship.supplier,
-              ownership_scope: "platform",
-              owner_tenant_id: null,
-              onboarding_status: onboardingStatus,
-              operational_status: "active",
-            },
-          })),
+      const deps = dependenciesWithRelationship({
+        supplier: {
+          ...relationship.supplier,
+          ownership_scope: "platform",
+          owner_tenant_id: null,
+          onboarding_status: onboardingStatus,
+          operational_status: "active",
         },
       });
-      const { SupplierProductAccessService } = await import(
-        "./supplier-product-access"
-      );
-      const result = new SupplierProductAccessService(deps as never)
+      const result = service(deps)
         .requirePurchasableProductWrite(
           auth([
             "supplier.product.manage",
@@ -247,28 +275,25 @@ describe("SupplierProductAccessService", () => {
 
   test("allows cost-price readers to load the product and SKU references needed for pricing", async () => {
     const deps = dependencies();
-    const { SupplierProductAccessService } = await import(
-      "./supplier-product-access"
-    );
-    const service = new SupplierProductAccessService(deps as never);
+    const accessService = service(deps);
 
-    await service.requireProductRead(
+    await accessService.requireProductRead(
       auth("supplier.product.view"),
       TENANT_SUPPLIER_ID,
     );
-    await service.requireProductRead(
+    await accessService.requireProductRead(
       auth("supplier.cost-price.view"),
       TENANT_SUPPLIER_ID,
     );
-    await service.requireProductRead(
+    await accessService.requireProductRead(
       auth("supplier.product.manage"),
       TENANT_SUPPLIER_ID,
     );
-    await service.requirePriceRead(
+    await accessService.requirePriceRead(
       auth("supplier.cost-price.view"),
       TENANT_SUPPLIER_ID,
     );
-    await service.requirePriceRead(
+    await accessService.requirePriceRead(
       auth("supplier.cost-price.manage"),
       TENANT_SUPPLIER_ID,
     );
@@ -302,12 +327,8 @@ describe("SupplierProductAccessService", () => {
 
   test("returns a server-derived supplier proxy scope", async () => {
     const deps = dependencies();
-    const { SupplierProductAccessService } = await import(
-      "./supplier-product-access"
-    );
-    const service = new SupplierProductAccessService(deps as never);
 
-    await expect(service.requireProductWrite(
+    await expect(service(deps).requireProductWrite(
       auth("supplier.product.manage"),
       TENANT_SUPPLIER_ID,
     )).resolves.toEqual({
@@ -325,29 +346,16 @@ describe("SupplierProductAccessService", () => {
   });
 
   test("allows tenant-owned private suppliers to write products without platform onboarding semantics", async () => {
-    const deps = dependencies({
-      repository: {
-        getSettings: mock(async () => ({
-          tenant_id: TENANT_ID,
-          module_enabled: true,
-        })),
-        findRelationship: mock(async () => ({
-          ...relationship,
-          supplier: {
-            ...relationship.supplier,
-            ownership_scope: "tenant",
-            owner_tenant_id: TENANT_ID,
-            onboarding_status: "draft",
-            operational_status: "active",
-          },
-        })),
+    const deps = dependenciesWithRelationship({
+      supplier: {
+        ...relationship.supplier,
+        ownership_scope: "tenant",
+        owner_tenant_id: TENANT_ID,
+        onboarding_status: "draft",
+        operational_status: "active",
       },
     });
-    const { SupplierProductAccessService } = await import(
-      "./supplier-product-access"
-    );
-
-    await expect(new SupplierProductAccessService(deps as never)
+    await expect(service(deps)
       .requireProductWrite(
         auth("supplier.product.manage"),
         TENANT_SUPPLIER_ID,
@@ -355,9 +363,6 @@ describe("SupplierProductAccessService", () => {
   });
 
   test("rejects disabled modules and non-active write relationships", async () => {
-    const { SupplierProductAccessService } = await import(
-      "./supplier-product-access"
-    );
     const disabled = dependencies({
       repository: {
         getSettings: mock(async () => ({
@@ -367,25 +372,16 @@ describe("SupplierProductAccessService", () => {
         findRelationship: mock(async () => relationship),
       },
     });
-    await expect(new SupplierProductAccessService(disabled as never)
+    await expect(service(disabled)
       .requireProductRead(
         auth("supplier.product.view"),
         TENANT_SUPPLIER_ID,
       )).rejects.toMatchObject({ code: "SUPPLIER_MODULE_DISABLED" });
 
-    const suspended = dependencies({
-      repository: {
-        getSettings: mock(async () => ({
-          tenant_id: TENANT_ID,
-          module_enabled: true,
-        })),
-        findRelationship: mock(async () => ({
-          ...relationship,
-          relationship_status: "suspended",
-        })),
-      },
+    const suspended = dependenciesWithRelationship({
+      relationship_status: "suspended",
     });
-    await expect(new SupplierProductAccessService(suspended as never)
+    await expect(service(suspended)
       .requirePriceWrite(
         auth("supplier.cost-price.manage"),
         TENANT_SUPPLIER_ID,
@@ -400,17 +396,9 @@ describe("SupplierProductAccessService", () => {
   ] as const)(
     "allows historical product reads for a %s relationship through the policy",
     async (relationshipStatus) => {
-      const deps = dependencies({
-        repository: {
-          getSettings: mock(async () => ({
-            tenant_id: TENANT_ID,
-            module_enabled: true,
-          })),
-          findRelationship: mock(async () => ({
-            ...relationship,
-            relationship_status: relationshipStatus,
-          })),
-        },
+      const deps = dependenciesWithRelationship({
+        relationship_status: relationshipStatus,
+      }, {
         relationshipAccess: mock(() => ({
           visible: true,
           writable: false,
@@ -418,11 +406,7 @@ describe("SupplierProductAccessService", () => {
           reason: "inactive_relationship" as const,
         })),
       });
-      const { SupplierProductAccessService } = await import(
-        "./supplier-product-access"
-      );
-
-      await expect(new SupplierProductAccessService(deps as never)
+      await expect(service(deps)
         .requireProductRead(
           auth("supplier.product.view"),
           TENANT_SUPPLIER_ID,
@@ -444,11 +428,7 @@ describe("SupplierProductAccessService", () => {
         reason: "inactive_relationship" as const,
       })),
     });
-    const { SupplierProductAccessService } = await import(
-      "./supplier-product-access"
-    );
-
-    await expect(new SupplierProductAccessService(deps as never)
+    await expect(service(deps)
       .requireProductWrite(
         auth("supplier.product.manage"),
         TENANT_SUPPLIER_ID,
@@ -459,23 +439,10 @@ describe("SupplierProductAccessService", () => {
   });
 
   test("maps a foreign tenant relationship to the existing non-disclosing error", async () => {
-    const deps = dependencies({
-      repository: {
-        getSettings: mock(async () => ({
-          tenant_id: TENANT_ID,
-          module_enabled: true,
-        })),
-        findRelationship: mock(async () => ({
-          ...relationship,
-          tenant_id: "30000000-0000-4000-8000-000000000099",
-        })),
-      },
+    const deps = dependenciesWithRelationship({
+      tenant_id: "30000000-0000-4000-8000-000000000099",
     });
-    const { SupplierProductAccessService } = await import(
-      "./supplier-product-access"
-    );
-
-    await expect(new SupplierProductAccessService(deps as never)
+    await expect(service(deps)
       .requireProductRead(
         auth("supplier.product.view"),
         TENANT_SUPPLIER_ID,
