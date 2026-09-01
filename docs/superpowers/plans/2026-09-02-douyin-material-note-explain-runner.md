@@ -197,7 +197,7 @@ index metadata -> public_list -> tenant_keyword_list -> owned_active_list ->
 guard-end -> close
 ```
 
-The fixture preflight resolves exactly one published note and one active installation from `Task10-A-20260902`. The claim preflight resolves exactly one active claim and keeps its subject hash only in memory. Zero claims fails `REPRESENTATIVE_CLAIM_MISSING`; ambiguous fixture/installation fails `INVALID_FIXTURE`.
+The fixture preflight resolves exactly one published note and one active merchant installation from `Task10-A-20260902`. The claim preflight requires at least one active claim, selects the latest by `claimed_at DESC, id DESC LIMIT 1`, and keeps its subject hash only in memory. Zero claims fails `REPRESENTATIVE_CLAIM_MISSING`; ambiguous fixture/installation fails `INVALID_FIXTURE`.
 
 - [ ] **Step 2: Run RED**
 
