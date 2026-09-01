@@ -257,17 +257,24 @@ describe("supplier purchasable SKU atomic command migration", () => {
     );
   });
 
-  test("locks the required active purchase unit on create before any SKU write", () => {
+  test("locks the active purchase and catalog base units on create before any SKU write", () => {
     expectOrdered(command, [
       /FROM public\.supplier_skus AS sku[\s\S]*?FOR UPDATE/,
       /IF p_action = 'create' THEN/,
       /v_purchase_unit_id := \(p_sku ->> 'purchase_unit_id'\)::uuid/,
+      /SELECT purchase_unit\.base_unit_id/,
+      /INTO v_catalog_base_unit_id/,
       /FROM public\.catalog_units AS unit_record/,
-      /unit_record\.id = v_purchase_unit_id/,
-      /unit_record\.status = 'active'/,
+      /unit_record\.id = ANY \(ARRAY\[\s*v_purchase_unit_id,\s*v_catalog_base_unit_id\s*\]\)/,
+      /ORDER BY unit_record\.id/,
       /FOR SHARE/,
+      /purchase_unit\.status = 'active'/,
       /'error_code', 'SUPPLIER_PURCHASABLE_SKU_SAVE_FAILED'/,
       /'reason', 'purchase_unit_not_found'/,
+      /v_locked_catalog_base_unit_id IS DISTINCT FROM v_catalog_base_unit_id/,
+      /v_catalog_base_unit_id IS NOT NULL/,
+      /base_unit\.status = 'active'/,
+      /'reason', 'purchase_unit_base_not_active'/,
       /command_supplier_sku_v3/,
     ]);
 
@@ -280,6 +287,36 @@ describe("supplier purchasable SKU atomic command migration", () => {
 
     expect(unitLockAt).toBeGreaterThanOrEqual(0);
     expect(unitLockAt).toBeLessThan(firstSkuWriteAt);
+  });
+
+  test("locks and validates both current update units in UUID order before writes", () => {
+    expectOrdered(command, [
+      /FROM public\.supplier_skus AS sku[\s\S]*?FOR UPDATE/,
+      /ELSIF p_action = 'update' THEN/,
+      /FROM public\.catalog_units AS unit_record/,
+      /unit_record\.id = ANY \(ARRAY\[\s*v_sku\.purchase_unit_id,\s*v_sku\.base_unit_id\s*\]\)/,
+      /ORDER BY unit_record\.id/,
+      /FOR SHARE/,
+      /v_sku\.purchase_unit_id IS NULL/,
+      /v_sku\.base_unit_id IS NULL/,
+      /purchase_unit\.id = v_sku\.purchase_unit_id/,
+      /purchase_unit\.status = 'active'/,
+      /base_unit\.id = v_sku\.base_unit_id/,
+      /base_unit\.status = 'active'/,
+      /'error_code', 'SUPPLIER_PURCHASABLE_SKU_SAVE_FAILED'/,
+      /'reason', 'current_unit_not_active'/,
+      /command_supplier_sku_v3/,
+    ]);
+
+    const updateUnitGateAt = normalizedCommand.indexOf(
+      "unit_record.id = ANY (ARRAY[ v_sku.purchase_unit_id, v_sku.base_unit_id ])",
+    );
+    const firstSkuWriteAt = normalizedCommand.indexOf(
+      "public.command_supplier_sku_v3(",
+    );
+
+    expect(updateUnitGateAt).toBeGreaterThanOrEqual(0);
+    expect(updateUnitGateAt).toBeLessThan(firstSkuWriteAt);
   });
 
   test("keeps unit conversion changes out of the composite update", () => {

@@ -276,6 +276,8 @@ DECLARE
   v_effective_price_item_id uuid;
   v_price_list_version integer;
   v_purchase_unit_id uuid;
+  v_catalog_base_unit_id uuid;
+  v_locked_catalog_base_unit_id uuid;
   v_unit_price numeric(14, 2);
   v_tax_rate numeric(7, 6);
   v_priced_at timestamptz;
@@ -922,11 +924,25 @@ BEGIN
   IF p_action = 'create' THEN
     v_purchase_unit_id := (p_sku ->> 'purchase_unit_id')::uuid;
 
+    SELECT purchase_unit.base_unit_id
+    INTO v_catalog_base_unit_id
+    FROM public.catalog_units AS purchase_unit
+    WHERE purchase_unit.id = v_purchase_unit_id;
+
     PERFORM unit_record.id
     FROM public.catalog_units AS unit_record
-    WHERE unit_record.id = v_purchase_unit_id
-      AND unit_record.status = 'active'
+    WHERE unit_record.id = ANY (ARRAY[
+      v_purchase_unit_id,
+      v_catalog_base_unit_id
+    ])
+    ORDER BY unit_record.id
     FOR SHARE;
+
+    SELECT purchase_unit.base_unit_id
+    INTO v_locked_catalog_base_unit_id
+    FROM public.catalog_units AS purchase_unit
+    WHERE purchase_unit.id = v_purchase_unit_id
+      AND purchase_unit.status = 'active';
 
     IF NOT FOUND THEN
       RETURN jsonb_build_object(
@@ -934,6 +950,63 @@ BEGIN
         'idempotent', false,
         'error_code', 'SUPPLIER_PURCHASABLE_SKU_SAVE_FAILED',
         'reason', 'purchase_unit_not_found'
+      );
+    END IF;
+
+    IF v_locked_catalog_base_unit_id IS DISTINCT FROM v_catalog_base_unit_id THEN
+      RETURN jsonb_build_object(
+        'status', 'state_conflict',
+        'idempotent', false,
+        'error_code', 'SUPPLIER_PURCHASABLE_SKU_SAVE_FAILED',
+        'reason', 'purchase_unit_base_changed'
+      );
+    END IF;
+
+    IF v_catalog_base_unit_id IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.catalog_units AS base_unit
+        WHERE base_unit.id = v_catalog_base_unit_id
+          AND base_unit.status = 'active'
+      )
+    THEN
+      RETURN jsonb_build_object(
+        'status', 'state_conflict',
+        'idempotent', false,
+        'error_code', 'SUPPLIER_PURCHASABLE_SKU_SAVE_FAILED',
+        'reason', 'purchase_unit_base_not_active'
+      );
+    END IF;
+  ELSIF p_action = 'update' THEN
+    PERFORM unit_record.id
+    FROM public.catalog_units AS unit_record
+    WHERE unit_record.id = ANY (ARRAY[
+      v_sku.purchase_unit_id,
+      v_sku.base_unit_id
+    ])
+    ORDER BY unit_record.id
+    FOR SHARE;
+
+    IF v_sku.purchase_unit_id IS NULL
+      OR v_sku.base_unit_id IS NULL
+      OR NOT EXISTS (
+        SELECT 1
+        FROM public.catalog_units AS purchase_unit
+        WHERE purchase_unit.id = v_sku.purchase_unit_id
+          AND purchase_unit.status = 'active'
+      )
+      OR NOT EXISTS (
+        SELECT 1
+        FROM public.catalog_units AS base_unit
+        WHERE base_unit.id = v_sku.base_unit_id
+          AND base_unit.status = 'active'
+      )
+    THEN
+      RETURN jsonb_build_object(
+        'status', 'state_conflict',
+        'idempotent', false,
+        'error_code', 'SUPPLIER_PURCHASABLE_SKU_SAVE_FAILED',
+        'reason', 'current_unit_not_active'
       );
     END IF;
   END IF;
