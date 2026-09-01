@@ -13,10 +13,10 @@ const SUPPLIER_ID = "30000000-0000-4000-8000-000000000003";
 const USER_ID = "30000000-0000-4000-8000-000000000004";
 const EMPLOYEE_ID = "30000000-0000-4000-8000-000000000005";
 
-function auth(permissions: string | string[]): AuthContext {
-  const permissionCodes = Array.isArray(permissions)
-    ? permissions
-    : [permissions];
+function auth(permissions: string | readonly string[]): AuthContext {
+  const permissionCodes = typeof permissions === "string"
+    ? [permissions]
+    : permissions;
   return {
     authUserId: USER_ID,
     employeeId: EMPLOYEE_ID,
@@ -137,7 +137,34 @@ describe("SupplierProductAccessService", () => {
     expect(deps.repository.getSettings).toHaveBeenCalledTimes(1);
     expect(deps.repository.findRelationship).toHaveBeenCalledTimes(1);
   });
-
+  test("enforces composite SKU permissions and the write relationship gate", async () => {
+    const { SupplierProductAccessService } = await import("./supplier-product-access");
+    const cases = [
+      ["requirePurchasableSkuPriceRead", ["supplier.product.manage", "supplier.cost-price.view"]],
+      ["requirePurchasableSkuWrite", ["supplier.product.manage", "supplier.cost-price.manage"]],
+    ] as const;
+    for (const [method, required] of cases) {
+      for (const partial of required.map((permission) => [permission])) {
+        const deps = dependencies();
+        await expect(new SupplierProductAccessService(deps as never)[method](auth(partial), TENANT_SUPPLIER_ID)).rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
+        expect(deps.repository.getSettings).not.toHaveBeenCalled();
+        expect(deps.repository.findRelationship).not.toHaveBeenCalled();
+      }
+      const deps = dependencies();
+      await expect(new SupplierProductAccessService(deps as never)[method](auth(required), TENANT_SUPPLIER_ID)).resolves.toMatchObject({ tenantSupplierId: TENANT_SUPPLIER_ID });
+      expect(deps.repository.getSettings).toHaveBeenCalledTimes(1);
+      expect(deps.repository.findRelationship).toHaveBeenCalledTimes(1);
+      expect(deps.relationshipAccess).toHaveBeenCalledWith({ relationshipStatus: "active", operation: "write", permissionGranted: true });
+      for (const relationshipStatus of ["suspended", "terminated"] as const) {
+        const inactive = dependencies({ repository: {
+          getSettings: mock(async () => ({ tenant_id: TENANT_ID, module_enabled: true })),
+          findRelationship: mock(async () => ({ ...relationship, relationship_status: relationshipStatus })),
+        } });
+        await expect(new SupplierProductAccessService(inactive as never)[method](auth(required), TENANT_SUPPLIER_ID)).rejects.toMatchObject({ code: "SUPPLIER_ORDER_NOT_ELIGIBLE" });
+        expect(inactive.relationshipAccess).toHaveBeenCalledWith({ relationshipStatus, operation: "write", permissionGranted: true });
+      }
+    }
+  });
   test("allows an active tenant-owned private supplier for purchasable product writes", async () => {
     const deps = dependencies({
       repository: {

@@ -100,6 +100,30 @@ export class SupplierProductAccessService {
     );
   }
 
+  requirePurchasableSkuPriceRead(
+    auth: AuthContext,
+    tenantSupplierId: string,
+  ) {
+    return this.requireScope(
+      auth,
+      tenantSupplierId,
+      ["supplier.product.manage", "supplier.cost-price.view"],
+      true,
+    );
+  }
+
+  requirePurchasableSkuWrite(
+    auth: AuthContext,
+    tenantSupplierId: string,
+  ) {
+    return this.requireScope(
+      auth,
+      tenantSupplierId,
+      ["supplier.product.manage", "supplier.cost-price.manage"],
+      true,
+    );
+  }
+
   requirePriceRead(
     auth: AuthContext,
     tenantSupplierId: string,
