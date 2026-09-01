@@ -1,7 +1,6 @@
 import { beforeAll, describe, expect, mock, test } from 'bun:test';
 import { Errors } from '@/errors/error-factory';
 import type { AuthContext } from '@/services/authorization';
-
 process.env.SUPABASE_URL ??= 'http://127.0.0.1:54321';
 process.env.SUPABASE_PUBLISH ??= 'test-publish-key';
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= 'test-service-role-key';
@@ -11,7 +10,6 @@ beforeAll(async () => {
     './tenant-douyin-material-notes'
   ));
 });
-
 const TENANT_ID = '11111111-1111-4111-8111-111111111111';
 const AUTH_TENANT_ID = '99999999-9999-4999-8999-999999999999';
 const NOTE_ID = '22222222-2222-4222-8222-222222222222';
@@ -325,24 +323,9 @@ describe('TenantDouyinMaterialNotesService access and mapping', () => {
     }
   });
 
-  test('rejects an impossible non-empty version page with zero total', async () => {
-    const context = fixture({
-      listVersions: mock(async () => ({ rows: [versionSummary], total: 0 })),
-    });
-    await expect(context.service.listVersions(
-      auth(['douyin_material_note.read']),
-      NOTE_ID,
-      { page: 1, pageSize: 20 },
-    )).rejects.toMatchObject({
-      statusCode: 500,
-      code: 'MATERIAL_NOTE_RESPONSE_INVALID',
-    });
-  });
-
-  test('returns total-zero empty tenant and version pages after the last page', async () => {
+  test('returns a total-zero empty tenant page after the last page', async () => {
     const context = fixture({
       listTenant: mock(async () => ({ rows: [], total: 0 })),
-      listVersions: mock(async () => ({ rows: [], total: 0 })),
     });
     const user = auth(['douyin_material_note.read']);
     await expect(context.service.list(user, { page: 2, pageSize: 20 }))
@@ -350,13 +333,32 @@ describe('TenantDouyinMaterialNotesService access and mapping', () => {
         list: [],
         pagination: { page: 2, pageSize: 20, total: 0, totalPages: 0 },
       });
+  });
+
+  test('returns 404 for a total-zero version page regardless of page number', async () => {
+    const context = fixture({
+      listVersions: mock(async () => ({ rows: [], total: 0 })),
+    });
     await expect(context.service.listVersions(
-      user,
+      auth(['douyin_material_note.read']),
+      NOTE_ID,
+      { page: 2, pageSize: 20 },
+    )).rejects.toMatchObject({
+      statusCode: 404,
+      code: 'MATERIAL_NOTE_NOT_FOUND',
+    });
+  });
+  test('returns an empty version page past the end when the note exists', async () => {
+    const context = fixture({
+      listVersions: mock(async () => ({ rows: [], total: 1 })),
+    });
+    await expect(context.service.listVersions(
+      auth(['douyin_material_note.read']),
       NOTE_ID,
       { page: 2, pageSize: 20 },
     )).resolves.toEqual({
       list: [],
-      pagination: { page: 2, pageSize: 20, total: 0, totalPages: 0 },
+      pagination: { page: 2, pageSize: 20, total: 1, totalPages: 1 },
     });
   });
 
