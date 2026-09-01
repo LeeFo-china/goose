@@ -216,6 +216,32 @@ describe("supplier purchasable SKU atomic command migration", () => {
     expect(normalizedCommand).toContain("command_supplier_price_list_v2(");
   });
 
+  test("locks the final active purchase unit before any SKU child write", () => {
+    expectOrdered(command, [
+      /FROM public\.supplier_skus AS sku[\s\S]*?FOR UPDATE/,
+      /v_purchase_unit_id := CASE/,
+      /WHEN p_sku \? 'purchase_unit_id'[\s\S]*?\(p_sku ->> 'purchase_unit_id'\)::uuid/,
+      /ELSE v_sku\.purchase_unit_id/,
+      /FROM public\.catalog_units AS unit_record/,
+      /unit_record\.id = v_purchase_unit_id/,
+      /unit_record\.status = 'active'/,
+      /FOR SHARE/,
+      /'error_code', 'SUPPLIER_PURCHASABLE_SKU_SAVE_FAILED'/,
+      /'reason', 'purchase_unit_not_found'/,
+      /command_supplier_sku_v3/,
+    ]);
+
+    const unitLockAt = normalizedCommand.indexOf(
+      "FROM public.catalog_units AS unit_record",
+    );
+    const firstSkuWriteAt = normalizedCommand.indexOf(
+      "public.command_supplier_sku_v3(",
+    );
+
+    expect(unitLockAt).toBeGreaterThanOrEqual(0);
+    expect(unitLockAt).toBeLessThan(firstSkuWriteAt);
+  });
+
   test("enforces tenant-owned SKU lifecycle and exact optimistic concurrency", () => {
     expect(normalizedCommand).toContain(
       "product.ownership_scope = 'tenant' AND product.owner_tenant_id = p_tenant_id",

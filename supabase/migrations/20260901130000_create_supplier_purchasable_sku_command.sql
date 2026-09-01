@@ -672,6 +672,27 @@ BEGIN
     );
   END IF;
 
+  v_purchase_unit_id := CASE
+    WHEN p_sku ? 'purchase_unit_id'
+      THEN (p_sku ->> 'purchase_unit_id')::uuid
+    ELSE v_sku.purchase_unit_id
+  END;
+
+  PERFORM unit_record.id
+  FROM public.catalog_units AS unit_record
+  WHERE unit_record.id = v_purchase_unit_id
+    AND unit_record.status = 'active'
+  FOR SHARE;
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object(
+      'status', 'state_conflict',
+      'idempotent', false,
+      'error_code', 'SUPPLIER_PURCHASABLE_SKU_SAVE_FAILED',
+      'reason', 'purchase_unit_not_found'
+    );
+  END IF;
+
   PERFORM pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended(
       'supplier-price-series:' || p_tenant_id::text || ':' ||
