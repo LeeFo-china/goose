@@ -340,6 +340,12 @@ export const tenantNavGroups: AdminMenuGroup[] = [
         permission: "douyin_lead.read",
       },
       {
+        href: "/douyin-miniapp/materials",
+        label: "资料笔记",
+        icon: Newspaper,
+        permission: "douyin_material_note.read",
+      },
+      {
         href: "/douyin-miniapp/projects",
         label: "项目实景内容",
         icon: Images,

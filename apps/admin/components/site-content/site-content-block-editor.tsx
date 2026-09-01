@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { SiteContentDraftBlock } from "@gooes/domain";
 import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
 
@@ -23,14 +23,26 @@ const blockLabels: Record<SiteContentDraftBlock["type"], string> = {
   "gallery": "画廊",
 };
 
-const blockOptions = Object.entries(blockLabels).map(([value, label]) => ({ value, label }));
+const allBlockTypes = Object.keys(blockLabels) as SiteContentDraftBlock["type"][];
+const allBlockOptions = Object.entries(blockLabels).map(([value, label]) => ({ value, label }));
+
+export function resolveAllowedSiteContentBlockTypes(
+  allowedTypes?: readonly SiteContentDraftBlock["type"][],
+): SiteContentDraftBlock["type"][] {
+  if (!allowedTypes) return [...allBlockTypes];
+  const allowed = new Set(allowedTypes);
+  const resolved = allowedTypes.filter((type, index) =>
+    allowed.has(type) && allowedTypes.indexOf(type) === index && type in blockLabels
+  );
+  return resolved.length > 0 ? resolved : [...allBlockTypes];
+}
 
 export function createEmptySiteContentBlock(type: SiteContentDraftBlock["type"]): SiteContentDraftBlock {
   switch (type) {
     case "paragraph": return { type, text: "" };
     case "heading": return { type, level: 2, text: "" };
     case "image": return { type, fileId: "", alt: "" };
-    case "quote": return { type, text: "", attribution: "" };
+    case "quote": return { type, text: "" };
     case "list": return { type, style: "unordered", items: [""] };
     case "callout": return { type, tone: "info", title: "", text: "" };
     case "metrics": return { type, items: [{ label: "", value: "" }] };
@@ -42,19 +54,34 @@ export function SiteContentBlockEditor({
   blocks,
   disabled,
   uploadLocked,
+  allowedTypes,
   onChange,
   onUploadStateChange,
 }: {
   blocks: SiteContentDraftBlock[];
   disabled?: boolean;
   uploadLocked?: boolean;
+  allowedTypes?: readonly SiteContentDraftBlock["type"][];
   onChange: (blocks: SiteContentDraftBlock[]) => void;
   onUploadStateChange?: (uploadId: string, uploading: boolean) => void;
 }) {
-  const [nextType, setNextType] = useState<SiteContentDraftBlock["type"]>("paragraph");
+  const allowedBlockTypes = useMemo(
+    () => resolveAllowedSiteContentBlockTypes(allowedTypes),
+    [allowedTypes],
+  );
+  const blockOptions = allBlockOptions.filter((option) =>
+    allowedBlockTypes.includes(option.value as SiteContentDraftBlock["type"])
+  );
+  const [nextType, setNextType] = useState<SiteContentDraftBlock["type"]>(
+    allowedBlockTypes.includes("paragraph") ? "paragraph" : allowedBlockTypes[0]!,
+  );
   const nextClientKey = useRef(blocks.length);
   const [clientKeys, setClientKeys] = useState(() => blocks.map((_, index) => `block-${index}`));
   const [openItems, setOpenItems] = useState(() => new Set<string>(clientKeys[0] ? [clientKeys[0]] : []));
+
+  useEffect(() => {
+    if (!allowedBlockTypes.includes(nextType)) setNextType(allowedBlockTypes[0]!);
+  }, [allowedBlockTypes, nextType]);
 
   function replace(clientKey: string, block: SiteContentDraftBlock) {
     const index = clientKeys.indexOf(clientKey);
