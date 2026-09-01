@@ -8,7 +8,12 @@ BEGIN;
 SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '30s';
 
+LOCK TABLE public.marketing_events IN ACCESS EXCLUSIVE MODE;
+
 DO $migration$
+DECLARE
+  v_expected_definition CONSTANT text :=
+    'CHECK (event_name = ANY (ARRAY[''page_view''::text, ''button_click''::text, ''phone_click''::text, ''form_submit''::text, ''app_launch''::text, ''case_view''::text, ''site_view''::text, ''lead_cta_click''::text, ''sms_send''::text, ''lead_submit''::text, ''lead_submit_success''::text, ''phone_call_click''::text, ''material_preview''::text, ''material_claim''::text, ''material_copy''::text, ''material_budget_click''::text, ''material_lead_click''::text]))';
 BEGIN
   IF NOT EXISTS (
     SELECT 1
@@ -25,6 +30,11 @@ BEGIN
         'marketing_events_event_name_check_material_notes'
       AND constraint_definition.contype = 'c'
       AND constraint_definition.convalidated
+      AND pg_catalog.regexp_replace(
+        pg_catalog.pg_get_constraintdef(constraint_definition.oid, true),
+        ' NOT VALID$',
+        ''
+      ) = v_expected_definition
   ) THEN
     RAISE EXCEPTION USING
       ERRCODE = 'P0001',
