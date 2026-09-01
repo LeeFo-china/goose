@@ -12,6 +12,9 @@ export const DOUYIN_ENTRY_PATH_VALUES = [
   'pages/qa/index',
   'pages/lead/index',
   'pages/lead-success/index',
+  'pages/materials/index',
+  'pages/material-detail/index',
+  'pages/my-materials/index',
 ] as const;
 
 export const DouyinEntryPathSchema = z.enum(DOUYIN_ENTRY_PATH_VALUES);
@@ -49,6 +52,11 @@ export const DOUYIN_MARKETING_EVENT_VALUES = [
   'lead_submit',
   'lead_submit_success',
   'phone_call_click',
+  'material_preview',
+  'material_claim',
+  'material_copy',
+  'material_budget_click',
+  'material_lead_click',
 ] as const;
 
 export const DOUYIN_PHONE_CAPTURE_MODE_VALUES = ['sms'] as const;

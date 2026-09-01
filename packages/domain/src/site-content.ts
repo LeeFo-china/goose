@@ -57,38 +57,48 @@ const SiteContentMetricSchema = z.strictObject({
   value: NonEmptyShortTextSchema,
 });
 
+export const SiteContentDraftParagraphBlockSchema = z.strictObject({
+  type: z.literal('paragraph'),
+  text: NonEmptyTextSchema,
+});
+
+export const SiteContentDraftHeadingBlockSchema = z.strictObject({
+  type: z.literal('heading'),
+  level: z.union([z.literal(2), z.literal(3)]),
+  text: NonEmptyShortTextSchema,
+});
+
+export const SiteContentDraftQuoteBlockSchema = z.strictObject({
+  type: z.literal('quote'),
+  text: NonEmptyTextSchema,
+  attribution: NonEmptyShortTextSchema.optional(),
+});
+
+export const SiteContentDraftListBlockSchema = z.strictObject({
+  type: z.literal('list'),
+  style: z.enum(['ordered', 'unordered']),
+  items: z
+    .array(NonEmptyListItemSchema)
+    .min(1)
+    .max(MAX_LIST_ITEM_COUNT),
+});
+
+export const SiteContentDraftCalloutBlockSchema = z.strictObject({
+  type: z.literal('callout'),
+  tone: z.enum(['info', 'warning']),
+  title: NonEmptyShortTextSchema,
+  text: NonEmptyTextSchema,
+});
+
 export const SiteContentDraftBlockSchema = z.discriminatedUnion('type', [
-  z.strictObject({
-    type: z.literal('paragraph'),
-    text: NonEmptyTextSchema,
-  }),
-  z.strictObject({
-    type: z.literal('heading'),
-    level: z.union([z.literal(2), z.literal(3)]),
-    text: NonEmptyShortTextSchema,
-  }),
+  SiteContentDraftParagraphBlockSchema,
+  SiteContentDraftHeadingBlockSchema,
   SiteContentDraftImageSchema.extend({
     type: z.literal('image'),
   }),
-  z.strictObject({
-    type: z.literal('quote'),
-    text: NonEmptyTextSchema,
-    attribution: NonEmptyShortTextSchema.optional(),
-  }),
-  z.strictObject({
-    type: z.literal('list'),
-    style: z.enum(['ordered', 'unordered']),
-    items: z
-      .array(NonEmptyListItemSchema)
-      .min(1)
-      .max(MAX_LIST_ITEM_COUNT),
-  }),
-  z.strictObject({
-    type: z.literal('callout'),
-    tone: z.enum(['info', 'warning']),
-    title: NonEmptyShortTextSchema,
-    text: NonEmptyTextSchema,
-  }),
+  SiteContentDraftQuoteBlockSchema,
+  SiteContentDraftListBlockSchema,
+  SiteContentDraftCalloutBlockSchema,
   z.strictObject({
     type: z.literal('metrics'),
     items: z.array(SiteContentMetricSchema).min(1).max(MAX_METRIC_COUNT),

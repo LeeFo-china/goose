@@ -94,9 +94,26 @@ describe('Douyin miniapp domain contracts', () => {
   });
 
   test('keeps every cold-start mini-program page in one canonical entry schema', () => {
-    expect(DOUYIN_ENTRY_PATH_VALUES).toContain('pages/budget/index');
-    expect(DOUYIN_ENTRY_PATH_VALUES).toContain('pages/qa/index');
+    expect(DOUYIN_ENTRY_PATH_VALUES).toEqual([
+      'pages/home/index',
+      'pages/company/index',
+      'pages/privacy/index',
+      'pages/cases/index',
+      'pages/case-detail/index',
+      'pages/sites/index',
+      'pages/site-detail/index',
+      'pages/budget/index',
+      'pages/qa/index',
+      'pages/lead/index',
+      'pages/lead-success/index',
+      'pages/materials/index',
+      'pages/material-detail/index',
+      'pages/my-materials/index',
+    ]);
     expect(DouyinEntryPathSchema.safeParse('pages/budget/index').success).toBe(true);
+    expect(DouyinEntryPathSchema.safeParse('pages/materials/index').success).toBe(true);
+    expect(DouyinEntryPathSchema.safeParse('pages/material-detail/index').success).toBe(true);
+    expect(DouyinEntryPathSchema.safeParse('pages/my-materials/index').success).toBe(true);
     expect(DouyinEntryPathSchema.safeParse('pages/admin/index').success).toBe(false);
   });
 
@@ -147,6 +164,11 @@ describe('Douyin miniapp domain contracts', () => {
       'lead_submit',
       'lead_submit_success',
       'phone_call_click',
+      'material_preview',
+      'material_claim',
+      'material_copy',
+      'material_budget_click',
+      'material_lead_click',
     ]);
     expect(DOUYIN_MARKETING_EVENT_VALUES).toContain('lead_submit_success');
     expect(DOUYIN_PHONE_CAPTURE_MODE_VALUES).toEqual(['sms']);

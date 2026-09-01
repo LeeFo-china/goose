@@ -164,6 +164,36 @@ describe("domain permissions", () => {
     }
   });
 
+  test("exposes tenant Douyin material note permissions", () => {
+    const expectedPermissions = {
+      "douyin_material_note.read": {
+        label: "查看抖音资料",
+        module: "douyin_miniapp",
+        resource: "douyin_material_note",
+        action: "read",
+      },
+      "douyin_material_note.manage": {
+        label: "管理抖音资料",
+        module: "douyin_miniapp",
+        resource: "douyin_material_note",
+        action: "manage",
+      },
+      "douyin_material_note.publish": {
+        label: "发布抖音资料",
+        module: "douyin_miniapp",
+        resource: "douyin_material_note",
+        action: "publish",
+      },
+    } as const;
+
+    for (const code of Object.keys(expectedPermissions) as Array<
+      keyof typeof expectedPermissions
+    >) {
+      expect(PERMISSION_CODE_VALUES).toContain(code);
+      expect(PermissionCodeConfig[code]).toEqual(expectedPermissions[code]);
+    }
+  });
+
   test("exposes tenant onboarding workflow permissions", () => {
     expect(PermissionCodeConfig["platform.tenant_onboarding.review"]).toEqual({
       label: "审核装企入驻",
