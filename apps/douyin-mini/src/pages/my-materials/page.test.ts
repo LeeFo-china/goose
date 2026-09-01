@@ -110,8 +110,12 @@ test("hide-show waits for pending remove and clear settlement before the latest 
       await mutation.promise;
       serverHasItem = false;
     });
+    const navigateToOwnedMaterialDetail = mock(async () => undefined);
+    const navigateToPage = mock(async () => undefined);
+    const stopPullDownRefresh = mock(() => undefined);
     const page = makePage({
       modals, fetchOwnedMaterials, removeOwnedMaterial, clearOwnedMaterials, toasts,
+      navigateToOwnedMaterialDetail, navigateToPage, stopPullDownRefresh,
     });
     page.onLoad();
     await flush();
@@ -138,6 +142,18 @@ test("hide-show waits for pending remove and clear settlement before the latest 
       .toHaveBeenCalledTimes(1);
     expect(fetchOwnedMaterials).toHaveBeenCalledTimes(1);
 
+    page.onMaterialSelect({ detail: { claimId: item.claim_id } });
+    page.onBrowseMaterials();
+    page.onPullDownRefresh();
+    page.onReachBottom();
+    page.onRetry();
+    page.onLoadMore();
+    await flush();
+    expect(navigateToOwnedMaterialDetail).not.toHaveBeenCalled();
+    expect(navigateToPage).not.toHaveBeenCalled();
+    expect(stopPullDownRefresh).toHaveBeenCalledTimes(1);
+    expect(fetchOwnedMaterials).toHaveBeenCalledTimes(1);
+
     mutation.resolve();
     await flush();
     await flush();
@@ -146,6 +162,11 @@ test("hide-show waits for pending remove and clear settlement before the latest 
     expect(command === "remove" ? removeOwnedMaterial : clearOwnedMaterials)
       .toHaveBeenCalledTimes(1);
     expect(toasts).toEqual([]);
+
+    page.onMaterialSelect({ detail: { claimId: item.claim_id } });
+    expect(navigateToOwnedMaterialDetail).not.toHaveBeenCalled();
+    page.onBrowseMaterials();
+    expect(navigateToPage).toHaveBeenCalledTimes(1);
   }
 });
 
@@ -157,8 +178,12 @@ test("hide-show refreshes after a rejected old mutation without old side effects
     const removeOwnedMaterial = mock(() => mutation.promise);
     const clearOwnedMaterials = mock(() => mutation.promise);
     const toasts: string[] = [];
+    const navigateToOwnedMaterialDetail = mock(async () => undefined);
+    const navigateToPage = mock(async () => undefined);
+    const stopPullDownRefresh = mock(() => undefined);
     const page = makePage({
       modals, fetchOwnedMaterials, removeOwnedMaterial, clearOwnedMaterials, toasts,
+      navigateToOwnedMaterialDetail, navigateToPage, stopPullDownRefresh,
     });
     page.onLoad();
     await flush();
@@ -179,12 +204,33 @@ test("hide-show refreshes after a rejected old mutation without old side effects
     }
     expect(modals).toHaveLength(1);
     expect(fetchOwnedMaterials).toHaveBeenCalledTimes(1);
+    page.onMaterialSelect({ detail: { claimId: item.claim_id } });
+    page.onBrowseMaterials();
+    page.onPullDownRefresh();
+    page.onReachBottom();
+    page.onRetry();
+    page.onLoadMore();
+    await flush();
+    expect(navigateToOwnedMaterialDetail).not.toHaveBeenCalled();
+    expect(navigateToPage).not.toHaveBeenCalled();
+    expect(stopPullDownRefresh).toHaveBeenCalledTimes(1);
+    expect(fetchOwnedMaterials).toHaveBeenCalledTimes(1);
     mutation.reject(new Error(`${command} rejected`));
     await flush();
     await flush();
     expect(fetchOwnedMaterials).toHaveBeenCalledTimes(2);
     expect(page.data.items).toHaveLength(1);
     expect(toasts).toEqual([]);
+    expect(page.data.mutating).toBe(false);
+
+    page.onMaterialSelect({ detail: { claimId: item.claim_id } });
+    page.onBrowseMaterials();
+    expect(navigateToOwnedMaterialDetail).toHaveBeenCalledTimes(1);
+    expect(navigateToPage).toHaveBeenCalledTimes(1);
+    page.onPullDownRefresh();
+    await flush();
+    expect(fetchOwnedMaterials).toHaveBeenCalledTimes(3);
+    expect(stopPullDownRefresh).toHaveBeenCalledTimes(2);
   }
 });
 
@@ -263,6 +309,9 @@ function makePage(options: {
   removeOwnedMaterial?: ReturnType<typeof mock>;
   clearOwnedMaterials?: ReturnType<typeof mock>;
   toasts?: string[];
+  navigateToOwnedMaterialDetail?: (claimId: string) => Promise<void>;
+  navigateToPage?: (path: string) => Promise<void>;
+  stopPullDownRefresh?: () => void;
 }) {
   const definition = createMyMaterialsPageDefinition({
     getApp: () => ({
@@ -272,13 +321,14 @@ function makePage(options: {
     fetchOwnedMaterials: options.fetchOwnedMaterials ?? mock(async () => response([item])),
     removeOwnedMaterial: options.removeOwnedMaterial ?? mock(async () => undefined),
     clearOwnedMaterials: options.clearOwnedMaterials ?? mock(async () => undefined),
-    navigateToOwnedMaterialDetail: async () => undefined,
-    navigateToPage: async () => undefined,
+    navigateToOwnedMaterialDetail: options.navigateToOwnedMaterialDetail
+      ?? (async () => undefined),
+    navigateToPage: options.navigateToPage ?? (async () => undefined),
     showModal: (modal: { success(result: { confirm: boolean }): void }) => {
       options.modals.push(modal);
     },
     showToast: (toast: { title: string }) => options.toasts?.push(toast.title),
-    stopPullDownRefresh: () => undefined,
+    stopPullDownRefresh: options.stopPullDownRefresh ?? (() => undefined),
   } as never);
   const setData = mock((patch: Record<string, unknown>) => Object.assign(definition.data, patch));
   return Object.assign(definition, { setData });

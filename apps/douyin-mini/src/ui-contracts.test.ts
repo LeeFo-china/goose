@@ -269,6 +269,11 @@ test("material claim experience keeps three non-tab pages and safe home entrance
   expect(homeTemplate).toContain("我的资料");
   expect(materialsTemplate).toContain("我的资料");
   expect(ownedTemplate).toContain('bindtap="onBrowseMaterials"');
+  expect(ownedTemplate).toMatch(
+    /class="browse-action[^\"]*"[^>]*disabled="{{mutating}}"/,
+  );
+  expect(ownedTemplate).toContain('aria-disabled="{{mutating}}"');
+  expect(ownedTemplate).toContain("{{mutationLockedClass}}");
   expect(`${materialsTemplate}\n${ownedTemplate}`).toContain("pagination-loader");
   expect(detailTemplate).toContain("免费领取");
   expect(detailTemplate).toContain("复制全文");

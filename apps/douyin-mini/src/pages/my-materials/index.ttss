@@ -8,6 +8,8 @@
 .clear-action { color: #8e1b13; }
 .owned-list { display: flex; flex-direction: column; gap: 24rpx; margin-top: 28rpx; }
 .owned-item { overflow: hidden; border-radius: 16rpx; background: #fff; }
+.owned-card-interaction { transition: opacity 160ms ease; }
+.owned-item--locked .owned-card-interaction { pointer-events: none; opacity: 0.58; }
 .item-actions { display: flex; justify-content: flex-end; gap: 12rpx; padding: 8rpx 18rpx 18rpx; }
 .item-action { min-height: 88rpx; margin: 0; padding: 0 18rpx; background: transparent; color: #625f5b; font-size: 23rpx; line-height: 88rpx; }
 .item-action--danger { color: #8e1b13; }

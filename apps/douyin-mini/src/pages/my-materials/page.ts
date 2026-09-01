@@ -39,7 +39,8 @@ export function createMyMaterialsPageDefinition(dependencies: MyMaterialsPageDep
     data: {
       items: [] as OwnedMaterialPageState["pagination"]["items"],
       firstLoading: true, firstError: false, empty: false, paginationStatus: "idle",
-      mutating: false, primaryColor: "#191817", primaryTextColor: "#FFFFFF",
+      mutating: false, mutationLockedClass: "",
+      primaryColor: "#191817", primaryTextColor: "#FFFFFF",
     },
     onLoad() { if (this.lifecycle.onLoad()) void this.initialize(); },
     onShow() {
@@ -60,8 +61,14 @@ export function createMyMaterialsPageDefinition(dependencies: MyMaterialsPageDep
       this.confirmationSequence += 1;
       this.pageState = cancelOwnedMutation(this.pageState);
     },
-    onReachBottom() { void this.load("loadMore"); },
-    onPullDownRefresh() { void this.load("refresh"); },
+    onReachBottom() { this.loadFromUser("loadMore"); },
+    onPullDownRefresh() {
+      if (this.isMutationLocked()) {
+        dependencies.stopPullDownRefresh();
+        return;
+      }
+      void this.load("refresh", true);
+    },
     async initialize() {
       const authority = this.lifecycle.beginOperation();
       if (!authority) return;
@@ -77,16 +84,16 @@ export function createMyMaterialsPageDefinition(dependencies: MyMaterialsPageDep
         if (this.lifecycle.isCurrent(authority)) this.setData({ firstLoading: false, firstError: true });
       }
     },
-    async load(mode: "loadMore" | "refresh" | "retry") {
+    async load(mode: "loadMore" | "refresh" | "retry", stopPullDown = false) {
       const authority = this.lifecycle.beginOperation();
       if (!authority) return;
       if (!this.featureReady) {
-        if (mode === "refresh") dependencies.stopPullDownRefresh();
+        if (stopPullDown) dependencies.stopPullDownRefresh();
         return;
       }
       const pending = beginOwnedListLoad(this.pageState, mode);
       if (!pending) {
-        if (mode === "refresh") dependencies.stopPullDownRefresh();
+        if (stopPullDown) dependencies.stopPullDownRefresh();
         return;
       }
       this.pageState = pending.state;
@@ -103,7 +110,7 @@ export function createMyMaterialsPageDefinition(dependencies: MyMaterialsPageDep
       } finally {
         if (this.lifecycle.isCurrent(authority)) {
           this.syncState();
-          if (mode === "refresh") dependencies.stopPullDownRefresh();
+          if (stopPullDown) dependencies.stopPullDownRefresh();
         }
       }
     },
@@ -118,23 +125,35 @@ export function createMyMaterialsPageDefinition(dependencies: MyMaterialsPageDep
       this.mutationNeedsReconcile = false;
       this.syncState();
     },
+    isMutationLocked() {
+      return this.pageState.mutation !== null
+        || this.mutationSettlement !== null
+        || this.mutationNeedsReconcile
+        || this.activeConfirmation !== null;
+    },
+    loadFromUser(mode: "loadMore" | "retry") {
+      if (this.isMutationLocked()) return;
+      void this.load(mode);
+    },
     syncState() {
       if (!this.lifecycle.beginOperation()) return;
+      const mutating = this.isMutationLocked();
       this.setData({
         items: this.pageState.pagination.items.map((value) => ({ ...value, claimed: true })),
         firstLoading: this.pageState.view.firstLoading, firstError: this.pageState.view.firstError,
         empty: this.pageState.view.empty, paginationStatus: this.pageState.view.paginationStatus,
-        mutating: this.pageState.mutation !== null
-          || this.mutationSettlement !== null
-          || this.mutationNeedsReconcile,
+        mutating,
+        mutationLockedClass: mutating ? "owned-item--locked" : "",
       });
     },
-    onRetry() { void this.load("retry"); },
-    onLoadMore() { void this.load("loadMore"); },
+    onRetry() { this.loadFromUser("retry"); },
+    onLoadMore() { this.loadFromUser("loadMore"); },
     onMaterialSelect(event: { detail: { claimId?: string } }) {
-      if (event.detail.claimId) {
-        this.navigateWithFeedback(dependencies.navigateToOwnedMaterialDetail(event.detail.claimId));
-      }
+      if (this.isMutationLocked()) return;
+      const claimId = event.detail.claimId;
+      if (!claimId
+        || !this.pageState.pagination.items.some((value) => value.claim_id === claimId)) return;
+      this.navigateWithFeedback(dependencies.navigateToOwnedMaterialDetail(claimId));
     },
     onConfirmRemove(event: { currentTarget: { dataset: { claimid?: string } } }) {
       const claimId = event.currentTarget.dataset.claimid;
@@ -157,18 +176,17 @@ export function createMyMaterialsPageDefinition(dependencies: MyMaterialsPageDep
       command: OwnedMutationCommand,
       copy: Pick<ModalOptions, "title" | "content" | "confirmText" | "cancelText">,
     ) {
-      if (this.pageState.mutation
-        || this.mutationSettlement
-        || this.mutationNeedsReconcile
-        || this.activeConfirmation) return;
+      if (this.isMutationLocked()) return;
       const authority = this.lifecycle.beginOperation();
       if (!authority) return;
       const token = { sequence: this.confirmationSequence + 1, command };
       this.confirmationSequence = token.sequence;
       this.activeConfirmation = token;
+      this.syncState();
       const release = () => {
         if (this.activeConfirmation !== token) return false;
         this.activeConfirmation = null;
+        this.syncState();
         return true;
       };
       try {
@@ -186,7 +204,7 @@ export function createMyMaterialsPageDefinition(dependencies: MyMaterialsPageDep
       }
     },
     async executeMutation(command: OwnedMutationCommand) {
-      if (this.mutationSettlement || this.mutationNeedsReconcile) return;
+      if (this.isMutationLocked()) return;
       const authority = this.lifecycle.beginOperation();
       if (!authority) return;
       const pending = beginOwnedMutation(this.pageState, command);
@@ -245,6 +263,7 @@ export function createMyMaterialsPageDefinition(dependencies: MyMaterialsPageDep
       }
     },
     onBrowseMaterials() {
+      if (this.isMutationLocked()) return;
       this.navigateWithFeedback(dependencies.navigateToPage("pages/materials/index"));
     },
     navigateWithFeedback(promise: Promise<void>) {
