@@ -30,6 +30,13 @@ const NOTE_ID = "11111111-1111-4111-8111-111111111111";
 const CLAIM_ID = "22222222-2222-4222-8222-222222222222";
 const UPPER_NOTE_ID = "A1111111-B111-4111-8111-11111111111A";
 const UPPER_CLAIM_ID = "B2222222-C222-4222-8222-22222222222B";
+const CANONICAL_UUIDS = [
+  ...Array.from({ length: 8 }, (_, index) => (
+    `A000000${index + 1}-B000-${index + 1}000-8000-00000000000${index + 1}`
+  )),
+  "00000000-0000-0000-0000-000000000000",
+  "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF",
+] as const;
 const PUBLISHED_AT = "2026-09-01T08:00:00.000Z";
 const CLAIMED_AT = "2026-09-01T08:30:00.000Z";
 
@@ -465,6 +472,19 @@ describe("Douyin material API client", () => {
       `/douyin-mini/material-notes/${UPPER_NOTE_ID.toLowerCase()}/claim`,
       `/douyin-mini/my-material-notes/${UPPER_CLAIM_ID.toLowerCase()}`,
     ]);
+  });
+
+  test("matches zod uuid acceptance for v1-v8, nil and max material ids", async () => {
+    const calls: TransportInput[] = [];
+    for (const id of CANONICAL_UUIDS) {
+      await expect(fetchMaterialPreview(clientWith((input) => {
+        calls.push(input);
+        return { ...preview, id };
+      }), id)).resolves.toMatchObject({ id: id.toLowerCase() });
+    }
+    expect(calls.map((call) => call.path)).toEqual(CANONICAL_UUIDS.map(
+      (id) => `/douyin-mini/material-notes/${id.toLowerCase()}`,
+    ));
   });
 
   test("normalizes every typed material business error and no unrelated error", () => {
