@@ -35,7 +35,7 @@ describe("supplier purchasable SKU smoke command", () => {
       username: "fixture-user",
       password: "fixture-password",
       tls: true,
-      url: "postgresql://api-dev.goodcms.cn:5432?sslmode=require",
+      url: DATABASE_URL,
     });
     expect(config).not.toHaveProperty("databaseUrl");
     expect(config.redactedDatabaseUrl).toBe(

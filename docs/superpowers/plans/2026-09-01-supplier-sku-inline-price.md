@@ -1158,6 +1158,9 @@ git commit -m "test(admin): 覆盖 SKU 即时价格流程"
 - Create: `apps/api/src/scripts/supplier-purchasable-sku-smoke.ts`
 - Create: `apps/api/src/scripts/supplier-purchasable-sku-explain.test.ts`
 - Create: `apps/api/src/scripts/supplier-purchasable-sku-explain.ts`
+- Create: `apps/api/src/scripts/supplier-purchasable-sku-development-database.test.ts`
+- Create: `apps/api/src/scripts/supplier-purchasable-sku-dev-direct.test.ts`
+- Create: `apps/api/src/scripts/supplier-purchasable-sku-dev-direct.ts`
 - Modify: `apps/api/package.json`
 - Modify after migration application: `apps/api/src/types/database.ts`
 
@@ -1180,6 +1183,8 @@ Assert that smoke output redacts credentials and returns a structured summary co
 
 ```bash
 cd apps/api && bun test \
+  src/scripts/supplier-purchasable-sku-development-database.test.ts \
+  src/scripts/supplier-purchasable-sku-dev-direct.test.ts \
   src/scripts/supplier-purchasable-sku-smoke.test.ts \
   src/scripts/supplier-purchasable-sku-explain.test.ts
 ```
@@ -1211,7 +1216,9 @@ Add package commands:
 
 ```json
 "supplier:purchasable-sku:smoke": "bun src/scripts/supplier-purchasable-sku-smoke.ts",
-"supplier:purchasable-sku:explain": "bun src/scripts/supplier-purchasable-sku-explain.ts"
+"supplier:purchasable-sku:explain": "bun src/scripts/supplier-purchasable-sku-explain.ts",
+"supplier:purchasable-sku:smoke:dev-direct": "bun src/scripts/supplier-purchasable-sku-dev-direct.ts smoke",
+"supplier:purchasable-sku:explain:dev-direct": "bun src/scripts/supplier-purchasable-sku-dev-direct.ts explain"
 ```
 
 - [ ] **Step 4: Verify script tests GREEN**
@@ -1223,8 +1230,9 @@ Expected: both unit tests PASS without accessing a remote database.
 Load the root `.env` without printing secrets:
 
 ```bash
+MAIN_WORKTREE_ROOT="$(cd "$(dirname "$(git rev-parse --git-common-dir)")" && pwd)"
 set -a
-source ../../.env
+source "$MAIN_WORKTREE_ROOT/.env"
 set +a
 test -n "$SUPABASE_DB_DIRECT_URL"
 pnpm dlx supabase@2.99.0 migration list \
@@ -1262,12 +1270,19 @@ Expected: both function signatures exist with the exact migration argument names
 - [ ] **Step 7: Run the real development smoke and EXPLAIN**
 
 ```bash
+MAIN_WORKTREE_ROOT="$(cd "$(dirname "$(git rev-parse --git-common-dir)")" && pwd)"
+set -a
+source "$MAIN_WORKTREE_ROOT/.env"
+set +a
 cd apps/api
-SUPPLIER_PURCHASABLE_SKU_SMOKE_DB_URL="$SUPABASE_DB_DIRECT_URL" \
-  bun run supplier:purchasable-sku:smoke
-SUPPLIER_PURCHASABLE_SKU_EXPLAIN_DB_URL="$SUPABASE_DB_DIRECT_URL" \
-  bun run supplier:purchasable-sku:explain
+bun run supplier:purchasable-sku:smoke:dev-direct
+bun run supplier:purchasable-sku:explain:dev-direct
 ```
+
+The dev-direct wrapper requires `SUPABASE_DB_DIRECT_URL`, derives
+`sslmode=require` in memory for the exact allowlisted development host, and never
+prints the URL. The original explicit-URL commands remain fail closed and require
+callers to provide a fully validated URL including `sslmode`.
 
 Expected: all smoke booleans true, cleanup true, no credentials printed, and scoped plans use indexes without N+1 behavior. If a required index is missing, add it through a new reviewed migration; do not edit the already-applied migration or create it manually.
 
@@ -1278,6 +1293,10 @@ git add apps/api/src/scripts/supplier-purchasable-sku-smoke.ts \
   apps/api/src/scripts/supplier-purchasable-sku-smoke.test.ts \
   apps/api/src/scripts/supplier-purchasable-sku-explain.ts \
   apps/api/src/scripts/supplier-purchasable-sku-explain.test.ts \
+  apps/api/src/scripts/supplier-purchasable-sku-development-database.ts \
+  apps/api/src/scripts/supplier-purchasable-sku-development-database.test.ts \
+  apps/api/src/scripts/supplier-purchasable-sku-dev-direct.ts \
+  apps/api/src/scripts/supplier-purchasable-sku-dev-direct.test.ts \
   apps/api/src/types/database.ts \
   apps/api/package.json
 git commit -m "test(supplier): 验证 SKU 即时价格事务"
@@ -1305,7 +1324,9 @@ cd apps/api && bun test \
   src/services/supplier-price-lists.test.ts \
   src/services/supplier-products.test.ts \
   src/scripts/supplier-purchasable-sku-smoke.test.ts \
-  src/scripts/supplier-purchasable-sku-explain.test.ts
+  src/scripts/supplier-purchasable-sku-explain.test.ts \
+  src/scripts/supplier-purchasable-sku-development-database.test.ts \
+  src/scripts/supplier-purchasable-sku-dev-direct.test.ts
 ```
 
 Expected: all focused API tests PASS.
@@ -1326,13 +1347,17 @@ Expected: every command exits 0; no file-size, permission-boundary, direct-write
 - [ ] **Step 3: Reconfirm migration alignment and API smoke**
 
 ```bash
+MAIN_WORKTREE_ROOT="$(cd "$(dirname "$(git rev-parse --git-common-dir)")" && pwd)"
 set -a
-source .env
+source "$MAIN_WORKTREE_ROOT/.env"
 set +a
 pnpm dlx supabase@2.99.0 migration list \
   --db-url "$SUPABASE_DB_DIRECT_URL"
 pnpm dlx supabase@2.99.0 db push --dry-run \
   --db-url "$SUPABASE_DB_DIRECT_URL"
+cd apps/api
+bun run supplier:purchasable-sku:smoke:dev-direct
+bun run supplier:purchasable-sku:explain:dev-direct
 ```
 
 Expected: Local/Remote align and dry-run reports the development database is up to date.

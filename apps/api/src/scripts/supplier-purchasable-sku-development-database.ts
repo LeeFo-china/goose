@@ -15,12 +15,11 @@ export type SupplierPurchasableSkuDatabaseConnection = {
   username: string;
   password: string;
   tls: boolean;
-  url?: string;
+  url: string;
 };
 
 export type SupplierPurchasableSkuDevelopmentDatabase = {
   connection: SupplierPurchasableSkuDatabaseConnection;
-  url: URL;
 };
 
 export const SUPPLIER_PURCHASABLE_SKU_CLOSE_OPTIONS = {
@@ -51,6 +50,26 @@ function decodeUrlComponent(value: string, variableName: string): string {
   }
 }
 
+function normalizedPostgresUrl(input: {
+  protocol: "postgres:" | "postgresql:";
+  hostname: string;
+  port: string;
+  database: string;
+  username: string;
+  password: string;
+  sslMode: string | undefined;
+}): string {
+  const credentials = `${encodeURIComponent(input.username)}:${
+    encodeURIComponent(input.password)
+  }`;
+  const query = input.sslMode === undefined
+    ? ""
+    : `?sslmode=${encodeURIComponent(input.sslMode)}`;
+  return `${input.protocol}//${credentials}@${input.hostname}:${input.port}/${
+    encodeURIComponent(input.database)
+  }${query}`;
+}
+
 export function parseSupplierPurchasableSkuDevelopmentDatabaseUrl(
   value: string,
   variableName: string,
@@ -66,6 +85,21 @@ export function parseSupplierPurchasableSkuDevelopmentDatabaseUrl(
     throw new Error(`${variableName} 必须是 PostgreSQL URL`);
   }
   const hostname = parsed.hostname.toLowerCase();
+  const database = decodeUrlComponent(parsed.pathname.slice(1), variableName);
+  const username = decodeUrlComponent(parsed.username, variableName);
+  const password = decodeUrlComponent(parsed.password, variableName);
+  if (
+    hostname.trim().length === 0 ||
+    parsed.port.length === 0 ||
+    Number(parsed.port) === 0 ||
+    database.trim().length === 0 ||
+    username.trim().length === 0 ||
+    password.trim().length === 0
+  ) {
+    throw new Error(
+      `${variableName} 必须完整包含主机、端口、数据库名、用户名和密码`,
+    );
+  }
   if (!DEVELOPMENT_POSTGRES_HOSTS.has(hostname)) {
     throw new Error(`${variableName} 仅允许连接开发数据库主机`);
   }
@@ -89,29 +123,56 @@ export function parseSupplierPurchasableSkuDevelopmentDatabaseUrl(
     connection: {
       adapter: "postgres",
       hostname,
-      port: parsed.port ? Number(parsed.port) : 5432,
-      database: decodeUrlComponent(parsed.pathname.slice(1), variableName),
-      username: decodeUrlComponent(parsed.username, variableName),
-      password: decodeUrlComponent(parsed.password, variableName),
+      port: Number(parsed.port),
+      database,
+      username,
+      password,
       tls: sslMode !== undefined,
-      ...(sslMode === undefined
-        ? {}
-        : {
-          url: `${parsed.protocol}//${parsed.host}?sslmode=${sslMode}`,
-        }),
+      url: normalizedPostgresUrl({
+        protocol: parsed.protocol,
+        hostname,
+        port: parsed.port,
+        database,
+        username,
+        password,
+        sslMode,
+      }),
     },
-    url: parsed,
   };
+}
+
+export function deriveSupplierPurchasableSkuDevelopmentDatabaseUrl(
+  value: string,
+  variableName: string,
+): string {
+  if (!value) throw new Error(`缺少 ${variableName}`);
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error(`${variableName} 必须是 PostgreSQL URL`);
+  }
+  if (
+    parsed.hostname.toLowerCase() === REMOTE_DEVELOPMENT_POSTGRES_HOST &&
+    parsed.search.length === 0
+  ) {
+    parsed.searchParams.set("sslmode", "require");
+  }
+  return parseSupplierPurchasableSkuDevelopmentDatabaseUrl(
+    parsed.toString(),
+    variableName,
+  ).connection.url;
 }
 
 export function redactSupplierPurchasableSkuDevelopmentDatabaseUrl(
   value: string,
   variableName: string,
 ): string {
-  const { url } = parseSupplierPurchasableSkuDevelopmentDatabaseUrl(
+  const { connection } = parseSupplierPurchasableSkuDevelopmentDatabaseUrl(
     value,
     variableName,
   );
+  const url = new URL(connection.url);
   if (url.username) url.username = "***";
   if (url.password) url.password = "***";
   return url.toString();
