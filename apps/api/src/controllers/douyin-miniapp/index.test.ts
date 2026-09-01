@@ -409,16 +409,18 @@ describe("DouyinMiniappController", () => {
     await expect(controller.listMaterialNotes({ user, query: {
       tenant_id: "33333333-3333-4333-8333-333333333333",
     } } as never)).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
-    await expect(controller.claimMaterialNote({
-      user,
-      params: { id: noteId },
-      body: { subject_hash: "a".repeat(64) },
-    } as never)).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
-    await expect(controller.removeOwnedMaterialNote({
-      user,
-      params: { claimId },
-      body: { installation_id: "44444444-4444-4444-8444-444444444444" },
-    } as never)).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
+    const invalidBodies = [null, false, 0, "", [], { forged: true }];
+    for (const invalidBody of invalidBodies) {
+      await expect(controller.claimMaterialNote({
+        user, params: { id: noteId }, body: invalidBody,
+      } as never)).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
+      await expect(controller.removeOwnedMaterialNote({
+        user, params: { claimId }, body: invalidBody,
+      } as never)).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
+      await expect(controller.clearOwnedMaterialNotes({
+        user, body: invalidBody,
+      } as never)).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
+    }
   });
 
   test("defines strict bounded decoration Q&A request bodies", () => {

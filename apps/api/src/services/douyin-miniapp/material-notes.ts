@@ -34,7 +34,7 @@ import {
 
 type RepositoryPort = Pick<DouyinMaterialNotesRepository,
   'listPublic' | 'findPublicPreview' | 'claim' | 'listOwned' |
-  'findOwnedDetail' | 'remove' | 'clear'>;
+  'findOwnedAccess' | 'findOwnedDetail' | 'remove' | 'clear'>;
 type ContextResolverPort = Pick<DouyinMaterialNoteContextResolver, 'resolve'>;
 type PublicRow = Awaited<ReturnType<RepositoryPort['listPublic']>>['rows'][number];
 type OwnedRow = Awaited<ReturnType<RepositoryPort['listOwned']>>['rows'][number];
@@ -102,16 +102,27 @@ export class DouyinMiniappMaterialNotesService {
   async getOwnedDetail(user: JwtPayload | undefined, claimId: string) {
     const context = await this.contextResolver.resolve(user);
     const params = parseInput(DouyinMaterialNoteClaimIdParamsSchema, { claimId });
-    const row = await this.repository.findOwnedDetail({
+    const input = {
       ...repositoryIdentity(context),
       claimId: params.claimId,
-    });
-    if (!row) throwClaimNotFound();
-    if (row.note.status === 'withdrawn') {
-      throw Errors.business(410, '资料已停止提供', 'MATERIAL_NOTE_WITHDRAWN');
-    }
-    if (row.note.status !== 'published' && row.note.status !== 'archived') {
+    };
+    const access = await this.repository.findOwnedAccess(input);
+    if (!access) throwClaimNotFound();
+    const status = ownedAccessStatus(access, params.claimId);
+    if (status === 'withdrawn') throwWithdrawn();
+    if (status === 'draft') throwClaimNotFound();
+    const row = await this.repository.findOwnedDetail(input);
+    if (!row) {
+      const racedAccess = await this.repository.findOwnedAccess(input);
+      if (!racedAccess) throwClaimNotFound();
+      if (ownedAccessStatus(racedAccess, params.claimId) === 'withdrawn') {
+        throwWithdrawn();
+      }
       throwClaimNotFound();
+    }
+    if (row.id !== params.claimId || row.note.id !== access.note.id
+      || (row.note.status !== 'published' && row.note.status !== 'archived')) {
+      throwInvalidResponse();
     }
     return parseOutput(DouyinMaterialNoteOwnedDetailResponseSchema, mapOwnedDetail(row));
   }
@@ -198,6 +209,26 @@ function throwNoteNotFound(): never {
 
 function throwClaimNotFound(): never {
   throw Errors.business(404, '领取记录不存在', 'MATERIAL_NOTE_CLAIM_NOT_FOUND');
+}
+
+function throwWithdrawn(): never {
+  throw Errors.business(410, '资料已停止提供', 'MATERIAL_NOTE_WITHDRAWN');
+}
+
+function ownedAccessStatus(
+  access: { readonly id: string; readonly note: { readonly status: unknown } },
+  claimId: string,
+): 'draft' | 'published' | 'archived' | 'withdrawn' {
+  if (access.id !== claimId) throwInvalidResponse();
+  switch (access.note.status) {
+    case 'draft':
+    case 'published':
+    case 'archived':
+    case 'withdrawn':
+      return access.note.status;
+    default:
+      throwInvalidResponse();
+  }
 }
 
 function throwInvalidResponse(): never {

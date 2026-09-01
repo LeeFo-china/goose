@@ -33,6 +33,26 @@ function createClient(results: DouyinMiniappMarketingDatabaseResult[]) {
       return this;
     }
 
+    eq(column: string, value: unknown) {
+      calls.push({ method: "eq", args: [column, value] });
+      return this;
+    }
+
+    in(column: string, values: readonly unknown[]) {
+      calls.push({ method: "in", args: [column, values] });
+      return this;
+    }
+
+    is(column: string, value: null) {
+      calls.push({ method: "is", args: [column, value] });
+      return this;
+    }
+
+    limit(count: number) {
+      calls.push({ method: "limit", args: [count] });
+      return this;
+    }
+
     then<TResult1 = DouyinMiniappMarketingDatabaseResult, TResult2 = never>(
       onfulfilled?: (
         (value: DouyinMiniappMarketingDatabaseResult) => TResult1 | PromiseLike<TResult1>
@@ -354,5 +374,83 @@ describe("DouyinMiniappMarketingRepository.insertEvents", () => {
     }
     expect(caught).toMatchObject({ statusCode: 500, code: "DB_ERROR" });
     expect(JSON.stringify(caught)).not.toContain(sensitive);
+  });
+});
+
+describe("DouyinMiniappMarketingRepository material event ownership", () => {
+  const noteIds = [
+    "55555555-5555-4555-8555-555555555555",
+    "66666666-6666-4666-8666-666666666666",
+  ] as const;
+
+  test("validates published previews in one bounded tenant query", async () => {
+    const { client, calls } = createClient([{
+      data: [{ id: noteIds[0] }],
+      error: null,
+    }]);
+    const repository = new DouyinMiniappMarketingRepository(client);
+
+    await expect(repository.listPublishedMaterialNoteIds({
+      tenantId: leadInput.tenantId,
+      noteIds,
+    })).resolves.toEqual([noteIds[0]]);
+    expect(calls).toEqual([
+      { method: "from", args: ["douyin_material_notes"] },
+      { method: "select", args: ["id"] },
+      { method: "eq", args: ["tenant_id", leadInput.tenantId] },
+      { method: "eq", args: ["status", "published"] },
+      { method: "in", args: ["id", noteIds] },
+      { method: "limit", args: [2] },
+    ]);
+  });
+
+  test("validates active owned notes with an inner status filter in one query", async () => {
+    const { client, calls } = createClient([{
+      data: [{ note_id: noteIds[1], note: { id: noteIds[1] } }],
+      error: null,
+    }]);
+    const repository = new DouyinMiniappMarketingRepository(client);
+
+    await expect(repository.listActiveClaimedMaterialNoteIds({
+      tenantId: leadInput.tenantId,
+      installationId: leadInput.installationId,
+      subjectHash: leadInput.subjectHash,
+      noteIds,
+    })).resolves.toEqual([noteIds[1]]);
+    expect(calls).toEqual([
+      { method: "from", args: ["douyin_material_note_claims"] },
+      { method: "select", args: [
+        "note_id,note:douyin_material_notes!douyin_material_note_claims_note_tenant_fkey!inner(id)",
+      ] },
+      { method: "eq", args: ["tenant_id", leadInput.tenantId] },
+      { method: "eq", args: [
+        "douyin_miniapp_installation_id", leadInput.installationId,
+      ] },
+      { method: "eq", args: ["subject_hash", leadInput.subjectHash] },
+      { method: "is", args: ["removed_at", null] },
+      { method: "in", args: ["note_id", noteIds] },
+      { method: "in", args: ["note.status", ["published", "archived"]] },
+      { method: "limit", args: [2] },
+    ]);
+  });
+
+  test("skips empty sets and rejects malformed validation rows", async () => {
+    const empty = createClient([]);
+    const repository = new DouyinMiniappMarketingRepository(empty.client);
+    await expect(repository.listPublishedMaterialNoteIds({
+      tenantId: leadInput.tenantId,
+      noteIds: [],
+    })).resolves.toEqual([]);
+    expect(empty.calls).toHaveLength(0);
+
+    const malformed = createClient([{ data: [{ id: "not-a-uuid" }], error: null }]);
+    await expect(new DouyinMiniappMarketingRepository(malformed.client)
+      .listPublishedMaterialNoteIds({
+        tenantId: leadInput.tenantId,
+        noteIds,
+      })).rejects.toMatchObject({
+        statusCode: 500,
+        code: "DOUYIN_MARKETING_REPOSITORY_RESPONSE_INVALID",
+      });
   });
 });

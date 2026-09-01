@@ -138,6 +138,12 @@ function serviceHarness() {
   ): Promise<typeof publicRow | null> => publicRow);
   const listOwned = mock(async (_input: OwnedListInput) =>
     ({ rows: [ownedRow], total: 1 }));
+  const findOwnedAccess = mock(async (
+    _input: OwnedDetailInput,
+  ): Promise<{ id: string; note: OwnedDetailRow['note'] } | null> => ({
+    id: CLAIM_ID,
+    note: ownedDetailRow.note,
+  }));
   const findOwnedDetail = mock(async (
     _input: OwnedDetailInput,
   ): Promise<OwnedDetailRow | null> => ownedDetailRow);
@@ -151,6 +157,7 @@ function serviceHarness() {
       listPublic,
       findPublicPreview,
       listOwned,
+      findOwnedAccess,
       findOwnedDetail,
       claim,
       remove,
@@ -161,6 +168,7 @@ function serviceHarness() {
     claim,
     clear,
     findOwnedDetail,
+    findOwnedAccess,
     findPublicPreview,
     listOwned,
     listPublic,
@@ -319,21 +327,22 @@ describe('DouyinMiniappMaterialNotesService claims', () => {
     }
   });
 
-  test('does not invoke lead, SMS, appointment or client analytics side effects', async () => {
+  test('keeps claim isolated from lead, SMS, appointment and analytics services', async () => {
     const harness = serviceHarness();
     await harness.service.claim(user, NOTE_ID);
 
     expect(harness.claim).toHaveBeenCalledTimes(1);
-    expect(Object.keys(harness)).not.toContain('insertEvents');
-    expect(Object.keys(harness)).not.toContain('submitMeasurementAppointment');
-    expect(Object.keys(harness)).not.toContain('sendCode');
-    expect(Object.keys(harness)).not.toContain('createLead');
+    const source = await Bun.file(new URL('./material-notes.ts', import.meta.url)).text();
+    expect(source).not.toMatch(
+      /douyin-miniapp-marketing|sms-verification|marketing-lead|measurement-appointment/,
+    );
+    expect(source).not.toMatch(/insertEvents|sendCode|submitMeasurementAppointment/);
   });
 });
 
 describe('DouyinMiniappMaterialNotesService owned materials', () => {
   test('maps owned pages and archived locked-version bodies without identity fields', async () => {
-    const { findOwnedDetail, listOwned, service } = serviceHarness();
+    const { findOwnedAccess, findOwnedDetail, listOwned, service } = serviceHarness();
     const page = await service.listOwned(user, { page: 1, pageSize: 20 });
     const detail = await service.getOwnedDetail(user, CLAIM_ID);
 
@@ -345,6 +354,12 @@ describe('DouyinMiniappMaterialNotesService owned materials', () => {
       pageSize: 20,
     });
     expect(findOwnedDetail).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      installationId: INSTALLATION_ID,
+      subjectHash: SUBJECT_HASH,
+      claimId: CLAIM_ID,
+    });
+    expect(findOwnedAccess).toHaveBeenCalledWith({
       tenantId: TENANT_ID,
       installationId: INSTALLATION_ID,
       subjectHash: SUBJECT_HASH,
@@ -366,9 +381,9 @@ describe('DouyinMiniappMaterialNotesService owned materials', () => {
 
   test('returns 410 without body for withdrawn claims and 404 for absent claims', async () => {
     const withdrawn = serviceHarness();
-    withdrawn.findOwnedDetail.mockImplementationOnce(async () => ({
-      ...ownedDetailRow,
-      note: { ...ownedDetailRow.note, status: 'withdrawn' as const },
+    withdrawn.findOwnedAccess.mockImplementationOnce(async () => ({
+      id: CLAIM_ID,
+      note: { id: NOTE_ID, status: 'withdrawn' as const },
     }));
     let caught: unknown;
     try {
@@ -381,13 +396,55 @@ describe('DouyinMiniappMaterialNotesService owned materials', () => {
       code: 'MATERIAL_NOTE_WITHDRAWN',
     });
     expect(JSON.stringify(caught)).not.toContain('content_blocks');
+    expect(withdrawn.findOwnedDetail).not.toHaveBeenCalled();
 
     const absent = serviceHarness();
-    absent.findOwnedDetail.mockImplementationOnce(async () => null);
+    absent.findOwnedAccess.mockImplementationOnce(async () => null);
     await expect(absent.service.getOwnedDetail(user, CLAIM_ID)).rejects.toMatchObject({
       statusCode: 404,
       code: 'MATERIAL_NOTE_CLAIM_NOT_FOUND',
     });
+    expect(absent.findOwnedDetail).not.toHaveBeenCalled();
+  });
+
+  test('rechecks body-free status when the eligible body disappears in a race', async () => {
+    const withdrawnRace = serviceHarness();
+    withdrawnRace.findOwnedAccess
+      .mockImplementationOnce(async () => ({
+        id: CLAIM_ID,
+        note: { id: NOTE_ID, status: 'published' as const },
+      }))
+      .mockImplementationOnce(async () => ({
+        id: CLAIM_ID,
+        note: { id: NOTE_ID, status: 'withdrawn' as const },
+      }));
+    withdrawnRace.findOwnedDetail.mockImplementationOnce(async () => null);
+    await expect(withdrawnRace.service.getOwnedDetail(user, CLAIM_ID))
+      .rejects.toMatchObject({ statusCode: 410, code: 'MATERIAL_NOTE_WITHDRAWN' });
+    expect(withdrawnRace.findOwnedAccess).toHaveBeenCalledTimes(2);
+    expect(withdrawnRace.findOwnedDetail).toHaveBeenCalledTimes(1);
+
+    const removedRace = serviceHarness();
+    removedRace.findOwnedAccess
+      .mockImplementationOnce(async () => ({
+        id: CLAIM_ID,
+        note: { id: NOTE_ID, status: 'archived' as const },
+      }))
+      .mockImplementationOnce(async () => null);
+    removedRace.findOwnedDetail.mockImplementationOnce(async () => null);
+    await expect(removedRace.service.getOwnedDetail(user, CLAIM_ID))
+      .rejects.toMatchObject({ statusCode: 404, code: 'MATERIAL_NOTE_CLAIM_NOT_FOUND' });
+  });
+
+  test('rejects malformed body-free access state without reading content', async () => {
+    const malformed = serviceHarness();
+    malformed.findOwnedAccess.mockImplementationOnce(async () => ({
+      id: CLAIM_ID,
+      note: { id: NOTE_ID, status: 'unexpected' },
+    } as never));
+    await expect(malformed.service.getOwnedDetail(user, CLAIM_ID))
+      .rejects.toMatchObject({ statusCode: 500, code: 'MATERIAL_NOTE_RESPONSE_INVALID' });
+    expect(malformed.findOwnedDetail).not.toHaveBeenCalled();
   });
 
   test('keeps remove and clear idempotent and fully session scoped', async () => {

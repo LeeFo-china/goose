@@ -9,6 +9,7 @@ import { AppError } from '@/errors/app-error';
 import { Errors } from '@/errors/error-factory';
 import {
   DouyinMaterialNoteRepositoryOwnedDetailRowSchema,
+  DouyinMaterialNoteRepositoryOwnedAccessRowSchema,
   DouyinMaterialNoteRepositoryOwnedRowSchema,
   DouyinMaterialNoteRepositoryPublicRowSchema,
   DouyinMaterialNoteClearResponseSchema,
@@ -41,6 +42,7 @@ export interface DouyinMaterialNotesQuery
   select(columns: string, options?: { readonly count?: 'exact' }): DouyinMaterialNotesQuery;
   eq(column: string, value: unknown): DouyinMaterialNotesQuery;
   is(column: string, value: null): DouyinMaterialNotesQuery;
+  in(column: string, values: readonly unknown[]): DouyinMaterialNotesQuery;
   or(filters: string, options?: ReferencedTableOptions): DouyinMaterialNotesQuery;
   order(column: string, options: OrderOptions): DouyinMaterialNotesQuery;
   range(from: number, to: number): DouyinMaterialNotesQuery;
@@ -97,9 +99,13 @@ const OWNED_SELECT = [
   'note:douyin_material_notes!douyin_material_note_claims_note_tenant_fkey(id,status)',
   'claimed_version:douyin_material_note_versions!douyin_material_note_claims_version_owner_fkey(version_no,title,summary,category,applicable_to)',
 ].join(',');
+const OWNED_ACCESS_SELECT = [
+  'id',
+  'note:douyin_material_notes!douyin_material_note_claims_note_tenant_fkey(id,status)',
+].join(',');
 const OWNED_DETAIL_SELECT = [
   'id,claimed_at',
-  'note:douyin_material_notes!douyin_material_note_claims_note_tenant_fkey(id,status)',
+  'note:douyin_material_notes!douyin_material_note_claims_note_tenant_fkey!inner(id,status)',
   'claimed_version:douyin_material_note_versions!douyin_material_note_claims_version_owner_fkey(version_no,title,summary,category,applicable_to,content_blocks)',
 ].join(',');
 
@@ -214,8 +220,17 @@ export class DouyinMaterialNotesRepository {
   async findOwnedDetail(input: PublicIdentityInput & { readonly claimId: string }) {
     return execute('查询已领取抖音资料失败', async () => {
       const result = await this.ownedQuery(input, OWNED_DETAIL_SELECT)
-        .eq('id', input.claimId).maybeSingle();
+        .eq('id', input.claimId).in('note.status', ['published', 'archived'])
+        .maybeSingle();
       return optionalResult(DouyinMaterialNoteRepositoryOwnedDetailRowSchema, result);
+    });
+  }
+
+  async findOwnedAccess(input: PublicIdentityInput & { readonly claimId: string }) {
+    return execute('查询抖音资料领取状态失败', async () => {
+      const result = await this.ownedQuery(input, OWNED_ACCESS_SELECT)
+        .eq('id', input.claimId).maybeSingle();
+      return optionalResult(DouyinMaterialNoteRepositoryOwnedAccessRowSchema, result);
     });
   }
 

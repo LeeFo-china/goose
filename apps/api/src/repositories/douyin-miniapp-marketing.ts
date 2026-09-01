@@ -54,6 +54,11 @@ const InsertedEventSchema = z.strictObject({
   event_name: z.enum(DOUYIN_MARKETING_EVENT_VALUES),
   created_at: z.iso.datetime({ offset: true }),
 });
+const MaterialNoteIdRowSchema = z.strictObject({ id: z.uuid() });
+const ActiveClaimedMaterialNoteRowSchema = z.strictObject({
+  note_id: z.uuid(),
+  note: z.strictObject({ id: z.uuid() }),
+});
 
 export type DouyinMarketingAttribution = {
   readonly source_type?: string;
@@ -105,6 +110,10 @@ export type DouyinMiniappMarketingDatabaseResult = {
 export interface DouyinMiniappMarketingQuery {
   insert(rows: readonly Record<string, unknown>[]): DouyinMiniappMarketingQuery;
   select(columns: string): DouyinMiniappMarketingQuery;
+  eq(column: string, value: unknown): DouyinMiniappMarketingQuery;
+  in(column: string, values: readonly unknown[]): DouyinMiniappMarketingQuery;
+  is(column: string, value: null): DouyinMiniappMarketingQuery;
+  limit(count: number): DouyinMiniappMarketingQuery;
   then<TResult1 = DouyinMiniappMarketingDatabaseResult, TResult2 = never>(
     onfulfilled?: (
       (value: DouyinMiniappMarketingDatabaseResult) => TResult1 | PromiseLike<TResult1>
@@ -211,6 +220,60 @@ export class DouyinMiniappMarketingRepository {
       return parsed.data;
     });
   }
+
+  async listPublishedMaterialNoteIds(input: {
+    readonly tenantId: string;
+    readonly noteIds: readonly string[];
+  }): Promise<string[]> {
+    const noteIds = materialNoteIds(input.noteIds);
+    if (noteIds.length === 0) return [];
+    return executeDatabaseOperation("校验抖音资料预览事件失败", async () => {
+      const result = await this.client.from("douyin_material_notes").select("id")
+        .eq("tenant_id", input.tenantId).eq("status", "published")
+        .in("id", noteIds).limit(noteIds.length);
+      assertDatabaseSuccess(result, "校验抖音资料预览事件失败");
+      const parsed = z.array(MaterialNoteIdRowSchema).safeParse(result.data);
+      if (!parsed.success) throw invalidResponse();
+      return parsed.data.map((row) => row.id);
+    });
+  }
+
+  async listActiveClaimedMaterialNoteIds(input: {
+    readonly tenantId: string;
+    readonly installationId: string;
+    readonly subjectHash: string;
+    readonly noteIds: readonly string[];
+  }): Promise<string[]> {
+    const noteIds = materialNoteIds(input.noteIds);
+    if (noteIds.length === 0) return [];
+    return executeDatabaseOperation("校验已领取抖音资料事件失败", async () => {
+      const result = await this.client.from("douyin_material_note_claims")
+        .select("note_id,note:douyin_material_notes!douyin_material_note_claims_note_tenant_fkey!inner(id)")
+        .eq("tenant_id", input.tenantId)
+        .eq("douyin_miniapp_installation_id", input.installationId)
+        .eq("subject_hash", input.subjectHash).is("removed_at", null)
+        .in("note_id", noteIds).in("note.status", ["published", "archived"])
+        .limit(noteIds.length);
+      assertDatabaseSuccess(result, "校验已领取抖音资料事件失败");
+      const parsed = z.array(ActiveClaimedMaterialNoteRowSchema).safeParse(result.data);
+      if (!parsed.success || parsed.data.some((row) => row.note.id !== row.note_id)) {
+        throw invalidResponse();
+      }
+      return parsed.data.map((row) => row.note_id);
+    });
+  }
+}
+
+function materialNoteIds(input: readonly string[]): string[] {
+  const parsed = z.array(z.uuid()).max(MAX_EVENT_COUNT).safeParse([...new Set(input)]);
+  if (!parsed.success) {
+    throw Errors.business(
+      400,
+      "资料事件实体无效",
+      "DOUYIN_MATERIAL_EVENT_ENTITY_INVALID",
+    );
+  }
+  return parsed.data;
 }
 
 async function executeDatabaseOperation<Result>(

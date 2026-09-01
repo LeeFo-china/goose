@@ -15,6 +15,10 @@ import type {
   DouyinLeadSmsRequest,
 } from "@/schema/douyin-miniapp";
 import {
+  DOUYIN_CLIENT_MATERIAL_OWNED_EVENT_VALUES,
+  DOUYIN_CLIENT_MATERIAL_PREVIEW_EVENT_VALUES,
+} from "@/schema/douyin-miniapp";
+import {
   DouyinRuntimeConfigSchema,
   type DouyinRuntimeConfig,
 } from "@/schema/platform-douyin-miniapps";
@@ -26,7 +30,8 @@ import type { JwtPayload } from "@/utils/jwt";
 
 type ContextRepository = Pick<DouyinMiniappContentRepository, "findActiveInstallation">;
 type MarketingRepository = Pick<DouyinMiniappMarketingRepository,
-  "submitMeasurementAppointment" | "insertEvents">;
+  "submitMeasurementAppointment" | "insertEvents" |
+  "listPublishedMaterialNoteIds" | "listActiveClaimedMaterialNoteIds">;
 type SmsService = Pick<SmsVerificationCodeService, "sendCode">;
 type NotificationService = Pick<typeof notificationService, "createTenantAdminNotifications">;
 type MarketingLogger = {
@@ -59,6 +64,12 @@ const CLIENT_EVENTS = new Set([
   "lead_cta_click", "phone_call_click",
   "material_preview", "material_copy", "material_budget_click", "material_lead_click",
 ]);
+const MATERIAL_PREVIEW_EVENTS = new Set<string>(
+  DOUYIN_CLIENT_MATERIAL_PREVIEW_EVENT_VALUES,
+);
+const MATERIAL_OWNED_EVENTS = new Set<string>(
+  DOUYIN_CLIENT_MATERIAL_OWNED_EVENT_VALUES,
+);
 
 export class DouyinMiniappMarketingService {
   private readonly contextRepository: ContextRepository;
@@ -176,6 +187,7 @@ export class DouyinMiniappMarketingService {
         entityId: event.entity_id,
       };
     });
+    await this.validateMaterialEventEntities(context, events);
     await this.marketingRepository.insertEvents({
       tenantId: context.tenantId,
       installationId: context.installationId,
@@ -185,6 +197,48 @@ export class DouyinMiniappMarketingService {
       events,
     });
     return { accepted: events.length };
+  }
+
+  private async validateMaterialEventEntities(
+    context: Context,
+    events: ReadonlyArray<{
+      readonly eventName: string;
+      readonly entityId?: string;
+    }>,
+  ): Promise<void> {
+    const previewIds = new Set<string>();
+    const ownedIds = new Set<string>();
+    for (const event of events) {
+      if (!MATERIAL_PREVIEW_EVENTS.has(event.eventName)
+        && !MATERIAL_OWNED_EVENTS.has(event.eventName)) continue;
+      if (!event.entityId) throwMaterialEventEntityInvalid();
+      if (MATERIAL_PREVIEW_EVENTS.has(event.eventName)) previewIds.add(event.entityId);
+      else ownedIds.add(event.entityId);
+    }
+    const previewNoteIds = [...previewIds];
+    const ownedNoteIds = [...ownedIds];
+    const [publishedIds, claimedIds] = await Promise.all([
+      previewNoteIds.length === 0
+        ? Promise.resolve([])
+        : this.marketingRepository.listPublishedMaterialNoteIds({
+          tenantId: context.tenantId,
+          noteIds: previewNoteIds,
+        }),
+      ownedNoteIds.length === 0
+        ? Promise.resolve([])
+        : this.marketingRepository.listActiveClaimedMaterialNoteIds({
+          tenantId: context.tenantId,
+          installationId: context.installationId,
+          subjectHash: context.subjectHash,
+          noteIds: ownedNoteIds,
+        }),
+    ]);
+    const published = new Set(publishedIds);
+    const claimed = new Set(claimedIds);
+    if (previewNoteIds.some((id) => !published.has(id))
+      || ownedNoteIds.some((id) => !claimed.has(id))) {
+      throwMaterialEventEntityInvalid();
+    }
   }
 
   private async loadContext(user: JwtPayload | undefined, requireLeadFeature: boolean) {
@@ -271,6 +325,14 @@ function validateConsent(input: DouyinLeadRequest, expectedVersion: string, now:
 function boundedUserAgent(value: string | null) {
   const normalized = value?.trim();
   return normalized ? normalized.slice(0, 512) : null;
+}
+
+function throwMaterialEventEntityInvalid(): never {
+  throw Errors.business(
+    400,
+    "资料事件实体无效",
+    "DOUYIN_MATERIAL_EVENT_ENTITY_INVALID",
+  );
 }
 
 let defaultService: DouyinMiniappMarketingService | undefined;

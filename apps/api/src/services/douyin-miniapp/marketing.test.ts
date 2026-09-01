@@ -98,12 +98,23 @@ function harness(features = { sms_lead: true }) {
   }));
   const createTenantAdminNotifications = mock(async (_input: unknown) => []);
   const insertEvents = mock(async (_input: unknown) => undefined);
+  const listPublishedMaterialNoteIds = mock(async (
+    input: { readonly noteIds: readonly string[] },
+  ) => [...input.noteIds]);
+  const listActiveClaimedMaterialNoteIds = mock(async (
+    input: { readonly noteIds: readonly string[] },
+  ) => [...input.noteIds]);
   const sendCode = mock(async (_input: unknown) => (
     { success: true as const, cooldown_seconds: 60 }
   ));
   const service = new MarketingService({
     contextRepository: { findActiveInstallation } as never,
-    marketingRepository: { submitMeasurementAppointment, insertEvents } as never,
+    marketingRepository: {
+      submitMeasurementAppointment,
+      insertEvents,
+      listPublishedMaterialNoteIds,
+      listActiveClaimedMaterialNoteIds,
+    } as never,
     notificationService: { createTenantAdminNotifications } as never,
     smsService: { sendCode } as never,
     now: () => new Date("2026-07-19T10:00:00.000Z"),
@@ -112,6 +123,8 @@ function harness(features = { sms_lead: true }) {
     createTenantAdminNotifications,
     findActiveInstallation,
     insertEvents,
+    listActiveClaimedMaterialNoteIds,
+    listPublishedMaterialNoteIds,
     sendCode,
     service,
     submitMeasurementAppointment,
@@ -270,6 +283,8 @@ describe("DouyinMiniappMarketingService", () => {
       marketingRepository: {
         submitMeasurementAppointment: afterMidnight.submitMeasurementAppointment,
         insertEvents: afterMidnight.insertEvents,
+        listPublishedMaterialNoteIds: afterMidnight.listPublishedMaterialNoteIds,
+        listActiveClaimedMaterialNoteIds: afterMidnight.listActiveClaimedMaterialNoteIds,
       } as never,
       notificationService: {
         createTenantAdminNotifications: afterMidnight.createTenantAdminNotifications,
@@ -307,7 +322,12 @@ describe("DouyinMiniappMarketingService", () => {
   });
 
   test("writes one bounded analytics batch with server-derived ownership", async () => {
-    const { insertEvents, service } = harness();
+    const {
+      insertEvents,
+      listActiveClaimedMaterialNoteIds,
+      listPublishedMaterialNoteIds,
+      service,
+    } = harness();
     await service.recordEvents(user, { events: [{
       event_name: "case_view",
       occurred_at: "2026-07-19T09:59:30.000Z",
@@ -320,6 +340,8 @@ describe("DouyinMiniappMarketingService", () => {
       events: [{ eventName: "case_view", occurredAt: "2026-07-19T09:59:30.000Z",
         attribution, entityId: "55555555-5555-4555-8555-555555555555" }],
     });
+    expect(listPublishedMaterialNoteIds).not.toHaveBeenCalled();
+    expect(listActiveClaimedMaterialNoteIds).not.toHaveBeenCalled();
   });
 
   test("accepts client material engagement but keeps material claims server-only", async () => {
@@ -339,7 +361,12 @@ describe("DouyinMiniappMarketingService", () => {
     expect(parsed.success).toBe(true);
     if (!parsed.success) return;
 
-    const { insertEvents, service } = harness();
+    const {
+      insertEvents,
+      listActiveClaimedMaterialNoteIds,
+      listPublishedMaterialNoteIds,
+      service,
+    } = harness();
     await expect(service.recordEvents(
       user,
       parsed.data,
@@ -351,6 +378,16 @@ describe("DouyinMiniappMarketingService", () => {
       installationId: INSTALLATION_ID,
       subjectHash: SUBJECT_HASH,
       events: eventNames.map((eventName) => ({ eventName })),
+    });
+    expect(listPublishedMaterialNoteIds).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      noteIds: ["55555555-5555-4555-8555-555555555555"],
+    });
+    expect(listActiveClaimedMaterialNoteIds).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      installationId: INSTALLATION_ID,
+      subjectHash: SUBJECT_HASH,
+      noteIds: ["55555555-5555-4555-8555-555555555555"],
     });
 
     expect(DouyinAnalyticsRequestSchema.safeParse({ events: [{
@@ -365,5 +402,87 @@ describe("DouyinMiniappMarketingService", () => {
       code: "DOUYIN_EVENT_NOT_CLIENT_WRITABLE",
     });
     expect(insertEvents).toHaveBeenCalledTimes(1);
+  });
+
+  test("requires note UUIDs for material events before any validation query", async () => {
+    const harnessed = harness();
+    const withoutEntity = {
+      event_name: "material_copy" as const,
+      occurred_at: "2026-07-19T09:59:30.000Z",
+      attribution,
+    };
+    expect(DouyinAnalyticsRequestSchema.safeParse({
+      events: [withoutEntity],
+    }).success).toBe(false);
+
+    await expect(harnessed.service.recordEvents(
+      user,
+      { events: [withoutEntity] } as never,
+      { requestIp: null, userAgent: null },
+    )).rejects.toMatchObject({
+      statusCode: 400,
+      code: "DOUYIN_MATERIAL_EVENT_ENTITY_INVALID",
+    });
+    expect(harnessed.listPublishedMaterialNoteIds).not.toHaveBeenCalled();
+    expect(harnessed.listActiveClaimedMaterialNoteIds).not.toHaveBeenCalled();
+    expect(harnessed.insertEvents).not.toHaveBeenCalled();
+  });
+
+  test("deduplicates two material scopes and rejects a mixed invalid batch atomically", async () => {
+    const harnessed = harness();
+    const previewId = "55555555-5555-4555-8555-555555555555";
+    const ownedId = "66666666-6666-4666-8666-666666666666";
+    harnessed.listPublishedMaterialNoteIds.mockImplementationOnce(async () => [previewId]);
+    harnessed.listActiveClaimedMaterialNoteIds.mockImplementationOnce(async () => []);
+    const events = [
+      "material_preview",
+      "material_preview",
+      "material_copy",
+      "material_budget_click",
+      "material_lead_click",
+    ].map((event_name) => ({
+      event_name,
+      occurred_at: "2026-07-19T09:59:30.000Z",
+      attribution,
+      entity_id: event_name === "material_preview" ? previewId : ownedId,
+    }));
+
+    await expect(harnessed.service.recordEvents(
+      user,
+      { events } as never,
+      { requestIp: null, userAgent: null },
+    )).rejects.toMatchObject({
+      statusCode: 400,
+      code: "DOUYIN_MATERIAL_EVENT_ENTITY_INVALID",
+    });
+    expect(harnessed.listPublishedMaterialNoteIds).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      noteIds: [previewId],
+    });
+    expect(harnessed.listActiveClaimedMaterialNoteIds).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      installationId: INSTALLATION_ID,
+      subjectHash: SUBJECT_HASH,
+      noteIds: [ownedId],
+    });
+    expect(harnessed.insertEvents).not.toHaveBeenCalled();
+  });
+
+  test("uses one private error for absent, foreign, withdrawn or removed entities", async () => {
+    for (const eventName of ["material_preview", "material_copy"] as const) {
+      const harnessed = harness();
+      harnessed.listPublishedMaterialNoteIds.mockImplementationOnce(async () => []);
+      harnessed.listActiveClaimedMaterialNoteIds.mockImplementationOnce(async () => []);
+      await expect(harnessed.service.recordEvents(user, { events: [{
+        event_name: eventName,
+        occurred_at: "2026-07-19T09:59:30.000Z",
+        attribution,
+        entity_id: "77777777-7777-4777-8777-777777777777",
+      }] }, { requestIp: null, userAgent: null })).rejects.toMatchObject({
+        statusCode: 400,
+        code: "DOUYIN_MATERIAL_EVENT_ENTITY_INVALID",
+      });
+      expect(harnessed.insertEvents).not.toHaveBeenCalled();
+    }
   });
 });

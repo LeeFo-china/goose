@@ -78,6 +78,7 @@ function clientWith(results: DouyinMaterialNotesDatabaseResult[]) {
     select(...args: unknown[]) { return this.call('select', args); }
     eq(...args: unknown[]) { return this.call('eq', args); }
     is(...args: unknown[]) { return this.call('is', args); }
+    in(...args: unknown[]) { return this.call('in', args); }
     or(...args: unknown[]) { return this.call('or', args); }
     order(...args: unknown[]) { return this.call('order', args); }
     range(...args: unknown[]) { return this.call('range', args); }

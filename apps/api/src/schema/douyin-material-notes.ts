@@ -74,6 +74,13 @@ export const DouyinMaterialNoteRepositoryOwnedRowSchema = z.strictObject({
     version_no: z.number().int().positive(),
   }).strict(),
 });
+export const DouyinMaterialNoteRepositoryOwnedAccessRowSchema = z.strictObject({
+  id: z.uuid(),
+  note: z.strictObject({
+    id: z.uuid(),
+    status: z.enum(DOUYIN_MATERIAL_NOTE_STATUS_VALUES),
+  }),
+});
 export const DouyinMaterialNoteRepositoryOwnedDetailRowSchema =
   DouyinMaterialNoteRepositoryOwnedRowSchema.extend({
     claimed_version: DouyinMaterialNoteRepositoryPreviewVersionSchema.extend({

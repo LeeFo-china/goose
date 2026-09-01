@@ -166,7 +166,10 @@ export class DouyinMiniappController {
 
   claimMaterialNote = async (request: FastifyRequest) => {
     const { id } = parse(DouyinMaterialNoteIdParamsSchema, request.params || {});
-    parse(DouyinMaterialNoteEmptyCommandSchema, request.body || {});
+    parse(
+      DouyinMaterialNoteEmptyCommandSchema,
+      request.body === undefined ? {} : request.body,
+    );
     return ResponseHandler.success(await this.materialNotes().claim(request.user, id));
   };
 
@@ -192,14 +195,20 @@ export class DouyinMiniappController {
       DouyinMaterialNoteClaimIdParamsSchema,
       request.params || {},
     );
-    parse(DouyinMaterialNoteEmptyCommandSchema, request.body || {});
+    parse(
+      DouyinMaterialNoteEmptyCommandSchema,
+      request.body === undefined ? {} : request.body,
+    );
     return ResponseHandler.success(
       await this.materialNotes().remove(request.user, claimId),
     );
   };
 
   clearOwnedMaterialNotes = async (request: FastifyRequest) => {
-    parse(DouyinMaterialNoteEmptyCommandSchema, request.body || {});
+    parse(
+      DouyinMaterialNoteEmptyCommandSchema,
+      request.body === undefined ? {} : request.body,
+    );
     return ResponseHandler.success(await this.materialNotes().clear(request.user));
   };
 

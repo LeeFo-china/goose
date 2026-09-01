@@ -78,6 +78,24 @@ export const DouyinLeadRequestSchema = z.strictObject({
   attribution: DouyinLaunchContextSchema,
 });
 
+export const DOUYIN_CLIENT_MATERIAL_PREVIEW_EVENT_VALUES = [
+  "material_preview",
+] as const;
+
+export const DOUYIN_CLIENT_MATERIAL_OWNED_EVENT_VALUES = [
+  "material_copy",
+  "material_budget_click",
+  "material_lead_click",
+] as const;
+
+const DOUYIN_CLIENT_MATERIAL_EVENT_VALUES = [
+  ...DOUYIN_CLIENT_MATERIAL_PREVIEW_EVENT_VALUES,
+  ...DOUYIN_CLIENT_MATERIAL_OWNED_EVENT_VALUES,
+] as const;
+const DOUYIN_CLIENT_MATERIAL_EVENTS = new Set<string>(
+  DOUYIN_CLIENT_MATERIAL_EVENT_VALUES,
+);
+
 const DOUYIN_CLIENT_EVENT_VALUES = [
   "app_launch",
   "page_view",
@@ -85,10 +103,7 @@ const DOUYIN_CLIENT_EVENT_VALUES = [
   "site_view",
   "lead_cta_click",
   "phone_call_click",
-  "material_preview",
-  "material_copy",
-  "material_budget_click",
-  "material_lead_click",
+  ...DOUYIN_CLIENT_MATERIAL_EVENT_VALUES,
 ] as const;
 
 export const DouyinAnalyticsRequestSchema = z.strictObject({
@@ -97,6 +112,14 @@ export const DouyinAnalyticsRequestSchema = z.strictObject({
     occurred_at: z.iso.datetime({ offset: true }),
     attribution: DouyinLaunchContextSchema,
     entity_id: z.uuid("事件实体 ID 格式无效").optional(),
+  }).superRefine((event, context) => {
+    if (DOUYIN_CLIENT_MATERIAL_EVENTS.has(event.event_name) && !event.entity_id) {
+      context.addIssue({
+        code: "custom",
+        path: ["entity_id"],
+        message: "资料事件必须提供资料 ID",
+      });
+    }
   })).min(1).max(20),
 });
 
