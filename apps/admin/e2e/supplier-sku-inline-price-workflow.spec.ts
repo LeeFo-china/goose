@@ -5,6 +5,10 @@ import {
   assertCreateDialogLayout,
   priceInput,
 } from "./supplier-sku-inline-price-layout-helpers";
+import {
+  assertCreateSeriesVersion,
+  assertCreateSourceSeed,
+} from "./supplier-sku-inline-price-series-assertions";
 
 import {
   compositeMutations,
@@ -85,7 +89,13 @@ async function fillRequiredSkuFields(
 test("全权限租户一次创建可采购 SKU 与即时未税价", async ({ page, request }, testInfo) => {
   const assertNoBrowserErrors = monitorBrowser(page);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await openTenantSkuWorkspace(page, request, { tenantProductStatus: "draft" });
+  await openTenantSkuWorkspace(page, request, {
+    tenantProductStatus: "draft",
+    priceScenario: "create-source",
+  });
+  const before = await readState(request);
+  const sourceSeed = assertCreateSourceSeed(before);
+  expect(before.items.some(({ supplier_sku_id }) => supplier_sku_id === tenantSkuId)).toBe(false);
   const mutationStart = (await readMutations(request)).length;
   await page.getByRole("button", { name: "新增 SKU" }).click();
   const dialog = page.getByRole("dialog", { name: "新增供应商 SKU" });
@@ -130,6 +140,7 @@ test("全权限租户一次创建可采购 SKU 与即时未税价", async ({ pag
   expect(state.products.find(({ id }) => id === tenantProductId)?.status).toBe("active");
   const createdSku = state.skus.find(({ name }) => name === "E2E 即时价格瓷砖");
   expect(createdSku?.status).toBe("active");
+  const series = assertCreateSeriesVersion(state, sourceSeed, createdSku?.id);
 
   const resolver = await request.get(
     `${mockBackendBaseUrl}/supplier-purchase-order-catalog` +
@@ -145,6 +156,19 @@ test("全权限租户一次创建可采购 SKU 与即时未税价", async ({ pag
         tax_inclusive: false,
       })],
     },
+  });
+  const otherResolver = await request.get(
+    `${mockBackendBaseUrl}/supplier-purchase-order-catalog` +
+    `?tenantSupplierId=${relationshipId}&page=1&pageSize=20&keyword=辅材`,
+  );
+  expect(otherResolver.ok()).toBe(true);
+  expect(await otherResolver.json()).toMatchObject({
+    data: { list: [expect.objectContaining({
+      supplier_sku_id: sourceSeed.otherSku?.id,
+      supplier_price_list_id: series.current.id,
+      supplier_price_list_item_id: series.copiedOtherItem?.id,
+      unit_price: "76.00",
+    })] },
   });
   assertNoBrowserErrors();
 });
@@ -188,12 +212,12 @@ test("即时调价止于未来计划且不改写未来版本", async ({ page, re
   const assertNoBrowserErrors = monitorBrowser(page);
   await openTenantSkuWorkspace(page, request, { priceScenario: "future" });
   const before = await readState(request);
-  const futureBefore = before.priceLists.find(({ version_number }) => version_number === 2);
+  const futureBefore = before.priceLists.find(({ version_number }) => version_number === 3);
   const futureItemBefore = before.items.find((item) =>
     item.supplier_price_list_id === futureBefore?.id &&
     item.supplier_sku_id === tenantSkuId);
   const secondarySku = before.skus.find(({ name }) =>
-    name === "租户私有瓷砖 300×600");
+    name === "租户私有辅材 标准装");
   const currentBefore = before.priceLists.find(({ version_number }) => version_number === 1);
   const secondaryItemBefore = before.items.find((item) =>
     item.supplier_price_list_id === currentBefore?.id &&
@@ -211,7 +235,7 @@ test("即时调价止于未来计划且不改写未来版本", async ({ page, re
   const after = await readState(request);
   expect(after.priceLists.find(({ id }) => id === futureBefore?.id)).toEqual(futureBefore);
   expect(after.items.find(({ id }) => id === futureItemBefore?.id)).toEqual(futureItemBefore);
-  const immediate = after.priceLists.find(({ version_number }) => version_number === 3);
+  const immediate = after.priceLists.find(({ version_number }) => version_number === 2);
   expect(immediate).toMatchObject({
     lifecycle_status: "published",
     effective_until: futureBefore?.effective_from,
@@ -227,7 +251,7 @@ test("即时调价止于未来计划且不改写未来版本", async ({ page, re
   expect(copiedSecondaryItem?.id).not.toBe(secondaryItemBefore?.id);
   const resolver = await request.get(
     `${mockBackendBaseUrl}/supplier-purchase-order-catalog` +
-    `?tenantSupplierId=${relationshipId}&page=1&pageSize=20&keyword=300`,
+    `?tenantSupplierId=${relationshipId}&page=1&pageSize=20&keyword=辅材`,
   );
   expect(resolver.ok()).toBe(true);
   expect(await resolver.json()).toMatchObject({

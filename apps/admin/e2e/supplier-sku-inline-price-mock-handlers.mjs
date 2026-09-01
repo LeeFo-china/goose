@@ -220,7 +220,9 @@ function applySave(productId, skuId, payload, method) {
   product.status = "active";
   const before = resolveCurrentPrice(skuId);
   const priceVersionCreated = !before || !samePrice(before, payload.price);
-  if (priceVersionCreated) createImmediatePriceVersion(sku, payload.price, before);
+  if (priceVersionCreated) {
+    createImmediatePriceVersion(sku, payload.price, before, method === "POST" ? "create" : "update");
+  }
   const current = resolveCurrentPrice(skuId);
   const result = {
     status: "saved",

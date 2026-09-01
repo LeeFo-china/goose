@@ -25,19 +25,30 @@ export type Mutation = {
 type LoggedRequest = { method: string; path: string; query: string };
 
 export type MockState = {
-  products: Array<{ id: string; status: string }>;
-  skus: Array<{ id: string; name: string; status: string; version: number }>;
+  products: Array<{ id: string; name: string; status: string }>;
+  skus: Array<{
+    id: string;
+    supplier_product_id: string;
+    name: string;
+    status: string;
+    version: number;
+  }>;
   priceLists: Array<{
     id: string;
+    price_list_code: string;
+    scope_type: string;
+    currency: string;
     lifecycle_status: string;
     version_number: number;
     effective_from: string;
     effective_until: string | null;
+    supersedes_price_list_id: string | null;
     row_version: number;
   }>;
   items: Array<{
     id: string;
     supplier_price_list_id: string;
+    supplier_product_id: string;
     supplier_sku_id: string;
     unit_price: string;
     tax_rate: string;
