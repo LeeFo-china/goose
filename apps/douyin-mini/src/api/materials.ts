@@ -10,8 +10,8 @@ import type {
   PaginationMeta,
 } from "../models";
 import { ApiClient, ApiRequestError } from "./request";
+import { normalizeMaterialUuid } from "./material-uuid";
 
-const UUID_PATTERN = /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/;
 // Kept equivalent to z.iso.datetime({ offset: true }) without adding a mini runtime dependency.
 const DATE_TIME_PATTERN = /^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/;
 const MAX_CONTENT_BYTES = 512 * 1024;
@@ -400,9 +400,7 @@ function validateId(id: string): string {
 }
 
 function parseUuid(value: unknown): string | null {
-  return typeof value === "string" && UUID_PATTERN.test(value)
-    ? value.toLowerCase()
-    : null;
+  return normalizeMaterialUuid(value);
 }
 
 function boundedText(value: unknown, minimum: number, maximum: number): string | null {

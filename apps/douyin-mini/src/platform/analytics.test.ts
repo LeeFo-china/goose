@@ -154,6 +154,71 @@ describe("AnalyticsQueue", () => {
     expect(snapshot.events.map((event) => event.event_name)).not.toContain("material_claim");
   });
 
+  test("keeps event ids strict v4 while preserving legacy entity UUID semantics", () => {
+    for (let version = 1; version <= 8; version += 1) {
+      const eventIdForVersion = `A0000001-B000-${version}000-8000-000000000001`;
+      const legacyEntity = `B0000002-C000-${version}000-8000-000000000002`;
+      const { analytics } = harness();
+      expect(analytics.record({
+        event_id: eventIdForVersion,
+        event_name: "page_view",
+        attribution,
+      }).status).toBe(version === 4 ? "queued" : "rejected");
+
+      const legacy = harness();
+      expect(legacy.analytics.record({
+        event_id: EVENT_ID,
+        event_name: "case_view",
+        attribution,
+        entity_id: legacyEntity,
+      }).status).toBe(version <= 5 ? "queued" : "rejected");
+    }
+    for (const entityId of [
+      "00000000-0000-0000-0000-000000000000",
+      "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    ]) {
+      expect(harness().analytics.record({
+        event_id: EVENT_ID,
+        event_name: "case_view",
+        attribution,
+        entity_id: entityId,
+      }).status).toBe("rejected");
+    }
+  });
+
+  test("accepts the complete zod material UUID range without widening invalid forms", () => {
+    const positive = [
+      ...Array.from({ length: 8 }, (_, index) => (
+        `A000000${index + 1}-B000-${index + 1}000-8000-00000000000${index + 1}`
+      )),
+      "00000000-0000-0000-0000-000000000000",
+      "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "aBcDeF12-3456-4789-aBcD-eF1234567890",
+    ];
+    for (const [index, entityId] of positive.entries()) {
+      expect(harness().analytics.record({
+        event_id: eventId(index + 1),
+        event_name: "material_preview",
+        attribution,
+        entity_id: entityId,
+      }).status).toBe("queued");
+    }
+    for (const entityId of [
+      "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF",
+      "A0000001-B000-0000-8000-000000000001",
+      "A0000001-B000-9000-8000-000000000001",
+      "A0000001-B000-4000-7000-000000000001",
+      "not-a-uuid",
+    ]) {
+      expect(harness().analytics.record({
+        event_id: EVENT_ID,
+        event_name: "material_copy",
+        attribution,
+        entity_id: entityId,
+      }).status).toBe("rejected");
+    }
+  });
+
   test("rejects arbitrary launch query and extra event fields", () => {
     const { analytics, getStored } = harness();
     const unsafeAttribution = {

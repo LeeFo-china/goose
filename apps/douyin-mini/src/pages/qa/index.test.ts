@@ -70,11 +70,13 @@ describe("Douyin Q&A page", () => {
   });
 
   test("home exposes one AI Q&A card without duplicating the budget hero", async () => {
-    const [homeSource, homeTemplate, homeStyle] = await Promise.all([
+    const [homeEntrySource, homePageSource, homeTemplate, homeStyle] = await Promise.all([
       Bun.file(`${__dirname}/../home/index.ts`).text(),
+      Bun.file(`${__dirname}/../home/page.ts`).text(),
       Bun.file(`${__dirname}/../home/index.ttml`).text(),
       Bun.file(`${__dirname}/../home/index.ttss`).text(),
     ]);
+    const homeSource = `${homeEntrySource}\n${homePageSource}`;
 
     expect(homeSource).toContain("onAskQuestion()");
     expect(homeSource).toContain('navigateToPage("pages/qa/index")');

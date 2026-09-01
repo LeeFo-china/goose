@@ -4,13 +4,14 @@ import {
   DOUYIN_SOURCE_TYPES,
   type LaunchContext,
 } from "../models";
+import { isMaterialUuid } from "../api/material-uuid";
 
 const ANALYTICS_STORAGE_KEY = "gooes_douyin_analytics_v1";
 const DEFAULT_DEBOUNCE_MS = 1_500;
 const MAX_EVENT_AGE_MS = 7 * 24 * 60 * 60 * 1_000;
 const MAX_FUTURE_SKEW_MS = 5 * 60 * 1_000;
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const EVENT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const LEGACY_ENTITY_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export const CLIENT_ANALYTICS_EVENT_NAMES = [
   "app_launch",
   "page_view",
@@ -252,12 +253,15 @@ function parseEventInput(value: unknown, now: number): StoredAnalyticsEvent | nu
     value,
     ["event_id", "event_name", "attribution", "entity_id"],
   )) return null;
-  if (!isUuid(value.event_id) || !isClientEventName(value.event_name)) return null;
+  if (!isEventId(value.event_id) || !isClientEventName(value.event_name)) return null;
   const parsedAttribution = parseAttribution(value.attribution);
   if (!parsedAttribution) return null;
-  if (value.entity_id !== undefined && !isUuid(value.entity_id)) return null;
-  if (CLIENT_MATERIAL_ANALYTICS_EVENT_NAMES.has(value.event_name)
-    && !isUuid(value.entity_id)) return null;
+  const isMaterialEvent = CLIENT_MATERIAL_ANALYTICS_EVENT_NAMES.has(value.event_name);
+  if (isMaterialEvent) {
+    if (!isMaterialUuid(value.entity_id)) return null;
+  } else if (value.entity_id !== undefined && !isLegacyEntityId(value.entity_id)) {
+    return null;
+  }
   return {
     event_id: value.event_id,
     event_name: value.event_name,
@@ -327,8 +331,12 @@ function isOptionalAttributionCode(value: unknown): boolean {
     || typeof value === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(value);
 }
 
-function isUuid(value: unknown): value is string {
-  return typeof value === "string" && UUID_PATTERN.test(value);
+function isEventId(value: unknown): value is string {
+  return typeof value === "string" && EVENT_ID_PATTERN.test(value);
+}
+
+function isLegacyEntityId(value: unknown): value is string {
+  return typeof value === "string" && LEGACY_ENTITY_ID_PATTERN.test(value);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -1,5 +1,6 @@
 import type { ServiceUnavailableCode } from "../models";
 import { ApiRequestError } from "../api/request";
+import { isMaterialUuid, normalizeMaterialUuid } from "../api/material-uuid";
 
 const PAGE_PATHS = new Set([
   "pages/sites/index",
@@ -20,7 +21,6 @@ const TAB_PATHS = {
   budget: "pages/budget/index",
   lead: "pages/lead/index",
 } as const;
-const UUID_PATTERN = /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/;
 
 export type TabName = keyof typeof TAB_PATHS;
 
@@ -36,7 +36,7 @@ export function buildTabRoute(tab: TabName): string {
 }
 
 export function buildEntityDetailRoute(type: "case" | "site", id: string): string {
-  if (!UUID_PATTERN.test(id)) throw invalidNavigationTarget();
+  if (!isMaterialUuid(id)) throw invalidNavigationTarget();
   return `${buildPageRoute("pages/case-detail/index")}?id=${encodeURIComponent(id)}`;
 }
 
@@ -103,6 +103,7 @@ function invalidNavigationTarget() {
 }
 
 function normalizeUuid(value: string): string {
-  if (!UUID_PATTERN.test(value)) throw invalidNavigationTarget();
-  return value.toLowerCase();
+  const normalized = normalizeMaterialUuid(value);
+  if (!normalized) throw invalidNavigationTarget();
+  return normalized;
 }
