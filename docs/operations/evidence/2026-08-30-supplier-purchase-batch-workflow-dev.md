@@ -12,7 +12,7 @@
   `20260830115000`、pending 0；API/Admin 已发布并通过健康检查。
 - `apps/api/src/types/database.ts` 已在 migration history 对齐的 dev 数据库上，使用官方
   `postgres-meta:v0.96.4` 机械生成并审查，未手改生成结果。
-- 单个内部 dev 租户灰度验收已完成：目标租户当前 setting version 为 10，
+- 单个内部 dev 租户灰度验收已完成：目标租户当前 setting version 为 12，
   `procurement_snapshot_v1_enabled=true`、`purchase_batch_workflow_enabled=true`。
 - flag=false 旧 `/review` 基线、受保护 dry-run/execute、两个独立批次的新旧审批入口对照，
   以及 version/round/self-review/completed-task/idempotency 稳定错误码均已通过。
@@ -287,11 +287,24 @@ task complete 具备一致的幂等终态。
 
 负向校验使用的四个批次在取得错误证据后均由正确审批人完成。最终回读确认本轮新增的 7 个
 证据批次全部为 `ordered`，每个批次恰好一张 submitted 订单；申请人与审批人的 pending
-workflow task 均为 0。setting 最终为 version 10、snapshot/workflow 均为 true。
+workflow task 均为 0；该对照完成时 setting 为 version 10、snapshot/workflow 均为 true。
 
-dev 中另有一个 2026-08-30 已存在的旧批次
-`5eb8312b-27a4-4fd0-ba1b-27a4b94515ec` 仍为 `pending_approval`，approvalRound 0、没有
-workflow instance/task/order。它早于本轮验收且不属于本轮证据，未擅自取消或删除。
+dev 中 2026-08-30 已存在的旧批次
+`5eb8312b-27a4-4fd0-ba1b-27a4b94515ec` 原为 `pending_approval`、approvalRound 0，且没有
+workflow instance/task/order。2026-09-01 经用户确认后通过正式 API 完成清理：预检确认它是
+唯一待审批采购批次、无运行中采购 Workflow 和 pending task；平台审计
+`d4218133-00c3-4c1f-a2f5-673f83b889a6` 将 setting version 10 更新为 11、workflow true
+临时更新为 false，非提交审批人使用旧 `/review` 将批次从 version 3 驳回为 version 4，随后
+提交人通过 `/cancel` 将批次更新为 `cancelled` version 5；平台审计
+`61152e9e-51ee-486b-9abb-9a4b285d8677` 将 setting version 11 更新为 12，并恢复 workflow
+为 true。
+
+最终回读确认该批次订单为 0、租户待审批采购批次为 0、申请人和审批人的采购 pending task
+均为 0。唯一批次托管子申请保留为 `rejected`、没有 purchase order；这是当前 RPC 的明确
+组合语义：旧 review reject 在同一事务中先释放 reserved budget commitment，再将子申请与
+批次驳回，随后 rejected batch cancel 兼容包装只取消批次，不改写已经 rejected 的子申请。
+不得绕过 `SUPPLIER_PURCHASE_BATCH_MANAGED_REQUISITION` 直接取消子申请。本次没有直接执行
+数据库 DDL/DML，也没有删除业务或审计记录。
 
 本轮 API 验收没有新增 migration、没有调整接口契约、没有修改 Orange 仓库，也没有扩大到
 其他租户。
