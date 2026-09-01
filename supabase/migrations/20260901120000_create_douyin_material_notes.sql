@@ -278,7 +278,7 @@ DECLARE
   v_reason text;
   v_request_digest text;
   v_result jsonb;
-  v_now timestamptz := clock_timestamp();
+  v_now timestamptz;
 BEGIN
   v_reason := CASE WHEN p_reason IS NULL THEN NULL ELSE btrim(p_reason) END;
   IF p_tenant_id IS NULL OR p_note_id IS NULL OR p_actor_employee_id IS NULL
@@ -357,6 +357,7 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'MATERIAL_NOTE_STATE_CONFLICT';
   END IF;
 
+  v_now := clock_timestamp();
   IF p_command = 'publish' THEN
     SELECT version.* INTO v_target
     FROM public.douyin_material_note_versions AS version
@@ -415,7 +416,7 @@ DECLARE
   v_note record;
   v_claim record;
   v_version record;
-  v_now timestamptz := clock_timestamp();
+  v_now timestamptz;
   v_already_claimed boolean := false;
   v_write_event boolean := false;
 BEGIN
@@ -444,7 +445,7 @@ BEGIN
   WHERE note.id = p_note_id AND note.tenant_id = p_tenant_id
   FOR UPDATE;
   IF NOT FOUND THEN
-    RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'MATERIAL_NOTE_NOT_AVAILABLE';
+    RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'MATERIAL_NOTE_NOT_FOUND';
   END IF;
   IF v_note.status = 'withdrawn' THEN
     RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'MATERIAL_NOTE_WITHDRAWN';
@@ -463,6 +464,7 @@ BEGIN
     IF v_note.status <> 'published' THEN
       RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'MATERIAL_NOTE_NOT_AVAILABLE';
     END IF;
+    v_now := clock_timestamp();
     IF FOUND THEN
       UPDATE public.douyin_material_note_claims
       SET removed_at = NULL, claimed_version_id = v_note.published_version_id,
@@ -687,6 +689,9 @@ ON public.douyin_material_note_claims(
   douyin_miniapp_installation_id, subject_hash, claimed_at DESC, id DESC
 )
 WHERE removed_at IS NULL;
+CREATE INDEX douyin_material_note_claims_tenant_note_active_idx
+ON public.douyin_material_note_claims(tenant_id, note_id)
+WHERE removed_at IS NULL;
 CREATE INDEX douyin_material_note_versions_tenant_note_idx
 ON public.douyin_material_note_versions(tenant_id, note_id, version_no DESC);
 CREATE INDEX douyin_material_note_versions_title_trgm_idx
@@ -710,19 +715,6 @@ GRANT SELECT ON TABLE public.douyin_material_notes TO service_role;
 GRANT SELECT ON TABLE public.douyin_material_note_versions TO service_role;
 GRANT SELECT ON TABLE public.douyin_material_note_claims TO service_role;
 GRANT SELECT ON TABLE public.douyin_material_note_command_events TO service_role;
-
-ALTER TABLE public.marketing_events
-DROP CONSTRAINT IF EXISTS marketing_events_event_name_check;
-ALTER TABLE public.marketing_events
-ADD CONSTRAINT marketing_events_event_name_check CHECK (
-  event_name IN (
-    'page_view', 'button_click', 'phone_click', 'form_submit', 'app_launch',
-    'case_view', 'site_view', 'lead_cta_click', 'sms_send', 'lead_submit',
-    'lead_submit_success', 'phone_call_click', 'material_preview',
-    'material_claim', 'material_copy', 'material_budget_click',
-    'material_lead_click'
-  )
-);
 
 INSERT INTO public.permissions (
   code, name, module, resource, action, description, status
@@ -834,7 +826,7 @@ DECLARE
   v_note public.douyin_material_notes%ROWTYPE;
   v_version_id uuid;
   v_version_no integer;
-  v_now timestamptz := clock_timestamp();
+  v_now timestamptz;
 BEGIN
   IF p_tenant_id IS NULL OR p_note_id IS NULL OR p_actor_employee_id IS NULL
     OR p_title IS NULL OR char_length(btrim(p_title)) NOT BETWEEN 1 AND 300
@@ -869,6 +861,7 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'MATERIAL_NOTE_WITHDRAWN';
   END IF;
 
+  v_now := clock_timestamp();
   SELECT coalesce(max(version.version_no), 0) + 1 INTO v_version_no
   FROM public.douyin_material_note_versions AS version
   WHERE version.note_id = p_note_id;
@@ -934,5 +927,19 @@ COMMENT ON TABLE public.douyin_material_note_claims IS
   '抖音小程序主体领取资料时锁定的内容版本。';
 COMMENT ON TABLE public.douyin_material_note_command_events IS
   '抖音资料发布、归档和撤回命令的不可变幂等账本。';
+
+-- Add the expanded check under a shadow name and commit immediately after this
+-- metadata-only step. A later migration validates it without retaining this
+-- transaction's ACCESS EXCLUSIVE lock, then swaps names in a short transaction.
+ALTER TABLE public.marketing_events
+ADD CONSTRAINT marketing_events_event_name_check_material_notes CHECK (
+  event_name IN (
+    'page_view', 'button_click', 'phone_click', 'form_submit', 'app_launch',
+    'case_view', 'site_view', 'lead_cta_click', 'sms_send', 'lead_submit',
+    'lead_submit_success', 'phone_call_click', 'material_preview',
+    'material_claim', 'material_copy', 'material_budget_click',
+    'material_lead_click'
+  )
+) NOT VALID;
 
 COMMIT;
