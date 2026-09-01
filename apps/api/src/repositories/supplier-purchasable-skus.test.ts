@@ -1,10 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 
-import type {
-  SupplierPurchasableSkuCommandResult,
-  SupplierPurchasableSkuIdentity,
-  SupplierPurchasableSkuPriceContext,
-} from "./supplier-purchasable-sku-records";
+import type { SupplierPurchasableSkuCommandResult, SupplierPurchasableSkuIdentity, SupplierPurchasableSkuPriceContext } from "./supplier-purchasable-sku-records";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
@@ -73,6 +69,7 @@ function commandResult(): SupplierPurchasableSkuCommandResult {
     status: "saved",
     idempotent: false,
     price_version_created: true,
+    currency: "CNY",
     product: {
       id: PRODUCT_ID, supplier_id: SUPPLIER_ID,
       product_code: "TP-40000000000040008000000000000004",
@@ -435,7 +432,7 @@ describe("SupplierPurchasableSkusRepository composite save", () => {
     for (const [error, expected] of [
       [{ message: "SUPPLIER_SKU_VERSION_CONFLICT select secret" },
         { statusCode: 409, code: "SUPPLIER_SKU_VERSION_CONFLICT" }],
-      [{ message: "select secret from supplier_skus" },
+      [{ message: "select secret from supplier_skus", constraint: "private_key" },
         { statusCode: 500, code: "DB_ERROR" }],
     ] as const) {
       const rpc = mock(async () => ({ data: null, error }));
@@ -444,6 +441,8 @@ describe("SupplierPurchasableSkusRepository composite save", () => {
         ).save(updateInput).then(() => null, (caught) => caught);
       expect(caught).toMatchObject(expected);
       expect(String((caught as Error).message)).not.toContain("select secret");
+      expect((caught as { details?: unknown }).details).toBeUndefined();
+      expect(JSON.stringify(caught)).not.toMatch(/select secret|private_key/);
     }
   });
 
@@ -468,28 +467,30 @@ describe("SupplierPurchasableSkusRepository composite save", () => {
   });
 
   test("rejects malformed, extra-key, and identity-mismatched saved results", async () => {
+    const result = commandResult();
+    const { currency: _currency, ...withoutCurrency } = result;
+    const scheduled = (until: string | null) => ({ ...result,
+      next_scheduled_effective_from: "2026-09-10T00:00:00Z",
+      current_price: { ...result.current_price, effective_until: until },
+      catalog_item: { ...result.catalog_item, effective_until: until } });
     const mutations = [
-      { ...commandResult(), debug_sql: "select secret" },
-      { ...commandResult(), current_price: {
-        ...commandResult().current_price, unit_price: 318,
-      } },
-      { ...commandResult(), sku: {
-        ...commandResult().sku, supplier_product_id: TENANT_ID,
-      } },
-      { ...commandResult(), catalog_item: {
-        ...commandResult().catalog_item, supplier_price_list_item_id: TENANT_ID,
-      } },
+      withoutCurrency, { ...result, currency: "USD" },
+      { ...result, debug_sql: "select secret" },
+      { ...result, current_price: { ...result.current_price, unit_price: 318 } },
+      { ...result, sku: { ...result.sku, supplier_product_id: TENANT_ID } },
+      { ...result, catalog_item: { ...result.catalog_item,
+        supplier_price_list_item_id: TENANT_ID } },
+      { ...result, sku: { ...result.sku, spec_values: { extra: "value" } } },
+      scheduled(null), scheduled("2026-09-09T00:00:00Z"),
+      scheduled("2026-09-11T00:00:00Z"),
     ];
-    const { SupplierPurchasableSkusRepository } = await import(
-      "./supplier-purchasable-skus"
-    );
+    const { SupplierPurchasableSkusRepository } = await import("./supplier-purchasable-skus");
     for (const data of mutations) {
       const rpc = mock(async () => ({ data, error: null }));
       await expect(new SupplierPurchasableSkusRepository(
         () => ({ rpc } as never),
       ).save(updateInput)).rejects.toMatchObject({
-        statusCode: 500, code: "SUPPLIER_PURCHASABLE_SKU_SAVE_FAILED",
-        message: "保存供应商 SKU 与供货价失败",
+        statusCode: 500, code: "SUPPLIER_PURCHASABLE_SKU_SAVE_FAILED", message: "保存供应商 SKU 与供货价失败",
       });
     }
   });

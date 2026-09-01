@@ -120,7 +120,7 @@ export class SupplierPurchasableSkusRepository {
     );
     if (error) {
       throw mapSupplierCommandDatabaseError(error) ??
-        Errors.dbError(SAVE_ERROR, error);
+        Errors.dbError(SAVE_ERROR);
     }
 
     const parsed = SupplierPurchasableSkuCommandResultSchema.safeParse(data);
@@ -237,9 +237,11 @@ function sameJsonValue(left: unknown, right: unknown): boolean {
     typeof right !== "object" || right === null) return false;
   const leftRecord = left as Record<string, unknown>;
   const rightRecord = right as Record<string, unknown>;
-  const keys = Object.keys(rightRecord);
-  return keys.every((key) => Object.hasOwn(leftRecord, key) &&
-    sameJsonValue(leftRecord[key], rightRecord[key]));
+  const leftKeys = Object.keys(leftRecord);
+  const rightKeys = Object.keys(rightRecord);
+  return leftKeys.length === rightKeys.length &&
+    leftKeys.every((key) => Object.hasOwn(rightRecord, key) &&
+      sameJsonValue(leftRecord[key], rightRecord[key]));
 }
 
 function generatedSkuCode(skuId: string): string {

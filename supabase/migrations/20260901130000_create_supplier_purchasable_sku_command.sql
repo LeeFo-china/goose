@@ -1640,6 +1640,7 @@ BEGIN
       'status', 'saved',
       'idempotent', false,
       'price_version_created', v_price_version_created,
+      'currency', 'CNY',
       'product', to_jsonb(v_product),
       'sku', to_jsonb(v_sku),
       'current_price', v_current_price,

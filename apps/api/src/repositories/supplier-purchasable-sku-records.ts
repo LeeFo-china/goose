@@ -139,6 +139,7 @@ export const SupplierPurchasableSkuCommandResultSchema = z.object({
   status: z.literal("saved"),
   idempotent: z.boolean(),
   price_version_created: z.boolean(),
+  currency: z.literal("CNY"),
   product: SupplierPurchasableSkuCommandProductSchema,
   sku: SupplierPurchasableSkuCommandSkuSchema,
   current_price: SupplierPurchasableSkuCurrentPriceSchema,
@@ -175,11 +176,9 @@ export const SupplierPurchasableSkuCommandResultSchema = z.object({
   const periodIsValid = price.effective_until === null ||
     Date.parse(price.effective_until) > Date.parse(price.effective_from);
   const nextPeriodIsValid = result.next_scheduled_effective_from === null ||
-    (Date.parse(result.next_scheduled_effective_from) >
-        Date.parse(price.effective_from) &&
-      (price.effective_until === null ||
-        Date.parse(price.effective_until) <=
-          Date.parse(result.next_scheduled_effective_from)));
+    (price.effective_until !== null &&
+      Date.parse(price.effective_until) ===
+        Date.parse(result.next_scheduled_effective_from));
   if (identitiesMatch.every(Boolean) && periodIsValid && nextPeriodIsValid) {
     return;
   }

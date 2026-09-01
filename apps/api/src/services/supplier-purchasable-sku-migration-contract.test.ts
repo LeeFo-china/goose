@@ -481,7 +481,7 @@ describe("supplier purchasable SKU atomic command migration", () => {
     );
 
     expect(normalizedCommand).toContain(
-      "v_response := jsonb_build_object( 'status', 'saved', 'idempotent', false, 'price_version_created', v_price_version_created, 'product', to_jsonb(v_product), 'sku', to_jsonb(v_sku), 'current_price', v_current_price, 'catalog_item', v_catalog_item, 'next_scheduled_effective_from', v_future_price_list.effective_from, 'available_actions', jsonb_build_array('edit', 'deactivate') )",
+      "v_response := jsonb_build_object( 'status', 'saved', 'idempotent', false, 'price_version_created', v_price_version_created, 'currency', 'CNY', 'product', to_jsonb(v_product), 'sku', to_jsonb(v_sku), 'current_price', v_current_price, 'catalog_item', v_catalog_item, 'next_scheduled_effective_from', v_future_price_list.effective_from, 'available_actions', jsonb_build_array('edit', 'deactivate') )",
     );
     expect(normalizedCommand).toContain(
       "'supplier_purchasable_sku_v1:' || p_action",
