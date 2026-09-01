@@ -335,18 +335,17 @@ describe('TenantDouyinMaterialNotesService access and mapping', () => {
       });
   });
 
-  test('returns 404 for a total-zero version page regardless of page number', async () => {
-    const context = fixture({
-      listVersions: mock(async () => ({ rows: [], total: 0 })),
-    });
-    await expect(context.service.listVersions(
-      auth(['douyin_material_note.read']),
-      NOTE_ID,
-      { page: 2, pageSize: 20 },
-    )).rejects.toMatchObject({
-      statusCode: 404,
-      code: 'MATERIAL_NOTE_NOT_FOUND',
-    });
+  test('rejects total-zero version pages and inconsistent rows', async () => {
+    const cases = [
+      [[], { statusCode: 404, code: 'MATERIAL_NOTE_NOT_FOUND' }],
+      [[versionSummary], { statusCode: 500, code: 'MATERIAL_NOTE_RESPONSE_INVALID' }],
+    ] as const;
+    for (const [rows, expected] of cases) {
+      const context = fixture({ listVersions: mock(async () => ({ rows, total: 0 })) });
+      await expect(context.service.listVersions(
+        auth(['douyin_material_note.read']), NOTE_ID, { page: 2, pageSize: 20 },
+      )).rejects.toMatchObject(expected);
+    }
   });
   test('returns an empty version page past the end when the note exists', async () => {
     const context = fixture({
