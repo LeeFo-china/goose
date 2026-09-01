@@ -9,9 +9,10 @@ type SupplierPurchasableSkuDevelopmentDatabaseCommandMode =
   | "target"
   | "migration-list"
   | "migration-dry-run"
-  | "migration-apply";
+  | "migration-apply"
+  | "gen-types";
 
-type SupplierPurchasableSkuMigrationMode = Exclude<
+type SupplierPurchasableSkuSupabaseMode = Exclude<
   SupplierPurchasableSkuDevelopmentDatabaseCommandMode,
   "target"
 >;
@@ -26,11 +27,20 @@ type SupplierPurchasableSkuDevelopmentDatabaseCommandCliOptions = {
   mode: string | undefined;
   env: Record<string, string | undefined>;
   runSupabase(
-    mode: SupplierPurchasableSkuMigrationMode,
+    mode: SupplierPurchasableSkuSupabaseMode,
     databaseUrl: string,
   ): Promise<SupplierPurchasableSkuSupabaseResult>;
   writeOutput(message: string): void;
   writeError(message: string): void;
+};
+
+type SupplierPurchasableSkuSupabaseSpawn = (
+  command: string[],
+  options: { stdout: "pipe"; stderr: "pipe" },
+) => {
+  exitCode: number;
+  stdout: { toString(): string };
+  stderr: { toString(): string };
 };
 
 const DIRECT_DATABASE_URL = "SUPABASE_DB_DIRECT_URL";
@@ -39,12 +49,15 @@ const ROOT_ENVIRONMENT_LOADED =
   "SUPPLIER_PURCHASABLE_SKU_ROOT_ENVIRONMENT_LOADED";
 const TARGET_FAILURE_CODE = "SUPPLIER_PURCHASABLE_SKU_DEV_TARGET_FAILED";
 const MIGRATION_FAILURE_CODE = "SUPPLIER_PURCHASABLE_SKU_DEV_MIGRATION_FAILED";
+const TYPE_GENERATION_FAILURE_CODE =
+  "SUPPLIER_PURCHASABLE_SKU_DEV_TYPE_GENERATION_FAILED";
 
 function isMode(
   value: string | undefined,
 ): value is SupplierPurchasableSkuDevelopmentDatabaseCommandMode {
   return value === "target" || value === "migration-list" ||
-    value === "migration-dry-run" || value === "migration-apply";
+    value === "migration-dry-run" || value === "migration-apply" ||
+    value === "gen-types";
 }
 
 export function resolveSupplierPurchasableSkuRootEnvironmentPath(
@@ -76,6 +89,19 @@ function sanitizeOutput(output: string, databaseUrl: string): string {
   return sanitized.trim();
 }
 
+function containsDatabaseSecret(output: string, databaseUrl: string): boolean {
+  const parsed = new URL(databaseUrl);
+  const sensitiveValues = [
+    databaseUrl,
+    decodeURIComponent(parsed.username),
+    decodeURIComponent(parsed.password),
+    parsed.username,
+    parsed.password,
+  ].filter((value) => value.length > 0);
+  return /postgres(?:ql)?:\/\/[^\s]+/i.test(output) ||
+    sensitiveValues.some((value) => output.includes(value));
+}
+
 function resolveTarget(env: Record<string, string | undefined>) {
   const databaseUrl = deriveSupplierPurchasableSkuDevelopmentDatabaseUrl(
     env[DIRECT_DATABASE_URL] ?? "",
@@ -100,7 +126,7 @@ function resolveTarget(env: Record<string, string | undefined>) {
 
 export async function runSupplierPurchasableSkuDevelopmentDatabaseCommandCli(
   options: SupplierPurchasableSkuDevelopmentDatabaseCommandCliOptions,
-): Promise<0 | 1> {
+): Promise<number> {
   if (!isMode(options.mode)) {
     options.writeError(TARGET_FAILURE_CODE);
     return 1;
@@ -121,10 +147,22 @@ export async function runSupplierPurchasableSkuDevelopmentDatabaseCommandCli(
 
   try {
     const result = await options.runSupabase(options.mode, target.connection.url);
-    const stdout = sanitizeOutput(result.stdout, target.connection.url);
     const stderr = sanitizeOutput(result.stderr, target.connection.url);
-    if (stdout) options.writeOutput(stdout);
     if (stderr) options.writeError(stderr);
+    if (options.mode === "gen-types") {
+      if (result.exitCode !== 0) {
+        options.writeError(TYPE_GENERATION_FAILURE_CODE);
+        return result.exitCode;
+      }
+      if (containsDatabaseSecret(result.stdout, target.connection.url)) {
+        options.writeError(TYPE_GENERATION_FAILURE_CODE);
+        return 1;
+      }
+      options.writeOutput(result.stdout);
+      return 0;
+    }
+    const stdout = sanitizeOutput(result.stdout, target.connection.url);
+    if (stdout) options.writeOutput(stdout);
     if (result.exitCode !== 0) {
       options.writeError(MIGRATION_FAILURE_CODE);
       return 1;
@@ -137,7 +175,7 @@ export async function runSupplierPurchasableSkuDevelopmentDatabaseCommandCli(
 }
 
 function supabaseCommand(
-  mode: SupplierPurchasableSkuMigrationMode,
+  mode: SupplierPurchasableSkuSupabaseMode,
   databaseUrl: string,
 ): string[] {
   const command = ["pnpm", "dlx", "supabase@2.99.0"];
@@ -148,15 +186,26 @@ function supabaseCommand(
       return [...command, "db", "push", "--dry-run", "--db-url", databaseUrl];
     case "migration-apply":
       return [...command, "db", "push", "--yes", "--db-url", databaseUrl];
+    case "gen-types":
+      return [
+        ...command,
+        "gen",
+        "types",
+        "typescript",
+        "--db-url",
+        databaseUrl,
+        "--schema",
+        "public,graphql_public",
+      ];
   }
 }
 
-async function runSupabase(
-  mode: SupplierPurchasableSkuMigrationMode,
+export function runSupplierPurchasableSkuSupabaseCommand(
+  mode: SupplierPurchasableSkuSupabaseMode,
   databaseUrl: string,
-): Promise<SupplierPurchasableSkuSupabaseResult> {
-  const result = Bun.spawnSync(supabaseCommand(mode, databaseUrl), {
-    env: process.env,
+  spawn: SupplierPurchasableSkuSupabaseSpawn,
+): SupplierPurchasableSkuSupabaseResult {
+  const result = spawn(supabaseCommand(mode, databaseUrl), {
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -165,6 +214,20 @@ async function runSupabase(
     stdout: result.stdout.toString(),
     stderr: result.stderr.toString(),
   };
+}
+
+async function runSupabase(
+  mode: SupplierPurchasableSkuSupabaseMode,
+  databaseUrl: string,
+): Promise<SupplierPurchasableSkuSupabaseResult> {
+  return runSupplierPurchasableSkuSupabaseCommand(
+    mode,
+    databaseUrl,
+    (command, options) => Bun.spawnSync(command, {
+      ...options,
+      env: process.env,
+    }),
+  );
 }
 
 function rerunWithRootEnvironment(): number {
@@ -200,11 +263,14 @@ if (import.meta.main) {
   if (process.env[ROOT_ENVIRONMENT_LOADED] !== "1") {
     process.exitCode = rerunWithRootEnvironment();
   } else {
+    const mode = process.argv[2];
     void runSupplierPurchasableSkuDevelopmentDatabaseCommandCli({
-      mode: process.argv[2],
+      mode,
       env: process.env,
       runSupabase,
-      writeOutput: console.log,
+      writeOutput: mode === "gen-types"
+        ? (message) => process.stdout.write(message)
+        : console.log,
       writeError: console.error,
     }).then((exitCode) => {
       process.exitCode = exitCode;

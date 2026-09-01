@@ -1235,7 +1235,8 @@ target and migration wrappers:
 "supplier:purchasable-sku:target:dev-direct": "bun apps/api/src/scripts/supplier-purchasable-sku-development-database-command.ts target",
 "supplier:purchasable-sku:migration:list:dev-direct": "bun apps/api/src/scripts/supplier-purchasable-sku-development-database-command.ts migration-list",
 "supplier:purchasable-sku:migration:dry-run:dev-direct": "bun apps/api/src/scripts/supplier-purchasable-sku-development-database-command.ts migration-dry-run",
-"supplier:purchasable-sku:migration:apply:dev-direct": "bun apps/api/src/scripts/supplier-purchasable-sku-development-database-command.ts migration-apply"
+"supplier:purchasable-sku:migration:apply:dev-direct": "bun apps/api/src/scripts/supplier-purchasable-sku-development-database-command.ts migration-apply",
+"supplier:purchasable-sku:db:gen-types:dev-direct": "bun apps/api/src/scripts/supplier-purchasable-sku-development-database-command.ts gen-types"
 ```
 
 - [ ] **Step 4: Verify script tests GREEN**
@@ -1283,24 +1284,27 @@ Expected: Local/Remote align through `20260901130000`. This is the only supporte
 
 ```bash
 REPO_ROOT="$(git rev-parse --show-toplevel)"
-MAIN_WORKTREE_ROOT="$(cd "$(dirname "$(git rev-parse --git-common-dir)")" && pwd)"
 (
   set -euo pipefail
   cd "$REPO_ROOT"
-  set -a
-  source "$MAIN_WORKTREE_ROOT/.env"
-  set +a
-  bun run supplier:purchasable-sku:target:dev-direct &&
-    pnpm dlx supabase@2.99.0 gen types typescript \
-      --db-url "$SUPABASE_DB_DIRECT_URL" \
-      --schema public,graphql_public \
-      > apps/api/src/types/database.ts
+  TEMP_TYPES="$(mktemp "$REPO_ROOT/apps/api/src/types/database.ts.XXXXXX")"
+  trap 'rm -f "$TEMP_TYPES"' EXIT
+  bun run supplier:purchasable-sku:db:gen-types:dev-direct > "$TEMP_TYPES"
+  if ! cmp -s "$TEMP_TYPES" "$REPO_ROOT/apps/api/src/types/database.ts"; then
+    chmod 0644 "$TEMP_TYPES"
+    mv "$TEMP_TYPES" "$REPO_ROOT/apps/api/src/types/database.ts"
+  fi
+  rm -f "$TEMP_TYPES"
+  trap - EXIT
   rg -n "get_supplier_purchasable_sku_price_context_v1|command_supplier_purchasable_sku_v1" \
-    apps/api/src/types/database.ts
+    "$REPO_ROOT/apps/api/src/types/database.ts"
 )
 ```
 
-Expected: both function signatures exist with the exact migration argument names.
+The guarded command loads the root `.env` through git common dir and passes the
+normalized exact development URL to Supabase CLI `2.99.0` internally. Stdout contains
+only generated TypeScript. Expected: both function signatures exist with the exact
+migration argument names.
 
 - [ ] **Step 7: Run the real development smoke and EXPLAIN**
 

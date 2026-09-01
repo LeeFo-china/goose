@@ -6,11 +6,12 @@
 - 功能分支：`docs/supplier-sku-inline-price-design`。
 - 本次评审修正前的 Task 9 证据文档 commit：
   `1091d1ba1000ab005d31bafc1760f1979886ae06`。
-- 本文的评审修正与目标保护代码由包含本文当前版本的后续 commit 一并记录，未使用
-  未创建的 SHA 占位符。
+- 首轮目标保护修正 commit：
+  `3bc478ce25eeb52d4dbb5269a1636db5961a2b9e`。本文当前的类型生成保护修正由包含
+  本文当前版本的后续 commit 一并记录，未使用未创建的 SHA 占位符。
 - `origin/main` 已通过双父 merge commit
   `1571b30f1f1f69d0f8fa39dac271d08ac14487c0` 集成主功能；该 commit 不是 squash。
-- 当前分支在评审前已有四个验证/证据 commit，本次目标保护修正也仍待后续集成。
+- 当前分支已有五个验证/证据及目标保护 commit，本次类型生成保护修正也仍待后续集成。
 - 功能 migration：`20260901130000_create_supplier_purchasable_sku_command.sql`。
 - 开发库目标已在连接前按 host `api-dev.goodcms.cn`、database `postgres`
   精确校验，并拒绝生产目标。`dev-direct` 在内存中补充 `sslmode=require`，未修改
@@ -23,9 +24,19 @@
 使用从 git common directory 定位的根 `.env` 和 Supabase CLI `2.99.0` 验证：
 
 - `supplier:purchasable-sku:target:dev-direct` 只输出开发 host、database 和 TLS 模式；
-- `supabase migration list` exit 0，Local/Remote 对齐至 `20260901130000`；
+- `supabase migration list` exit 0，556 条 Local/Remote 记录零差异，对齐至
+  `20260901130000`；
 - `supabase db push --dry-run` exit 0，返回 `Remote database is up to date.`；
 - 本轮未执行 migration push，未连接生产环境。
+
+## 类型生成
+
+- `supplier:purchasable-sku:db:gen-types:dev-direct` 在内部使用经校验并补齐 TLS 的 URL，
+  固定执行 Supabase CLI `2.99.0`，schema 为 `public,graphql_public`；
+- 单元测试确认 argv、纯 TypeScript stdout、诊断 stderr、失败退出码和凭据脱敏；
+- 开发库临时文件验证中，Supabase `postgres-meta` 容器返回 DNS `EAI_AGAIN`，命令 exit 1；
+- 失败时 stdout 为 0 字节，诊断中没有 URL 或凭据，临时文件已删除，已签入的
+  `apps/api/src/types/database.ts` 未改动；未声称类型比较通过。
 
 ## 开发库 Smoke
 
@@ -63,7 +74,8 @@
 
 | 命令 | 结果 |
 | --- | --- |
-| 聚焦 API 回归，17 个文件 | 193 pass / 0 fail / 931 `expect()` calls |
+| 聚焦数据库保护测试，2 个文件 | 22 pass / 0 fail / 79 `expect()` calls |
+| 聚焦 API 回归，17 个文件 | 196 pass / 0 fail / 945 `expect()` calls |
 | `bun run api:check` | exit 0；typecheck、build、API file-size 均通过 |
 | `pnpm --dir apps/admin check` | exit 0；1332 个 TS/TSX 文件检查及 typecheck 通过 |
 | `pnpm --dir apps/admin build` | exit 0；Next.js production build 通过 |

@@ -141,6 +141,99 @@ describe("supplier purchasable SKU dev direct command", () => {
     expect(output.join(" ")).not.toContain("fixture-password");
   });
 
+  test("type generation builds the exact Supabase argv with normalized TLS", async () => {
+    const { runSupplierPurchasableSkuSupabaseCommand } = await import(
+      "./supplier-purchasable-sku-development-database-command"
+    );
+    const calls: unknown[] = [];
+    const normalizedUrl = `${ROOT_DIRECT_URL}?sslmode=require`;
+
+    await runSupplierPurchasableSkuSupabaseCommand(
+      "gen-types",
+      normalizedUrl,
+      (command, options) => {
+        calls.push({ command, options });
+        return { exitCode: 0, stdout: "", stderr: "" };
+      },
+    );
+
+    expect(calls).toEqual([{
+      command: [
+        "pnpm",
+        "dlx",
+        "supabase@2.99.0",
+        "gen",
+        "types",
+        "typescript",
+        "--db-url",
+        normalizedUrl,
+        "--schema",
+        "public,graphql_public",
+      ],
+      options: {
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    }]);
+  });
+
+  test("type generation writes only pure types to stdout", async () => {
+    const { runSupplierPurchasableSkuDevelopmentDatabaseCommandCli } =
+      await import("./supplier-purchasable-sku-development-database-command");
+    const output: string[] = [];
+    const errors: string[] = [];
+    const calls: unknown[] = [];
+    const types = "export type Database = {\n  public: unknown;\n};\n";
+
+    const exitCode = await runSupplierPurchasableSkuDevelopmentDatabaseCommandCli({
+      mode: "gen-types",
+      env: { SUPABASE_DB_DIRECT_URL: ROOT_DIRECT_URL },
+      runSupabase: async (mode, databaseUrl) => {
+        calls.push({ mode, databaseUrl });
+        return { exitCode: 0, stdout: types, stderr: "generated types\n" };
+      },
+      writeOutput: (message) => output.push(message),
+      writeError: (message) => errors.push(message),
+    });
+
+    expect(exitCode).toBe(0);
+    expect(calls).toEqual([{
+      mode: "gen-types",
+      databaseUrl: `${ROOT_DIRECT_URL}?sslmode=require`,
+    }]);
+    expect(output).toEqual([types]);
+    expect(errors).toEqual(["generated types"]);
+  });
+
+  test("type generation failure emits no partial types or credentials", async () => {
+    const { runSupplierPurchasableSkuDevelopmentDatabaseCommandCli } =
+      await import("./supplier-purchasable-sku-development-database-command");
+    const output: string[] = [];
+    const errors: string[] = [];
+
+    const exitCode = await runSupplierPurchasableSkuDevelopmentDatabaseCommandCli({
+      mode: "gen-types",
+      env: { SUPABASE_DB_DIRECT_URL: ROOT_DIRECT_URL },
+      runSupabase: async (_mode, databaseUrl) => ({
+        exitCode: 23,
+        stdout: `partial types from ${databaseUrl}`,
+        stderr: `failed for ${databaseUrl}`,
+      }),
+      writeOutput: (message) => output.push(message),
+      writeError: (message) => errors.push(message),
+    });
+
+    expect(exitCode).toBe(23);
+    expect(output).toEqual([]);
+    expect(errors).toEqual([
+      "failed for [REDACTED_DATABASE_URL]",
+      "SUPPLIER_PURCHASABLE_SKU_DEV_TYPE_GENERATION_FAILED",
+    ]);
+    expect(errors.join(" ")).not.toContain("fixture-user");
+    expect(errors.join(" ")).not.toContain("fixture-password");
+    expect(errors.join(" ")).not.toContain("postgresql://");
+  });
+
   test("resolves root env from normal and linked git common directories", async () => {
     const { resolveSupplierPurchasableSkuRootEnvironmentPath } = await import(
       "./supplier-purchasable-sku-development-database-command"
@@ -187,6 +280,11 @@ describe("supplier purchasable SKU dev direct command", () => {
     ]).toBe(
       "bun apps/api/src/scripts/supplier-purchasable-sku-development-database-command.ts migration-list",
     );
+    expect(rootPackageJson.scripts?.[
+      "supplier:purchasable-sku:db:gen-types:dev-direct"
+    ]).toBe(
+      "bun apps/api/src/scripts/supplier-purchasable-sku-development-database-command.ts gen-types",
+    );
     expect(task8And9).toContain(
       "src/repositories/supplier-purchasable-skus-save.test.ts",
     );
@@ -198,6 +296,12 @@ describe("supplier purchasable SKU dev direct command", () => {
     );
     expect(task8And9).toContain(
       "supplier:purchasable-sku:target:dev-direct &&",
+    );
+    expect(task8And9).toContain(
+      "bun run supplier:purchasable-sku:db:gen-types:dev-direct >",
+    );
+    expect(task8And9).not.toContain(
+      'pnpm dlx supabase@2.99.0 gen types typescript \\\n+      --db-url "$SUPABASE_DB_DIRECT_URL"',
     );
     expect(task8And9).not.toContain("cd apps/api &&");
     expect(plan).not.toContain(
