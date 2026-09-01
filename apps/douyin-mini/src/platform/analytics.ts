@@ -46,6 +46,10 @@ type StoredAnalyticsEvent = AnalyticsEventInput & { occurred_at: string };
 type AnalyticsSnapshot = { version: 1; events: StoredAnalyticsEvent[] };
 
 type AnalyticsRequestEvent = Omit<StoredAnalyticsEvent, "event_id">;
+type ExactBatchDelivery =
+  | { status: "accepted" }
+  | { status: "malformed" }
+  | { status: "rejected"; error: unknown };
 
 export type AnalyticsRecordResult = {
   status: "queued" | "duplicate" | "rejected" | "failed";
@@ -151,9 +155,7 @@ export class AnalyticsQueue {
     return this.flush();
   }
 
-  private async flushOneBatch(
-    canIsolateMaterialPoison = true,
-  ): Promise<AnalyticsFlushResult> {
+  private async flushOneBatch(): Promise<AnalyticsFlushResult> {
     this.cancelDebounce();
     const stored = this.readQueue();
     const now = this.now();
@@ -173,6 +175,26 @@ export class AnalyticsQueue {
       return { status: "empty", sent_count: 0, queue_size: 0 };
     }
     const batch = queued.slice(0, 20);
+    const delivery = await this.requestExactBatch(batch);
+    if (delivery.status === "accepted") return this.commitExactBatch(batch);
+    if (delivery.status === "rejected"
+      && isApiRequestErrorCode(
+        delivery.error,
+        "DOUYIN_MATERIAL_EVENT_ENTITY_INVALID",
+      )
+      && delivery.error.statusCode === 400) {
+      return await this.isolatePoisonAndRetryFixedBatch(batch);
+    }
+    return {
+      status: "failed",
+      sent_count: 0,
+      queue_size: this.readQueue().length,
+    };
+  }
+
+  private async requestExactBatch(
+    batch: readonly StoredAnalyticsEvent[],
+  ): Promise<ExactBatchDelivery> {
     try {
       const response = await this.client.request<unknown>({
         path: "/douyin-mini/events",
@@ -182,51 +204,81 @@ export class AnalyticsQueue {
       if (!isRecord(response)
         || !Number.isInteger(response.accepted)
         || response.accepted !== batch.length) {
-        return {
-          status: "failed",
-          sent_count: 0,
-          queue_size: this.readQueue().length,
-        };
+        return { status: "malformed" };
       }
-      const sentIds = new Set(batch.map((event) => event.event_id));
-      const remaining = this.readQueue().filter((event) => !sentIds.has(event.event_id));
-      this.storage.write({ version: 1, events: remaining } satisfies AnalyticsSnapshot);
-      if (remaining.length > 0) this.scheduleFlush();
-      return {
-        status: "sent",
-        sent_count: batch.length,
-        queue_size: remaining.length,
-      };
+      return { status: "accepted" };
     } catch (error) {
-      if (canIsolateMaterialPoison
-        && isApiRequestErrorCode(error, "DOUYIN_MATERIAL_EVENT_ENTITY_INVALID")
-        && error.statusCode === 400) {
-        const poisonIds = new Set(batch
-          .filter((event) => CLIENT_MATERIAL_ANALYTICS_EVENT_NAMES.has(event.event_name))
-          .map((event) => event.event_id));
-        if (poisonIds.size > 0) {
-          const remaining = this.readQueue().filter((event) => !poisonIds.has(event.event_id));
-          try {
-            this.storage.write({ version: 1, events: remaining } satisfies AnalyticsSnapshot);
-          } catch {
-            return {
-              status: "failed",
-              sent_count: 0,
-              queue_size: this.readQueue().length,
-            };
-          }
-          if (remaining.length === 0) {
-            return { status: "empty", sent_count: 0, queue_size: 0 };
-          }
-          return await this.flushOneBatch(false);
-        }
-      }
+      return { status: "rejected", error };
+    }
+  }
+
+  private commitExactBatch(
+    batch: readonly StoredAnalyticsEvent[],
+  ): AnalyticsFlushResult {
+    const sentIds = new Set(batch.map((event) => event.event_id));
+    const remaining = this.readQueue().filter((event) => !sentIds.has(event.event_id));
+    try {
+      this.storage.write({ version: 1, events: remaining } satisfies AnalyticsSnapshot);
+    } catch {
       return {
         status: "failed",
         sent_count: 0,
         queue_size: this.readQueue().length,
       };
     }
+    if (remaining.length > 0) this.ensureFlushScheduled();
+    return {
+      status: "sent",
+      sent_count: batch.length,
+      queue_size: remaining.length,
+    };
+  }
+
+  private async isolatePoisonAndRetryFixedBatch(
+    batch: readonly StoredAnalyticsEvent[],
+  ): Promise<AnalyticsFlushResult> {
+    const poisonIds = new Set(batch
+      .filter((event) => CLIENT_MATERIAL_ANALYTICS_EVENT_NAMES.has(event.event_name))
+      .map((event) => event.event_id));
+    if (poisonIds.size === 0) {
+      return {
+        status: "failed",
+        sent_count: 0,
+        queue_size: this.readQueue().length,
+      };
+    }
+    const ordinaryBatch = batch.filter((event) => !poisonIds.has(event.event_id));
+    const afterIsolation = this.readQueue().filter((event) => !poisonIds.has(event.event_id));
+    try {
+      this.storage.write({ version: 1, events: afterIsolation } satisfies AnalyticsSnapshot);
+    } catch {
+      return {
+        status: "failed",
+        sent_count: 0,
+        queue_size: this.readQueue().length,
+      };
+    }
+    if (ordinaryBatch.length === 0) {
+      if (afterIsolation.length > 0) this.ensureFlushScheduled();
+      return { status: "empty", sent_count: 0, queue_size: afterIsolation.length };
+    }
+    const retry = await this.requestExactBatch(ordinaryBatch);
+    if (retry.status === "accepted") {
+      const result = this.commitExactBatch(ordinaryBatch);
+      if (result.status === "failed") this.ensureFlushScheduled();
+      return result;
+    }
+    this.ensureFlushScheduled();
+    return {
+      status: "failed",
+      sent_count: 0,
+      queue_size: this.readQueue().length,
+    };
+  }
+
+  private ensureFlushScheduled(): void {
+    if (this.cancelScheduledFlush || this.readQueue().length === 0) return;
+    this.scheduleFlush();
   }
 
   private cancelDebounce(): void {

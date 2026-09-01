@@ -127,6 +127,15 @@ test("hide-show waits for pending remove and clear settlement before the latest 
     page.onHide();
     page.onShow();
     await flush();
+    expect(page.data.mutating).toBe(true);
+    if (command === "remove") {
+      page.onConfirmRemove({ currentTarget: { dataset: { claimid: item.claim_id } } });
+    } else {
+      page.onConfirmClear();
+    }
+    expect(modals).toHaveLength(1);
+    expect(command === "remove" ? removeOwnedMaterial : clearOwnedMaterials)
+      .toHaveBeenCalledTimes(1);
     expect(fetchOwnedMaterials).toHaveBeenCalledTimes(1);
 
     mutation.resolve();
@@ -141,15 +150,94 @@ test("hide-show waits for pending remove and clear settlement before the latest 
 });
 
 test("hide-show refreshes after a rejected old mutation without old side effects", async () => {
+  for (const command of ["remove", "clear"] as const) {
+    const mutation = deferred<void>();
+    const modals: Array<{ success(result: { confirm: boolean }): void }> = [];
+    const fetchOwnedMaterials = mock(async () => response([item]));
+    const removeOwnedMaterial = mock(() => mutation.promise);
+    const clearOwnedMaterials = mock(() => mutation.promise);
+    const toasts: string[] = [];
+    const page = makePage({
+      modals, fetchOwnedMaterials, removeOwnedMaterial, clearOwnedMaterials, toasts,
+    });
+    page.onLoad();
+    await flush();
+    if (command === "remove") {
+      page.onConfirmRemove({ currentTarget: { dataset: { claimid: item.claim_id } } });
+    } else {
+      page.onConfirmClear();
+    }
+    modals[0]!.success({ confirm: true });
+    page.onHide();
+    page.onShow();
+    await flush();
+    expect(page.data.mutating).toBe(true);
+    if (command === "remove") {
+      page.onConfirmRemove({ currentTarget: { dataset: { claimid: item.claim_id } } });
+    } else {
+      page.onConfirmClear();
+    }
+    expect(modals).toHaveLength(1);
+    expect(fetchOwnedMaterials).toHaveBeenCalledTimes(1);
+    mutation.reject(new Error(`${command} rejected`));
+    await flush();
+    await flush();
+    expect(fetchOwnedMaterials).toHaveBeenCalledTimes(2);
+    expect(page.data.items).toHaveLength(1);
+    expect(toasts).toEqual([]);
+  }
+});
+
+test("unload keeps pending remove and clear globally single-flight without late effects", async () => {
+  for (const command of ["remove", "clear"] as const) {
+    const mutation = deferred<void>();
+    const modals: Array<{ success(result: { confirm: boolean }): void }> = [];
+    const fetchOwnedMaterials = mock(async () => response([item]));
+    const removeOwnedMaterial = mock(() => mutation.promise);
+    const clearOwnedMaterials = mock(() => mutation.promise);
+    const toasts: string[] = [];
+    const page = makePage({
+      modals, fetchOwnedMaterials, removeOwnedMaterial, clearOwnedMaterials, toasts,
+    });
+    page.onLoad();
+    await flush();
+    if (command === "remove") {
+      page.onConfirmRemove({ currentTarget: { dataset: { claimid: item.claim_id } } });
+    } else {
+      page.onConfirmClear();
+    }
+    modals[0]!.success({ confirm: true });
+    await flush();
+    page.onUnload();
+    if (command === "remove") {
+      page.onConfirmRemove({ currentTarget: { dataset: { claimid: item.claim_id } } });
+    } else {
+      page.onConfirmClear();
+    }
+    expect(modals).toHaveLength(1);
+    expect(command === "remove" ? removeOwnedMaterial : clearOwnedMaterials)
+      .toHaveBeenCalledTimes(1);
+    const fetchCount = fetchOwnedMaterials.mock.calls.length;
+    mutation.resolve();
+    await flush();
+    expect(fetchOwnedMaterials).toHaveBeenCalledTimes(fetchCount);
+    expect(toasts).toEqual([]);
+  }
+});
+
+test("a failed authoritative refresh releases reconcile lock and exposes retry", async () => {
   const mutation = deferred<void>();
+  let fetchCalls = 0;
+  const fetchOwnedMaterials = mock(async () => {
+    fetchCalls += 1;
+    if (fetchCalls === 2) throw new Error("refresh failed");
+    return response([item]);
+  });
   const modals: Array<{ success(result: { confirm: boolean }): void }> = [];
-  const fetchOwnedMaterials = mock(async () => response([item]));
-  const toasts: string[] = [];
   const page = makePage({
     modals,
     fetchOwnedMaterials,
     clearOwnedMaterials: mock(() => mutation.promise),
-    toasts,
   });
   page.onLoad();
   await flush();
@@ -157,14 +245,16 @@ test("hide-show refreshes after a rejected old mutation without old side effects
   modals[0]!.success({ confirm: true });
   page.onHide();
   page.onShow();
-  await flush();
-  expect(fetchOwnedMaterials).toHaveBeenCalledTimes(1);
-  mutation.reject(new Error("clear rejected"));
+  mutation.resolve();
   await flush();
   await flush();
-  expect(fetchOwnedMaterials).toHaveBeenCalledTimes(2);
-  expect(page.data.items).toHaveLength(1);
-  expect(toasts).toEqual([]);
+
+  expect(page.data.mutating).toBe(false);
+  expect(page.data.firstError).toBe(true);
+  page.onRetry();
+  await flush();
+  expect(fetchOwnedMaterials).toHaveBeenCalledTimes(3);
+  expect(page.data.firstError).toBe(false);
 });
 
 function makePage(options: {

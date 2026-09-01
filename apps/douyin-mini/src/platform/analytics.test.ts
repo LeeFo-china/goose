@@ -28,15 +28,20 @@ function harness(initialValue: unknown = null) {
   const request = mock(async (input: ApiRequestInput) => ({
     accepted: Array.isArray(input.data?.events) ? input.data.events.length : 0,
   }));
+  const cancelScheduled = mock(() => undefined);
+  const schedulerSchedule = mock(() => cancelScheduled);
   const analytics = new AnalyticsQueue(
     { request } as Pick<ApiClient, "request">,
     {
       storage,
       now: () => NOW,
-      scheduler: { schedule: mock(() => () => undefined) },
+      scheduler: { schedule: schedulerSchedule },
     },
   );
-  return { analytics, getStored: () => stored, request, storage };
+  return {
+    analytics, getStored: () => stored, request, storage,
+    schedulerSchedule, cancelScheduled,
+  };
 }
 
 describe("AnalyticsQueue", () => {
@@ -348,6 +353,90 @@ describe("AnalyticsQueue", () => {
     expect(getStored()).toEqual({ version: 1, events: [] });
   });
 
+  test("retries only the ordinary subset from the poisoned fixed batch", async () => {
+    const poison = deferred<void>();
+    const initial = mixedPoisonBatch();
+    const {
+      analytics, getStored, request, schedulerSchedule, cancelScheduled,
+    } = harness(initial);
+    request.mockImplementationOnce(async () => {
+      await poison.promise;
+      throw materialPoison();
+    });
+    const flush = analytics.flush();
+    await Bun.sleep(0);
+    analytics.record({
+      event_id: eventId(3), event_name: "case_view", attribution,
+      entity_id: ENTITY_ID,
+    });
+    analytics.record({
+      event_id: eventId(4), event_name: "material_preview", attribution,
+      entity_id: ENTITY_ID,
+    });
+    schedulerSchedule.mockClear();
+    cancelScheduled.mockClear();
+    poison.resolve();
+
+    await expect(flush).resolves.toEqual({
+      status: "sent", sent_count: 1, queue_size: 2,
+    });
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(request.mock.calls[1]?.[0]?.data?.events).toEqual([
+      expect.objectContaining({ event_name: "page_view" }),
+    ]);
+    expect((getStored() as { events: Array<{ event_name: string }> }).events
+      .map((event) => event.event_name)).toEqual(["case_view", "material_preview"]);
+    expect(cancelScheduled).not.toHaveBeenCalled();
+    expect(schedulerSchedule).not.toHaveBeenCalled();
+  });
+
+  test("fixed poison retry failures retain its ordinary subset and later events", async () => {
+    for (const retryOutcome of ["network", "malformed", "storage"] as const) {
+      const poison = deferred<void>();
+      const base = harness(mixedPoisonBatch());
+      let failRetryPersistence = false;
+      base.request.mockImplementationOnce(async () => {
+        await poison.promise;
+        throw materialPoison();
+      });
+      if (retryOutcome === "network") {
+        base.request.mockImplementationOnce(async () => { throw new Error("offline"); });
+      } else if (retryOutcome === "malformed") {
+        base.request.mockImplementationOnce(async () => ({ accepted: 0 }));
+      } else {
+        failRetryPersistence = true;
+      }
+      const flush = base.analytics.flush();
+      await Bun.sleep(0);
+      base.analytics.record({
+        event_id: eventId(3), event_name: "case_view", attribution,
+        entity_id: ENTITY_ID,
+      });
+      if (failRetryPersistence) {
+        const persist = base.storage.write;
+        let writes = 0;
+        base.storage.write = mock((value: unknown) => {
+          writes += 1;
+          if (writes === 2) throw new Error("storage failed after retry");
+          persist(value);
+        });
+      }
+      poison.resolve();
+
+      await expect(flush).resolves.toEqual({
+        status: "failed", sent_count: 0, queue_size: 2,
+      });
+      expect(base.request).toHaveBeenCalledTimes(2);
+      expect(base.request.mock.calls[1]?.[0]?.data?.events).toEqual([
+        expect.objectContaining({ event_name: "page_view" }),
+      ]);
+      expect((base.getStored() as { events: Array<{ event_name: string }> }).events
+        .map((event) => event.event_name)).toEqual(["page_view", "case_view"]);
+      expect(base.schedulerSchedule).toHaveBeenCalledTimes(1);
+      expect(base.cancelScheduled).not.toHaveBeenCalled();
+    }
+  });
+
   test("never drops analytics for 5xx or unrelated business failures", async () => {
     for (const error of [
       new ApiRequestError(500, "DOUYIN_MATERIAL_EVENT_ENTITY_INVALID", "server failed"),
@@ -552,4 +641,36 @@ function snapshot(count: number) {
       attribution,
     })),
   };
+}
+
+function mixedPoisonBatch() {
+  return {
+    version: 1,
+    events: [
+      {
+        event_id: eventId(1), event_name: "material_copy",
+        occurred_at: "2026-07-20T08:00:00.000Z", attribution,
+        entity_id: ENTITY_ID,
+      },
+      {
+        event_id: eventId(2), event_name: "page_view",
+        occurred_at: "2026-07-20T08:00:00.000Z", attribution,
+      },
+    ],
+  };
+}
+
+function materialPoison() {
+  return new ApiRequestError(
+    400,
+    "DOUYIN_MATERIAL_EVENT_ENTITY_INVALID",
+    "material entity is no longer active",
+  );
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((done, fail) => { resolve = done; reject = fail; });
+  return { promise, resolve, reject };
 }

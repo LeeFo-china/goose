@@ -114,7 +114,9 @@ export function createMyMaterialsPageDefinition(dependencies: MyMaterialsPageDep
       if (this.mutationNeedsReconcile && pendingSettlement) await pendingSettlement;
       if (!this.lifecycle.isCurrent(authority)) return;
       await this.load("refresh");
-      if (this.lifecycle.isCurrent(authority)) this.mutationNeedsReconcile = false;
+      if (!this.lifecycle.isCurrent(authority)) return;
+      this.mutationNeedsReconcile = false;
+      this.syncState();
     },
     syncState() {
       if (!this.lifecycle.beginOperation()) return;
@@ -122,7 +124,9 @@ export function createMyMaterialsPageDefinition(dependencies: MyMaterialsPageDep
         items: this.pageState.pagination.items.map((value) => ({ ...value, claimed: true })),
         firstLoading: this.pageState.view.firstLoading, firstError: this.pageState.view.firstError,
         empty: this.pageState.view.empty, paginationStatus: this.pageState.view.paginationStatus,
-        mutating: this.pageState.mutation !== null,
+        mutating: this.pageState.mutation !== null
+          || this.mutationSettlement !== null
+          || this.mutationNeedsReconcile,
       });
     },
     onRetry() { void this.load("retry"); },
@@ -153,7 +157,10 @@ export function createMyMaterialsPageDefinition(dependencies: MyMaterialsPageDep
       command: OwnedMutationCommand,
       copy: Pick<ModalOptions, "title" | "content" | "confirmText" | "cancelText">,
     ) {
-      if (this.pageState.mutation || this.activeConfirmation) return;
+      if (this.pageState.mutation
+        || this.mutationSettlement
+        || this.mutationNeedsReconcile
+        || this.activeConfirmation) return;
       const authority = this.lifecycle.beginOperation();
       if (!authority) return;
       const token = { sequence: this.confirmationSequence + 1, command };
@@ -179,6 +186,7 @@ export function createMyMaterialsPageDefinition(dependencies: MyMaterialsPageDep
       }
     },
     async executeMutation(command: OwnedMutationCommand) {
+      if (this.mutationSettlement || this.mutationNeedsReconcile) return;
       const authority = this.lifecycle.beginOperation();
       if (!authority) return;
       const pending = beginOwnedMutation(this.pageState, command);
@@ -207,17 +215,23 @@ export function createMyMaterialsPageDefinition(dependencies: MyMaterialsPageDep
       try {
         await mutationFlight;
         if (!this.lifecycle.isCurrent(authority)) return;
+        if (this.mutationSettlement === settlement) this.mutationSettlement = null;
         const resolved = resolveOwnedMutation(this.pageState, pending.request);
         this.pageState = resolved.state;
         this.syncState();
         if (resolved.shouldReload) await this.load("refresh");
         if (this.lifecycle.isCurrent(authority)) {
           this.mutationNeedsReconcile = false;
+          this.syncState();
           dependencies.showToast({ title: command.type === "clear" ? "已清空" : "已移出", icon: "none" });
         }
       } catch {
         this.handleMutationFailure(pending.request, authority);
-        if (this.lifecycle.isCurrent(authority)) this.mutationNeedsReconcile = false;
+        if (this.lifecycle.isCurrent(authority)) {
+          this.mutationNeedsReconcile = false;
+          if (this.mutationSettlement === settlement) this.mutationSettlement = null;
+          this.syncState();
+        }
       } finally {
         if (this.mutationSettlement === settlement) this.mutationSettlement = null;
       }
