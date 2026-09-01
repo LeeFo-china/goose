@@ -57,6 +57,13 @@ export function selectMaterialVersionAfterPageLoad<Version extends { id: string 
   return versions[0] ?? previous;
 }
 
+export function resolveSelectedMaterialVersionDetail<Version extends { id: string }>(
+  selectedVersionId: string,
+  loadedVersion: Version | null,
+): Version | null {
+  return loadedVersion?.id === selectedVersionId ? loadedVersion : null;
+}
+
 export function MaterialNoteDetail({
   detail,
   initialVersionPage,
@@ -81,7 +88,11 @@ export function MaterialNoteDetail({
   const [selectedVersionDetail, setSelectedVersionDetail] = useState<DouyinMaterialNoteTenantVersion | null>(null);
   const [previewError, setPreviewError] = useState("");
   const [previewReloadKey, setPreviewReloadKey] = useState(0);
-  const hasLoadedBody = selectedVersionDetail?.content_blocks !== undefined;
+  const resolvedVersionDetail = resolveSelectedMaterialVersionDetail(
+    selectedVersion.id,
+    selectedVersionDetail,
+  );
+  const hasLoadedBody = resolvedVersionDetail?.content_blocks !== undefined;
 
   useEffect(() => {
     setVersions(initialVersionPage);
@@ -144,7 +155,7 @@ export function MaterialNoteDetail({
             当前最新 v{detail.current_version} · 累计领取 {detail.claim_count} 次 · 更新于 {formatDate(detail.updated_at)}
           </p>
         </div>
-        {selectedVersionDetail && hasLoadedBody ? <MaterialNoteActions
+        {resolvedVersionDetail && hasLoadedBody ? <MaterialNoteActions
           key={`${detail.status}:${selectedVersion.id}`}
           noteId={detail.id}
           status={detail.status}
@@ -192,18 +203,18 @@ export function MaterialNoteDetail({
       </Card>
 
       {previewError ? <StatusAlert>{previewError}<Button type="button" variant="link" onClick={() => setPreviewReloadKey((current) => current + 1)}>重新加载</Button></StatusAlert> : null}
-      {!selectedVersionDetail && !previewError ? <div className="flex items-center gap-2 text-sm text-muted-foreground">
+      {!resolvedVersionDetail && !previewError ? <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Loader2 className="animate-spin" data-icon="inline-start" />正在读取所选版本正文
       </div> : null}
-      {selectedVersionDetail ? canManage && detail.status !== "withdrawn"
+      {resolvedVersionDetail ? canManage && detail.status !== "withdrawn"
         ? <MaterialNoteEditor
-          key={selectedVersionDetail.id}
+          key={resolvedVersionDetail.id}
           noteId={detail.id}
-          baseVersion={selectedVersionDetail}
+          baseVersion={resolvedVersionDetail}
           canManage
           onSaved={handleVersionSaved}
         />
-        : <MaterialNoteDraftPreview draft={selectedVersionDetail} />
+        : <MaterialNoteDraftPreview draft={resolvedVersionDetail} />
       : null}
     </div>
   );

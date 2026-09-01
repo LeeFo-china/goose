@@ -5,6 +5,7 @@ import type {
 import { z } from "zod";
 
 import {
+  assertMaterialNoteRequestedPage,
   buildMaterialNoteListQuery,
   getMaterialNoteActions,
   type MaterialNoteAction,
@@ -48,7 +49,7 @@ export async function listMaterialNotes(filters: MaterialNoteFilters) {
     { cache: "no-store", fallbackMessage: "资料列表加载失败" },
   );
   const result = parseMaterialNoteList(raw);
-  assertRequestedPage(result.pagination, filters);
+  assertMaterialNoteRequestedPage(result.pagination, filters);
   return result;
 }
 
@@ -75,7 +76,7 @@ export async function listMaterialNoteVersions(
     { cache: "no-store", fallbackMessage: "版本历史加载失败" },
   );
   const result = parseMaterialNoteVersionList(raw);
-  assertRequestedPage(result.pagination, {
+  assertMaterialNoteRequestedPage(result.pagination, {
     page: pagination.page,
     pageSize: Math.min(100, pagination.pageSize),
   });
@@ -192,13 +193,4 @@ function createReasonBody(
   }
   if (trimmedReason.length > 1_000) throw new Error("操作原因不能超过 1000 个字符");
   return { expected_status: expectedStatus, reason: trimmedReason };
-}
-
-function assertRequestedPage(
-  actual: { page: number; pageSize: number },
-  requested: { page: number; pageSize: number },
-): void {
-  if (actual.page !== requested.page || actual.pageSize !== requested.pageSize) {
-    throw new Error("分页响应与请求不一致");
-  }
 }

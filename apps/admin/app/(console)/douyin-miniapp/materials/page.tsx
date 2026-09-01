@@ -22,7 +22,7 @@ import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
 type SearchParams = Promise<Partial<Record<
   "page" | "pageSize" | "status" | "keyword",
-  string
+  string | string[] | undefined
 >>>;
 
 export default async function TenantMaterialNotesPage({

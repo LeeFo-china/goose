@@ -14,6 +14,7 @@ import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -73,46 +74,59 @@ export function MaterialNoteFilters({ filters }: { filters: MaterialNoteFilters 
   }
 
   return (
-    <form className="grid gap-3 lg:grid-cols-[170px_130px_minmax(240px,1fr)_80px]" onSubmit={submit}>
-      <Select value={status} disabled={pending} onValueChange={(value) => {
-        setStatus(value);
-        navigate({ keyword, status: value, pageSize });
-      }}>
-        <SelectTrigger aria-label="资料状态"><SelectValue placeholder="全部状态" /></SelectTrigger>
-        <SelectContent><SelectGroup>{statusOptions.map((option) => (
-          <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-        ))}</SelectGroup></SelectContent>
-      </Select>
-      <Select value={pageSize} disabled={pending} onValueChange={(value) => {
-        setPageSize(value);
-        navigate({ keyword, status, pageSize: value });
-      }}>
-        <SelectTrigger aria-label="每页条数"><SelectValue /></SelectTrigger>
-        <SelectContent><SelectGroup>{pageSizeOptions.map((value) => (
-          <SelectItem key={value} value={String(value)}>{value} 条/页</SelectItem>
-        ))}</SelectGroup></SelectContent>
-      </Select>
-      <InputGroup>
-        <InputGroupAddon><Search /></InputGroupAddon>
-        <InputGroupInput
-          value={keyword}
-          disabled={pending}
-          maxLength={120}
-          aria-label="搜索标题、摘要或分类"
-          placeholder="搜索标题、摘要或分类"
-          onChange={(event) => setKeyword(event.target.value)}
-        />
-        {keyword ? <InputGroupAddon align="inline-end"><InputGroupButton
-          type="button"
-          size="icon-xs"
-          aria-label="清空搜索"
-          onClick={() => { setKeyword(""); navigate({ keyword: "", status, pageSize }); }}
-        ><X /></InputGroupButton></InputGroupAddon> : null}
-      </InputGroup>
-      <Button type="submit" disabled={pending}>
-        {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
-        搜索
-      </Button>
+    <form onSubmit={submit}>
+      <FieldGroup className="grid gap-2 lg:grid-cols-[170px_130px_minmax(240px,1fr)_80px] lg:items-end">
+        <Field>
+          <FieldLabel htmlFor="material-note-status" className="sr-only">资料状态</FieldLabel>
+          <Select value={status} disabled={pending} onValueChange={(value) => {
+            setStatus(value);
+            navigate({ keyword, status: value, pageSize });
+          }}>
+            <SelectTrigger id="material-note-status"><SelectValue placeholder="全部状态" /></SelectTrigger>
+            <SelectContent><SelectGroup>{statusOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+            ))}</SelectGroup></SelectContent>
+          </Select>
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="material-note-page-size" className="sr-only">每页条数</FieldLabel>
+          <Select value={pageSize} disabled={pending} onValueChange={(value) => {
+            setPageSize(value);
+            navigate({ keyword, status, pageSize: value });
+          }}>
+            <SelectTrigger id="material-note-page-size"><SelectValue /></SelectTrigger>
+            <SelectContent><SelectGroup>{pageSizeOptions.map((value) => (
+              <SelectItem key={value} value={String(value)}>{value} 条/页</SelectItem>
+            ))}</SelectGroup></SelectContent>
+          </Select>
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="material-note-keyword" className="sr-only">搜索标题、摘要或分类</FieldLabel>
+          <InputGroup>
+            <InputGroupAddon><Search /></InputGroupAddon>
+            <InputGroupInput
+              id="material-note-keyword"
+              value={keyword}
+              disabled={pending}
+              maxLength={120}
+              placeholder="搜索标题、摘要或分类"
+              onChange={(event) => setKeyword(event.target.value)}
+            />
+            {keyword ? <InputGroupAddon align="inline-end"><InputGroupButton
+              type="button"
+              size="icon-xs"
+              aria-label="清空搜索"
+              onClick={() => { setKeyword(""); navigate({ keyword: "", status, pageSize }); }}
+            ><X /></InputGroupButton></InputGroupAddon> : null}
+          </InputGroup>
+        </Field>
+        <Field>
+          <Button type="submit" disabled={pending}>
+            {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
+            搜索
+          </Button>
+        </Field>
+      </FieldGroup>
     </form>
   );
 }

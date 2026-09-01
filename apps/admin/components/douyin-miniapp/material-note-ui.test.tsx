@@ -3,9 +3,15 @@ import { describe, expect, test } from "bun:test";
 
 import { createEmptySiteContentBlock, resolveAllowedSiteContentBlockTypes } from
   "@/components/site-content/site-content-block-editor";
-import { narrowMaterialNoteEditorBlocks } from
+import {
+  narrowMaterialNoteEditorBlocks,
+  validateMaterialNoteEditorDraft,
+} from
   "@/components/douyin-miniapp/material-note-editor";
-import { selectMaterialVersionAfterPageLoad } from
+import {
+  resolveSelectedMaterialVersionDetail,
+  selectMaterialVersionAfterPageLoad,
+} from
   "@/components/douyin-miniapp/material-note-detail";
 
 const adminRoot = new URL("../../", import.meta.url);
@@ -67,6 +73,7 @@ describe("抖音资料后台工作台 UI 合同", () => {
     expect(newPage).toContain("douyin_material_note.manage");
     expect(detailPage).toContain("douyin_material_note.manage");
     expect(detailPage).toContain("douyin_material_note.publish");
+    expect(detailPage).toContain("assertMaterialNoteRequestedPage");
   });
 
   test("列表提供 URL 筛选分页、聚合列和稳定状态", () => {
@@ -76,6 +83,8 @@ describe("抖音资料后台工作台 UI 合同", () => {
     expect(table).toContain("status");
     expect(table).toContain("pageSize");
     expect(table).toContain("router.push");
+    expect(table).toContain("FieldGroup");
+    expect(table).toContain("FieldLabel");
     expect(table).toContain("claim_count");
     expect(table).toContain("current_version");
     expect(table).toContain("initialError");
@@ -104,6 +113,42 @@ describe("抖音资料后台工作台 UI 合同", () => {
     expect(selectMaterialVersionAfterPageLoad([first, second], previous)).toBe(first);
     expect(selectMaterialVersionAfterPageLoad([first, second], previous, second.id)).toBe(second);
     expect(selectMaterialVersionAfterPageLoad([], previous)).toBe(previous);
+    expect(resolveSelectedMaterialVersionDetail(first.id, first)).toBe(first);
+    expect(resolveSelectedMaterialVersionDetail(second.id, first)).toBeNull();
+    expect(detail).toContain("resolvedVersionDetail");
+  });
+
+  test("编辑器按字段路径映射中文错误并关联可访问属性", () => {
+    const result = validateMaterialNoteEditorDraft({
+      title: "",
+      summary: "",
+      category: "",
+      applicable_to: "适".repeat(301),
+      content_blocks: [{ type: "paragraph", text: "" }],
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.fieldErrors).toEqual({
+        title: "请输入 1～300 个字符的资料标题",
+        summary: "请输入 1～1000 个字符的资料摘要",
+        category: "请输入 1～100 个字符的资料分类",
+        applicable_to: "适用场景不能超过 300 个字符",
+        content_blocks: "请检查正文内容块，确保必填内容完整且格式有效",
+      });
+    }
+
+    const editor = read("components/douyin-miniapp/material-note-editor.tsx");
+    const actions = read("components/douyin-miniapp/material-note-actions.tsx");
+    for (const field of ["title", "summary", "category", "applicable", "blocks"]) {
+      expect(editor).toContain(`material-${field}-error`);
+    }
+    expect(editor).toContain("data-invalid");
+    expect(editor).toContain("aria-invalid");
+    expect(editor).toContain("aria-describedby");
+    expect(editor).toContain("aria-required");
+    expect(actions).toContain("required");
+    expect(actions).toContain("aria-required");
+    expect(actions).toContain("aria-describedby");
   });
 
   test("发布指定版本；归档与不可恢复撤回使用不同确认和原因", () => {

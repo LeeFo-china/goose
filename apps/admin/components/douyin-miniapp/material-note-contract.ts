@@ -73,11 +73,14 @@ export const materialNoteStatusLabels: Record<DouyinMaterialNoteStatus, string> 
 
 export function normalizeMaterialNoteFilters(input: Partial<Record<
   "page" | "pageSize" | "status" | "keyword",
-  string | undefined
+  unknown
 >>): MaterialNoteFilters {
-  const parsedPage = Number(input.page ?? 1);
-  const parsedPageSize = Number(input.pageSize ?? MATERIAL_NOTE_DEFAULT_PAGE_SIZE);
-  const status = input.status?.trim() ?? "";
+  const pageValue = firstSearchParamString(input.page);
+  const pageSizeValue = firstSearchParamString(input.pageSize);
+  const status = firstSearchParamString(input.status)?.trim() ?? "";
+  const keyword = firstSearchParamString(input.keyword) ?? "";
+  const parsedPage = Number(pageValue ?? 1);
+  const parsedPageSize = Number(pageSizeValue ?? MATERIAL_NOTE_DEFAULT_PAGE_SIZE);
   return {
     page: Number.isFinite(parsedPage) && parsedPage >= 1
       ? Math.floor(parsedPage)
@@ -86,8 +89,14 @@ export function normalizeMaterialNoteFilters(input: Partial<Record<
       ? Math.min(MATERIAL_NOTE_MAX_PAGE_SIZE, Math.floor(parsedPageSize))
       : MATERIAL_NOTE_DEFAULT_PAGE_SIZE,
     status: statusSet.has(status) ? status as DouyinMaterialNoteStatus : "",
-    keyword: (input.keyword ?? "").trim().slice(0, 120),
+    keyword: keyword.trim().slice(0, 120),
   };
+}
+
+function firstSearchParamString(value: unknown): string | undefined {
+  if (typeof value === "string") return value;
+  if (!Array.isArray(value)) return undefined;
+  return typeof value[0] === "string" ? value[0] : undefined;
 }
 
 export function buildMaterialNoteListQuery(filters: MaterialNoteFilters): URLSearchParams {
@@ -98,6 +107,15 @@ export function buildMaterialNoteListQuery(filters: MaterialNoteFilters): URLSea
   if (filters.status) query.set("status", filters.status);
   if (filters.keyword) query.set("keyword", filters.keyword);
   return query;
+}
+
+export function assertMaterialNoteRequestedPage(
+  actual: { page: number; pageSize: number },
+  requested: { page: number; pageSize: number },
+): void {
+  if (actual.page !== requested.page || actual.pageSize !== requested.pageSize) {
+    throw new Error("分页响应与请求不一致");
+  }
 }
 
 export function parseMaterialNoteList(value: unknown): DouyinMaterialNoteTenantList {

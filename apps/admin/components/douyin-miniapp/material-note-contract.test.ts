@@ -6,6 +6,7 @@ import type {
 } from "@gooes/domain";
 
 import {
+  assertMaterialNoteRequestedPage,
   buildMaterialNoteListQuery,
   getMaterialNoteActions,
   getMaterialNotePermissions,
@@ -75,6 +76,52 @@ describe("抖音资料后台客户端契约", () => {
     expect(query.toString()).toBe(
       "page=2&pageSize=50&status=archived&keyword=%E6%B8%85%E5%8D%95",
     );
+  });
+
+  test("重复和畸形 searchParams 只取首个字符串或安全回退", () => {
+    expect(normalizeMaterialNoteFilters({
+      page: ["3", "9"],
+      pageSize: ["50", "100"],
+      status: ["archived", "published"],
+      keyword: ["  首个关键词  ", "忽略词"],
+    })).toEqual({
+      page: 3,
+      pageSize: 50,
+      status: "archived",
+      keyword: "首个关键词",
+    });
+    expect(() => normalizeMaterialNoteFilters({
+      page: { invalid: true },
+      pageSize: null,
+      status: [123],
+      keyword: [],
+    })).not.toThrow();
+    expect(normalizeMaterialNoteFilters({
+      page: { invalid: true },
+      pageSize: null,
+      status: [123],
+      keyword: [],
+    })).toEqual({
+      page: 1,
+      pageSize: MATERIAL_NOTE_DEFAULT_PAGE_SIZE,
+      status: "",
+      keyword: "",
+    });
+  });
+
+  test("分页响应必须严格匹配请求的 page 和 pageSize", () => {
+    expect(() => assertMaterialNoteRequestedPage(
+      { page: 1, pageSize: 20 },
+      { page: 1, pageSize: 20 },
+    )).not.toThrow();
+    expect(() => assertMaterialNoteRequestedPage(
+      { page: 2, pageSize: 20 },
+      { page: 1, pageSize: 20 },
+    )).toThrow("分页响应与请求不一致");
+    expect(() => assertMaterialNoteRequestedPage(
+      { page: 1, pageSize: 50 },
+      { page: 1, pageSize: 20 },
+    )).toThrow("分页响应与请求不一致");
   });
 
   test("严格解析聚合列表且拒绝正文与领取人身份字段", () => {

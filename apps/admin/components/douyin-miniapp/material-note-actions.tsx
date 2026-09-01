@@ -188,12 +188,17 @@ function MaterialNoteActionDialog({
             maxLength={1_000}
             value={reason}
             disabled={pending}
+            required
+            aria-required
             aria-invalid={Boolean(error && !reason.trim())}
+            aria-describedby={`material-${action}-reason-error`}
             placeholder={action === "withdraw" ? "必填，请记录不可恢复撤回的合规原因" : "必填，请记录本次归档原因"}
             onChange={(event) => { setReason(event.target.value); setError(""); setRetryRequest(null); }}
           />
           <FieldDescription>{action === "withdraw" ? "撤回后不能恢复；需要重新提供时只能创建新资料。" : "归档可在后续明确选择版本后重新发布。"}</FieldDescription>
-          {!reason.trim() && error ? <FieldError>{action === "withdraw" ? "撤回原因不能为空" : "归档原因不能为空"}</FieldError> : null}
+          {!reason.trim() && error ? <FieldError id={`material-${action}-reason-error`}>
+            {action === "withdraw" ? "撤回原因不能为空" : "归档原因不能为空"}
+          </FieldError> : null}
         </Field> : null}
         {error ? <StatusAlert>{error}{retryRequest ? "；重试会复用本次请求的幂等键。" : ""}</StatusAlert> : null}
         <AlertDialogFooter>

@@ -9,6 +9,7 @@ import { StatusAlert } from "@/components/admin/status-alert";
 import { MaterialNoteDetail } from
   "@/components/douyin-miniapp/material-note-detail";
 import {
+  assertMaterialNoteRequestedPage,
   getMaterialNotePermissions,
   parseMaterialNoteDetail,
   parseMaterialNoteVersionList,
@@ -83,7 +84,11 @@ export default async function TenantMaterialNoteDetailPage({
     loadResource<DouyinMaterialNoteTenantVersionList>(
       token,
       `/tenant/douyin-material-notes/${rawParams.id}/versions?page=1&pageSize=20`,
-      parseMaterialNoteVersionList,
+      (value) => {
+        const result = parseMaterialNoteVersionList(value);
+        assertMaterialNoteRequestedPage(result.pagination, { page: 1, pageSize: 20 });
+        return result;
+      },
       "版本历史加载失败",
     ),
   ]);
