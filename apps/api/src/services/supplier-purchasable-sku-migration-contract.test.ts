@@ -217,6 +217,9 @@ describe("supplier purchasable SKU atomic command migration", () => {
       /pg_advisory_xact_lock[\s\S]*?'supplier-price-publish:'/,
       /INTO v_source_price_list[\s\S]*?FROM public\.supplier_price_lists AS price_list[\s\S]*?FOR UPDATE OF price_list/,
       /pg_advisory_xact_lock[\s\S]*?'supplier-price-series:'/,
+      /v_current_price_list\.row_version IS DISTINCT FROM[\s\S]*?p_expected_price_list_version/,
+      /v_price_changed := false/,
+      /IF v_price_changed THEN/,
       /FROM public\.supplier_price_lists AS price_list[\s\S]*?JOIN public\.supplier_price_list_items AS item[\s\S]*?ORDER BY price_list\.version_number, price_list\.id[\s\S]*?FOR UPDATE OF price_list/,
       /FROM public\.supplier_products AS product[\s\S]*?FOR UPDATE/,
       /FROM public\.supplier_skus AS sku[\s\S]*?FOR UPDATE/,
@@ -378,40 +381,19 @@ describe("supplier purchasable SKU atomic command migration", () => {
   });
 
   test("versions only changed prices and preserves the earliest future version", () => {
-    expect(normalizedCommand).toContain(
-      "v_immediate_effective_until := v_future_price_list.effective_from",
-    );
-    expect(normalizedCommand).toContain(
-      "ORDER BY price_list.effective_from, price_list.version_number, price_list.id",
-    );
-    expect(normalizedCommand).toContain(
-      "v_current_price_list.id IS DISTINCT FROM p_expected_price_list_id",
-    );
-    expect(normalizedCommand).toContain(
-      "v_current_price_list.row_version IS DISTINCT FROM p_expected_price_list_version",
-    );
+    expect(normalizedCommand).toContain("v_immediate_effective_until := v_future_price_list.effective_from");
+    expect(normalizedCommand).toContain("ORDER BY price_list.effective_from, price_list.version_number, price_list.id");
+    expect(normalizedCommand).toContain("v_current_price_list.id IS DISTINCT FROM p_expected_price_list_id");
+    expect(normalizedCommand).toContain("v_current_price_list.row_version IS DISTINCT FROM p_expected_price_list_version");
     expect(normalizedCommand).toContain("v_price_changed := false");
     expect(normalizedCommand).toContain("v_price_version_created := false");
-    expect(normalizedCommand).toContain(
-      "v_current_price_item.purchase_unit_id = v_sku.purchase_unit_id",
-    );
-    expect(normalizedCommand).toContain(
-      "v_current_price_item.base_unit_id = v_sku.base_unit_id",
-    );
-    expect(normalizedCommand).toContain(
-      "v_current_price_item.base_unit_conversion = v_sku.base_unit_conversion",
-    );
-    expect(normalizedCommand).toMatch(
-      /IF v_price_changed THEN[\s\S]*command_supplier_price_list_v2[\s\S]*ELSE v_current_price := jsonb_build_object/,
-    );
-    expect(normalizedCommand).toContain(
-      "'effective_until', v_immediate_effective_until",
-    );
-    expect(normalizedCommand).toMatch(
-      /INSERT INTO public\.supplier_price_list_items[\s\S]*SELECT/,
-    );
-    expect(normalizedCommand.match(/command_supplier_price_item_v2\(/g))
-      .toHaveLength(1);
+    expect(normalizedCommand).toContain("v_current_price_item.purchase_unit_id = v_sku.purchase_unit_id");
+    expect(normalizedCommand).toContain("v_current_price_item.base_unit_id = v_sku.base_unit_id");
+    expect(normalizedCommand).toContain("v_current_price_item.base_unit_conversion = v_sku.base_unit_conversion");
+    expect(normalizedCommand).toMatch(/IF v_price_changed THEN[\s\S]*command_supplier_price_list_v2[\s\S]*ELSE v_current_price := jsonb_build_object/);
+    expect(normalizedCommand).toContain("'effective_until', v_immediate_effective_until");
+    expect(normalizedCommand).toMatch(/INSERT INTO public\.supplier_price_list_items[\s\S]*SELECT/);
+    expect(normalizedCommand.match(/command_supplier_price_item_v2\(/g)).toHaveLength(1);
     expect(normalizedCommand).not.toMatch(
       /FOREACH[\s\S]*command_supplier_price_item_v2/,
     );
@@ -420,6 +402,17 @@ describe("supplier purchasable SKU atomic command migration", () => {
       "p_price_list_id => v_future_price_list.id",
     );
     expect(normalizedCommand).toContain("'SUPPLIER_PRICE_PERIOD_CONFLICT'");
+  });
+
+  test("skips price-write prerequisite conflicts for unchanged prices and audits no-op saves", () => {
+    expectOrdered(normalizedCommand, [
+      /v_price_changed := false/,
+      /IF v_price_changed THEN[\s\S]*?FROM public\.supplier_price_lists AS draft[\s\S]*?FROM public\.supplier_price_list_items AS earlier_item[\s\S]*?'SUPPLIER_PRICE_PERIOD_CONFLICT'[\s\S]*?END IF/,
+      /FROM public\.supplier_products AS product[\s\S]*?FOR UPDATE/,
+      /IF v_price_changed THEN[\s\S]*ELSE v_current_price := jsonb_build_object/,
+      /v_response := jsonb_build_object\( 'status', 'saved', 'idempotent', false, 'price_version_created', v_price_version_created/,
+      /INSERT INTO public\.supplier_command_events/,
+    ]);
   });
 
   test("scopes write-time periods and overlap checks to the target SKU", () => {
@@ -434,6 +427,10 @@ describe("supplier purchasable SKU atomic command migration", () => {
     );
     expect(normalizedCommand).toContain(
       "later_item.supplier_sku_id = earlier_item.supplier_sku_id",
+    );
+    expect(normalizedCommand).toContain("later_item.supplier_product_id = earlier_item.supplier_product_id");
+    expect(normalizedCommand).toMatch(
+      /FROM public\.supplier_price_list_items AS earlier_item[\s\S]*WHERE earlier_item\.tenant_id = p_tenant_id AND earlier_item\.supplier_id = p_supplier_id AND earlier_item\.supplier_product_id = p_supplier_product_id AND earlier_item\.supplier_sku_id = p_supplier_sku_id/,
     );
     expect(normalizedCommand).not.toContain(
       "FROM public.supplier_price_lists AS earlier JOIN public.supplier_price_lists AS later",
