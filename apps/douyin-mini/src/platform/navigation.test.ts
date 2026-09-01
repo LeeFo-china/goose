@@ -18,11 +18,14 @@ import {
 
 const ENTITY_ID = "11111111-1111-4111-8111-111111111111";
 const UPPER_MATERIAL_ID = "A1111111-B111-4111-8111-11111111111A";
-const CANONICAL_UUIDS = [
+const ZOD_UUID_POSITIVE_CASES = [
   ...Array.from({ length: 8 }, (_, index) => (
     `A000000${index + 1}-B000-${index + 1}000-8000-00000000000${index + 1}`
   )),
   "00000000-0000-0000-0000-000000000000",
+  "ffffffff-ffff-ffff-ffff-ffffffffffff",
+] as const;
+const ZOD_UUID_NEGATIVE_CASES = [
   "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF",
 ] as const;
 
@@ -103,7 +106,7 @@ describe("Douyin native navigation and visual view models", () => {
   });
 
   test("matches zod uuid acceptance for v1-v8, nil and max material routes", () => {
-    for (const id of CANONICAL_UUIDS) {
+    for (const id of ZOD_UUID_POSITIVE_CASES) {
       const normalized = id.toLowerCase();
       expect(buildMaterialDetailRoute(id)).toBe(
         `/pages/material-detail/index?id=${normalized}`,
@@ -111,6 +114,10 @@ describe("Douyin native navigation and visual view models", () => {
       expect(buildOwnedMaterialDetailRoute(id)).toBe(
         `/pages/material-detail/index?claimId=${normalized}`,
       );
+    }
+    for (const id of ZOD_UUID_NEGATIVE_CASES) {
+      expect(() => buildMaterialDetailRoute(id)).toThrow("INVALID_NAVIGATION_TARGET");
+      expect(() => buildOwnedMaterialDetailRoute(id)).toThrow("INVALID_NAVIGATION_TARGET");
     }
   });
 
