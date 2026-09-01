@@ -206,13 +206,29 @@ describe("供应商 SKU 即时价格模型", () => {
     })).toBe(true);
   });
 
-  test("常用税率选项保留历史非标准值且显示与提交分离", () => {
+  test("当前税率与常见值等价时去重并保留当前原始字符串", () => {
+    const options = getSupplierSkuTaxRateOptions("0.130000");
+
+    expect(options).toHaveLength(6);
+    expect(options.map(({ value }) => value)).toEqual([
+      "0", "0.01", "0.03", "0.06", "0.09", "0.130000",
+    ]);
+    expect(options.map(({ label }) => label)).toEqual([
+      "0%", "1%", "3%", "6%", "9%", "13%",
+    ]);
+    expect(options.at(-1)).toEqual({ value: "0.130000", label: "13%" });
+  });
+
+  test("非标准历史税率按数值排序并标记当前值", () => {
     const options = getSupplierSkuTaxRateOptions("0.075000");
 
     expect(options.map(({ value }) => value)).toEqual([
-      "0", "0.01", "0.03", "0.06", "0.09", "0.13", "0.075000",
+      "0", "0.01", "0.03", "0.06", "0.075000", "0.09", "0.13",
     ]);
-    expect(options.at(-1)).toEqual({ value: "0.075000", label: "7.5%" });
+    expect(options[4]).toEqual({
+      value: "0.075000",
+      label: "7.5%（当前税率）",
+    });
   });
 
   test("仅租户范围和三项权限齐全时启用即时价格", () => {
@@ -266,29 +282,37 @@ describe("供应商 SKU 即时价格模型", () => {
     }))).toMatch(/^当前价格有效至 .+$/);
   });
 
-  test("价格读取实际发送仅含租户供应商范围的 GET 并返回上下文", async () => {
+  test("非法未来价格时间不生成提示", () => {
+    expect(getSupplierSkuPriceEffectiveUntilNotice(priceContext({
+      next_scheduled_effective_from: "not-a-timestamp",
+    }))).toBeNull();
+  });
+
+  test("价格读取编码恶意路径段且仅发送租户供应商范围", async () => {
     const currentContext = priceContext({ current_price: currentPrice });
     const calls = installPriceContextFetch([priceContext(), currentContext]);
+    const productId = "product/id ?#";
+    const skuId = "sku/id ?#";
     const scope = {
       kind: "tenant",
       tenantSupplierId: "relationship/id ?",
     } as const;
 
-    const defaults = await loadSupplierSkuPriceDefaults(scope, "product-1");
+    const defaults = await loadSupplierSkuPriceDefaults(scope, productId);
     const current = await loadSupplierSkuCurrentPrice(
       scope,
-      "product-1",
-      "sku-1",
+      productId,
+      skuId,
     );
 
     expect(defaults).toEqual(priceContext());
     expect(current).toEqual(currentContext);
-    expect(buildPurchasableSkuPath("product-1", "sku-1")).toBe(
-      "/supplier-products/product-1/purchasable-skus/sku-1",
+    expect(buildPurchasableSkuPath(productId, skuId)).toBe(
+      "/supplier-products/product%2Fid%20%3F%23/purchasable-skus/sku%2Fid%20%3F%23",
     );
     expect(calls.map(({ input }) => String(input))).toEqual([
-      "/api/backend/supplier-products/product-1/purchasable-skus/price-defaults?tenantSupplierId=relationship%2Fid+%3F",
-      "/api/backend/supplier-products/product-1/purchasable-skus/sku-1/price?tenantSupplierId=relationship%2Fid+%3F",
+      "/api/backend/supplier-products/product%2Fid%20%3F%23/purchasable-skus/price-defaults?tenantSupplierId=relationship%2Fid+%3F",
+      "/api/backend/supplier-products/product%2Fid%20%3F%23/purchasable-skus/sku%2Fid%20%3F%23/price?tenantSupplierId=relationship%2Fid+%3F",
     ]);
     for (const { input, init } of calls) {
       const url = new URL(String(input), "http://admin.local");

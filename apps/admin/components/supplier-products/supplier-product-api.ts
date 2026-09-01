@@ -112,7 +112,7 @@ export function buildSkuResourcePath(
 }
 
 export function buildPurchasableSkuPath(productId: string, skuId: string) {
-  return `/supplier-products/${productId}/purchasable-skus/${skuId}`;
+  return `${purchasableSkuBasePath(productId)}/${encodeURIComponent(skuId)}`;
 }
 
 export function loadSupplierSkuPriceDefaults(
@@ -120,7 +120,7 @@ export function loadSupplierSkuPriceDefaults(
   productId: string,
 ) {
   return requestBackendJson<SupplierSkuPriceContext>(
-    `/supplier-products/${productId}/purchasable-skus/price-defaults?${scopeOnly(scope)}`,
+    `${purchasableSkuBasePath(productId)}/price-defaults?${scopeOnly(scope)}`,
     { fallbackMessage: "基础供货价默认值加载失败" },
   );
 }
@@ -134,6 +134,10 @@ export function loadSupplierSkuCurrentPrice(
     `${buildPurchasableSkuPath(productId, skuId)}/price?${scopeOnly(scope)}`,
     { fallbackMessage: "SKU 当前供货价加载失败" },
   );
+}
+
+function purchasableSkuBasePath(productId: string) {
+  return `/supplier-products/${encodeURIComponent(productId)}/purchasable-skus`;
 }
 
 export function loadSupplierSkus(

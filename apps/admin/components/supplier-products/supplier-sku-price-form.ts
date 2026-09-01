@@ -119,13 +119,27 @@ export function isSupplierSkuPriceFormValid(
 }
 
 export function getSupplierSkuTaxRateOptions(selectedTaxRate?: string | null) {
-  const values: string[] = [...COMMON_TAX_RATES];
-  if (selectedTaxRate && !values.includes(selectedTaxRate)) {
-    values.push(selectedTaxRate);
-  }
-  return values.map((value) => ({
+  const options = COMMON_TAX_RATES.map<{
+    value: string;
+    isCommon: boolean;
+  }>((value) => ({
     value,
-    label: formatTaxRatePercent(value),
+    isCommon: true,
+  }));
+  if (selectedTaxRate) {
+    const selectedCanonical = canonicalDecimal(selectedTaxRate);
+    const common = options.find(({ value }) =>
+      canonicalDecimal(value) === selectedCanonical);
+    if (common) {
+      common.value = selectedTaxRate;
+    } else {
+      options.push({ value: selectedTaxRate, isCommon: false });
+    }
+  }
+  return options.sort((left, right) =>
+    compareDecimals(left.value, right.value)).map(({ value, isCommon }) => ({
+    value,
+    label: `${formatTaxRatePercent(value)}${isCommon ? "" : "（当前税率）"}`,
   }));
 }
 
@@ -155,12 +169,14 @@ export function getSupplierSkuPriceEffectiveUntilNotice(
   context: SupplierSkuPriceContext,
 ): string | null {
   if (!context.next_scheduled_effective_from) return null;
+  const date = new Date(context.next_scheduled_effective_from);
+  if (!Number.isFinite(date.getTime())) return null;
   const effectiveUntil = new Intl.DateTimeFormat("zh-CN", {
     dateStyle: "short",
     timeStyle: "short",
     hour12: false,
     timeZone: "Asia/Shanghai",
-  }).format(new Date(context.next_scheduled_effective_from));
+  }).format(date);
   return `当前价格有效至 ${effectiveUntil}`;
 }
 
@@ -195,4 +211,21 @@ function formatTaxRatePercent(value: string): string {
     .replace(/^0+(?=\d)/, "");
   const decimal = shiftedFraction.slice(2).replace(/0+$/, "");
   return decimal ? `${whole}.${decimal}%` : `${whole}%`;
+}
+
+function canonicalDecimal(value: string): string {
+  const [integer, fraction = ""] = value.trim().split(".");
+  const canonicalFraction = fraction.replace(/0+$/, "");
+  return canonicalFraction ? `${integer}.${canonicalFraction}` : integer;
+}
+
+function compareDecimals(left: string, right: string): number {
+  const [leftInteger, leftFraction = ""] = canonicalDecimal(left).split(".");
+  const [rightInteger, rightFraction = ""] = canonicalDecimal(right).split(".");
+  if (leftInteger !== rightInteger) return leftInteger < rightInteger ? -1 : 1;
+  const width = Math.max(leftFraction.length, rightFraction.length);
+  const leftComparable = leftFraction.padEnd(width, "0");
+  const rightComparable = rightFraction.padEnd(width, "0");
+  if (leftComparable === rightComparable) return 0;
+  return leftComparable < rightComparable ? -1 : 1;
 }
