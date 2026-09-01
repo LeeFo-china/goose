@@ -86,7 +86,12 @@ async function fillStructuredSku(
   await expect(dialog.getByLabel("SKU 名称")).toHaveValue(expectedName);
   await chooseCatalogOption(page, dialog, "采购单位", "箱", /^箱/);
   await expect(dialog.getByLabel("代录原因")).toHaveCount(0);
-  await dialog.getByRole("button", { name: "保存 SKU" }).click();
+  const inlinePrice = dialog.getByLabel(/基础供货价/);
+  const usesInlinePrice = await inlinePrice.count() === 1;
+  if (usesInlinePrice) await inlinePrice.fill("88.00");
+  await dialog.getByRole("button", {
+    name: usesInlinePrice ? "保存并生效" : "保存 SKU",
+  }).click();
 }
 
 async function saveConversionChain(page: Page, skuName: string) {
@@ -210,19 +215,9 @@ test("租户可检索第21个合作供应商并维护私有商品、规格、换
   await expect(page.getByText(createdSkuName, { exact: true })).toBeVisible();
   await saveConversionChain(page, createdSkuName);
 
-  let skuRow = page.getByRole("row").filter({ hasText: createdSkuName });
-  await skuRow.getByRole("button", { name: "启用 SKU" }).click();
-  dialog = page.getByRole("dialog", { name: /启用.*800×800×10mm/ });
-  await expect(dialog.getByLabel("代录原因")).toHaveCount(0);
-  await dialog.getByRole("button", { name: "确认启用" }).click();
-
   await page.getByRole("button", { name: "返回商品列表" }).click();
   productRow = page.getByRole("row").filter({ hasText: "E2E 瓷砖" });
   await expect(productRow.getByRole("button", { name: /1 个.*已启用 1/ })).toBeVisible();
-  await productRow.getByRole("button", { name: "启用商品" }).click();
-  dialog = page.getByRole("dialog", { name: /启用 E2E 瓷砖/ });
-  await expect(dialog.getByLabel("代录原因")).toHaveCount(0);
-  await dialog.getByRole("button", { name: "确认启用" }).click();
 
   await page.getByRole("tab", { name: "基础供货价" }).click();
   await page.getByRole("button", { name: "新建价格草稿" }).click();
@@ -263,18 +258,20 @@ test("租户可检索第21个合作供应商并维护私有商品、规格、换
   await expect(priceRow.getByText("已发布", { exact: true })).toBeVisible();
 
   const mutations = await readMutations(request);
-  expect(mutations).toHaveLength(8);
+  expect(mutations).toHaveLength(6);
   expect(mutations.every(({ payload }) => !("proxy_reason" in payload))).toBe(true);
   expect("product_code" in mutations[0].payload).toBe(false);
   expect("sku_code" in mutations[1].payload).toBe(false);
   expect(mutations[1].payload).toMatchObject({
-    spec_values: {
-      size: "800×800×10mm",
-      color: "灰色",
-      thickness: 10,
-      anti_slip: true,
-      finishes: ["哑光", "柔光"],
-      available_on: "2026-08-19",
+    sku: {
+      spec_values: {
+        size: "800×800×10mm",
+        color: "灰色",
+        thickness: 10,
+        anti_slip: true,
+        finishes: ["哑光", "柔光"],
+        available_on: "2026-08-19",
+      },
     },
   });
   expect(mutations[2]).toMatchObject({
