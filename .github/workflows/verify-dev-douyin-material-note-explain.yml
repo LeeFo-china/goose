@@ -1,0 +1,219 @@
+name: Verify Development Douyin Material Note EXPLAIN
+run-name: Verify Douyin material note EXPLAIN ${{ inputs.commit_sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        required: true
+        type: string
+      confirmation:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: verify-dev-douyin-material-note-explain
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: [self-hosted, Linux, X64, gooes-dev-deploy]
+    environment: development
+    timeout-minutes: 20
+    env:
+      DEV_DB_ENV_FILE: /opt/gooes-dev/docker/.env.dev.db
+      DEV_PROJECT_REF: fclnkyatvfvmzgzdqlba
+      DEV_DB_HOST: api-dev.goodcms.cn
+      BLOCKED_PROJECT_REFS: unqhypivjkpwldhufpjc
+      BLOCKED_DB_HOSTS: api.goodcms.cn 1.13.20.39
+      COMMIT_SHA: ${{ inputs.commit_sha }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+      DISPATCH_REF: ${{ github.ref }}
+      DISPATCH_SHA: ${{ github.sha }}
+    steps:
+      - name: Guard development runner and request
+        run: |
+          set -euo pipefail
+          reject_dev_target() {
+            printf '%s\n' "INVALID_DEV_TARGET" >&2
+            exit 1
+          }
+          reject_confirmation() {
+            printf '%s\n' "CONFIRMATION_REQUIRED" >&2
+            exit 1
+          }
+
+          if [[ "${CONFIRMATION:-}" != "development-read-only" ]]; then
+            reject_confirmation
+          fi
+          if [[ "${RUNNER_NAME:-}" != "gooes-dev-vm-0-11" ||
+            ! -r "${DEV_DB_ENV_FILE:-}" ||
+            "${DISPATCH_REF:-}" != "refs/heads/main" ||
+            ! "${COMMIT_SHA:-}" =~ ^[a-f0-9]{40}$ ||
+            "${COMMIT_SHA:-}" != "${DISPATCH_SHA:-}" ]]; then
+            reject_dev_target
+          fi
+
+      - name: Checkout verified commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.commit_sha }}
+          clean: true
+
+      - name: Verify immutable checkout and deployed revision
+        run: |
+          set -euo pipefail
+          reject_dev_target() {
+            printf '%s\n' "INVALID_DEV_TARGET" >&2
+            exit 1
+          }
+
+          if ! head_revision="$(git rev-parse HEAD 2>/dev/null)"; then
+            reject_dev_target
+          fi
+          if ! workspace_status="$(git status --porcelain 2>/dev/null)"; then
+            reject_dev_target
+          fi
+          if ! deployed_revision="$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' gooes-api-dev 2>/dev/null)"; then
+            reject_dev_target
+          fi
+          if [[ "${head_revision}" != "${COMMIT_SHA}" || -n "${workspace_status}" || "${deployed_revision}" != "${COMMIT_SHA}" ]]; then
+            reject_dev_target
+          fi
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          package-manager-cache: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.2"
+
+      - name: Install API workflow dependencies
+        run: |
+          set -euo pipefail
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+          pnpm install --frozen-lockfile --filter @gooes/api... --filter @gooes/domain...
+
+      - name: Verify development database target and migration history
+        env:
+          NO_COLOR: "1"
+          TERM: dumb
+        run: |
+          set -euo pipefail
+          reject_dev_target() {
+            printf '%s\n' "INVALID_DEV_TARGET" >&2
+            exit 1
+          }
+          reject_migration_history() {
+            printf '%s\n' "MIGRATION_HISTORY_MISMATCH" >&2
+            exit 1
+          }
+          load_dev_environment() {
+            set -a
+            . "${DEV_DB_ENV_FILE}"
+            local load_status=$?
+            set +a
+            return "${load_status}"
+          }
+
+          if ! load_dev_environment 2>/dev/null; then
+            reject_dev_target
+          fi
+          if [[ -z "${SUPABASE_DB_URL:-}" || -z "${SUPABASE_DB_DIRECT_URL:-}" ]]; then
+            reject_dev_target
+          fi
+          export SUPABASE_PROJECT_REF="${SUPABASE_PROJECT_REF:-${DEV_PROJECT_REF}}"
+          if ! ACTUAL_PROJECT_REF="$(node scripts/validate-dev-database-target.mjs --resolve-project-ref 2>/dev/null)"; then
+            reject_dev_target
+          fi
+          if [[ -z "${ACTUAL_PROJECT_REF}" ]]; then
+            reject_dev_target
+          fi
+          if ! node scripts/validate-dev-database-target.mjs --direct-migration-history \
+            "${SUPABASE_DB_DIRECT_URL}" "${ACTUAL_PROJECT_REF}" \
+            "${DEV_DB_HOST}" "${DEV_PROJECT_REF}" \
+            "${BLOCKED_DB_HOSTS}" "${BLOCKED_PROJECT_REFS}" \
+            >/dev/null 2>&1; then
+            reject_dev_target
+          fi
+
+          if ! pnpm dlx supabase@2.99.0 migration list --db-url "${SUPABASE_DB_DIRECT_URL}" > migration-history.txt 2>/dev/null; then
+            reject_migration_history
+          fi
+          if ! node scripts/verify-migration-history.mjs \
+            migration-history.txt supabase/migrations 20260901120030 \
+            > migration-evidence.json 2>/dev/null; then
+            reject_migration_history
+          fi
+
+      - name: Run read-only material note EXPLAIN
+        run: |
+          set -euo pipefail
+          reject_dev_target() {
+            printf '%s\n' "INVALID_DEV_TARGET" >&2
+            exit 1
+          }
+          load_dev_environment() {
+            set -a
+            . "${DEV_DB_ENV_FILE}"
+            local load_status=$?
+            set +a
+            return "${load_status}"
+          }
+
+          if ! load_dev_environment 2>/dev/null; then
+            reject_dev_target
+          fi
+          if [[ -z "${SUPABASE_DB_URL:-}" || -z "${SUPABASE_DB_DIRECT_URL:-}" ]]; then
+            reject_dev_target
+          fi
+          export SUPABASE_PROJECT_REF="${SUPABASE_PROJECT_REF:-${DEV_PROJECT_REF}}"
+          if ! ACTUAL_PROJECT_REF="$(node scripts/validate-dev-database-target.mjs --resolve-project-ref 2>/dev/null)"; then
+            reject_dev_target
+          fi
+          if ! node scripts/validate-dev-database-target.mjs --direct-migration-history \
+            "${SUPABASE_DB_DIRECT_URL}" "${ACTUAL_PROJECT_REF}" \
+            "${DEV_DB_HOST}" "${DEV_PROJECT_REF}" \
+            "${BLOCKED_DB_HOSTS}" "${BLOCKED_PROJECT_REFS}" \
+            >/dev/null 2>&1; then
+            reject_dev_target
+          fi
+
+          DOUYIN_MATERIAL_NOTE_EXPLAIN_CONFIRM="${CONFIRMATION}" \
+          DOUYIN_MATERIAL_NOTE_EXPLAIN_DB_URL="${SUPABASE_DB_DIRECT_URL}" \
+            bun run --silent --cwd apps/api douyin:material-note:explain \
+            > "${GITHUB_WORKSPACE}/material-note-explain-summary.json"
+
+      - name: Verify material note EXPLAIN summary
+        run: |
+          set -euo pipefail
+          reject_evidence() {
+            printf '%s\n' "INVALID_EVIDENCE_INPUT" >&2
+            exit 1
+          }
+
+          if ! jq -e \
+            '.gate == "douyin_material_note_queries" and .queryCount == 3 and (.queries | length) == 3' \
+            material-note-explain-summary.json \
+            >/dev/null 2>&1; then
+            reject_evidence
+          fi
+
+      - name: Upload material note EXPLAIN evidence
+        uses: actions/upload-artifact@v6
+        with:
+          name: douyin-material-note-explain-${{ inputs.commit_sha }}
+          path: |
+            material-note-explain-summary.json
+            migration-evidence.json
+          if-no-files-found: error
+          retention-days: 30

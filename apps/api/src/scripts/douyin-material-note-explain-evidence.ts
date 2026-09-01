@@ -75,9 +75,6 @@ export const MATERIAL_NOTE_EXPLAIN_ERROR_CODES = [
   "INVALID_CARDINALITY",
   "INDEX_RELATION_MISMATCH",
   "INDEX_METADATA_INVALID",
-  "UNKNOWN_PLAN",
-  "DUPLICATE_PLAN",
-  "MISSING_PLAN",
   "PLANNING_THRESHOLD",
   "EXECUTION_THRESHOLD",
   "SHARED_READ_THRESHOLD",
@@ -181,7 +178,7 @@ export function assertMaterialNoteExplainPlanEvidence(
   if (plan.targetNodes.some((node) => node.nodeType === "Seq Scan")) {
     fail("LARGE_TABLE_SEQ_SCAN", `${plan.name} target relation used Seq Scan`);
   }
-  const approved = new Set(
+  const approved = new Set<string>(
     MATERIAL_NOTE_EXPLAIN_MANIFEST[plan.name].indexes
       .filter((index) => index.relation ===
         MATERIAL_NOTE_EXPLAIN_MANIFEST[plan.name].primaryRelation)

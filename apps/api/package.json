@@ -34,6 +34,7 @@
     "supplier:purchase-project-options:explain": "bun src/scripts/supplier-purchase-project-options-explain.ts",
     "supplier:purchase-batch-workflow:smoke": "bun src/scripts/supplier-purchase-batch-workflow-smoke.ts",
     "supplier:purchase-batch-workflow:explain": "bun src/scripts/supplier-purchase-batch-workflow-explain.ts",
+    "douyin:material-note:explain": "bun src/scripts/douyin-material-note-explain.ts",
     "smoke:supplier-purchase-fulfillment": "bun src/scripts/supplier-purchase-fulfillment-smoke.ts",
     "billing:subscription-lock": "bun --env-file=.env src/scripts/tenant-subscription-billing-lock.ts",
     "workflow:cleanup-readiness": "bun src/scripts/workflow-cleanup-readiness.ts",

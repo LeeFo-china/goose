@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { MaterialNoteExplainError } from "./douyin-material-note-explain-config";
 import {
   MATERIAL_NOTE_EXPLAIN_CARDINALITY_LIMIT,
+  MATERIAL_NOTE_EXPLAIN_ERROR_CODES,
   MATERIAL_NOTE_EXPLAIN_MANIFEST,
   MATERIAL_NOTE_EXPLAIN_QUERY_NAMES,
   MATERIAL_NOTE_EXPLAIN_THRESHOLDS,
@@ -101,6 +102,19 @@ describe("douyin material note EXPLAIN evidence manifest", () => {
       sharedReadBlocks: 20_000,
       tempBlocks: 0,
     });
+    expect(MATERIAL_NOTE_EXPLAIN_ERROR_CODES).toEqual([
+      "INVALID_PLAN",
+      "NON_DEFAULT_PLANNER",
+      "INVALID_CARDINALITY",
+      "INDEX_RELATION_MISMATCH",
+      "INDEX_METADATA_INVALID",
+      "PLANNING_THRESHOLD",
+      "EXECUTION_THRESHOLD",
+      "SHARED_READ_THRESHOLD",
+      "TEMP_BLOCKS",
+      "LARGE_TABLE_SEQ_SCAN",
+      "LARGE_TABLE_INDEX_REQUIRED",
+    ]);
     expect(MATERIAL_NOTE_EXPLAIN_MANIFEST.public_list.primaryRelation)
       .toBe("douyin_material_notes");
     expect(MATERIAL_NOTE_EXPLAIN_MANIFEST.tenant_keyword_list.primaryRelation)
