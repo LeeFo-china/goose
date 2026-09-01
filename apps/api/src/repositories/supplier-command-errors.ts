@@ -61,20 +61,17 @@ const BUSINESS_ERRORS = {
     message: "供应商 SKU 不存在",
   },
   SUPPLIER_SKU_CODE_CONFLICT: {
-    statusCode: 409,
-    message: "供应商 SKU 编码已存在",
+    statusCode: 409, message: "供应商 SKU 编码已存在",
   },
   SUPPLIER_SKU_ID_CONFLICT: {
-    statusCode: 409,
-    message: "供应商 SKU 编号已存在",
+    statusCode: 409, message: "供应商 SKU 编号已存在",
   },
   PLATFORM_PERMISSION_REQUIRED: {
     statusCode: 403,
     message: "缺少平台供应商商品管理权限",
   },
   SUPPLIER_PRICE_LIST_NOT_FOUND: {
-    statusCode: 404,
-    message: "供应商价格簿不存在",
+    statusCode: 404, message: "供应商价格簿不存在",
   },
   SUPPLIER_PURCHASE_ORDER_NOT_FOUND: {
     statusCode: 404,
@@ -167,6 +164,9 @@ const BUSINESS_ERRORS = {
   },
   SUPPLIER_PURCHASABLE_PRODUCT_CREATE_FAILED: {
     statusCode: 409, message: "创建可采购商品失败",
+  },
+  SUPPLIER_PURCHASABLE_SKU_SAVE_FAILED: {
+    statusCode: 409, message: "保存供应商 SKU 与供货价失败",
   },
   SUPPLIER_PURCHASE_ORDER_PROJECT_INVALID: {
     statusCode: 409,

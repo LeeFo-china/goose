@@ -1,13 +1,27 @@
 import { Errors } from "@/errors/error-factory";
 import {
+  supplierCatalogRepository,
+  type SupplierCatalogRepositoryPort,
+} from "@/repositories/supplier-catalog";
+import {
   supplierProductsRepository,
 } from "@/repositories/supplier-products";
+import type { SupplierPurchasableSkuCommandResult } from "@/repositories/supplier-purchasable-sku-records";
 import {
   supplierPurchasableSkusRepository,
   type SupplierPurchasableSkuIdentityInput,
+  type SupplierPurchasableSkuSaveInput,
   type SupplierPurchasableSkusRepository,
 } from "@/repositories/supplier-purchasable-skus";
+import type {
+  SupplierPurchasableSkuCreateInput,
+  SupplierPurchasableSkuUpdateInput,
+} from "@/schema/supplier-purchasable-skus";
 import type { AuthContext } from "@/services/authorization";
+import {
+  validateSkuSpecsAgainstCurrentTemplate,
+} from "@/services/supplier-product-spec-template";
+import { generateSupplierSkuCode } from "@/services/supplier-sku-codes";
 import {
   supplierProductAccessService,
   type SupplierProxyScope,
@@ -15,17 +29,18 @@ import {
 
 type ProductAccessPort = Pick<
   typeof supplierProductAccessService,
-  "requirePurchasableSkuPriceRead"
+  "requirePurchasableSkuPriceRead" | "requirePurchasableSkuWrite"
 >;
 type PriceRepositoryPort = Pick<
   SupplierPurchasableSkusRepository,
-  "findTenantSkuIdentity" | "getCurrentPrice" | "getPriceDefaults"
+  "findTenantSkuIdentity" | "getCurrentPrice" | "getPriceDefaults" | "save"
 >;
 type ProductIdentity = {
   id: string;
   supplier_id: string;
   ownership_scope: "platform" | "tenant";
   owner_tenant_id: string | null;
+  category: { id: string };
 };
 type SupplierProductsRepositoryPort = {
   findProduct(
@@ -40,12 +55,17 @@ export type SupplierPurchasableSkusServiceDependencies = {
   access?: ProductAccessPort;
   repository?: PriceRepositoryPort;
   supplierProductsRepository?: SupplierProductsRepositoryPort;
+  catalogRepository?: Pick<SupplierCatalogRepositoryPort, "listSpecDefinitions">;
 };
 
 export class SupplierPurchasableSkusService {
   private readonly access: ProductAccessPort;
   private readonly repository: PriceRepositoryPort;
   private readonly supplierProductsRepository: SupplierProductsRepositoryPort;
+  private readonly catalogRepository: Pick<
+    SupplierCatalogRepositoryPort,
+    "listSpecDefinitions"
+  >;
 
   constructor(
     dependencies: SupplierPurchasableSkusServiceDependencies = {},
@@ -55,6 +75,8 @@ export class SupplierPurchasableSkusService {
       supplierPurchasableSkusRepository;
     this.supplierProductsRepository = dependencies.supplierProductsRepository ??
       supplierProductsRepository;
+    this.catalogRepository = dependencies.catalogRepository ??
+      supplierCatalogRepository;
   }
 
   async getPriceDefaults(
@@ -68,6 +90,83 @@ export class SupplierPurchasableSkusService {
       productId,
     );
     return this.repository.getPriceDefaults(scopeInput(resolved));
+  }
+
+  async create(
+    auth: AuthContext,
+    input: {
+      tenantSupplierId: string;
+      productId: string;
+      skuId: string;
+      body: SupplierPurchasableSkuCreateInput;
+      idempotencyKey: string;
+    },
+  ): Promise<SupplierPurchasableSkuCommandResult> {
+    const resolved = await this.resolveProductScope(
+      auth,
+      input.tenantSupplierId,
+      input.productId,
+      true,
+    );
+    await this.validateSpecs(resolved, input.body.sku.spec_values);
+    const skuId = canonicalUuid(input.skuId);
+    return this.repository.save({
+      action: "create",
+      ...scopeInput(resolved),
+      supplier_sku_id: skuId,
+      expected_sku_version: null,
+      sku: {
+        ...input.body.sku,
+        purchase_unit_id: canonicalUuid(input.body.sku.purchase_unit_id),
+        sku_code: generateSupplierSkuCode("tenant", skuId),
+      },
+      price: input.body.price,
+      expected_price_list_id: null,
+      expected_price_list_version: null,
+      ...actorInput(resolved.scope, input.idempotencyKey),
+    });
+  }
+
+  async update(
+    auth: AuthContext,
+    input: {
+      tenantSupplierId: string;
+      productId: string;
+      skuId: string;
+      body: SupplierPurchasableSkuUpdateInput;
+      idempotencyKey: string;
+    },
+  ): Promise<SupplierPurchasableSkuCommandResult> {
+    const resolved = await this.resolveProductScope(
+      auth,
+      input.tenantSupplierId,
+      input.productId,
+      true,
+    );
+    const skuId = canonicalUuid(input.skuId);
+    const identityInput = { ...scopeInput(resolved), sku_id: skuId };
+    const sku = await this.repository.findTenantSkuIdentity(identityInput);
+    assertTenantSku(sku, identityInput);
+    if (input.body.sku.spec_values !== undefined) {
+      await this.validateSpecs(resolved, input.body.sku.spec_values);
+    }
+    const { expected_version, ...skuFields } = input.body.sku;
+    const {
+      expected_price_list_id,
+      expected_price_list_version,
+      ...priceFields
+    } = input.body.price;
+    return this.repository.save({
+      action: "update",
+      ...scopeInput(resolved),
+      supplier_sku_id: skuId,
+      expected_sku_version: expected_version,
+      sku: skuFields,
+      price: priceFields,
+      expected_price_list_id,
+      expected_price_list_version,
+      ...actorInput(resolved.scope, input.idempotencyKey),
+    });
   }
 
   async getCurrentPrice(
@@ -94,13 +193,19 @@ export class SupplierPurchasableSkusService {
     auth: AuthContext,
     tenantSupplierId: string,
     productId: string,
-  ): Promise<{ scope: SupplierProxyScope; productId: string }> {
+    write = false,
+  ): Promise<ResolvedProductScope> {
     const canonicalTenantSupplierId = canonicalUuid(tenantSupplierId);
     const scope = canonicalizeScope(
-      await this.access.requirePurchasableSkuPriceRead(
-        auth,
-        canonicalTenantSupplierId,
-      ),
+      write
+        ? await this.access.requirePurchasableSkuWrite(
+          auth,
+          canonicalTenantSupplierId,
+        )
+        : await this.access.requirePurchasableSkuPriceRead(
+          auth,
+          canonicalTenantSupplierId,
+        ),
     );
     if (scope.tenantSupplierId !== canonicalTenantSupplierId) {
       throw Errors.business(
@@ -118,9 +223,27 @@ export class SupplierPurchasableSkusService {
       false,
     );
     assertTenantProduct(product, scope, canonicalProductId);
-    return { scope, productId: canonicalProductId };
+    return { scope, productId: canonicalProductId, product };
+  }
+
+  private validateSpecs(
+    resolved: ResolvedProductScope,
+    values: SupplierPurchasableSkuCreateInput["sku"]["spec_values"],
+  ): Promise<void> {
+    return validateSkuSpecsAgainstCurrentTemplate(
+      canonicalUuid(resolved.product.category.id),
+      values,
+      { kind: "tenant", tenantId: resolved.scope.tenantId },
+      this.catalogRepository,
+    );
   }
 }
+
+type ResolvedProductScope = {
+  scope: SupplierProxyScope;
+  productId: string;
+  product: ProductIdentity;
+};
 
 function scopeInput(resolved: {
   scope: SupplierProxyScope;
@@ -131,6 +254,20 @@ function scopeInput(resolved: {
     tenant_supplier_id: resolved.scope.tenantSupplierId,
     supplier_id: resolved.scope.supplierId,
     supplier_product_id: resolved.productId,
+  };
+}
+
+function actorInput(
+  scope: SupplierProxyScope,
+  idempotencyKey: string,
+): Pick<
+  SupplierPurchasableSkuSaveInput,
+  "actor_user_id" | "actor_employee_id" | "idempotency_key"
+> {
+  return {
+    actor_user_id: scope.authUserId,
+    actor_employee_id: scope.employeeId,
+    idempotency_key: idempotencyKey,
   };
 }
 

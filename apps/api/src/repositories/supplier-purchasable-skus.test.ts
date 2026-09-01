@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 
 import type {
+  SupplierPurchasableSkuCommandResult,
   SupplierPurchasableSkuIdentity,
   SupplierPurchasableSkuPriceContext,
 } from "./supplier-purchasable-sku-records";
@@ -16,6 +17,9 @@ const PRODUCT_ID = "40000000-0000-4000-8000-000000000004";
 const SKU_ID = "40000000-0000-4000-8000-000000000005";
 const PRICE_LIST_ID = "40000000-0000-4000-8000-000000000006";
 const PRICE_ITEM_ID = "40000000-0000-4000-8000-000000000007";
+const USER_ID = "40000000-0000-4000-8000-000000000008";
+const EMPLOYEE_ID = "40000000-0000-4000-8000-000000000009";
+const UNIT_ID = "40000000-0000-4000-8000-00000000000a";
 
 const scopeInput = {
   tenant_id: TENANT_ID,
@@ -61,6 +65,66 @@ function publicContext(
     ...context
   } = priceEnvelope(skuId);
   return context;
+}
+
+function commandResult(): SupplierPurchasableSkuCommandResult {
+  const now = "2026-09-01T08:00:00+08:00";
+  return {
+    status: "saved",
+    idempotent: false,
+    price_version_created: true,
+    product: {
+      id: PRODUCT_ID, supplier_id: SUPPLIER_ID,
+      product_code: "TP-40000000000040008000000000000004",
+      name: "净味乳胶漆", category_id: UNIT_ID, brand_id: PRICE_ITEM_ID,
+      description: null, status: "active", version: 2,
+      ownership_scope: "tenant", owner_tenant_id: TENANT_ID,
+      acting_tenant_id: TENANT_ID, acting_employee_id: EMPLOYEE_ID,
+      operation_source: "tenant", proxy_reason: null,
+      created_by_employee_id: EMPLOYEE_ID,
+      updated_by_employee_id: EMPLOYEE_ID, created_at: now, updated_at: now,
+    },
+    sku: {
+      id: SKU_ID, supplier_id: SUPPLIER_ID,
+      supplier_product_id: PRODUCT_ID,
+      sku_code: "TS-40000000000040008000000000000005",
+      name: "净味乳胶漆 18L 新包装", specification: "18L", model: null,
+      spec_values: {}, purchase_unit_id: UNIT_ID, base_unit_id: UNIT_ID,
+      base_unit_conversion: 1, batch_managed: false, color_managed: false,
+      serial_managed: false, status: "active", version: 4,
+      ownership_scope: "tenant", owner_tenant_id: TENANT_ID,
+      acting_tenant_id: TENANT_ID, acting_employee_id: EMPLOYEE_ID,
+      operation_source: "tenant", proxy_reason: null,
+      created_by_employee_id: EMPLOYEE_ID,
+      updated_by_employee_id: EMPLOYEE_ID, created_at: now, updated_at: now,
+    },
+    current_price: {
+      supplier_price_list_id: PRICE_LIST_ID,
+      supplier_price_list_version: 3,
+      supplier_price_list_row_version: 6,
+      supplier_price_list_item_id: PRICE_ITEM_ID,
+      unit_price: "318.00", tax_rate: "0.130000", tax_inclusive: false,
+      effective_from: now, effective_until: null,
+    },
+    catalog_item: {
+      supplier_product_id: PRODUCT_ID,
+      product_code: "TP-40000000000040008000000000000004",
+      product_name: "净味乳胶漆", supplier_sku_id: SKU_ID,
+      sku_code: "TS-40000000000040008000000000000005",
+      sku_name: "净味乳胶漆 18L 新包装", specification: "18L", model: null,
+      supplier_price_list_id: PRICE_LIST_ID, price_list_code: "DEFAULT",
+      price_list_version: 3, effective_from: now, effective_until: null,
+      supplier_price_list_item_id: PRICE_ITEM_ID,
+      purchase_unit_id: UNIT_ID, purchase_unit_code: "BARREL",
+      purchase_unit_name: "桶", purchase_unit_symbol: "桶",
+      base_unit_id: UNIT_ID, base_unit_code: "BARREL",
+      base_unit_name: "桶", base_unit_symbol: "桶",
+      base_unit_conversion: "1.00000000", unit_price: "318.00",
+      tax_rate: "0.130000", tax_inclusive: false,
+    },
+    next_scheduled_effective_from: null,
+    available_actions: ["edit", "deactivate"],
+  };
 }
 
 describe("supplier purchasable SKU price context records", () => {
@@ -294,5 +358,139 @@ describe("SupplierPurchasableSkusRepository tenant SKU identity", () => {
       code: "DB_ERROR",
       message: "查询供应商 SKU 失败",
     });
+  });
+});
+
+describe("SupplierPurchasableSkusRepository composite save", () => {
+  const updateInput = {
+    action: "update" as const, ...scopeInput, supplier_sku_id: SKU_ID,
+    expected_sku_version: 3,
+    sku: {
+      name: "净味乳胶漆 18L 新包装", specification: "18L", model: null,
+      batch_managed: false, color_managed: false, serial_managed: false,
+      spec_values: {},
+    },
+    price: { unit_price: "318.00", tax_rate: "0.13", tax_inclusive: false },
+    expected_price_list_id: PRICE_LIST_ID,
+    expected_price_list_version: 5,
+    actor_user_id: USER_ID, actor_employee_id: EMPLOYEE_ID,
+    idempotency_key: "sku:update:price",
+  };
+
+  test("strictly parses a saved result and calls the command RPC exactly once", async () => {
+    const rpc = mock(async () => ({ data: commandResult(), error: null }));
+    const { SupplierPurchasableSkuCommandResultSchema } = await import(
+      "./supplier-purchasable-sku-records"
+    );
+    const { SupplierPurchasableSkusRepository } = await import(
+      "./supplier-purchasable-skus"
+    );
+    expect(SupplierPurchasableSkuCommandResultSchema.parse(commandResult())
+      .current_price.unit_price).toBe("318.00");
+    await expect(new SupplierPurchasableSkusRepository(
+      () => ({ rpc } as never),
+    ).save(updateInput)).resolves.toEqual(commandResult());
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith("command_supplier_purchasable_sku_v1", {
+      p_action: "update", p_tenant_id: TENANT_ID,
+      p_tenant_supplier_id: TENANT_SUPPLIER_ID, p_supplier_id: SUPPLIER_ID,
+      p_supplier_product_id: PRODUCT_ID, p_supplier_sku_id: SKU_ID,
+      p_expected_sku_version: 3, p_sku: updateInput.sku,
+      p_price: updateInput.price, p_expected_price_list_id: PRICE_LIST_ID,
+      p_expected_price_list_version: 5, p_actor_user_id: USER_ID,
+      p_actor_employee_id: EMPLOYEE_ID,
+      p_idempotency_key: "sku:update:price",
+    });
+  });
+
+  test("accepts supported historical audit fields, SKU codes, and null specs", async () => {
+    const base = commandResult();
+    const legacyCode = `TS-${SKU_ID.replaceAll("-", "").slice(0, 16)}`;
+    const variants = [
+      [{ ...base, product: { ...base.product, acting_employee_id: USER_ID } },
+        updateInput],
+      [{ ...base, sku: { ...base.sku, sku_code: legacyCode }, catalog_item: {
+        ...base.catalog_item, sku_code: legacyCode,
+      } }, updateInput],
+      [{ ...base, sku: { ...base.sku, spec_values: null } }, {
+        ...updateInput, sku: { name: updateInput.sku.name },
+      }],
+    ] as const;
+    const { SupplierPurchasableSkusRepository } = await import(
+      "./supplier-purchasable-skus"
+    );
+    const accepted = await Promise.all(variants.map(async ([data, input]) => {
+      const rpc = mock(async () => ({ data, error: null }));
+      return new SupplierPurchasableSkusRepository(
+        () => ({ rpc } as never),
+      ).save(input).then(() => true, () => false);
+    }));
+    expect(accepted).toEqual([true, true, true]);
+  });
+
+  test("maps known database errors and wraps unknown errors without leaking SQL", async () => {
+    const { SupplierPurchasableSkusRepository } = await import(
+      "./supplier-purchasable-skus"
+    );
+    for (const [error, expected] of [
+      [{ message: "SUPPLIER_SKU_VERSION_CONFLICT select secret" },
+        { statusCode: 409, code: "SUPPLIER_SKU_VERSION_CONFLICT" }],
+      [{ message: "select secret from supplier_skus" },
+        { statusCode: 500, code: "DB_ERROR" }],
+    ] as const) {
+      const rpc = mock(async () => ({ data: null, error }));
+      const caught = await new SupplierPurchasableSkusRepository(
+          () => ({ rpc } as never),
+        ).save(updateInput).then(() => null, (caught) => caught);
+      expect(caught).toMatchObject(expected);
+      expect(String((caught as Error).message)).not.toContain("select secret");
+    }
+  });
+
+  test("maps stable envelopes and uses composite failure for unknown envelopes", async () => {
+    const { SupplierPurchasableSkusRepository } = await import(
+      "./supplier-purchasable-skus"
+    );
+    for (const [data, expected] of [
+      [{ status: "version_conflict", idempotent: false,
+        error_code: "SUPPLIER_PRICE_LIST_VERSION_CONFLICT", version: 7,
+        current_price_list_id: PRICE_LIST_ID },
+      { statusCode: 409, code: "SUPPLIER_PRICE_LIST_VERSION_CONFLICT" }],
+      [{ status: "state_conflict", idempotent: false,
+        error_code: "UNKNOWN_SQL_FAILURE", reason: "select secret" },
+      { statusCode: 500, code: "SUPPLIER_PURCHASABLE_SKU_SAVE_FAILED" }],
+    ] as const) {
+      const rpc = mock(async () => ({ data, error: null }));
+      await expect(new SupplierPurchasableSkusRepository(
+        () => ({ rpc } as never),
+      ).save(updateInput)).rejects.toMatchObject(expected);
+    }
+  });
+
+  test("rejects malformed, extra-key, and identity-mismatched saved results", async () => {
+    const mutations = [
+      { ...commandResult(), debug_sql: "select secret" },
+      { ...commandResult(), current_price: {
+        ...commandResult().current_price, unit_price: 318,
+      } },
+      { ...commandResult(), sku: {
+        ...commandResult().sku, supplier_product_id: TENANT_ID,
+      } },
+      { ...commandResult(), catalog_item: {
+        ...commandResult().catalog_item, supplier_price_list_item_id: TENANT_ID,
+      } },
+    ];
+    const { SupplierPurchasableSkusRepository } = await import(
+      "./supplier-purchasable-skus"
+    );
+    for (const data of mutations) {
+      const rpc = mock(async () => ({ data, error: null }));
+      await expect(new SupplierPurchasableSkusRepository(
+        () => ({ rpc } as never),
+      ).save(updateInput)).rejects.toMatchObject({
+        statusCode: 500, code: "SUPPLIER_PURCHASABLE_SKU_SAVE_FAILED",
+        message: "保存供应商 SKU 与供货价失败",
+      });
+    }
   });
 });
