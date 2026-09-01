@@ -194,7 +194,7 @@
 - [ ] Implement repository methods for tenant list/detail/version-summary list/version detail and public list/preview/owned list. Never select `content_blocks` in a list; the tenant version-detail query must filter tenant ID, note ID and version ID together.
 - [ ] Keep direct Supabase/SQL/RPC calls exclusively in the repository. Map database codes to typed repository failures without throwing raw `Error` from controllers/services.
 - [ ] Implement command methods for create, append version, transition, claim, remove and clear, plus the service-only subject-erasure gateway, using the migration RPC names and generated Supabase argument types where available.
-- [ ] Run `bun test apps/api/src/schema/douyin-material-notes.test.ts apps/api/src/schema/tenant-douyin-material-notes.test.ts apps/api/src/repositories/douyin-material-notes.test.ts`; expect pass.
+- [ ] Run `cd apps/api && bun test src/schema/douyin-material-notes.test.ts src/schema/tenant-douyin-material-notes.test.ts src/repositories/douyin-material-notes.test.ts`; expect pass.
 - [ ] Commit with `feat(api): add material note schemas and repository`.
 
 ## Task 4: Implement tenant-admin API behavior
@@ -218,7 +218,7 @@
 - [ ] Implement the controller as HTTP-only glue: parse request, call service and wrap success. Do not query Supabase or perform state transitions in the controller.
 - [ ] Register the controller in `apps/api/src/routes/index.ts`.
 - [ ] Extend route capability classification tests to include every new tenant route and assert the existing top-level `tenant` exclusion reports `not_trial_capability`; do not add a new paid capability mapping.
-- [ ] Run `bun test apps/api/src/services/tenant-douyin-material-notes.test.ts apps/api/src/controllers/tenant-douyin-material-notes/index.test.ts apps/api/src/services/tenant-service-capability-map.test.ts`; expect pass.
+- [ ] Run `cd apps/api && bun test src/services/tenant-douyin-material-notes.test.ts src/controllers/tenant-douyin-material-notes/index.test.ts src/services/tenant-service-capability-map.test.ts`; expect pass.
 - [ ] Commit with `feat(api): expose tenant material note management`.
 
 ## Task 5: Implement public mini-program API and analytics semantics
@@ -249,7 +249,7 @@
 - [ ] Implement the public service and map errors through `error-factory.ts`: 404 not found, 409 unavailable/conflict and 410 withdrawn.
 - [ ] Register controller routes with strict query/params/body schemas and `ResponseHandler.success`.
 - [ ] Update auth and analytics allowlists while preserving all existing routes/events.
-- [ ] Run `bun test apps/api/src/services/douyin-miniapp/material-notes.test.ts apps/api/src/controllers/douyin-miniapp/index.test.ts apps/api/src/plugins/auth/legacy-plugin-douyin.test.ts apps/api/src/services/douyin-miniapp/marketing.test.ts`; expect pass.
+- [ ] Run `cd apps/api && bun test src/services/douyin-miniapp/material-notes.test.ts src/controllers/douyin-miniapp/index.test.ts src/plugins/auth/legacy-plugin-douyin.test.ts src/services/douyin-miniapp/marketing.test.ts`; expect pass.
 - [ ] Run `bun run api:check`; expect API typecheck, build and file-size checks to pass before any server or browser smoke.
 - [ ] Commit with `feat(api): expose douyin material note claims`.
 

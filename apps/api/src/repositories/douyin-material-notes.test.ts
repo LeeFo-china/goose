@@ -261,27 +261,28 @@ describe('DouyinMaterialNotesRepository query boundaries', () => {
   });
 
   test('version history is body-free and detail is triple scoped', async () => {
-    const context = clientWith([
-      { data: [versionSummary], error: null, count: 1 },
-      { data: version, error: null },
-    ]);
-    const repository = new Repository(context.client);
-    await expect(repository.listVersions({
+    const listContext = clientWith([{ data: [versionSummary], error: null, count: 1 }]);
+    await expect(new Repository(listContext.client).listVersions({
       tenantId: TENANT_ID, noteId: NOTE_ID, page: 1, pageSize: 20,
     })).resolves.toEqual({ rows: [versionSummary], total: 1 });
-    await expect(repository.findTenantVersionDetail({
+    const detailContext = clientWith([{ data: version, error: null }]);
+    await expect(new Repository(detailContext.client).findTenantVersionDetail({
       tenantId: TENANT_ID, noteId: NOTE_ID, versionId: VERSION_ID,
     })).resolves.toEqual(version);
 
-    expect(selects(context.calls)[0]).not.toContain('content_blocks');
-    expect(selects(context.calls)[1]).toContain('content_blocks');
-    expect(context.calls).toContainEqual({
+    expect(selects(listContext.calls)[0]).not.toContain('content_blocks');
+    expect(selects(detailContext.calls)[0]).toContain('content_blocks');
+    expect(listContext.calls).toContainEqual({
       method: 'order', args: ['created_at', { ascending: false }],
     });
-    expect(context.calls).toContainEqual({
+    expect(listContext.calls).toContainEqual({
       method: 'order', args: ['id', { ascending: false }],
     });
-    expectScope(context.calls, [
+    expectScope(listContext.calls, [
+      { method: 'eq', args: ['tenant_id', TENANT_ID] },
+      { method: 'eq', args: ['note_id', NOTE_ID] },
+    ]);
+    expectScope(detailContext.calls, [
       { method: 'eq', args: ['tenant_id', TENANT_ID] },
       { method: 'eq', args: ['note_id', NOTE_ID] },
       { method: 'eq', args: ['id', VERSION_ID] },
