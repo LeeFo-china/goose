@@ -12,11 +12,12 @@
   `20260830115000`、pending 0；API/Admin 已发布并通过健康检查。
 - `apps/api/src/types/database.ts` 已在 migration history 对齐的 dev 数据库上，使用官方
   `postgres-meta:v0.96.4` 机械生成并审查，未手改生成结果。
-- dev 发布已完成，但租户灰度验收尚未完成：只读检查确认 14 个租户中
-  `purchase_batch_workflow_enabled=true` 为 0，且
-  `procurement_snapshot_v1_enabled=true AND purchase_batch_workflow_enabled=false` 也为 0。
-  因此没有符合 runbook 的内部验收租户，未运行 dev execute、未生成业务批次，也未扩大
-  灰度。必须由平台管理员通过现有 Admin/API 完成租户配置；禁止用 SQL 临时开关或造数据。
+- 单个内部 dev 租户灰度验收已完成：目标租户当前 setting version 为 10，
+  `procurement_snapshot_v1_enabled=true`、`purchase_batch_workflow_enabled=true`。
+- flag=false 旧 `/review` 基线、受保护 dry-run/execute、两个独立批次的新旧审批入口对照，
+  以及 version/round/self-review/completed-task/idempotency 稳定错误码均已通过。
+- 本轮没有扩大租户灰度；后端已具备 Orange 真机验收条件，剩余项仅为小程序端真机结论与
+  最终灰度范围。
 
 以下为 Task12 的历史类型基线：当时在未加本轮 migration 的 disposable
 production-schema clone 上，以真实
@@ -155,7 +156,7 @@ Seq Scan 未触发“大基数顺扫”拒绝条件，且耗时与 buffer 均在
 `source=user` 没有被泛化放行。此次门禁修复未增加 migration、未改变 API 契约，也未改动
 Orange 仓库。
 
-## dev 租户灰度阻塞
+## dev 租户灰度前置排查（历史）
 
 受保护 runner 在临时 ops commit `86127e0f6e3aa0aa55bace04a98874d358d86b22`
 运行了只读候选筛选：[run 33349436557](https://github.com/LeeFo-china/goose/actions/runs/33349436557)。
@@ -214,18 +215,87 @@ Orange 仓库。
   `bbab0193-43ae-4b7a-a7f3-24314e0f2e0d`；purchase、finance、all candidates 三项
   preflight 均为 true，`prerequisites_ready_without_rollout=true`。
 
-租户侧职责分离阻塞已消除。剩余阻塞仅为平台 rollout：setting version 仍为 6，snapshot 与
-workflow 均为 false；租户管理员访问平台设置接口返回 HTTP 403
-`PLATFORM_STAFF_REQUIRED`，本机也没有可复用的平台管理员浏览器会话。必须由平台管理员使用
-现有 Admin/API 按父子顺序开启 `procurement_snapshot_v1_enabled` 与
-`purchase_batch_workflow_enabled`，保存审计事件和 setting version。不得直接修改
-`tenant_supplier_settings`。
+租户侧职责分离阻塞已消除。以下平台 rollout 阻塞是当时的历史状态：setting version 为 6，
+snapshot 与 workflow 均为 false；租户管理员访问平台设置接口返回 HTTP 403
+`PLATFORM_STAFF_REQUIRED`。后续平台管理员通过现有 API 完成开关与审计，未直接修改
+`tenant_supplier_settings`，实际验收见下一节。
 
-## 灰度前待补证据
+## 2026-09-01 单租户 dev API 验收
 
-- flag=false 基线及 flag=true setting version；
-- smoke dry-run 输出，以及明确授权后的 execute requestId/batch/round/instance/task/
-  budget/order/supplierCount；
-- 已发布 dev API 上使用两个不同批次分别调用旧 `/review` 和新 workflow task complete 的
-  终态/订单/稳定错误码对照证据；不得用同一批次串行调用两个入口伪造对照；
-- Orange 真机验收结论和灰度范围。
+### Rollout 与受保护 smoke
+
+- 平台 rollout 审计 `9582dc80-654d-4bbb-affb-2c5b704561e2` 将 setting version 从 6 更新为
+  7，开启 `procurement_snapshot_v1_enabled`；审计
+  `0f87c7dd-9b75-42e4-8a12-9ab72b898c5d` 将 version 从 7 更新为 8，开启
+  `purchase_batch_workflow_enabled`。两次变更均通过现有平台 API 完成。
+- 受保护 [run 33359680214](https://github.com/LeeFo-china/goose/actions/runs/33359680214)
+  artifact `supplier-purchase-workflow-acceptance-9d02854a88d5ca83a2f883b923de1ffcd7d49bd3`
+  （artifact ID `9746296599`）保留了 rollout、dry-run、execute 和 EXPLAIN 脱敏证据。
+- dry-run requestId 为 `ca23bf7c-b19a-4531-93c5-90b0e522ceea`，mode 为 `dry-run`，预算为
+  `preflight_ready`，未生成批次、订单或任务。
+- execute requestId 为 `51c180a5-24fb-4392-b5ea-11b3633c187a`，生成批次
+  `53298aa5-a3f6-45c3-8820-4cbfa15abfdb`、round 1、实例
+  `158649b4-c356-4b04-abb4-d1d1b65f08d5`、任务
+  `32e4f511-7fa2-4f34-a3ec-36c5991ee38d` 和 submitted 订单
+  `34285e7f-8efd-4883-b6e1-ff4f052a990b`；预算 `within_budget`、supplierCount 为 1，最终
+  workflow completed、pending task 为 0。
+- 该 run 的业务 dry-run/execute 成功，但旧门禁把仅 1 行命中的
+  `workflow_subject_states` `Seq Scan` 直接判失败，所以 workflow 总结为 failure。后续受保护
+  [run 33423552325](https://github.com/LeeFo-china/goose/actions/runs/33423552325) 已按小基数、耗时
+  和 buffer 边界完成最终 EXPLAIN 验收；不是业务写入或审批失败。
+
+### flag=false 兼容基线
+
+- 为补齐旧入口基线，通过平台 API 暂时将 version 8 更新为 9、workflow true 更新为 false，
+  审计 ID `40ce0be3-f122-4cf1-a194-86ca09e65ca5`；旧 `/review` 验收完成后立即将 version 9
+  更新为 10、workflow false 恢复为 true，审计 ID
+  `22581653-2404-4900-ab71-96608ee7ae56`。snapshot 始终为 true。
+- flag=false 批次 `bc479d34-733a-46f2-a201-6c6d92d0a5d0` 通过旧 `/review` 完成超预算授权，
+  终态 `ordered`、approvalRound 0、无 workflow instance，生成唯一 submitted 订单
+  `46da71eb-bd0c-4fe2-9ea7-0fd9b3459b4b`；在 flag=false 回读时响应省略
+  `workflow_state`，符合兼容契约。
+- save/submit/review/restore 均使用包含批次 ID 的固定 idempotency key。成功响应契约没有
+  requestId 字段或响应头，因此该路径以 idempotency key、批次、订单和 rollout 审计作为
+  可复核标识。
+
+### 新旧审批入口对照
+
+为保证对照有效，两个入口使用同一项目、SKU、预算科目、数量和供应商，但使用两个独立批次
+及独立 idempotency key。项目 `b95f6b51-6b9c-4970-948e-b369106545d8` 通过现有 API 增加审批
+员工为非主责 `material_manager`，成员记录
+`8f05fa8a-0e85-4fa4-bdf4-9fca373ff2cd`；这是为 Orange 真机 smoke 保留的可回退 dev 配置。
+
+| 入口 | 批次 | task | 订单 | 终态 |
+| --- | --- | --- | --- | --- |
+| 旧 `/supplier-purchase-batches/:id/review` | `3beceea6-e677-4544-8aeb-e308b0e3a5e6` | `9682de11-4b79-4d80-84a1-a4416c30c792` | `83503392-4237-49b9-a66e-a0bcd4c8344d` | ordered / within_budget / round 1 / workflow completed / pending 0 / submitted |
+| 新 `/workflow/tasks/:id/complete` | `a5ab42f4-44db-4720-964c-2e482c9a1781` | `5409e3b1-24ff-47e1-9f80-ebce72b2e8b2` | `ded92eb4-9472-41f3-b2d6-faa8f4140736` | ordered / within_budget / round 1 / workflow completed / pending 0 / submitted |
+
+两个入口分别使用完全相同 key/payload 重放，均返回原订单且没有新增订单，证明兼容桥与统一
+task complete 具备一致的幂等终态。
+
+### 稳定错误码与清理结果
+
+| 场景 | HTTP / code | requestId |
+| --- | --- | --- |
+| 旧入口 stale version | 409 / `SUPPLIER_PURCHASE_BATCH_VERSION_CONFLICT` | `req-133` |
+| 新入口 stale round | 409 / `SUPPLIER_PURCHASE_BATCH_APPROVAL_ROUND_STALE` | `req-13j` |
+| 旧入口 self-review | 409 / `SUPPLIER_PURCHASE_BATCH_SELF_REVIEW` | `req-13s` |
+| 新入口 self-review | 409 / `SUPPLIER_PURCHASE_BATCH_SELF_REVIEW` | `req-142` |
+| 旧入口重复完成 task | 409 / `WORKFLOW_TASK_NOT_PENDING` | `req-146` |
+| 新入口重复完成 task | 409 / `WORKFLOW_TASK_NOT_PENDING` | `req-147` |
+| 新入口同 key 不同 payload | 409 / `SUPPLIER_IDEMPOTENCY_CONFLICT` | `req-148` |
+
+负向校验使用的四个批次在取得错误证据后均由正确审批人完成。最终回读确认本轮新增的 7 个
+证据批次全部为 `ordered`，每个批次恰好一张 submitted 订单；申请人与审批人的 pending
+workflow task 均为 0。setting 最终为 version 10、snapshot/workflow 均为 true。
+
+dev 中另有一个 2026-08-30 已存在的旧批次
+`5eb8312b-27a4-4fd0-ba1b-27a4b94515ec` 仍为 `pending_approval`，approvalRound 0、没有
+workflow instance/task/order。它早于本轮验收且不属于本轮证据，未擅自取消或删除。
+
+本轮 API 验收没有新增 migration、没有调整接口契约、没有修改 Orange 仓库，也没有扩大到
+其他租户。
+
+## 扩大灰度前待补证据
+
+- Orange 真机验收结论和最终灰度范围。
