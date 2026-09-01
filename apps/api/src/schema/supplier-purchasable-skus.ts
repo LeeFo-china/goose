@@ -83,10 +83,13 @@ const SupplierPurchasableSkuUpdatePriceSchema = z.object({
   const hasPriceListVersion = price.expected_price_list_version !== null;
 
   if (hasPriceListId !== hasPriceListVersion) {
+    const missingField = hasPriceListId
+      ? "expected_price_list_version"
+      : "expected_price_list_id";
     context.addIssue({
       code: "custom",
       message: "价格簿 ID 和版本号必须同时为空或同时提供",
-      path: ["expected_price_list_id"],
+      path: [missingField],
     });
   }
 });
@@ -109,3 +112,8 @@ export const SupplierPurchasableSkuPriceParamSchema = z.object({
 export const SupplierPurchasableSkuScopeQuerySchema = z.object({
   tenantSupplierId: uuid("无效的租户供应商关系 ID"),
 }).strict();
+
+export type SupplierPurchasableSkuCreateInput =
+  z.infer<typeof SupplierPurchasableSkuCreateSchema>;
+export type SupplierPurchasableSkuUpdateInput =
+  z.infer<typeof SupplierPurchasableSkuUpdateSchema>;

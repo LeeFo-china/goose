@@ -6,6 +6,10 @@ import {
   SupplierPurchasableSkuScopeQuerySchema,
   SupplierPurchasableSkuUpdateSchema,
 } from "./supplier-purchasable-skus";
+import type {
+  SupplierPurchasableSkuCreateInput,
+  SupplierPurchasableSkuUpdateInput,
+} from "./supplier-purchasable-skus";
 
 const UUID = "10000000-0000-4000-8000-000000000001";
 const SECOND_UUID = "20000000-0000-4000-8000-000000000002";
@@ -26,8 +30,28 @@ const createPayload = {
     tax_rate: "0.13",
   },
 };
+const updatePayload = {
+  sku: { expected_version: 3 },
+  price: {
+    unit_price: "318.00",
+    tax_rate: "0.13",
+    tax_inclusive: false,
+    expected_price_list_id: null,
+    expected_price_list_version: null,
+  },
+};
 
 describe("supplier purchasable SKU schemas", () => {
+  test("exports inferred create and update input types", () => {
+    const createInput: SupplierPurchasableSkuCreateInput =
+      SupplierPurchasableSkuCreateSchema.parse(createPayload);
+    const updateInput: SupplierPurchasableSkuUpdateInput =
+      SupplierPurchasableSkuUpdateSchema.parse(updatePayload);
+
+    expect(createInput.price.unit_price).toBe("328.00");
+    expect(updateInput.sku.expected_version).toBe(3);
+  });
+
   test("keeps decimal strings and defaults creates to untaxed", () => {
     const parsed = SupplierPurchasableSkuCreateSchema.parse({
       sku: {
@@ -230,6 +254,53 @@ describe("supplier purchasable SKU schemas", () => {
           expected_price_list_version,
         },
       }).success).toBe(false);
+    }
+  });
+
+  test("points concurrency pairing issues at the missing field", () => {
+    const missingVersion = SupplierPurchasableSkuUpdateSchema.safeParse({
+      ...updatePayload,
+      price: {
+        ...updatePayload.price,
+        expected_price_list_id: UUID,
+        expected_price_list_version: null,
+      },
+    });
+    expect(missingVersion.success).toBe(false);
+    if (!missingVersion.success) {
+      expect(missingVersion.error.issues[0]?.path)
+        .toEqual(["price", "expected_price_list_version"]);
+    }
+
+    const missingId = SupplierPurchasableSkuUpdateSchema.safeParse({
+      ...updatePayload,
+      price: {
+        ...updatePayload.price,
+        expected_price_list_id: null,
+        expected_price_list_version: 5,
+      },
+    });
+    expect(missingId.success).toBe(false);
+    if (!missingId.success) {
+      expect(missingId.error.issues[0]?.path)
+        .toEqual(["price", "expected_price_list_id"]);
+    }
+  });
+
+  test("rejects unknown fields at every update input level", () => {
+    for (const input of [
+      { ...updatePayload, unknown: true },
+      {
+        ...updatePayload,
+        sku: { ...updatePayload.sku, unknown: true },
+      },
+      {
+        ...updatePayload,
+        price: { ...updatePayload.price, unknown: true },
+      },
+    ]) {
+      expect(SupplierPurchasableSkuUpdateSchema.safeParse(input).success)
+        .toBe(false);
     }
   });
 
