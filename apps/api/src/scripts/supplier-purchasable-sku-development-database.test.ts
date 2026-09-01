@@ -49,16 +49,23 @@ describe("supplier purchasable SKU development database", () => {
     );
   });
 
+  test("rejects the development host when the database is not postgres", () => {
+    expect(() => parseSupplierPurchasableSkuDevelopmentDatabaseUrl(
+      "postgresql://fixture-user:fixture-password@api-dev.goodcms.cn:5432/wrong-database?sslmode=require",
+      VARIABLE_NAME,
+    )).toThrowError(`${VARIABLE_NAME} 仅允许连接 postgres 数据库`);
+  });
+
   test("keeps Bun SQL pinned to the validated local endpoint under hostile ambient env", async () => {
     setHostileDatabaseEnvironment();
     const { connection } =
       parseSupplierPurchasableSkuDevelopmentDatabaseUrl(
-        "postgresql://requested-user:requested-password@127.0.0.1:5432/requested-database",
+        "postgresql://requested-user:requested-password@127.0.0.1:5432/postgres",
         VARIABLE_NAME,
       );
 
     expect(connection.url).toBe(
-      "postgresql://requested-user:requested-password@127.0.0.1:5432/requested-database",
+      "postgresql://requested-user:requested-password@127.0.0.1:5432/postgres",
     );
     const database = new Bun.SQL(
       createSupplierPurchasableSkuDatabaseOptions(connection, 1),
@@ -72,7 +79,7 @@ describe("supplier purchasable SKU development database", () => {
         adapter: "postgres",
         hostname: "127.0.0.1",
         port: 5432,
-        database: "requested-database",
+        database: "postgres",
         username: "requested-user",
         password: "requested-password",
         sslMode: 0,

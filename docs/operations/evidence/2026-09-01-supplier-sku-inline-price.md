@@ -4,21 +4,25 @@
 
 - 验收日期：2026-09-02。
 - 功能分支：`docs/supplier-sku-inline-price-design`。
-- Task 9 证据写入前 revision：
-  `60dbd287c8414721f83a6e136de3d637dcb96c7e`。
-- `origin/main` 功能 squash：
-  `1571b30f1f1f69d0f8fa39dac271d08ac14487c0`。
+- 本次评审修正前的 Task 9 证据文档 commit：
+  `1091d1ba1000ab005d31bafc1760f1979886ae06`。
+- 本文的评审修正与目标保护代码由包含本文当前版本的后续 commit 一并记录，未使用
+  未创建的 SHA 占位符。
+- `origin/main` 已通过双父 merge commit
+  `1571b30f1f1f69d0f8fa39dac271d08ac14487c0` 集成主功能；该 commit 不是 squash。
+- 当前分支在评审前已有四个验证/证据 commit，本次目标保护修正也仍待后续集成。
 - 功能 migration：`20260901130000_create_supplier_purchasable_sku_command.sql`。
 - 开发库目标已在连接前按 host `api-dev.goodcms.cn`、database `postgres`
   精确校验，并拒绝生产目标。`dev-direct` 在内存中补充 `sslmode=require`，未修改
   根 `.env`；验证输出未包含连接 URL 或凭据。
-- 开发 API/Admin 代码未部署，本分支仍待 PR、评审、合并和正常发布流程；不存在可记录的
-  开发部署 revision。
+- 主功能进入 `origin/main` 只表示代码已集成，不代表已部署。没有可核实的开发 API/Admin
+  部署 revision；当前分支验证加固仍待 PR、评审、合并和正常发布流程。
 
 ## Migration
 
 使用从 git common directory 定位的根 `.env` 和 Supabase CLI `2.99.0` 验证：
 
+- `supplier:purchasable-sku:target:dev-direct` 只输出开发 host、database 和 TLS 模式；
 - `supabase migration list` exit 0，Local/Remote 对齐至 `20260901130000`；
 - `supabase db push --dry-run` exit 0，返回 `Remote database is up to date.`；
 - 本轮未执行 migration push，未连接生产环境。
@@ -59,7 +63,7 @@
 
 | 命令 | 结果 |
 | --- | --- |
-| 聚焦 API 回归，17 个文件 | 186 pass / 0 fail / 894 `expect()` calls |
+| 聚焦 API 回归，17 个文件 | 193 pass / 0 fail / 931 `expect()` calls |
 | `bun run api:check` | exit 0；typecheck、build、API file-size 均通过 |
 | `pnpm --dir apps/admin check` | exit 0；1332 个 TS/TSX 文件检查及 typecheck 通过 |
 | `pnpm --dir apps/admin build` | exit 0；Next.js production build 通过 |
@@ -70,9 +74,9 @@
 
 ## 发布与回滚
 
-当前只完成开发库 migration 和本地/开发直连验收，代码尚未部署。合并后按正常流程先发布
-API，再发布 Admin，并在各自 revision 可追溯后复核健康检查和接口 smoke。生产 migration、
-API 和 Admin 发布仍需单独明确授权。
+当前只完成开发库 migration 和本地/开发直连验收，没有可核实的代码部署。当前分支验证加固
+合并后，再按正常流程先发布 API、后发布 Admin，并在各自 revision 可追溯后复核健康检查和
+接口 smoke。生产 migration、API 和 Admin 发布仍需单独明确授权。
 
 如发布后需要回滚：
 

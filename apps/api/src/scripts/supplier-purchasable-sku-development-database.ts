@@ -1,4 +1,5 @@
 const REMOTE_DEVELOPMENT_POSTGRES_HOST = "api-dev.goodcms.cn";
+const DEVELOPMENT_POSTGRES_DATABASE = "postgres";
 const DEVELOPMENT_POSTGRES_HOSTS = new Set([
   REMOTE_DEVELOPMENT_POSTGRES_HOST,
   "localhost",
@@ -102,6 +103,9 @@ export function parseSupplierPurchasableSkuDevelopmentDatabaseUrl(
   }
   if (!DEVELOPMENT_POSTGRES_HOSTS.has(hostname)) {
     throw new Error(`${variableName} 仅允许连接开发数据库主机`);
+  }
+  if (database !== DEVELOPMENT_POSTGRES_DATABASE) {
+    throw new Error(`${variableName} 仅允许连接 postgres 数据库`);
   }
   for (const key of parsed.searchParams.keys()) {
     if (key !== "sslmode") {
