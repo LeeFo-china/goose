@@ -12,10 +12,8 @@ import {
   type OwnedMutationCommand, type OwnedMutationRequest,
 } from "./page-model";
 
-type ModalOptions = {
-  title: string; content: string; confirmText: string; cancelText: string;
-  success(result: { confirm: boolean }): void;
-};
+type ModalOptions = Parameters<typeof tt.showModal>[0];
+type ConfirmationToken = { sequence: number; command: OwnedMutationCommand };
 
 export type MyMaterialsPageDependencies = {
   getApp(): DouyinAppContext;
@@ -33,6 +31,10 @@ export function createMyMaterialsPageDefinition(dependencies: MyMaterialsPageDep
   return definePage({
     pageState: createOwnedMaterialPageState(20),
     featureReady: false,
+    confirmationSequence: 0,
+    activeConfirmation: null as ConfirmationToken | null,
+    mutationSettlement: null as Promise<void> | null,
+    mutationNeedsReconcile: false,
     lifecycle: new MaterialExperienceLifecycle(),
     data: {
       items: [] as OwnedMaterialPageState["pagination"]["items"],
@@ -43,15 +45,19 @@ export function createMyMaterialsPageDefinition(dependencies: MyMaterialsPageDep
     onShow() {
       if (!this.lifecycle.onShow()) return;
       this.syncState();
-      if (this.featureReady) void this.load("refresh");
+      if (this.featureReady) void this.refreshAfterPendingMutation();
       else void this.initialize();
     },
     onHide() {
       if (!this.lifecycle.onHide()) return;
+      this.activeConfirmation = null;
+      this.confirmationSequence += 1;
       this.pageState = cancelOwnedMutation(this.pageState);
     },
     onUnload() {
       this.lifecycle.onUnload();
+      this.activeConfirmation = null;
+      this.confirmationSequence += 1;
       this.pageState = cancelOwnedMutation(this.pageState);
     },
     onReachBottom() { void this.load("loadMore"); },
@@ -101,6 +107,15 @@ export function createMyMaterialsPageDefinition(dependencies: MyMaterialsPageDep
         }
       }
     },
+    async refreshAfterPendingMutation() {
+      const authority = this.lifecycle.beginOperation();
+      if (!authority) return;
+      const pendingSettlement = this.mutationSettlement;
+      if (this.mutationNeedsReconcile && pendingSettlement) await pendingSettlement;
+      if (!this.lifecycle.isCurrent(authority)) return;
+      await this.load("refresh");
+      if (this.lifecycle.isCurrent(authority)) this.mutationNeedsReconcile = false;
+    },
     syncState() {
       if (!this.lifecycle.beginOperation()) return;
       this.setData({
@@ -119,34 +134,49 @@ export function createMyMaterialsPageDefinition(dependencies: MyMaterialsPageDep
     },
     onConfirmRemove(event: { currentTarget: { dataset: { claimid?: string } } }) {
       const claimId = event.currentTarget.dataset.claimid;
-      if (!claimId || this.pageState.mutation) return;
-      const authority = this.lifecycle.beginOperation();
-      if (!authority) return;
-      dependencies.showModal({
+      if (!claimId) return;
+      this.showMutationConfirmation({ type: "remove", claimId }, {
         title: "移出我的资料",
         content: "移出后将不能继续查看这份正文，可从资料中心重新领取当前版本。",
         confirmText: "移出", cancelText: "取消",
-        success: (result) => {
-          if (result.confirm && this.lifecycle.isCurrent(authority)) {
-            void this.executeMutation({ type: "remove", claimId });
-          }
-        },
       });
     },
     onConfirmClear() {
-      if (this.pageState.mutation || this.pageState.pagination.items.length === 0) return;
-      const authority = this.lifecycle.beginOperation();
-      if (!authority) return;
-      dependencies.showModal({
+      if (this.pageState.pagination.items.length === 0) return;
+      this.showMutationConfirmation({ type: "clear" }, {
         title: "清空全部资料",
         content: "将一次移出当前全部资料，之后可在资料中心重新领取。此操作不等同于删除个人信息。",
         confirmText: "清空", cancelText: "取消",
-        success: (result) => {
-          if (result.confirm && this.lifecycle.isCurrent(authority)) {
-            void this.executeMutation({ type: "clear" });
-          }
-        },
       });
+    },
+    showMutationConfirmation(
+      command: OwnedMutationCommand,
+      copy: Pick<ModalOptions, "title" | "content" | "confirmText" | "cancelText">,
+    ) {
+      if (this.pageState.mutation || this.activeConfirmation) return;
+      const authority = this.lifecycle.beginOperation();
+      if (!authority) return;
+      const token = { sequence: this.confirmationSequence + 1, command };
+      this.confirmationSequence = token.sequence;
+      this.activeConfirmation = token;
+      const release = () => {
+        if (this.activeConfirmation !== token) return false;
+        this.activeConfirmation = null;
+        return true;
+      };
+      try {
+        dependencies.showModal({
+          ...copy,
+          success: (result) => {
+            if (!release() || !result.confirm || !this.lifecycle.isCurrent(authority)) return;
+            void this.executeMutation(token.command);
+          },
+          fail: release,
+          complete: release,
+        });
+      } catch {
+        release();
+      }
     },
     async executeMutation(command: OwnedMutationCommand) {
       const authority = this.lifecycle.beginOperation();
@@ -155,22 +185,41 @@ export function createMyMaterialsPageDefinition(dependencies: MyMaterialsPageDep
       if (!pending) return;
       this.pageState = pending.state;
       this.syncState();
+      let mutationFlight: Promise<unknown>;
       try {
         if (command.type === "remove") {
-          await dependencies.removeOwnedMaterial(dependencies.getApp().api, command.claimId);
+          mutationFlight = dependencies.removeOwnedMaterial(
+            dependencies.getApp().api,
+            command.claimId,
+          );
         } else {
-          await dependencies.clearOwnedMaterials(dependencies.getApp().api);
+          mutationFlight = dependencies.clearOwnedMaterials(dependencies.getApp().api);
         }
+      } catch (error) {
+        mutationFlight = Promise.reject(error);
+      }
+      const settlement = mutationFlight.then(
+        () => undefined,
+        () => undefined,
+      );
+      this.mutationSettlement = settlement;
+      this.mutationNeedsReconcile = true;
+      try {
+        await mutationFlight;
         if (!this.lifecycle.isCurrent(authority)) return;
         const resolved = resolveOwnedMutation(this.pageState, pending.request);
         this.pageState = resolved.state;
         this.syncState();
         if (resolved.shouldReload) await this.load("refresh");
         if (this.lifecycle.isCurrent(authority)) {
+          this.mutationNeedsReconcile = false;
           dependencies.showToast({ title: command.type === "clear" ? "已清空" : "已移出", icon: "none" });
         }
       } catch {
         this.handleMutationFailure(pending.request, authority);
+        if (this.lifecycle.isCurrent(authority)) this.mutationNeedsReconcile = false;
+      } finally {
+        if (this.mutationSettlement === settlement) this.mutationSettlement = null;
       }
     },
     handleMutationFailure(request: OwnedMutationRequest, authority: MaterialOperationAuthority) {

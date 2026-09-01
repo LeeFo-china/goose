@@ -6,6 +6,7 @@ import type {
   toMaterialBusinessError,
 } from "../../api/materials";
 import { resolveThemeColor } from "../../components/theme";
+import type { DouyinMaterialNoteBlock } from "../../models";
 import type { copyTextToClipboard } from "../../platform/clipboard";
 import type { navigateToPage, switchToTab } from "../../platform/navigation";
 import { MaterialExperienceLifecycle, type MaterialOperationAuthority } from "../materials/page-model";
@@ -46,11 +47,16 @@ export function createMaterialDetailPageDefinition(
   return definePage({
     pageState: null as MaterialDetailState | null,
     target: null as MaterialDetailTarget | null,
+    claimSettlement: null as Promise<void> | null,
     lifecycle: new MaterialExperienceLifecycle(),
     data: {
       status: "loading",
       preview: null as MaterialDetailState["preview"],
       content: null as MaterialDetailState["content"],
+      displayTitle: "",
+      displaySummary: "",
+      displayCategory: "装修资料",
+      displayApplicableTo: "",
       blocks: [] as Array<Record<string, unknown>>,
       primaryColor: "#191817",
       primaryTextColor: "#FFFFFF",
@@ -84,6 +90,11 @@ export function createMaterialDetailPageDefinition(
       if (!this.pageState || !this.target) return;
       const operation = this.lifecycle.beginOperation();
       if (!operation) return;
+      const pendingClaimSettlement = this.claimSettlement;
+      if (pendingClaimSettlement) {
+        await pendingClaimSettlement;
+        if (!this.lifecycle.isCurrent(operation)) return;
+      }
       const pending = beginDetailLoad(this.pageState);
       this.pageState = pending.state;
       this.syncState();
@@ -155,11 +166,22 @@ export function createMaterialDetailPageDefinition(
       if (!pending) return;
       this.pageState = pending.state;
       this.syncState();
+      let claimFlight: ReturnType<MaterialDetailPageDependencies["claimMaterial"]>;
       try {
-        const result = await dependencies.claimMaterial(
+        claimFlight = dependencies.claimMaterial(
           dependencies.getApp().api,
           this.target.id,
         );
+      } catch (error) {
+        claimFlight = Promise.reject(error);
+      }
+      const settlement = claimFlight.then(
+        () => undefined,
+        () => undefined,
+      );
+      this.claimSettlement = settlement;
+      try {
+        const result = await claimFlight;
         if (!this.lifecycle.isCurrent(operation) || !this.pageState) return;
         const resolved = resolveMaterialClaim(this.pageState, pending.request, result);
         if (resolved === this.pageState) return;
@@ -168,6 +190,8 @@ export function createMaterialDetailPageDefinition(
         dependencies.showToast({ title: "已加入我的资料", icon: "none" });
       } catch (error) {
         await this.recoverClaim(operation, pending.request, error);
+      } finally {
+        if (this.claimSettlement === settlement) this.claimSettlement = null;
       }
     },
     async recoverClaim(
@@ -196,14 +220,16 @@ export function createMaterialDetailPageDefinition(
     },
     syncState() {
       if (!this.pageState || !this.lifecycle.beginOperation()) return;
+      const display = this.pageState.content ?? this.pageState.preview;
       this.setData({
         status: this.pageState.status,
         preview: this.pageState.preview,
         content: this.pageState.content,
-        blocks: (this.pageState.content?.content_blocks ?? []).map((block, index) => ({
-          ...block,
-          key: `${index}-${block.type}`,
-        })),
+        displayTitle: display?.title ?? "",
+        displaySummary: display?.summary ?? "",
+        displayCategory: display?.category ?? "装修资料",
+        displayApplicableTo: display?.applicable_to ?? "",
+        blocks: projectMaterialBlocks(this.pageState.content?.content_blocks ?? []),
       });
     },
     async onCopy() {
@@ -268,6 +294,24 @@ export function createMaterialDetailPageDefinition(
         dependencies.showToast({ title: "页面跳转失败，请重试", icon: "none" });
       });
     },
+  });
+}
+
+function projectMaterialBlocks(
+  blocks: readonly DouyinMaterialNoteBlock[],
+): Array<Record<string, unknown>> {
+  return blocks.map((block, blockIndex) => {
+    const key = `${blockIndex}-${block.type}`;
+    if (block.type !== "list") return { ...block, key };
+    return {
+      ...block,
+      key,
+      items: block.items.map((text, itemIndex) => ({
+        key: `${key}-${itemIndex}`,
+        marker: block.style === "ordered" ? `${itemIndex + 1}.` : "•",
+        text,
+      })),
+    };
   });
 }
 

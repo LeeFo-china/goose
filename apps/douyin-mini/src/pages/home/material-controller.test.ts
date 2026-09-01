@@ -23,6 +23,15 @@ test("home requests four materials and keeps material failure local", async () =
   expect(fetchMaterials).toHaveBeenCalledTimes(1);
 });
 
+test("home keeps its global state healthy when no public materials are available", async () => {
+  const page = makePage(mock(async () => response([])));
+  await page.load();
+  await flush();
+  expect(page.data.error).toBe(false);
+  expect(page.data.materialStatus).toBe("empty");
+  expect(page.data.materialItems).toEqual([]);
+});
+
 test("home caps the module at four and ignores its old response after hide-show", async () => {
   const staleFlight = deferred<ReturnType<typeof response>>();
   const currentFlight = deferred<ReturnType<typeof response>>();

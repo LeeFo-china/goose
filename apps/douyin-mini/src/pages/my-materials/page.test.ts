@@ -56,14 +56,158 @@ test("my materials ignores late modal callbacks and late mutation results", asyn
   expect(toasts).toHaveLength(toastCount);
 });
 
-function response() {
-  return { list: [item], pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 } };
+test("clear and remove confirmations are single-flight and old callbacks are single-use", async () => {
+  const modals: Array<{ success(result: { confirm: boolean }): void }> = [];
+  const clearOwnedMaterials = mock(async () => undefined);
+  const removeOwnedMaterial = mock(async () => undefined);
+  const page = makePage({ modals, clearOwnedMaterials, removeOwnedMaterial });
+  page.onLoad();
+  await flush();
+
+  page.onConfirmClear();
+  page.onConfirmClear();
+  expect(modals).toHaveLength(1);
+  const clearCallback = modals[0]!.success;
+  clearCallback({ confirm: true });
+  await flush();
+  expect(clearOwnedMaterials).toHaveBeenCalledTimes(1);
+  clearCallback({ confirm: true });
+  await flush();
+  expect(clearOwnedMaterials).toHaveBeenCalledTimes(1);
+
+  page.onConfirmClear();
+  expect(modals).toHaveLength(2);
+  modals[1]!.success({ confirm: false });
+  page.onConfirmClear();
+  expect(modals).toHaveLength(3);
+  modals[2]!.success({ confirm: false });
+
+  const removeEvent = { currentTarget: { dataset: { claimid: item.claim_id } } };
+  page.onConfirmRemove(removeEvent);
+  page.onConfirmRemove(removeEvent);
+  expect(modals).toHaveLength(4);
+  const removeCallback = modals[3]!.success;
+  removeCallback({ confirm: true });
+  await flush();
+  expect(removeOwnedMaterial).toHaveBeenCalledTimes(1);
+  removeCallback({ confirm: true });
+  await flush();
+  expect(removeOwnedMaterial).toHaveBeenCalledTimes(1);
+});
+
+test("hide-show waits for pending remove and clear settlement before the latest refresh", async () => {
+  for (const command of ["remove", "clear"] as const) {
+    const mutation = deferred<void>();
+    let serverHasItem = true;
+    const modals: Array<{ success(result: { confirm: boolean }): void }> = [];
+    const toasts: string[] = [];
+    const fetchOwnedMaterials = mock(async () => response(serverHasItem ? [item] : []));
+    const removeOwnedMaterial = mock(async () => {
+      await mutation.promise;
+      serverHasItem = false;
+    });
+    const clearOwnedMaterials = mock(async () => {
+      await mutation.promise;
+      serverHasItem = false;
+    });
+    const page = makePage({
+      modals, fetchOwnedMaterials, removeOwnedMaterial, clearOwnedMaterials, toasts,
+    });
+    page.onLoad();
+    await flush();
+    if (command === "remove") {
+      page.onConfirmRemove({ currentTarget: { dataset: { claimid: item.claim_id } } });
+    } else {
+      page.onConfirmClear();
+    }
+    modals[0]!.success({ confirm: true });
+    await flush();
+    page.onHide();
+    page.onShow();
+    page.onHide();
+    page.onShow();
+    await flush();
+    expect(fetchOwnedMaterials).toHaveBeenCalledTimes(1);
+
+    mutation.resolve();
+    await flush();
+    await flush();
+    expect(fetchOwnedMaterials).toHaveBeenCalledTimes(2);
+    expect(page.data.items).toEqual([]);
+    expect(command === "remove" ? removeOwnedMaterial : clearOwnedMaterials)
+      .toHaveBeenCalledTimes(1);
+    expect(toasts).toEqual([]);
+  }
+});
+
+test("hide-show refreshes after a rejected old mutation without old side effects", async () => {
+  const mutation = deferred<void>();
+  const modals: Array<{ success(result: { confirm: boolean }): void }> = [];
+  const fetchOwnedMaterials = mock(async () => response([item]));
+  const toasts: string[] = [];
+  const page = makePage({
+    modals,
+    fetchOwnedMaterials,
+    clearOwnedMaterials: mock(() => mutation.promise),
+    toasts,
+  });
+  page.onLoad();
+  await flush();
+  page.onConfirmClear();
+  modals[0]!.success({ confirm: true });
+  page.onHide();
+  page.onShow();
+  await flush();
+  expect(fetchOwnedMaterials).toHaveBeenCalledTimes(1);
+  mutation.reject(new Error("clear rejected"));
+  await flush();
+  await flush();
+  expect(fetchOwnedMaterials).toHaveBeenCalledTimes(2);
+  expect(page.data.items).toHaveLength(1);
+  expect(toasts).toEqual([]);
+});
+
+function makePage(options: {
+  modals: Array<{ success(result: { confirm: boolean }): void }>;
+  fetchOwnedMaterials?: ReturnType<typeof mock>;
+  removeOwnedMaterial?: ReturnType<typeof mock>;
+  clearOwnedMaterials?: ReturnType<typeof mock>;
+  toasts?: string[];
+}) {
+  const definition = createMyMaterialsPageDefinition({
+    getApp: () => ({
+      api: {}, startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
+      recordAnalytics: () => undefined,
+    }),
+    fetchOwnedMaterials: options.fetchOwnedMaterials ?? mock(async () => response([item])),
+    removeOwnedMaterial: options.removeOwnedMaterial ?? mock(async () => undefined),
+    clearOwnedMaterials: options.clearOwnedMaterials ?? mock(async () => undefined),
+    navigateToOwnedMaterialDetail: async () => undefined,
+    navigateToPage: async () => undefined,
+    showModal: (modal: { success(result: { confirm: boolean }): void }) => {
+      options.modals.push(modal);
+    },
+    showToast: (toast: { title: string }) => options.toasts?.push(toast.title),
+    stopPullDownRefresh: () => undefined,
+  } as never);
+  const setData = mock((patch: Record<string, unknown>) => Object.assign(definition.data, patch));
+  return Object.assign(definition, { setData });
+}
+
+function response(list: DouyinMaterialNoteOwnedSummary[] = [item]) {
+  return {
+    list,
+    pagination: {
+      page: 1, pageSize: 20, total: list.length, totalPages: list.length ? 1 : 0,
+    },
+  };
 }
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => { resolve = done; });
-  return { promise, resolve };
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((done, fail) => { resolve = done; reject = fail; });
+  return { promise, resolve, reject };
 }
 
 async function flush() {

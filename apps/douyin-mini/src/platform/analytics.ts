@@ -1,4 +1,4 @@
-import type { ApiClient } from "../api/request";
+import { isApiRequestErrorCode, type ApiClient } from "../api/request";
 import {
   DOUYIN_ENTRY_PATH_VALUES,
   DOUYIN_SOURCE_TYPES,
@@ -151,7 +151,9 @@ export class AnalyticsQueue {
     return this.flush();
   }
 
-  private async flushOneBatch(): Promise<AnalyticsFlushResult> {
+  private async flushOneBatch(
+    canIsolateMaterialPoison = true,
+  ): Promise<AnalyticsFlushResult> {
     this.cancelDebounce();
     const stored = this.readQueue();
     const now = this.now();
@@ -195,7 +197,30 @@ export class AnalyticsQueue {
         sent_count: batch.length,
         queue_size: remaining.length,
       };
-    } catch {
+    } catch (error) {
+      if (canIsolateMaterialPoison
+        && isApiRequestErrorCode(error, "DOUYIN_MATERIAL_EVENT_ENTITY_INVALID")
+        && error.statusCode === 400) {
+        const poisonIds = new Set(batch
+          .filter((event) => CLIENT_MATERIAL_ANALYTICS_EVENT_NAMES.has(event.event_name))
+          .map((event) => event.event_id));
+        if (poisonIds.size > 0) {
+          const remaining = this.readQueue().filter((event) => !poisonIds.has(event.event_id));
+          try {
+            this.storage.write({ version: 1, events: remaining } satisfies AnalyticsSnapshot);
+          } catch {
+            return {
+              status: "failed",
+              sent_count: 0,
+              queue_size: this.readQueue().length,
+            };
+          }
+          if (remaining.length === 0) {
+            return { status: "empty", sent_count: 0, queue_size: 0 };
+          }
+          return await this.flushOneBatch(false);
+        }
+      }
       return {
         status: "failed",
         sent_count: 0,

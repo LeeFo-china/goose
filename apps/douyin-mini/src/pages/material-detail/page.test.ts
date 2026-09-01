@@ -108,6 +108,29 @@ describe("material detail page controller", () => {
     expect(context.page.data.content?.content_blocks).toEqual(claim.material.content_blocks);
   });
 
+  test("projects duplicate list text to stable keys and precomputed markers", async () => {
+    const context = harness({
+      claimMaterial: mock(async () => ({
+        ...claim,
+        material: {
+          ...claim.material,
+          content_blocks: [{ type: "list", style: "ordered", items: ["同一项", "同一项"] }],
+        },
+      })),
+    });
+    await context.page.load();
+    await context.page.executeClaim();
+    expect(context.page.data.blocks).toEqual([{
+      type: "list",
+      style: "ordered",
+      key: "0-list",
+      items: [
+        { key: "0-list-0", marker: "1.", text: "同一项" },
+        { key: "0-list-1", marker: "2.", text: "同一项" },
+      ],
+    }]);
+  });
+
   test("an uncertain POST performs one GET recovery and never automatically POSTs twice", async () => {
     let previewCalls = 0;
     const context = harness({
@@ -187,6 +210,61 @@ describe("material detail page controller", () => {
     await operation;
     expect(effects(claimContext)).toEqual(claimSnapshot);
     expect(claimContext.fetchMaterialPreview).toHaveBeenCalledTimes(1);
+  });
+
+  test("hide-show waits for a successful pending claim before authoritative reload", async () => {
+    const staleClaim = deferred<DouyinMaterialNoteClaimResponse>();
+    const currentClaim = deferred<DouyinMaterialNoteClaimResponse>();
+    const claimFlights = [staleClaim, currentClaim];
+    let previewCalls = 0;
+    const context = harness({
+      fetchMaterialPreview: mock(async () => ({
+        ...preview,
+        claimed: previewCalls++ > 0,
+      })),
+      claimMaterial: mock(() => claimFlights.shift()!.promise),
+    });
+    await context.page.load();
+    const staleOperation = context.page.executeClaim();
+    context.page.onHide();
+    context.page.onShow();
+    await Bun.sleep(0);
+
+    expect(context.fetchMaterialPreview).toHaveBeenCalledTimes(1);
+    staleClaim.resolve(claim);
+    await staleOperation;
+    await Bun.sleep(0);
+    await Bun.sleep(0);
+    expect(context.fetchMaterialPreview).toHaveBeenCalledTimes(2);
+    expect(context.claimMaterial).toHaveBeenCalledTimes(2);
+    expect(context.toasts).toEqual([]);
+    expect(context.page.data.content).toBeNull();
+
+    currentClaim.resolve({ ...claim, already_claimed: true });
+    await Bun.sleep(0);
+    await Bun.sleep(0);
+    expect(context.page.pageState?.status).toBe("claimed");
+    expect(context.toasts).toEqual(["已加入我的资料"]);
+  });
+
+  test("hide-show waits for a rejected pending claim before reloading preview", async () => {
+    const staleClaim = deferred<DouyinMaterialNoteClaimResponse>();
+    const context = harness({ claimMaterial: mock(() => staleClaim.promise) });
+    await context.page.load();
+    const staleOperation = context.page.executeClaim();
+    context.page.onHide();
+    context.page.onShow();
+    await Bun.sleep(0);
+    expect(context.fetchMaterialPreview).toHaveBeenCalledTimes(1);
+
+    staleClaim.reject(new Error("claim rejected"));
+    await staleOperation;
+    await Bun.sleep(0);
+    await Bun.sleep(0);
+    expect(context.fetchMaterialPreview).toHaveBeenCalledTimes(2);
+    expect(context.claimMaterial).toHaveBeenCalledTimes(1);
+    expect(context.page.pageState?.status).toBe("preview");
+    expect(context.toasts).toEqual([]);
   });
 
   test("budget and lead record before navigation and stale navigation failures never toast", async () => {

@@ -4,10 +4,10 @@
 <empty-state tt:elif="{{status === 'unavailable'}}" title="资料暂不可领取" description="这篇资料目前没有开放新领取。" action-label="返回资料中心" bindaction="onBackToMaterials" />
 <empty-state tt:elif="{{status === 'withdrawn'}}" title="资料已停止提供" description="因内容调整，正文已不可查看。" action-label="返回资料中心" bindaction="onBackToMaterials" />
 <view tt:else class="page-content material-detail-page">
-  <view class="detail-meta">{{(content && content.category) || (preview && preview.category) || '装修资料'}}</view>
-  <view class="detail-title">{{(content && content.title) || (preview && preview.title)}}</view>
-  <view class="detail-summary">{{(content && content.summary) || (preview && preview.summary)}}</view>
-  <view tt:if="{{(content && content.applicable_to) || (preview && preview.applicable_to)}}" class="applicable">适合：{{(content && content.applicable_to) || (preview && preview.applicable_to)}}</view>
+  <view class="detail-meta">{{displayCategory}}</view>
+  <view class="detail-title">{{displayTitle}}</view>
+  <view class="detail-summary">{{displaySummary}}</view>
+  <view tt:if="{{displayApplicableTo}}" class="applicable">适合：{{displayApplicableTo}}</view>
 
   <view tt:if="{{status === 'preview'}}" class="claim-panel ui-card">
     <view class="claim-title">免费领取全文</view>
@@ -32,7 +32,7 @@
       <view tt:for="{{blocks}}" tt:key="key" tt:for-item="block" class="body-block body-block--{{block.type}}">
         <view tt:if="{{block.type === 'heading'}}" class="body-heading body-heading--{{block.level}}">{{block.text}}</view>
         <view tt:elif="{{block.type === 'paragraph'}}" class="body-paragraph">{{block.text}}</view>
-        <view tt:elif="{{block.type === 'list'}}" class="body-list"><view tt:for="{{block.items}}" tt:key="*this" tt:for-item="listItem" tt:for-index="listIndex" class="body-list-item"><text class="body-list-marker">{{block.style === 'ordered' ? (listIndex + 1) + '.' : '•'}}</text><text>{{listItem}}</text></view></view>
+        <view tt:elif="{{block.type === 'list'}}" class="body-list"><view tt:for="{{block.items}}" tt:key="key" tt:for-item="listItem" class="body-list-item"><text class="body-list-marker">{{listItem.marker}}</text><text>{{listItem.text}}</text></view></view>
         <view tt:elif="{{block.type === 'quote'}}" class="body-quote"><view>“{{block.text}}”</view><view tt:if="{{block.attribution}}" class="quote-attribution">——{{block.attribution}}</view></view>
         <view tt:elif="{{block.type === 'callout'}}" class="body-callout body-callout--{{block.tone}}"><view class="callout-title">{{block.title}}</view><view class="callout-text">{{block.text}}</view></view>
       </view>

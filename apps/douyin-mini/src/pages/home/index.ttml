@@ -14,7 +14,7 @@
     <button class="qa-action ui-pressable" hover-class="ui-pressable--pressed" style="background: {{primaryColor}}; color: {{primaryTextColor}}" bindtap="onAskQuestion">去提问</button>
   </view>
 
-  <view tt:if="{{materialStatus !== 'empty'}}" class="home-section">
+  <view class="home-section">
     <view class="section-heading">
       <view class="ui-section-title">装修资料</view>
       <view class="section-actions">
@@ -26,6 +26,7 @@
     <view tt:elif="{{materialStatus === 'ready'}}" class="card-list">
       <material-card tt:for="{{materialItems}}" tt:key="id" item="{{item}}" bindselect="onMaterialSelect" />
     </view>
+    <view tt:elif="{{materialStatus === 'empty'}}" class="material-module-empty ui-hint-surface">暂无新资料，可在“我的资料”继续查看已领取内容。</view>
     <view tt:else class="material-module-error ui-hint-surface" role="alert"><view>装修资料暂时加载失败，不影响其他功能。</view><button class="material-retry ui-pressable" hover-class="ui-pressable--pressed" bindtap="onRetryMaterials">重试</button></view>
   </view>
 

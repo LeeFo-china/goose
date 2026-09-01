@@ -295,6 +295,28 @@ test("material templates expose only five text blocks and never persist protecte
   expect(source).not.toMatch(/submitLead|sendLeadSms|createMeasurement/);
 });
 
+test("material templates use compiler-safe mustache fields without parenthesized expressions", async () => {
+  const templates = await Promise.all([
+    readSource("pages/home/index.ttml"),
+    readSource("pages/materials/index.ttml"),
+    readSource("pages/material-detail/index.ttml"),
+    readSource("pages/my-materials/index.ttml"),
+  ]);
+  for (const template of templates) {
+    const expressions = template.match(/{{[^}]*}}/g) ?? [];
+    expect(expressions.filter((expression) => /[()]/.test(expression))).toEqual([]);
+  }
+  expect(templates[2]).toContain('tt:key="key"');
+  expect(templates[2]).not.toContain('tt:key="*this"');
+});
+
+test("home keeps my materials reachable when the public material list is empty", async () => {
+  const template = await readSource("pages/home/index.ttml");
+  expect(template).not.toContain('tt:if="{{materialStatus !== \'empty\'}}"');
+  expect(template).toContain('tt:elif="{{materialStatus === \'empty\'}}"');
+  expect(template).toContain('bindtap="onViewMyMaterials"');
+});
+
 test("privacy explains anonymous claim history without overstating removal as deletion", async () => {
   const policy = await readSource("pages/privacy/index.ttml");
   expect(policy).toContain("匿名领取记录");

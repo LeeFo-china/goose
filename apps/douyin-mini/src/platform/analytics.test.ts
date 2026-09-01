@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { DOUYIN_ENTRY_PATH_VALUES as CANONICAL_ENTRY_PATHS } from
   "../../../../packages/domain/src/douyin-miniapp";
-import type { ApiClient, ApiRequestInput } from "../api/request";
+import { ApiRequestError, type ApiClient, type ApiRequestInput } from "../api/request";
 import {
   AnalyticsQueue,
   CLIENT_ANALYTICS_EVENT_NAMES,
@@ -313,6 +313,81 @@ describe("AnalyticsQueue", () => {
       queue_size: 3,
     });
     expect(getStored()).toEqual(initial);
+  });
+
+  test("isolates a deterministic invalid material event and sends the ordinary remainder", async () => {
+    const initial = {
+      version: 1,
+      events: [
+        {
+          event_id: eventId(1), event_name: "material_copy",
+          occurred_at: "2026-07-20T08:00:00.000Z", attribution,
+          entity_id: ENTITY_ID,
+        },
+        {
+          event_id: eventId(2), event_name: "page_view",
+          occurred_at: "2026-07-20T08:00:00.000Z", attribution,
+        },
+      ],
+    };
+    const { analytics, getStored, request } = harness(initial);
+    request.mockImplementationOnce(async () => {
+      throw new ApiRequestError(
+        400,
+        "DOUYIN_MATERIAL_EVENT_ENTITY_INVALID",
+        "material entity is no longer active",
+      );
+    });
+
+    await expect(analytics.flush()).resolves.toEqual({
+      status: "sent", sent_count: 1, queue_size: 0,
+    });
+    expect(request).toHaveBeenCalledTimes(2);
+    expect((request.mock.calls[1]?.[0]?.data?.events as Array<{ event_name: string }>))
+      .toEqual([expect.objectContaining({ event_name: "page_view" })]);
+    expect(getStored()).toEqual({ version: 1, events: [] });
+  });
+
+  test("never drops analytics for 5xx or unrelated business failures", async () => {
+    for (const error of [
+      new ApiRequestError(500, "DOUYIN_MATERIAL_EVENT_ENTITY_INVALID", "server failed"),
+      new ApiRequestError(400, "ANOTHER_BUSINESS_ERROR", "another error"),
+    ]) {
+      const initial = snapshot(2);
+      const { analytics, getStored, request } = harness(initial);
+      request.mockImplementation(async () => { throw error; });
+      await expect(analytics.flush()).resolves.toEqual({
+        status: "failed", sent_count: 0, queue_size: 2,
+      });
+      expect(getStored()).toEqual(initial);
+      expect(request).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  test("retains the poison batch when isolation cannot be persisted", async () => {
+    const initial = {
+      version: 1,
+      events: [{
+        event_id: eventId(1), event_name: "material_copy",
+        occurred_at: "2026-07-20T08:00:00.000Z", attribution,
+        entity_id: ENTITY_ID,
+      }],
+    };
+    const { analytics, getStored, request, storage } = harness(initial);
+    request.mockImplementation(async () => {
+      throw new ApiRequestError(
+        400,
+        "DOUYIN_MATERIAL_EVENT_ENTITY_INVALID",
+        "material entity is no longer active",
+      );
+    });
+    storage.write = mock(() => { throw new Error("storage unavailable"); });
+
+    await expect(analytics.flush()).resolves.toEqual({
+      status: "failed", sent_count: 0, queue_size: 1,
+    });
+    expect(getStored()).toEqual(initial);
+    expect(request).toHaveBeenCalledTimes(1);
   });
 
   test("retains the batch when the server acknowledgement is malformed", async () => {
