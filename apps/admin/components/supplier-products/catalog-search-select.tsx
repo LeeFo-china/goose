@@ -52,6 +52,7 @@ export function CatalogSearchSelect({
   selectedOption,
   createCategoryId,
   onChange,
+  onOptionsLoaded,
 }: {
   id: string;
   kind: keyof typeof labels;
@@ -61,6 +62,7 @@ export function CatalogSearchSelect({
   selectedOption?: CatalogOption | null;
   createCategoryId?: string;
   onChange: (value: string) => void;
+  onOptionsLoaded?: (options: CatalogOption[]) => void;
 }) {
   const [result, setResult] = useState(emptyPage);
   const [page, setPage] = useState(1);
@@ -84,7 +86,10 @@ export function CatalogSearchSelect({
     setLoading(true);
     void loadCatalogOptions(kind, scope, page, appliedKeyword)
       .then((data) => {
-        if (active) setResult(data);
+        if (active) {
+          setResult(data);
+          onOptionsLoaded?.(data.list);
+        }
       })
       .catch((error) => {
         if (active) {
@@ -97,7 +102,7 @@ export function CatalogSearchSelect({
     return () => {
       active = false;
     };
-  }, [appliedKeyword, kind, label, page, scope]);
+  }, [appliedKeyword, kind, label, onOptionsLoaded, page, scope]);
 
   const options = useMemo(() => {
     const list = selectedOption && !result.list.some(({ id }) => id === selectedOption.id)

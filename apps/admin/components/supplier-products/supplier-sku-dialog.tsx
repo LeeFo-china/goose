@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { CatalogSpecValue } from "@gooes/domain";
 import { Pencil, Plus, WandSparkles } from "lucide-react";
 import { toast } from "sonner";
@@ -28,8 +28,6 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 
 import {
-  buildPurchasableSkuPath,
-  buildSkuResourcePath,
   createSupplierResource,
   loadAllSpecDefinitions,
   loadSupplierSkuCurrentPrice,
@@ -37,23 +35,25 @@ import {
   mutateSupplierResource,
 } from "./supplier-product-api";
 import { CatalogSearchSelect } from "./catalog-search-select";
-import {
-  resolveSupplierCommandAttempt,
-  type SupplierCommandAttempt,
-} from "./supplier-command-attempt";
+import type { SupplierCommandAttempt } from "./supplier-command-attempt";
 import { buildSuggestedSkuName } from "./supplier-product-rules";
 import { SupplierSkuPriceFields } from "./supplier-sku-price-fields";
 import {
-  buildPurchasableSkuCreatePayload,
-  buildPurchasableSkuUpdatePayload,
   createInitialSkuPriceForm,
   getSupplierSkuPriceEffectiveUntilNotice,
   isSupplierSkuPriceFormValid,
   type SupplierSkuPriceForm,
 } from "./supplier-sku-price-form";
+import {
+  createSupplierSkuDialogLoadWorkflow,
+  executeSupplierSkuDialogSave,
+  prepareSupplierSkuDialogSave,
+  resolveSupplierSkuPurchaseUnitLabel,
+} from "./supplier-sku-dialog-workflow";
 import { SupplierSpecFields } from "./supplier-spec-fields";
 import type {
   CatalogSpecDefinition,
+  CatalogOption,
   ProductApiScope,
   SupplierProduct,
   SupplierSku,
@@ -98,6 +98,8 @@ export function SupplierSkuDialog({
   const [priceContext, setPriceContext] = useState<SupplierSkuPriceContext | null>(null);
   const [priceForm, setPriceForm] = useState<SupplierSkuPriceForm>(emptyPriceForm);
   const [priceTouched, setPriceTouched] = useState(false);
+  const [purchaseUnitOptions, setPurchaseUnitOptions] = useState<CatalogOption[]>([]);
+  const [loadWorkflow] = useState(createSupplierSkuDialogLoadWorkflow);
   const attemptRef = useRef<SupplierCommandAttempt | null>(null);
   const saveMode = !inlinePriceEnabled || scope.kind !== "tenant"
     ? "legacy"
@@ -118,35 +120,39 @@ export function SupplierSkuDialog({
     setPriceContext(null);
     setPriceForm(emptyPriceForm);
     setPriceTouched(false);
-    let active = true;
+    setPurchaseUnitOptions([]);
     setLoading(true);
-    const priceRequest = inlinePriceEnabled && scope.kind === "tenant"
-      ? sku
-        ? sku.status !== "inactive"
-          ? loadSupplierSkuCurrentPrice(scope, product.id, sku.id)
-          : Promise.resolve(null)
-        : loadSupplierSkuPriceDefaults(scope, product.id)
-      : Promise.resolve(null);
-    void Promise.all([
-      loadAllSpecDefinitions(product.category.id, scope),
-      priceRequest,
-    ]).then(([specDefinitions, nextPriceContext]) => {
-      if (!active) return;
-      setDefinitions(specDefinitions);
-      setSpecValues((current) => withSpecDefaults(current, specDefinitions));
-      setPriceContext(nextPriceContext);
-      if (nextPriceContext) {
-        setPriceForm(createInitialSkuPriceForm(nextPriceContext));
+    void loadWorkflow.load({ inlinePriceEnabled, scope, sku }, {
+      loadSpecDefinitions: () => loadAllSpecDefinitions(product.category.id, scope),
+      loadPriceDefaults: () => scope.kind === "tenant"
+        ? loadSupplierSkuPriceDefaults(scope, product.id)
+        : Promise.resolve(null),
+      loadCurrentPrice: (skuId) => scope.kind === "tenant"
+        ? loadSupplierSkuCurrentPrice(scope, product.id, skuId)
+        : Promise.resolve(null),
+    }).then((result) => {
+      if (!result) return;
+      setDefinitions(result.definitions);
+      setSpecValues((current) => withSpecDefaults(current, result.definitions));
+      setPriceContext(result.priceContext);
+      if (result.priceContext) {
+        setPriceForm(createInitialSkuPriceForm(result.priceContext));
       }
+      setLoading(false);
     }).catch((error) => {
-      if (active) toast.error(error instanceof Error ? error.message : "SKU 表单资料加载失败");
-    }).finally(() => {
-      if (active) setLoading(false);
+      toast.error(error instanceof Error ? error.message : "SKU 表单资料加载失败");
+      setLoading(false);
     });
-    return () => {
-      active = false;
-    };
-  }, [open, product.category.id, scope, sku]);
+    return loadWorkflow.invalidate;
+  }, [inlinePriceEnabled, loadWorkflow, open, product.category.id, product.id, scope, sku]);
+
+  const handlePurchaseUnitOptionsLoaded = useCallback((options: CatalogOption[]) => {
+    setPurchaseUnitOptions((current) => {
+      const merged = new Map(current.map((option) => [option.id, option]));
+      for (const option of options) merged.set(option.id, option);
+      return [...merged.values()];
+    });
+  }, []);
 
   const priceInvalid = saveMode === "inline-price" &&
     (!priceContext || !isSupplierSkuPriceFormValid(priceForm));
@@ -164,59 +170,32 @@ export function SupplierSkuDialog({
       serial_managed: serialManaged,
       spec_values: specValues,
     };
-    const legacyPayload = sku
-      ? { ...fields, expected_version: sku.version }
-      : { ...fields, purchase_unit_id: purchaseUnitId };
-    let payload: unknown = legacyPayload;
-    if (saveMode === "inline-price") {
-      if (!priceContext) return;
-      payload = sku
-        ? buildPurchasableSkuUpdatePayload({
-          sku: { ...fields, expectedVersion: sku.version },
-          priceForm,
-          context: priceContext,
-        })
-        : buildPurchasableSkuCreatePayload({
-          sku: { ...fields, purchase_unit_id: purchaseUnitId },
-          priceForm,
-        });
-    }
-    const resourcePath = saveMode === "inline-price"
-      ? buildPurchasableSkuPath(product.id, sku?.id ?? ":skuId")
-      : buildSkuResourcePath(scope, product.id, sku?.id ?? ":skuId");
+    const plan = prepareSupplierSkuDialogSave({
+      saveMode,
+      scope,
+      productId: product.id,
+      sku,
+      fields,
+      purchaseUnitId,
+      priceForm,
+      priceContext,
+    }, attemptRef.current);
+    if (!plan) return;
+    attemptRef.current = plan.attempt;
     setSaving(true);
     try {
-      const attempt = resolveSupplierCommandAttempt(attemptRef.current, {
-        scope: `${scope.kind}-supplier-sku-${sku ? "update" : "create"}`,
-        resourcePath,
-        payload,
-        allocateResourceId: !sku,
+      await executeSupplierSkuDialogSave(plan, {
+        create: createSupplierResource,
+        mutate: mutateSupplierResource,
+        onSuccess: async () => {
+          attemptRef.current = null;
+          toast.success(saveMode === "inline-price"
+            ? "SKU 与供货价已生效"
+            : sku ? "供应商 SKU 已更新" : "供应商 SKU 已创建");
+          setOpen(false);
+          await onSaved();
+        },
       });
-      attemptRef.current = attempt;
-      if (sku) {
-        await mutateSupplierResource(
-          resourcePath,
-          scope,
-          payload,
-          attempt.idempotencyKey,
-          "PATCH",
-        );
-      } else {
-        await createSupplierResource(
-          saveMode === "inline-price"
-            ? buildPurchasableSkuPath(product.id, attempt.resourceId!)
-            : buildSkuResourcePath(scope, product.id, attempt.resourceId!),
-          scope,
-          payload,
-          attempt.idempotencyKey,
-        );
-      }
-      attemptRef.current = null;
-      toast.success(saveMode === "inline-price"
-        ? "SKU 与供货价已生效"
-        : sku ? "供应商 SKU 已更新" : "供应商 SKU 已创建");
-      setOpen(false);
-      await onSaved();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "保存 SKU 失败");
     } finally {
@@ -307,6 +286,7 @@ export function SupplierSkuDialog({
                 value={purchaseUnitId}
                 label="采购单位"
                 onChange={setPurchaseUnitId}
+                onOptionsLoaded={handlePurchaseUnitOptionsLoaded}
               />
             )}
           </div>
@@ -323,7 +303,11 @@ export function SupplierSkuDialog({
             <SupplierSkuPriceFields
               idPrefix={`supplier-sku-price-${sku?.id ?? "new"}`}
               value={priceForm}
-              purchaseUnitSymbol={sku?.purchase_unit.symbol ?? "所选采购单位"}
+              purchaseUnitSymbol={resolveSupplierSkuPurchaseUnitLabel(
+                purchaseUnitId,
+                purchaseUnitOptions,
+                sku?.purchase_unit,
+              )}
               disabled={saveMode === "metadata-only"}
               effectiveUntilNotice={priceContext
                 ? getSupplierSkuPriceEffectiveUntilNotice(priceContext)

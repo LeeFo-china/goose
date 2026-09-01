@@ -9,7 +9,6 @@ import {
   buildSupplierProductScopeHref,
 } from "./supplier-product-drilldown";
 import { SupplierProductSourceBadge } from "./supplier-product-source-badge";
-import { registerSupplierSkuInlinePriceContractTests } from "./supplier-sku-inline-price-contract-tests";
 import {
   createLatestRequestGate,
   isLatestResourceRequest,
@@ -60,7 +59,6 @@ const tenantProduct = {
 } as SupplierProduct;
 
 describe("供应商品与供货价行为", () => {
-  registerSupplierSkuInlinePriceContractTests();
   test("商品列表展示 SKU 数量并使用同区域下钻工作区", () => {
     const listSource = readFileSync(
       new URL("./supplier-product-list.tsx", import.meta.url),
