@@ -16,7 +16,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: verify-dev-douyin-material-note-explain
+  group: admin-release-development
   cancel-in-progress: false
 
 jobs:
@@ -188,6 +188,19 @@ jobs:
             reject_dev_target
           fi
 
+          if ! head_revision="$(git rev-parse HEAD 2>/dev/null)"; then
+            reject_dev_target
+          fi
+          if ! workspace_status="$(git status --porcelain 2>/dev/null)"; then
+            reject_dev_target
+          fi
+          if ! deployed_revision="$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' gooes-api-dev 2>/dev/null)"; then
+            reject_dev_target
+          fi
+          if [[ "${head_revision}" != "${COMMIT_SHA}" || -n "${workspace_status}" || "${deployed_revision}" != "${COMMIT_SHA}" ]]; then
+            reject_dev_target
+          fi
+
           DOUYIN_MATERIAL_NOTE_EXPLAIN_CONFIRM="${CONFIRMATION}" \
           DOUYIN_MATERIAL_NOTE_EXPLAIN_DB_URL="${SUPABASE_DB_DIRECT_URL}" \
             bun run --silent --cwd apps/api douyin:material-note:explain \
@@ -200,12 +213,72 @@ jobs:
             printf '%s\n' "INVALID_EVIDENCE_INPUT" >&2
             exit 1
           }
+          reject_redaction() {
+            printf '%s\n' "OUTPUT_REDACTION_FAILED" >&2
+            exit 1
+          }
+
+          if ! jq empty material-note-explain-summary.json >/dev/null 2>&1; then
+            reject_evidence
+          fi
+          if grep -Eiq \
+            '(postgres(ql)?://|password|secret|subject_hash|[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|(^|[^0-9])1[3-9][0-9]{9}([^0-9]|$)|[0-9a-f]{64})' \
+            material-note-explain-summary.json; then
+            reject_redaction
+          fi
+
+          QUERY_NAMES='["owned_active_list","public_list","tenant_keyword_list"]'
+          QUERY_KEYS='["actualLoops","actualRows","cardinality","cardinalityClass","executionMs","indexNames","nodeTypes","planningMs","sharedHitBlocks","sharedReadBlocks","tempReadBlocks","tempWrittenBlocks"]'
 
           if ! jq -e \
-            '.gate == "douyin_material_note_queries" and .queryCount == 3 and (.queries | length) == 3' \
+            --argjson queryNames "${QUERY_NAMES}" \
+            --argjson queryKeys "${QUERY_KEYS}" '
+            def bounded_number($maximum):
+              type == "number" and . >= 0 and . <= $maximum;
+            def query_valid($name; $approvedIndexes):
+              .queries[$name] as $query |
+              ($query | keys) == $queryKeys and
+              ($query.cardinality | type == "number" and floor == . and . >= 0 and . <= 1000) and
+              ($query.cardinalityClass == (if $query.cardinality < 1000 then "small" else "large" end)) and
+              ($query.planningMs | bounded_number(50)) and
+              ($query.executionMs | bounded_number(250)) and
+              ($query.sharedReadBlocks | bounded_number(20000)) and
+              ($query.tempReadBlocks == 0) and ($query.tempWrittenBlocks == 0) and
+              ($query.actualRows | bounded_number(1000000000)) and
+              ($query.actualLoops | bounded_number(1000000000)) and
+              ($query.sharedHitBlocks | bounded_number(1000000000)) and
+              ($query.nodeTypes | type == "array" and length > 0 and
+                all(.[]; type == "string" and test("^[A-Za-z][A-Za-z ]{0,63}$"))) and
+              ($query.indexNames | type == "array" and
+                all(.[]; . as $index | $approvedIndexes | index($index) != null));
+            (keys == ["fixtureTag","gate","queries","queryCount","thresholds"]) and
+            .gate == "douyin_material_note_queries" and
+            .fixtureTag == "Task10-A-20260902" and
+            .queryCount == 3 and
+            (.thresholds | keys) == ["executionMs","planningMs","sharedReadBlocks","statementTimeoutMs","tempBlocks"] and
+            .thresholds == {statementTimeoutMs: 5000, planningMs: 50, executionMs: 250, sharedReadBlocks: 20000, tempBlocks: 0} and
+            (.queries | keys) == $queryNames and
+            query_valid("public_list"; ["douyin_material_notes_public_idx"]) and
+            query_valid("tenant_keyword_list"; ["douyin_material_note_versions_title_trgm_idx","douyin_material_note_versions_summary_trgm_idx","douyin_material_note_versions_category_trgm_idx","douyin_material_note_versions_tenant_note_idx"]) and
+            query_valid("owned_active_list"; ["douyin_material_note_claims_owned_idx"])
+            ' \
             material-note-explain-summary.json \
             >/dev/null 2>&1; then
-            reject_evidence
+            reject_redaction
+          fi
+
+          if ! jq --arg commitSha "${COMMIT_SHA}" \
+            '. + {commitSha: $commitSha, conclusion: "passed"}' \
+            material-note-explain-summary.json \
+            > material-note-explain-summary.final.json; then
+            reject_redaction
+          fi
+          mv material-note-explain-summary.final.json material-note-explain-summary.json
+          if ! jq -e --arg commitSha "${COMMIT_SHA}" '
+            keys == ["commitSha","conclusion","fixtureTag","gate","queries","queryCount","thresholds"] and
+            .commitSha == $commitSha and .conclusion == "passed"
+            ' material-note-explain-summary.json >/dev/null 2>&1; then
+            reject_redaction
           fi
 
       - name: Upload material note EXPLAIN evidence

@@ -42,7 +42,11 @@ export const MATERIAL_NOTE_EXPLAIN_MANIFEST = {
   },
   tenant_keyword_list: {
     primaryRelation: "douyin_material_note_versions",
-    relations: ["douyin_material_notes", "douyin_material_note_versions"],
+    relations: [
+      "douyin_material_notes",
+      "douyin_material_note_versions",
+      "douyin_material_note_claims",
+    ],
     indexes: [
       { name: "douyin_material_notes_tenant_idx", relation: "douyin_material_notes" },
       { name: "douyin_material_note_versions_title_trgm_idx",
@@ -51,6 +55,10 @@ export const MATERIAL_NOTE_EXPLAIN_MANIFEST = {
         relation: "douyin_material_note_versions" },
       { name: "douyin_material_note_versions_category_trgm_idx",
         relation: "douyin_material_note_versions" },
+      { name: "douyin_material_note_versions_tenant_note_idx",
+        relation: "douyin_material_note_versions" },
+      { name: "douyin_material_note_claims_tenant_note_history_idx",
+        relation: "douyin_material_note_claims" },
     ],
   },
   owned_active_list: {
@@ -79,6 +87,7 @@ export const MATERIAL_NOTE_EXPLAIN_ERROR_CODES = [
   "EXECUTION_THRESHOLD",
   "SHARED_READ_THRESHOLD",
   "TEMP_BLOCKS",
+  "UNAPPROVED_INDEX",
   "LARGE_TABLE_SEQ_SCAN",
   "LARGE_TABLE_INDEX_REQUIRED",
 ] as const;
@@ -254,9 +263,16 @@ function collectPlanFacts(
   if (targetNodes.length === 0) {
     fail("INVALID_PLAN", `${queryName} target relation is missing`);
   }
+  const approvedIndexes = new Set<string>(
+    MATERIAL_NOTE_EXPLAIN_MANIFEST[queryName].indexes.map((index) => index.name),
+  );
+  const uniqueIndexNames = [...new Set(indexNames)];
+  if (uniqueIndexNames.some((indexName) => !approvedIndexes.has(indexName))) {
+    fail("UNAPPROVED_INDEX", `${queryName} used an unapproved target index`);
+  }
   return {
     targetNodes,
-    indexNames: [...new Set(indexNames)],
+    indexNames: uniqueIndexNames,
     nodeTypes: [...new Set(nodeTypes)],
     actualRows,
     actualLoops,

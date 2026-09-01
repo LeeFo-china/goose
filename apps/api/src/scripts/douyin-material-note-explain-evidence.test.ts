@@ -112,6 +112,7 @@ describe("douyin material note EXPLAIN evidence manifest", () => {
       "EXECUTION_THRESHOLD",
       "SHARED_READ_THRESHOLD",
       "TEMP_BLOCKS",
+      "UNAPPROVED_INDEX",
       "LARGE_TABLE_SEQ_SCAN",
       "LARGE_TABLE_INDEX_REQUIRED",
     ]);
@@ -131,6 +132,7 @@ describe("douyin material note EXPLAIN evidence manifest", () => {
       "douyin_material_note_versions_summary_trgm_idx",
       "douyin_material_note_versions_category_trgm_idx",
       "douyin_material_note_claims_owned_idx",
+      "douyin_material_note_claims_tenant_note_history_idx",
     ]));
   });
 
@@ -193,20 +195,44 @@ describe("douyin material note EXPLAIN plan policy", () => {
       assertMaterialNoteExplainCurrentPlannerSettings(PLANNER_ROWS),
     )).not.toThrow();
 
-    const unrelated = parseMaterialNoteExplainPlan(
+    const missing = parseMaterialNoteExplainPlan(
       planRows("owned_active_list", {
-        "Node Type": "Index Scan",
-        "Index Name": "unapproved_claim_index",
+        "Node Type": "Bitmap Heap Scan",
       }),
       "owned_active_list",
     );
     expectCode(
       () => assertMaterialNoteExplainPlanEvidence(
-        unrelated,
+        missing,
         1_000,
         assertMaterialNoteExplainCurrentPlannerSettings(PLANNER_ROWS),
       ),
       "LARGE_TABLE_INDEX_REQUIRED",
+    );
+  });
+
+  test("rejects planner index names outside the fixed query manifest", () => {
+    const mixed = planRows("owned_active_list", {
+      "Node Type": "Bitmap Heap Scan",
+      Plans: [
+        {
+          "Node Type": "BitmapOr",
+          Plans: [
+            {
+              "Node Type": "Bitmap Index Scan",
+              "Index Name": "douyin_material_note_claims_owned_idx",
+            },
+            {
+              "Node Type": "Bitmap Index Scan",
+              "Index Name": "customer_specific_secret_index",
+            },
+          ],
+        },
+      ],
+    });
+    expectCode(
+      () => parseMaterialNoteExplainPlan(mixed, "owned_active_list"),
+      "UNAPPROVED_INDEX",
     );
   });
 

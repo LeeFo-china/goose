@@ -56,7 +56,7 @@ describe("protected dev material note EXPLAIN workflow", () => {
       "  actions: read",
     ].join("\n"));
     expect(workflow).toContain(
-      "group: verify-dev-douyin-material-note-explain",
+      "group: admin-release-development",
     );
     expect(workflow).toContain(
       "runs-on: [self-hosted, Linux, X64, gooes-dev-deploy]",
@@ -153,6 +153,12 @@ describe("protected dev material note EXPLAIN workflow", () => {
     expect(run).not.toMatch(
       /(?:echo|printf)[^\n]*(?:SUPABASE_DB_DIRECT_URL|SUPABASE_DB_URL)/,
     );
+    expect(run.match(/git rev-parse HEAD/g)).toHaveLength(1);
+    expect(run.match(/git status --porcelain/g)).toHaveLength(1);
+    expect(run.match(/gooes-api-dev/g)).toHaveLength(1);
+    expect(run).toContain(
+      '"${deployed_revision}" != "${COMMIT_SHA}"',
+    );
   });
 
   test("validates and uploads only sanitized evidence", () => {
@@ -161,7 +167,12 @@ describe("protected dev material note EXPLAIN workflow", () => {
       '.gate == "douyin_material_note_queries"',
     );
     expect(verify).toContain(".queryCount == 3");
-    expect(verify).toContain("(.queries | length) == 3");
+    expect(verify).toContain('"owned_active_list","public_list","tenant_keyword_list"');
+    expect(verify).toContain("OUTPUT_REDACTION_FAILED");
+    expect(verify).toContain("INVALID_EVIDENCE_INPUT");
+    expect(verify).toContain('conclusion: "passed"');
+    expect(verify).toContain('commitSha: $commitSha');
+    expect(verify).toContain("[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}");
     const upload = stepSource("Upload material note EXPLAIN evidence");
     expect(upload).toContain("uses: actions/upload-artifact@v6");
     expect(upload).toContain("material-note-explain-summary.json");

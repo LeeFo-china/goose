@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 
 import {
   MATERIAL_NOTE_EXPLAIN_FIXTURE_TAG,
@@ -227,6 +228,36 @@ async function captureFailure(
 }
 
 describe("douyin material note EXPLAIN SQL", () => {
+  test("mirrors the effective repository list payload and exact-count work", () => {
+    const repository = readFileSync(new URL(
+      "../repositories/douyin-material-notes.ts",
+      import.meta.url,
+    ), "utf8");
+    for (const exactCountCall of [
+      "this.publicQuery(input, columns, { count: 'exact' })",
+      "count: 'exact',\n        }).eq('tenant_id', input.tenantId)",
+      "this.ownedQuery(input, OWNED_SELECT, { count: 'exact' })",
+    ]) {
+      expect(repository).toContain(exactCountCall);
+    }
+    for (const projection of [
+      "title,summary,category,applicable_to",
+      "version_no,title,category",
+      "claims:douyin_material_note_claims!douyin_material_note_claims_note_tenant_fkey(count)",
+      "version_no,title,summary,category,applicable_to",
+    ]) {
+      expect(repository).toContain(projection);
+    }
+    for (const text of Object.values(MATERIAL_NOTE_EXPLAIN_QUERIES)) {
+      expect(normalize(text)).toContain("count(*) over () as exact_count");
+    }
+    const tenantSql = normalize(
+      MATERIAL_NOTE_EXPLAIN_QUERIES.tenant_keyword_list,
+    );
+    expect(tenantSql).toContain("left join lateral");
+    expect(tenantSql).toContain("select count(*)::integer");
+  });
+
   test("exports three read-only parameterized and bounded query shapes", () => {
     expect(Object.keys(MATERIAL_NOTE_EXPLAIN_QUERIES))
       .toEqual([...MATERIAL_NOTE_EXPLAIN_QUERY_NAMES]);
@@ -238,13 +269,22 @@ describe("douyin material note EXPLAIN SQL", () => {
       );
       expect(text).toContain(`-- ${name}`);
       expect(normalize(text)).toContain("limit 20");
-      expect(text).not.toMatch(
+      const plannedStatement = text.replace(
+        /^explain\s*\([^)]*\)\s*(?:--[^\n]*\s*)*/i,
+        "",
+      );
+      expect(plannedStatement).toMatch(/^\s*(?:select|with)\b/i);
+      expect(plannedStatement).not.toMatch(
         /^\s*(?:insert|update|delete|merge|create|alter|drop|truncate|analyze)\b/i,
       );
+      expect(normalize(text)).toContain("count(*) over () as exact_count");
     }
 
     const publicSql = normalize(MATERIAL_NOTE_EXPLAIN_QUERIES.public_list);
     expect(publicSql).toContain("note.status = 'published'");
+    expect(publicSql).toContain(
+      "version.title, version.summary, version.category, version.applicable_to",
+    );
     expect(publicSql).toContain("claim.subject_hash = $3::text");
     expect(publicSql).toContain(
       "order by note.published_at desc, note.id desc",
@@ -256,6 +296,10 @@ describe("douyin material note EXPLAIN SQL", () => {
     expect(keywordSql).toContain("version.title ilike $2 escape");
     expect(keywordSql).toContain("version.summary ilike $2 escape");
     expect(keywordSql).toContain("version.category ilike $2 escape");
+    expect(keywordSql.split("escape e'\\\\'")).toHaveLength(4);
+    expect(keywordSql).not.toContain("escape '\\\\'");
+    expect(keywordSql).toContain("latest_version.version_no");
+    expect(keywordSql).toContain("claim_count");
     expect(keywordSql).toContain(
       "order by note.updated_at desc, note.id desc",
     );
@@ -264,6 +308,12 @@ describe("douyin material note EXPLAIN SQL", () => {
       MATERIAL_NOTE_EXPLAIN_QUERIES.owned_active_list,
     );
     expect(ownedSql).toContain("claim.removed_at is null");
+    expect(ownedSql).toContain(
+      "version.version_no, version.title, version.summary",
+    );
+    expect(ownedSql).toContain(
+      "version.category, version.applicable_to",
+    );
     expect(ownedSql).toContain(
       "order by claim.claimed_at desc, claim.id desc",
     );

@@ -81,6 +81,13 @@ describe("douyin material note EXPLAIN runbook", () => {
     for (const code of runnerStableCodes()) {
       expect(table.split(`| ${code} |`)).toHaveLength(2);
     }
+    for (const workflowCode of [
+      "INVALID_EVIDENCE_INPUT",
+      "MIGRATION_HISTORY_MISMATCH",
+      "OUTPUT_REDACTION_FAILED",
+    ]) {
+      expect(table.split(`| ${workflowCode} |`)).toHaveLength(2);
+    }
   });
 
   test("prohibits fixture writes and sensitive evidence retention", () => {

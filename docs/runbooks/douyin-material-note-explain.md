@@ -44,10 +44,12 @@ fixture tag 固定为 `Task10-A-20260902`。runner 在只读事务中解析该 t
 | 查询 | 主基数关系 | 必须存在且有效的索引:关系 |
 | --- | --- | --- |
 | public_list | douyin_material_notes | douyin_material_notes_public_idx:douyin_material_notes、douyin_material_note_versions_tenant_note_idx:douyin_material_note_versions、douyin_material_note_claims_owned_idx:douyin_material_note_claims |
-| tenant_keyword_list | douyin_material_note_versions | douyin_material_notes_tenant_idx:douyin_material_notes、douyin_material_note_versions_title_trgm_idx:douyin_material_note_versions、douyin_material_note_versions_summary_trgm_idx:douyin_material_note_versions、douyin_material_note_versions_category_trgm_idx:douyin_material_note_versions |
+| tenant_keyword_list | douyin_material_note_versions | douyin_material_notes_tenant_idx:douyin_material_notes、douyin_material_note_versions_title_trgm_idx:douyin_material_note_versions、douyin_material_note_versions_summary_trgm_idx:douyin_material_note_versions、douyin_material_note_versions_category_trgm_idx:douyin_material_note_versions、douyin_material_note_versions_tenant_note_idx:douyin_material_note_versions、douyin_material_note_claims_tenant_note_history_idx:douyin_material_note_claims |
 | owned_active_list | douyin_material_note_claims | douyin_material_note_claims_owned_idx:douyin_material_note_claims、douyin_material_note_versions_tenant_note_idx:douyin_material_note_versions |
 
-三条查询都使用绑定参数和 `LIMIT 20`。公开列表按
+三条查询都使用绑定参数和 `LIMIT 20`，并通过窗口计数覆盖 repository 的
+`count=exact` 工作。租户关键词查询同时覆盖最新版本 lateral 读取和领取历史计数，
+与 repository 的列表投影一致。公开列表按
 `published_at DESC, id DESC`，租户关键词列表按 `updated_at DESC, id DESC`，
 有效领取列表按 `claimed_at DESC, id DESC` 稳定排序。
 
@@ -87,6 +89,7 @@ fixture tag 固定为 `Task10-A-20260902`。runner 在只读事务中解析该 t
 | EXECUTION_THRESHOLD | execution time 超限 |
 | SHARED_READ_THRESHOLD | shared read blocks 超限 |
 | TEMP_BLOCKS | 使用了临时块 |
+| UNAPPROVED_INDEX | plan 暴露了固定清单之外的主关系索引 |
 | LARGE_TABLE_SEQ_SCAN | large 主关系出现顺序扫描 |
 | LARGE_TABLE_INDEX_REQUIRED | large 主关系未命中批准索引 |
 | INVALID_FIXTURE | 固定资料、安装或领取证据无效 |
@@ -96,6 +99,9 @@ fixture tag 固定为 `Task10-A-20260902`。runner 在只读事务中解析该 t
 | QUERY_TIMEOUT | 查询超过 5 秒 |
 | DATABASE_FAILURE | 数据库查询失败且未暴露原始错误 |
 | DATABASE_CLOSE_FAILED | 数据库连接关闭失败 |
+| INVALID_EVIDENCE_INPUT | workflow 读取到非 JSON 或无法解析的证据文件 |
+| MIGRATION_HISTORY_MISMATCH | 仓库与 dev migration history 未对齐 |
+| OUTPUT_REDACTION_FAILED | artifact 字段、值域或敏感信息白名单校验失败 |
 
 CLI 失败只打印 `DOUYIN_MATERIAL_NOTE_EXPLAIN_FAILED:STABLE_CODE`。
 
@@ -103,7 +109,7 @@ CLI 失败只打印 `DOUYIN_MATERIAL_NOTE_EXPLAIN_FAILED:STABLE_CODE`。
 
 成功 artifact 只保存：
 
-- gate、fixture tag、query count 和阈值；
+- gate、fixture tag、query count、阈值、已验证 commit SHA 和 passed 结论；
 - 三条查询的基数分档、节点类型、索引名称；
 - planning/execution time、actual rows/loops 和 buffer 汇总；
 - migration 对齐布尔证据。
