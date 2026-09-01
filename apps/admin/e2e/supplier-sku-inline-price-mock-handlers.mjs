@@ -3,58 +3,26 @@ import {
   ids,
   mockStore,
   now,
-  platformSuppliers,
   units,
 } from "./supplier-product-pricing-mock-state.mjs";
+import {
+  advanceCurrentPriceRowVersion,
+  createImmediatePriceVersion,
+  earliestFutureList,
+  resetInlinePriceState,
+  resolveCurrentPrice,
+  samePrice,
+} from "./supplier-sku-inline-price-mock-state.mjs";
 
-const inlineIds = {
-  currentList: "28000000-0000-4000-8000-000000000001",
-  currentItem: "28100000-0000-4000-8000-000000000001",
-  futureList: "28000000-0000-4000-8000-000000000002",
-  futureItem: "28100000-0000-4000-8000-000000000002",
-};
-const futureStart = "2026-09-01T00:00:00.000Z";
 const inlineState = {
-  sequence: 2,
   conflictRemaining: 0,
   idempotency: new Map(),
 };
 
 export function resetSupplierSkuInlinePriceMock(config = {}) {
-  inlineState.sequence = 2;
   inlineState.conflictRemaining = config.compositeConflictOnce === true ? 1 : 0;
   inlineState.idempotency = new Map();
-  if (config.priceScenario !== "current" && config.priceScenario !== "future") return;
-  const supplierId = platformSuppliers().at(-1).id;
-  mockStore.state.priceLists.push(priceListRecord({
-    id: inlineIds.currentList,
-    supplierId,
-    version: 1,
-    effectiveFrom: "2026-08-01T00:00:00.000Z",
-    effectiveUntil: config.priceScenario === "future" ? futureStart : null,
-    rowVersion: 4,
-  }));
-  mockStore.state.items.push(priceItemRecord({
-    id: inlineIds.currentItem,
-    priceListId: inlineIds.currentList,
-    sku: tenantSku(),
-    unitPrice: "128.00",
-  }));
-  if (config.priceScenario !== "future") return;
-  mockStore.state.priceLists.push(priceListRecord({
-    id: inlineIds.futureList,
-    supplierId,
-    version: 2,
-    effectiveFrom: futureStart,
-    effectiveUntil: null,
-    rowVersion: 2,
-  }));
-  mockStore.state.items.push(priceItemRecord({
-    id: inlineIds.futureItem,
-    priceListId: inlineIds.futureList,
-    sku: tenantSku(),
-    unitPrice: "188.00",
-  }));
+  resetInlinePriceState(config);
 }
 
 export async function handleSupplierSkuInlinePriceMock(request, response, url) {
@@ -82,55 +50,6 @@ export async function handleSupplierSkuInlinePriceMock(request, response, url) {
     return true;
   }
   return false;
-}
-
-function priceListRecord({
-  id,
-  supplierId,
-  version,
-  effectiveFrom,
-  effectiveUntil,
-  rowVersion,
-}) {
-  return {
-    id,
-    tenant_id: currentTenantId(),
-    supplier_id: supplierId,
-    price_list_code: "DEFAULT",
-    version_number: version,
-    scope_type: "default",
-    name: "默认基础供货价",
-    currency: "CNY",
-    lifecycle_status: "published",
-    effective_from: effectiveFrom,
-    effective_until: effectiveUntil,
-    supersedes_price_list_id: null,
-    published_at: now,
-    row_version: rowVersion,
-    updated_at: now,
-  };
-}
-
-function priceItemRecord({ id, priceListId, sku, unitPrice, taxRate = "0.13" }) {
-  return {
-    id,
-    tenant_id: currentTenantId(),
-    supplier_id: sku.supplier_id,
-    supplier_price_list_id: priceListId,
-    supplier_sku_id: sku.id,
-    minimum_quantity: "1",
-    maximum_quantity: null,
-    purchase_unit_id: sku.purchase_unit_id,
-    base_unit_id: sku.base_unit_id,
-    base_unit_conversion: sku.base_unit_conversion,
-    unit_price: unitPrice,
-    tax_rate: taxRate,
-    tax_inclusive: false,
-    sku: { id: sku.id, sku_code: sku.sku_code, name: sku.name, status: sku.status },
-    purchase_unit: sku.purchase_unit,
-    base_unit: sku.base_unit,
-    updated_at: now,
-  };
 }
 
 function tenantSku(skuId = ids.tenantSku) {
@@ -189,37 +108,6 @@ function priceContext(skuId) {
   };
 }
 
-function resolveCurrentPrice(skuId) {
-  const pricedAt = Date.parse(now);
-  const list = mockStore.state.priceLists
-    .filter((record) => record.lifecycle_status === "published" &&
-      record.currency === "CNY" && Date.parse(record.effective_from) <= pricedAt &&
-      (record.effective_until === null || Date.parse(record.effective_until) > pricedAt))
-    .sort((left, right) => right.version_number - left.version_number)[0];
-  if (!list) return null;
-  const item = mockStore.state.items.find((record) =>
-    record.supplier_price_list_id === list.id && (!skuId || record.supplier_sku_id === skuId));
-  if (!item) return null;
-  return {
-    supplier_price_list_id: list.id,
-    supplier_price_list_version: list.version_number,
-    supplier_price_list_row_version: list.row_version,
-    supplier_price_list_item_id: item.id,
-    unit_price: item.unit_price,
-    tax_rate: item.tax_rate,
-    tax_inclusive: item.tax_inclusive,
-    effective_from: list.effective_from,
-    effective_until: list.effective_until,
-  };
-}
-
-function earliestFutureList() {
-  return mockStore.state.priceLists
-    .filter((record) => record.lifecycle_status === "published" &&
-      Date.parse(record.effective_from) > Date.parse(now))
-    .sort((left, right) => Date.parse(left.effective_from) - Date.parse(right.effective_from))[0];
-}
-
 async function savePurchasableSku(request, response, url, productId, skuId) {
   const payload = await readBody(request);
   const attempt = recordMutation(request, url, payload);
@@ -237,11 +125,13 @@ async function savePurchasableSku(request, response, url, productId, skuId) {
   }
   if (inlineState.conflictRemaining > 0) {
     inlineState.conflictRemaining -= 1;
-    attempt.result = { error_code: "SUPPLIER_PRICE_LIST_VERSION_CONFLICT" };
-    return sendError(response, 409, "SUPPLIER_PRICE_LIST_VERSION_CONFLICT", "价格版本已变化，请重试");
+    advanceCurrentPriceRowVersion(skuId);
   }
   const issue = validateSave(url, productId, skuId, payload, request.method);
-  if (issue) return sendError(response, issue.status, issue.code, issue.message);
+  if (issue) {
+    attempt.result = { error_code: issue.code };
+    return sendError(response, issue.status, issue.code, issue.message);
+  }
   const result = applySave(productId, skuId, payload, request.method);
   attempt.result = structuredClone(result);
   inlineState.idempotency.set(key, { fingerprint, result: structuredClone(result) });
@@ -278,7 +168,11 @@ function validateSave(url, productId, skuId, payload, method) {
   const current = resolveCurrentPrice(skuId);
   if (price.expected_price_list_id !== current?.supplier_price_list_id ||
     price.expected_price_list_version !== current?.supplier_price_list_row_version) {
-    return { status: 409, code: "SUPPLIER_PRICE_LIST_VERSION_CONFLICT", message: "价格版本已变化" };
+    return {
+      status: 409,
+      code: "SUPPLIER_PRICE_LIST_VERSION_CONFLICT",
+      message: "价格版本已变化，请重试",
+    };
   }
   return null;
 }
@@ -341,51 +235,6 @@ function applySave(productId, skuId, payload, method) {
     available_actions: ["edit", "deactivate"],
   };
   return result;
-}
-
-function samePrice(current, price) {
-  return canonicalDecimal(current.unit_price) === canonicalDecimal(price.unit_price) &&
-    canonicalDecimal(current.tax_rate) === canonicalDecimal(price.tax_rate) &&
-    current.tax_inclusive === price.tax_inclusive;
-}
-
-function canonicalDecimal(value) {
-  const [integer, fraction = ""] = value.split(".");
-  const trimmed = fraction.replace(/0+$/, "");
-  return trimmed ? `${integer}.${trimmed}` : integer;
-}
-
-function createImmediatePriceVersion(sku, price, current) {
-  const source = current
-    ? mockStore.state.priceLists.find(({ id }) => id === current.supplier_price_list_id)
-    : null;
-  const future = earliestFutureList();
-  if (source) {
-    source.lifecycle_status = "retired";
-    source.effective_until = now;
-    source.row_version += 1;
-    source.updated_at = now;
-  }
-  inlineState.sequence += 1;
-  const suffix = String(inlineState.sequence).padStart(12, "0");
-  const list = priceListRecord({
-    id: `28000000-0000-4000-8000-${suffix}`,
-    supplierId: sku.supplier_id,
-    version: Math.max(0, ...mockStore.state.priceLists.map(({ version_number }) => version_number)) + 1,
-    effectiveFrom: now,
-    effectiveUntil: future?.effective_from ?? null,
-    rowVersion: 1,
-  });
-  list.supersedes_price_list_id = source?.id ?? null;
-  mockStore.state.priceLists.push(list);
-  mockStore.state.items.push(priceItemRecord({
-    id: `28100000-0000-4000-8000-${suffix}`,
-    priceListId: list.id,
-    sku,
-    unitPrice: price.unit_price,
-    taxRate: price.tax_rate,
-  }));
-  mockStore.state.items.at(-1).tax_inclusive = price.tax_inclusive;
 }
 
 function buildCatalogItem(sku, current) {

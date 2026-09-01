@@ -45,7 +45,7 @@ export type MockState = {
   }>;
 };
 
-type ExpectedHttpError = { status: number; path: string };
+type ExpectedHttpError = { status: number; path: string; count?: number };
 
 export function monitorBrowser(page: Page, expectedHttpErrors: ExpectedHttpError[] = []) {
   const consoleErrors: Array<{ text: string; url: string }> = [];
@@ -62,8 +62,8 @@ export function monitorBrowser(page: Page, expectedHttpErrors: ExpectedHttpError
       const matches = consoleErrors.flatMap((error, index) =>
         error.text.includes(`status of ${expectedError.status}`) &&
           error.url.includes(expectedError.path) ? [index] : []);
-      expect(matches).toHaveLength(1);
-      expectedIndexes.add(matches[0]);
+      expect(matches).toHaveLength(expectedError.count ?? 1);
+      for (const index of matches) expectedIndexes.add(index);
     }
     expect(consoleErrors.filter((_, index) => !expectedIndexes.has(index))).toEqual([]);
     expect(pageErrors).toEqual([]);
@@ -78,6 +78,7 @@ export async function resetMock(
     data: config,
   });
   expect(response.ok()).toBe(true);
+  expect(await readMutations(request)).toEqual([]);
 }
 
 export async function login(page: Page) {
