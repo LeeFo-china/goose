@@ -1,94 +1,22 @@
 import { expect, test } from "@playwright/test";
 import type { APIRequestContext, Locator, Page, TestInfo } from "@playwright/test";
 
-const mockBackendBaseUrl = "http://127.0.0.1:3996";
-const relationshipId = "23000000-0000-4000-8000-000000000021";
-const tenantProductId = "21000000-0000-4000-8000-000000000032";
-const tenantSkuId = "21000000-0000-4000-8000-000000000042";
-
-type ResetConfig = {
-  sessionMode?: string;
-  tenantProductStatus?: string;
-  tenantSkuStatus?: string;
-  priceScenario?: string;
-  compositeConflictOnce?: boolean;
-};
-
-type Mutation = {
-  method: string;
-  path: string;
-  idempotencyKey: string | null;
-  payload: Record<string, unknown>;
-  result?: Record<string, unknown>;
-};
-
-type LoggedRequest = { method: string; path: string; query: string };
-
-type MockState = {
-  products: Array<{ id: string; status: string }>;
-  skus: Array<{ id: string; name: string; status: string; version: number }>;
-  priceLists: Array<{
-    id: string;
-    lifecycle_status: string;
-    version_number: number;
-    effective_from: string;
-    effective_until: string | null;
-    row_version: number;
-  }>;
-  items: Array<{
-    id: string;
-    supplier_price_list_id: string;
-    supplier_sku_id: string;
-    unit_price: string;
-    tax_rate: string;
-    tax_inclusive: boolean;
-  }>;
-};
-
-function monitorBrowser(page: Page) {
-  const consoleErrors: string[] = [];
-  const pageErrors: string[] = [];
-  page.on("console", (message) => {
-    if (message.type() === "error") consoleErrors.push(message.text());
-  });
-  page.on("pageerror", (error) => pageErrors.push(error.message));
-  return () => {
-    expect(consoleErrors).toEqual([]);
-    expect(pageErrors).toEqual([]);
-  };
-}
-
-async function resetMock(request: APIRequestContext, config: ResetConfig = {}) {
-  const response = await request.post(`${mockBackendBaseUrl}/__test/reset`, {
-    data: config,
-  });
-  expect(response.ok()).toBe(true);
-}
-
-async function login(page: Page) {
-  const response = await page.request.post("/api/auth/login", {
-    data: { phone: "18637605353", code: "" },
-  });
-  expect(response.ok()).toBe(true);
-}
-
-async function readMutations(request: APIRequestContext): Promise<Mutation[]> {
-  const response = await request.get(`${mockBackendBaseUrl}/__test/mutations`);
-  expect(response.ok()).toBe(true);
-  return (await response.json() as { mutations: Mutation[] }).mutations;
-}
-
-async function readRequests(request: APIRequestContext): Promise<LoggedRequest[]> {
-  const response = await request.get(`${mockBackendBaseUrl}/__test/requests`);
-  expect(response.ok()).toBe(true);
-  return (await response.json() as { requests: LoggedRequest[] }).requests;
-}
-
-async function readState(request: APIRequestContext): Promise<MockState> {
-  const response = await request.get(`${mockBackendBaseUrl}/__test/state`);
-  expect(response.ok()).toBe(true);
-  return (await response.json() as { state: MockState }).state;
-}
+import {
+  compositeMutations,
+  expectNoPriceTraffic,
+  legacySkuMutations,
+  login,
+  mockBackendBaseUrl,
+  monitorBrowser,
+  readMutations,
+  readState,
+  relationshipId,
+  resetMock,
+  skuPostMutations,
+  tenantProductId,
+  tenantSkuId,
+} from "./supplier-sku-inline-price-test-helpers";
+import type { ResetConfig } from "./supplier-sku-inline-price-test-helpers";
 
 async function selectSupplier(page: Page, platform = false) {
   const name = platform ? "第21家平台供应商" : "第21家合作供应商";
@@ -112,6 +40,10 @@ async function openTenantSkuWorkspace(
   const productRow = page.getByRole("row").filter({ hasText: "租户私有瓷砖" });
   await productRow.getByRole("button", { name: "查看 SKU" }).click();
   await expect(page).toHaveURL(new RegExp(`productId=${tenantProductId}`));
+  await expect(page.getByRole("row").filter({
+    hasText: "租户私有瓷砖 600×600",
+  })).toBeVisible();
+  await page.waitForLoadState("networkidle");
 }
 
 async function choosePurchaseUnit(page: Page, dialog: Locator) {
@@ -138,10 +70,6 @@ async function fillRequiredSkuFields(
 
 function priceInput(dialog: Locator) {
   return dialog.getByLabel(/基础供货价/);
-}
-
-function compositeMutations(mutations: Mutation[]) {
-  return mutations.filter(({ path }) => path.includes("/purchasable-skus/"));
 }
 
 async function assertCreateDialogLayout(
@@ -212,6 +140,7 @@ test("全权限租户一次创建可采购 SKU 与即时未税价", async ({ pag
   const assertNoBrowserErrors = monitorBrowser(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await openTenantSkuWorkspace(page, request, { tenantProductStatus: "draft" });
+  const mutationStart = (await readMutations(request)).length;
   await page.getByRole("button", { name: "新增 SKU" }).click();
   const dialog = page.getByRole("dialog", { name: "新增供应商 SKU" });
   await expect(priceInput(dialog)).toHaveValue("");
@@ -228,9 +157,12 @@ test("全权限租户一次创建可采购 SKU 与即时未税价", async ({ pag
   await dialog.getByRole("button", { name: "保存并生效" }).click();
   await expect(dialog).toBeHidden();
 
-  const mutations = compositeMutations(await readMutations(request));
-  expect(mutations).toHaveLength(1);
-  expect(mutations[0]).toMatchObject({
+  const interactionMutations = (await readMutations(request)).slice(mutationStart);
+  const composites = compositeMutations(interactionMutations);
+  expect(skuPostMutations(interactionMutations)).toHaveLength(1);
+  expect(composites).toHaveLength(1);
+  expect(legacySkuMutations(interactionMutations)).toHaveLength(0);
+  expect(composites[0]).toMatchObject({
     method: "POST",
     path: expect.stringMatching(
       new RegExp(`^/supplier-products/${tenantProductId}/purchasable-skus/[^/]+$`),
@@ -351,8 +283,8 @@ test("停用 SKU 仅允许 legacy 元数据更新且不读取价格", async ({ p
     path: `/supplier-products/${tenantProductId}/skus/${tenantSkuId}`,
   }));
   expect(compositeMutations(mutations)).toHaveLength(0);
-  expect((await readRequests(request)).some(({ path }) =>
-    path.includes("/purchasable-skus/"))).toBe(false);
+  await page.waitForLoadState("networkidle");
+  await expectNoPriceTraffic(request);
   assertNoBrowserErrors();
 });
 
@@ -374,23 +306,16 @@ test("仅商品权限沿用 legacy 草稿创建且不读取价格", async ({ pag
   }));
   expect((await readState(request)).skus.find(({ name }) =>
     name === "仅商品权限草稿 SKU")?.status).toBe("draft");
-  expect((await readRequests(request)).some(({ path }) =>
-    path.includes("/purchasable-skus/"))).toBe(false);
+  await page.waitForLoadState("networkidle");
+  await expectNoPriceTraffic(request);
   assertNoBrowserErrors();
 });
 
 test("价格冲突保留输入并以同一幂等尝试重试", async ({ page, request }) => {
-  const assertNoBrowserErrors = monitorBrowser(page);
-  let firstCompositeStatus: number | null = null;
-  await page.route("**/api/backend/supplier-products/*/purchasable-skus/*", async (route) => {
-    const response = await route.fetch();
-    if (response.status() === 409 && firstCompositeStatus === null) {
-      firstCompositeStatus = 409;
-      await route.fulfill({ response, status: 200 });
-      return;
-    }
-    await route.fulfill({ response });
-  });
+  const assertNoBrowserErrors = monitorBrowser(page, [{
+    status: 409,
+    path: `/purchasable-skus/${tenantSkuId}`,
+  }]);
   await openTenantSkuWorkspace(page, request, {
     priceScenario: "current",
     compositeConflictOnce: true,
@@ -400,23 +325,35 @@ test("价格冲突保留输入并以同一幂等尝试重试", async ({ page, re
   const dialog = page.getByRole("dialog", { name: "编辑供应商 SKU" });
   await dialog.getByLabel("SKU 名称").fill("冲突后保留的 SKU 名称");
   await priceInput(dialog).fill("333.00");
+  const conflictResponsePromise = page.waitForResponse((response) =>
+    response.request().method() === "PATCH" &&
+    response.url().includes(`/purchasable-skus/${tenantSkuId}`));
   await dialog.getByRole("button", { name: "保存并生效" }).click();
-  await expect.poll(() => firstCompositeStatus).toBe(409);
+  const conflictResponse = await conflictResponsePromise;
+  expect(conflictResponse.status()).toBe(409);
+  expect(await conflictResponse.json()).toEqual({
+    success: false,
+    code: "SUPPLIER_PRICE_LIST_VERSION_CONFLICT",
+    message: "价格版本已变化，请重试",
+  });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByLabel("SKU 名称")).toHaveValue("冲突后保留的 SKU 名称");
   await expect(priceInput(dialog)).toHaveValue("333.00");
+  const retryResponsePromise = page.waitForResponse((response) =>
+    response.request().method() === "PATCH" &&
+    response.url().includes(`/purchasable-skus/${tenantSkuId}`));
   await dialog.getByRole("button", { name: "保存并生效" }).click();
+  expect((await retryResponsePromise).ok()).toBe(true);
   await expect(dialog).toBeHidden();
 
   const attempts = compositeMutations(await readMutations(request));
   expect(attempts).toHaveLength(2);
-  expect(attempts[1]).toMatchObject({
-    method: attempts[0].method,
-    path: attempts[0].path,
-    idempotencyKey: attempts[0].idempotencyKey,
-    payload: attempts[0].payload,
-    result: { price_version_created: true },
-  });
+  expect(attempts[0].idempotencyKey).not.toBeNull();
+  expect(attempts[1].method).toBe(attempts[0].method);
+  expect(attempts[1].path).toBe(attempts[0].path);
+  expect(attempts[1].idempotencyKey).toBe(attempts[0].idempotencyKey);
+  expect(attempts[1].payload).toEqual(attempts[0].payload);
+  expect(attempts[1].result).toMatchObject({ price_version_created: true });
   assertNoBrowserErrors();
 });
 
@@ -432,8 +369,8 @@ test("平台 SKU 表单不展示租户价格也不发起价格请求", async ({ 
   await skuRow.getByRole("button", { name: "编辑 SKU" }).click();
   const dialog = page.getByRole("dialog", { name: "编辑供应商 SKU" });
   await expect(dialog.getByText("采购价格", { exact: true })).toHaveCount(0);
-  expect((await readRequests(request)).some(({ path }) =>
-    path.includes("/purchasable-skus/"))).toBe(false);
+  await page.waitForLoadState("networkidle");
+  await expectNoPriceTraffic(request);
   assertNoBrowserErrors();
 });
 
