@@ -2766,6 +2766,286 @@ export type Database = {
           },
         ]
       }
+      douyin_material_note_claims: {
+        Row: {
+          claimed_at: string
+          claimed_version_id: string
+          douyin_miniapp_installation_id: string
+          id: string
+          note_id: string
+          removed_at: string | null
+          subject_hash: string
+          tenant_id: string
+        }
+        Insert: {
+          claimed_at?: string
+          claimed_version_id: string
+          douyin_miniapp_installation_id: string
+          id?: string
+          note_id: string
+          removed_at?: string | null
+          subject_hash: string
+          tenant_id: string
+        }
+        Update: {
+          claimed_at?: string
+          claimed_version_id?: string
+          douyin_miniapp_installation_id?: string
+          id?: string
+          note_id?: string
+          removed_at?: string | null
+          subject_hash?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "douyin_material_note_claims_installation_tenant_fkey"
+            columns: ["douyin_miniapp_installation_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "douyin_miniapp_installations"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "douyin_material_note_claims_note_tenant_fkey"
+            columns: ["note_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "douyin_material_notes"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "douyin_material_note_claims_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "douyin_material_note_claims_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "douyin_material_note_claims_version_owner_fkey"
+            columns: ["claimed_version_id", "note_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "douyin_material_note_versions"
+            referencedColumns: ["id", "note_id", "tenant_id"]
+          },
+        ]
+      }
+      douyin_material_note_command_events: {
+        Row: {
+          command: string
+          created_at: string
+          created_by: string
+          id: string
+          idempotency_key: string
+          note_id: string
+          reason: string | null
+          request_digest: string
+          result: Json
+          tenant_id: string
+        }
+        Insert: {
+          command: string
+          created_at?: string
+          created_by: string
+          id?: string
+          idempotency_key: string
+          note_id: string
+          reason?: string | null
+          request_digest: string
+          result: Json
+          tenant_id: string
+        }
+        Update: {
+          command?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          idempotency_key?: string
+          note_id?: string
+          reason?: string | null
+          request_digest?: string
+          result?: Json
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "douyin_material_note_command_events_created_by_tenant_fkey"
+            columns: ["created_by", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "douyin_material_note_command_events_note_tenant_fkey"
+            columns: ["note_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "douyin_material_notes"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "douyin_material_note_command_events_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "douyin_material_note_command_events_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      douyin_material_note_versions: {
+        Row: {
+          applicable_to: string | null
+          category: string
+          content_blocks: Json
+          created_at: string
+          created_by: string
+          id: string
+          note_id: string
+          summary: string
+          tenant_id: string
+          title: string
+          version_no: number
+        }
+        Insert: {
+          applicable_to?: string | null
+          category: string
+          content_blocks: Json
+          created_at?: string
+          created_by: string
+          id?: string
+          note_id: string
+          summary: string
+          tenant_id: string
+          title: string
+          version_no: number
+        }
+        Update: {
+          applicable_to?: string | null
+          category?: string
+          content_blocks?: Json
+          created_at?: string
+          created_by?: string
+          id?: string
+          note_id?: string
+          summary?: string
+          tenant_id?: string
+          title?: string
+          version_no?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "douyin_material_note_versions_created_by_tenant_fkey"
+            columns: ["created_by", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "douyin_material_note_versions_note_tenant_fkey"
+            columns: ["note_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "douyin_material_notes"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "douyin_material_note_versions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "douyin_material_note_versions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      douyin_material_notes: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          published_at: string | null
+          published_version_id: string | null
+          status: string
+          tenant_id: string
+          updated_at: string
+          updated_by: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          published_at?: string | null
+          published_version_id?: string | null
+          status?: string
+          tenant_id: string
+          updated_at?: string
+          updated_by: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          published_at?: string | null
+          published_version_id?: string | null
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+          updated_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "douyin_material_notes_created_by_tenant_fkey"
+            columns: ["created_by", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "douyin_material_notes_published_version_owner_fkey"
+            columns: ["published_version_id", "id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "douyin_material_note_versions"
+            referencedColumns: ["id", "note_id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "douyin_material_notes_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "douyin_material_notes_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "douyin_material_notes_updated_by_tenant_fkey"
+            columns: ["updated_by", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id", "tenant_id"]
+          },
+        ]
+      }
       douyin_measurement_appointments: {
         Row: {
           appointment_no: string
@@ -22680,6 +22960,19 @@ export type Database = {
         }
         Returns: Json
       }
+      append_douyin_material_note_version: {
+        Args: {
+          p_actor_employee_id: string
+          p_applicable_to: string
+          p_category: string
+          p_content_blocks: Json
+          p_note_id: string
+          p_summary: string
+          p_tenant_id: string
+          p_title: string
+        }
+        Returns: Json
+      }
       apply_tenant_entitlement_action: {
         Args: {
           p_action: string
@@ -24599,6 +24892,15 @@ export type Database = {
           claim_token: string
         }[]
       }
+      claim_douyin_material_note: {
+        Args: {
+          p_douyin_miniapp_installation_id: string
+          p_note_id: string
+          p_subject_hash: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       claim_douyin_miniapp_release_operation: {
         Args: {
           p_claim_expires_at: string
@@ -24864,6 +25166,14 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      clear_douyin_material_note_claims: {
+        Args: {
+          p_douyin_miniapp_installation_id: string
+          p_subject_hash: string
+          p_tenant_id: string
+        }
+        Returns: Json
       }
       close_supplier_payment_request: {
         Args: {
@@ -25415,6 +25725,18 @@ export type Database = {
           p_effective_from: string
           p_effective_to: string
           p_tenant_id: string
+        }
+        Returns: Json
+      }
+      create_douyin_material_note: {
+        Args: {
+          p_actor_employee_id: string
+          p_applicable_to: string
+          p_category: string
+          p_content_blocks: Json
+          p_summary: string
+          p_tenant_id: string
+          p_title: string
         }
         Returns: Json
       }
@@ -26218,6 +26540,27 @@ export type Database = {
         Args: { p_target_employee_id: string }
         Returns: undefined
       }
+      erase_douyin_material_note_subject_data: {
+        Args: {
+          p_douyin_miniapp_installation_id: string
+          p_subject_hash: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      execute_douyin_material_note_state_command: {
+        Args: {
+          p_actor_employee_id: string
+          p_command: string
+          p_expected_status: string
+          p_idempotency_key: string
+          p_note_id: string
+          p_reason: string
+          p_target_version_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       expire_tenant_entitlement_if_due: {
         Args: { p_entitlement_code: string; p_now: string; p_tenant_id: string }
         Returns: {
@@ -26709,6 +27052,10 @@ export type Database = {
       }
       is_valid_douyin_budget_pricing_item: {
         Args: { p_item: Json }
+        Returns: boolean
+      }
+      is_valid_douyin_material_note_content_blocks: {
+        Args: { p_blocks: Json }
         Returns: boolean
       }
       is_valid_douyin_measurement_attribution_snapshot: {
@@ -28364,6 +28711,15 @@ export type Database = {
         Returns: {
           status: string
         }[]
+      }
+      remove_douyin_material_note_claim: {
+        Args: {
+          p_claim_id: string
+          p_douyin_miniapp_installation_id: string
+          p_subject_hash: string
+          p_tenant_id: string
+        }
+        Returns: Json
       }
       replace_douyin_budget_pricing_items: {
         Args: {
