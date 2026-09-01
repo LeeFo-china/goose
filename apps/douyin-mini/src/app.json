@@ -11,6 +11,9 @@
     "pages/case-detail/index",
     "pages/site-detail/index",
     "pages/lead-success/index",
+    "pages/materials/index",
+    "pages/material-detail/index",
+    "pages/my-materials/index",
     "pages/service-unavailable/index"
   ],
   "window": {

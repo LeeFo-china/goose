@@ -1,0 +1,9 @@
+<button class="material-card ui-card ui-pressable" hover-class="ui-pressable--pressed" hover-start-time="20" bindtap="onSelect" aria-label="查看资料 {{item.title}}">
+  <view class="material-card__header">
+    <view class="material-card__category">{{item.category || '装修资料'}}</view>
+    <view tt:if="{{item.claimed}}" class="material-card__claimed">已领取</view>
+  </view>
+  <view class="material-card__title">{{item.title || '资料笔记'}}</view>
+  <view class="material-card__summary">{{item.summary || ''}}</view>
+  <view tt:if="{{item.applicable_to}}" class="material-card__applicable">适合：{{item.applicable_to}}</view>
+</button>

@@ -10,6 +10,9 @@ const PAGE_PATHS = new Set([
   "pages/qa/index",
   "pages/lead-success/index",
   "pages/service-unavailable/index",
+  "pages/materials/index",
+  "pages/material-detail/index",
+  "pages/my-materials/index",
 ]);
 const TAB_PATHS = {
   home: "pages/home/index",
@@ -37,6 +40,16 @@ export function buildEntityDetailRoute(type: "case" | "site", id: string): strin
   return `${buildPageRoute("pages/case-detail/index")}?id=${encodeURIComponent(id)}`;
 }
 
+export function buildMaterialDetailRoute(id: string): string {
+  if (!UUID_PATTERN.test(id)) throw invalidNavigationTarget();
+  return `${buildPageRoute("pages/material-detail/index")}?id=${encodeURIComponent(id)}`;
+}
+
+export function buildOwnedMaterialDetailRoute(claimId: string): string {
+  if (!UUID_PATTERN.test(claimId)) throw invalidNavigationTarget();
+  return `${buildPageRoute("pages/material-detail/index")}?claimId=${encodeURIComponent(claimId)}`;
+}
+
 export function navigateToPage(path: string): Promise<void> {
   return navigate("navigateTo", buildPageRoute(path));
 }
@@ -47,6 +60,14 @@ export function switchToTab(tab: TabName): Promise<void> {
 
 export function navigateToEntityDetail(type: "case" | "site", id: string): Promise<void> {
   return navigate("navigateTo", buildEntityDetailRoute(type, id));
+}
+
+export function navigateToMaterialDetail(id: string): Promise<void> {
+  return navigate("navigateTo", buildMaterialDetailRoute(id));
+}
+
+export function navigateToOwnedMaterialDetail(claimId: string): Promise<void> {
+  return navigate("navigateTo", buildOwnedMaterialDetailRoute(claimId));
 }
 
 export function navigateToServiceUnavailable(code: ServiceUnavailableCode): Promise<void> {

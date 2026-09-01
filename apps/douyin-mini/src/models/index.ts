@@ -10,6 +10,9 @@ export const DOUYIN_ENTRY_PATH_VALUES = [
   "pages/qa/index",
   "pages/lead/index",
   "pages/lead-success/index",
+  "pages/materials/index",
+  "pages/material-detail/index",
+  "pages/my-materials/index",
 ] as const;
 
 export const DOUYIN_SOURCE_TYPES = [
@@ -135,6 +138,66 @@ export type PaginationMeta = {
   total: number;
   totalPages: number;
 };
+
+export type DouyinMaterialNoteBlock =
+  | { type: "heading"; level: 2 | 3; text: string }
+  | { type: "paragraph"; text: string }
+  | { type: "list"; style: "ordered" | "unordered"; items: string[] }
+  | { type: "quote"; text: string; attribution?: string }
+  | { type: "callout"; tone: "info" | "warning"; title: string; text: string };
+
+export type DouyinMaterialNotePreview = {
+  id: string;
+  title: string;
+  summary: string;
+  category: string;
+  applicable_to: string | null;
+  published_at: string;
+  claimed: boolean;
+};
+
+export type DouyinMaterialNoteClaimedMaterial = {
+  id: string;
+  version: number;
+  title: string;
+  summary: string;
+  category: string;
+  applicable_to: string | null;
+  content_blocks: DouyinMaterialNoteBlock[];
+};
+
+export type DouyinMaterialNoteClaimResponse = {
+  claim_id: string;
+  already_claimed: boolean;
+  claimed_at: string;
+  material: DouyinMaterialNoteClaimedMaterial;
+};
+
+export type DouyinMaterialNoteOwnedSummary = {
+  claim_id: string;
+  id: string;
+  version: number;
+  title: string;
+  summary: string;
+  category: string;
+  applicable_to: string | null;
+  claimed_at: string;
+};
+
+export type DouyinMaterialNoteOwnedDetail = DouyinMaterialNoteOwnedSummary & {
+  content_blocks: DouyinMaterialNoteBlock[];
+};
+
+export type DouyinMaterialNotePage<Item> = {
+  list: Item[];
+  pagination: PaginationMeta;
+};
+
+export type DouyinMaterialNotePublicPage =
+  DouyinMaterialNotePage<DouyinMaterialNotePreview>;
+
+export type DouyinMaterialNoteOwnedPage =
+  DouyinMaterialNotePage<DouyinMaterialNoteOwnedSummary>;
 
 export type PublicProjectPage = { items: PublicProject[]; pagination: PaginationMeta };
 
