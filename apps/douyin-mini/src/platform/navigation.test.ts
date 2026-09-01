@@ -17,6 +17,7 @@ import {
 } from "./navigation";
 
 const ENTITY_ID = "11111111-1111-4111-8111-111111111111";
+const UPPER_MATERIAL_ID = "A1111111-B111-4111-8111-11111111111A";
 
 describe("Douyin native navigation and visual view models", () => {
   test("builds allowlisted tab and page routes and rejects unknown paths", () => {
@@ -82,6 +83,16 @@ describe("Douyin native navigation and visual view models", () => {
       if (originalPlatform === undefined) Reflect.deleteProperty(globalThis, "tt");
       else Reflect.set(globalThis, "tt", originalPlatform);
     }
+  });
+
+  test("normalizes material and claim UUIDs in navigation routes", () => {
+    const normalized = UPPER_MATERIAL_ID.toLowerCase();
+    expect(buildMaterialDetailRoute(UPPER_MATERIAL_ID)).toBe(
+      `/pages/material-detail/index?id=${normalized}`,
+    );
+    expect(buildOwnedMaterialDetailRoute(UPPER_MATERIAL_ID)).toBe(
+      `/pages/material-detail/index?claimId=${normalized}`,
+    );
   });
 
   test("registers material pages without changing the existing four tab items", async () => {

@@ -41,13 +41,13 @@ export function buildEntityDetailRoute(type: "case" | "site", id: string): strin
 }
 
 export function buildMaterialDetailRoute(id: string): string {
-  if (!UUID_PATTERN.test(id)) throw invalidNavigationTarget();
-  return `${buildPageRoute("pages/material-detail/index")}?id=${encodeURIComponent(id)}`;
+  const normalized = normalizeUuid(id);
+  return `${buildPageRoute("pages/material-detail/index")}?id=${encodeURIComponent(normalized)}`;
 }
 
 export function buildOwnedMaterialDetailRoute(claimId: string): string {
-  if (!UUID_PATTERN.test(claimId)) throw invalidNavigationTarget();
-  return `${buildPageRoute("pages/material-detail/index")}?claimId=${encodeURIComponent(claimId)}`;
+  const normalized = normalizeUuid(claimId);
+  return `${buildPageRoute("pages/material-detail/index")}?claimId=${encodeURIComponent(normalized)}`;
 }
 
 export function navigateToPage(path: string): Promise<void> {
@@ -100,4 +100,9 @@ function invalidNavigationTarget() {
     "INVALID_NAVIGATION_TARGET",
     "INVALID_NAVIGATION_TARGET",
   );
+}
+
+function normalizeUuid(value: string): string {
+  if (!UUID_PATTERN.test(value)) throw invalidNavigationTarget();
+  return value.toLowerCase();
 }

@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
 import type { DouyinMaterialNoteBlock } from "../models";
+import type {
+  MaterialPaginationQuery,
+  OwnedMaterialListQuery,
+  PublicMaterialListQuery,
+} from "./materials";
 import { ApiClient, ApiRequestError, type TransportInput } from "./request";
 import {
   claimMaterial,
@@ -13,8 +18,18 @@ import {
   toMaterialBusinessError,
 } from "./materials";
 
+type Assert<Condition extends true> = Condition;
+type PublicQueryHasKeyword = Assert<"keyword" extends keyof PublicMaterialListQuery ? true : false>;
+type OwnedQueryHasNoKeyword = Assert<"keyword" extends keyof OwnedMaterialListQuery ? false : true>;
+type PaginationHasNoKeyword = Assert<"keyword" extends keyof MaterialPaginationQuery ? false : true>;
+void (null as unknown as PublicQueryHasKeyword);
+void (null as unknown as OwnedQueryHasNoKeyword);
+void (null as unknown as PaginationHasNoKeyword);
+
 const NOTE_ID = "11111111-1111-4111-8111-111111111111";
 const CLAIM_ID = "22222222-2222-4222-8222-222222222222";
+const UPPER_NOTE_ID = "A1111111-B111-4111-8111-11111111111A";
+const UPPER_CLAIM_ID = "B2222222-C222-4222-8222-22222222222B";
 const PUBLISHED_AT = "2026-09-01T08:00:00.000Z";
 const CLAIMED_AT = "2026-09-01T08:30:00.000Z";
 
@@ -55,6 +70,38 @@ const claimedMaterial = {
   applicable_to: preview.applicable_to,
   content_blocks: contentBlocks,
 };
+
+function maximumUtf8Blocks(token: string): DouyinMaterialNoteBlock[] {
+  const maximumBytes = 512 * 1024;
+  const maximumRepeats = Math.floor(20_000 / token.length);
+  const blocks: DouyinMaterialNoteBlock[] = [];
+  while (blocks.length < 100) {
+    const fullBlock = { type: "paragraph" as const, text: token.repeat(maximumRepeats) };
+    if (Buffer.byteLength(JSON.stringify([...blocks, fullBlock]), "utf8") <= maximumBytes) {
+      blocks.push(fullBlock);
+      continue;
+    }
+    let lower = 1;
+    let upper = maximumRepeats;
+    let accepted = 0;
+    while (lower <= upper) {
+      const middle = Math.floor((lower + upper) / 2);
+      const candidate = [...blocks, {
+        type: "paragraph" as const,
+        text: token.repeat(middle),
+      }];
+      if (Buffer.byteLength(JSON.stringify(candidate), "utf8") <= maximumBytes) {
+        accepted = middle;
+        lower = middle + 1;
+      } else {
+        upper = middle - 1;
+      }
+    }
+    if (accepted > 0) blocks.push({ type: "paragraph", text: token.repeat(accepted) });
+    break;
+  }
+  return blocks;
+}
 
 const ownedSummary = {
   claim_id: CLAIM_ID,
@@ -106,6 +153,7 @@ describe("Douyin material API client", () => {
       { page: 1, pageSize: 101 },
       { page: 1, pageSize: 20, keyword: " " },
       { page: 1, pageSize: 20, keyword: "x".repeat(121) },
+      { page: 1, pageSize: 20, keyword: 123 },
       { page: 1, pageSize: 20, tenant_id: NOTE_ID },
       { page: 1, pageSize: 20, installation_id: NOTE_ID },
       { page: 1, pageSize: 20, appid: "tt-private" },
@@ -123,6 +171,49 @@ describe("Douyin material API client", () => {
     });
   });
 
+  test("accepts canonical safe-integer pagination without client-only caps", async () => {
+    const calls: TransportInput[] = [];
+    await expect(fetchMaterials(clientWith((input) => {
+      calls.push(input);
+      return {
+        list: [],
+        pagination: { page: 10_001, pageSize: 20, total: 0, totalPages: 0 },
+      };
+    }), { page: 10_001, pageSize: 20 })).resolves.toMatchObject({
+      pagination: { page: 10_001, pageSize: 20, total: 0, totalPages: 0 },
+    });
+    expect(calls[0]?.path).toBe(
+      "/douyin-mini/material-notes?page=10001&pageSize=20",
+    );
+
+    const total = 10_000_001;
+    await expect(fetchMaterials(clientWith(() => ({
+      list: Array.from({ length: 100 }, () => preview),
+      pagination: {
+        page: 1,
+        pageSize: 100,
+        total,
+        totalPages: Math.ceil(total / 100),
+      },
+    })), { page: 1, pageSize: 100 })).resolves.toMatchObject({
+      pagination: { total, totalPages: Math.ceil(total / 100) },
+    });
+
+    await expect(fetchMaterials(clientWith(() => null), {
+      page: Number.MAX_SAFE_INTEGER + 1,
+      pageSize: 20,
+    })).rejects.toMatchObject({ code: "INVALID_MATERIAL_QUERY" });
+    await expect(fetchMaterials(clientWith(() => ({
+      list: [],
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: Number.MAX_SAFE_INTEGER + 1,
+        totalPages: 0,
+      },
+    })))).rejects.toMatchObject({ code: "INVALID_API_RESPONSE" });
+  });
+
   test("parses unclaimed detail without ever accepting a response body", async () => {
     await expect(fetchMaterialPreview(clientWith(() => preview), NOTE_ID))
       .resolves.toEqual(preview);
@@ -137,6 +228,30 @@ describe("Douyin material API client", () => {
     ]) {
       await expect(fetchMaterialPreview(clientWith(() => expanded), NOTE_ID))
         .rejects.toMatchObject({ code: "INVALID_API_RESPONSE" });
+    }
+  });
+
+  test("matches the canonical offset ISO datetime calendar and precision semantics", async () => {
+    for (const publishedAt of [
+      "2024-02-29T23:59:59.123456Z",
+      "2026-09-01T08:30Z",
+      "2026-09-01T08:30:00+23:59",
+    ]) {
+      await expect(fetchMaterialPreview(clientWith(() => ({
+        ...preview,
+        published_at: publishedAt,
+      })), NOTE_ID)).resolves.toMatchObject({ published_at: publishedAt });
+    }
+    for (const publishedAt of [
+      "2026-02-30T12:00:00Z",
+      "2023-02-29T12:00:00Z",
+      "2026-09-01T08:30:00+24:00",
+      "2026-09-01T08:30:00+01:60",
+    ]) {
+      await expect(fetchMaterialPreview(clientWith(() => ({
+        ...preview,
+        published_at: publishedAt,
+      })), NOTE_ID)).rejects.toMatchObject({ code: "INVALID_API_RESPONSE" });
     }
   });
 
@@ -177,6 +292,62 @@ describe("Douyin material API client", () => {
     }
   });
 
+  test("counts normalized content with portable UTF-8 semantics at 512 KiB", async () => {
+    for (const token of ["A", "é", "中", "😀"]) {
+      const accepted = maximumUtf8Blocks(token);
+      const acceptedBytes = Buffer.byteLength(JSON.stringify(accepted), "utf8");
+      const last = accepted[accepted.length - 1];
+      expect(acceptedBytes).toBeLessThanOrEqual(512 * 1024);
+      expect(last?.type).toBe("paragraph");
+      if (!last || last.type !== "paragraph") throw new Error("invalid boundary fixture");
+      const rejected = [
+        ...accepted.slice(0, -1),
+        { ...last, text: `${last.text}${token}` },
+      ];
+      expect(Buffer.byteLength(JSON.stringify(rejected), "utf8")).toBeGreaterThan(512 * 1024);
+      await expect(claimMaterial(clientWith(() => ({
+        claim_id: CLAIM_ID,
+        already_claimed: false,
+        claimed_at: CLAIMED_AT,
+        material: { ...claimedMaterial, content_blocks: accepted },
+      })), NOTE_ID)).resolves.toMatchObject({ material: { content_blocks: accepted } });
+      await expect(claimMaterial(clientWith(() => ({
+        claim_id: CLAIM_ID,
+        already_claimed: false,
+        claimed_at: CLAIMED_AT,
+        material: { ...claimedMaterial, content_blocks: rejected },
+      })), NOTE_ID)).rejects.toMatchObject({ code: "INVALID_API_RESPONSE" });
+    }
+
+    const padding = " ".repeat(512 * 1024);
+    await expect(claimMaterial(clientWith(() => ({
+      claim_id: CLAIM_ID,
+      already_claimed: false,
+      claimed_at: CLAIMED_AT,
+      material: {
+        ...claimedMaterial,
+        content_blocks: [{ type: "paragraph", text: `${padding} 正文 ${padding}` }],
+      },
+    })), NOTE_ID)).resolves.toMatchObject({
+      material: { content_blocks: [{ type: "paragraph", text: "正文" }] },
+    });
+  });
+
+  test("parses material bodies when TextEncoder is not available globally", async () => {
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, "TextEncoder");
+    Reflect.deleteProperty(globalThis, "TextEncoder");
+    try {
+      await expect(claimMaterial(clientWith(() => ({
+        claim_id: CLAIM_ID,
+        already_claimed: false,
+        claimed_at: CLAIMED_AT,
+        material: claimedMaterial,
+      })), NOTE_ID)).resolves.toMatchObject({ material: claimedMaterial });
+    } finally {
+      if (descriptor) Object.defineProperty(globalThis, "TextEncoder", descriptor);
+    }
+  });
+
   test("parses owned summaries and detail with strict subject-safe shapes", async () => {
     const listCalls: TransportInput[] = [];
     await expect(fetchOwnedMaterials(clientWith((input) => {
@@ -207,6 +378,16 @@ describe("Douyin material API client", () => {
       ...detail,
       subject_hash: "private",
     })), CLAIM_ID)).rejects.toMatchObject({ code: "INVALID_API_RESPONSE" });
+  });
+
+  test("rejects public-only keyword and unknown fields from owned pagination", async () => {
+    const calls: TransportInput[] = [];
+    const client = clientWith((input) => calls.push(input));
+    await expect(fetchOwnedMaterials(client, { keyword: "开工" } as never))
+      .rejects.toMatchObject({ code: "INVALID_MATERIAL_QUERY" });
+    await expect(fetchOwnedMaterials(client, { page: 1, pageSize: 20, tenant_id: NOTE_ID } as never))
+      .rejects.toMatchObject({ code: "INVALID_MATERIAL_QUERY" });
+    expect(calls).toHaveLength(0);
   });
 
   test("uses strict idempotent remove and atomic clear commands", async () => {
@@ -245,6 +426,47 @@ describe("Douyin material API client", () => {
     expect(calls).toHaveLength(0);
   });
 
+  test("normalizes mixed-case UUIDs before all detail requests and correlations", async () => {
+    const calls: TransportInput[] = [];
+    const client = clientWith((input) => {
+      calls.push(input);
+      if (input.path.endsWith("/claim")) {
+        return {
+          claim_id: UPPER_CLAIM_ID,
+          already_claimed: false,
+          claimed_at: CLAIMED_AT,
+          material: { ...claimedMaterial, id: UPPER_NOTE_ID },
+        };
+      }
+      if (input.path.startsWith("/douyin-mini/my-material-notes/")) {
+        return {
+          ...ownedSummary,
+          claim_id: UPPER_CLAIM_ID,
+          id: UPPER_NOTE_ID,
+          content_blocks: contentBlocks,
+        };
+      }
+      return { ...preview, id: UPPER_NOTE_ID };
+    });
+
+    await expect(fetchMaterialPreview(client, UPPER_NOTE_ID)).resolves.toMatchObject({
+      id: UPPER_NOTE_ID.toLowerCase(),
+    });
+    await expect(claimMaterial(client, UPPER_NOTE_ID)).resolves.toMatchObject({
+      claim_id: UPPER_CLAIM_ID.toLowerCase(),
+      material: { id: UPPER_NOTE_ID.toLowerCase() },
+    });
+    await expect(fetchOwnedMaterialDetail(client, UPPER_CLAIM_ID)).resolves.toMatchObject({
+      claim_id: UPPER_CLAIM_ID.toLowerCase(),
+      id: UPPER_NOTE_ID.toLowerCase(),
+    });
+    expect(calls.map((call) => call.path)).toEqual([
+      `/douyin-mini/material-notes/${UPPER_NOTE_ID.toLowerCase()}`,
+      `/douyin-mini/material-notes/${UPPER_NOTE_ID.toLowerCase()}/claim`,
+      `/douyin-mini/my-material-notes/${UPPER_CLAIM_ID.toLowerCase()}`,
+    ]);
+  });
+
   test("normalizes every typed material business error and no unrelated error", () => {
     const cases = [
       [404, "MATERIAL_NOTE_NOT_FOUND"],
@@ -257,6 +479,8 @@ describe("Douyin material API client", () => {
     for (const [statusCode, code] of cases) {
       expect(toMaterialBusinessError(new ApiRequestError(statusCode, code, "业务错误")))
         .toEqual({ statusCode, code, message: "业务错误" });
+      expect(toMaterialBusinessError(new ApiRequestError(statusCode + 1, code, "状态错误")))
+        .toBeNull();
     }
     expect(toMaterialBusinessError(new ApiRequestError(0, "NETWORK_ERROR", "网络错误")))
       .toBeNull();

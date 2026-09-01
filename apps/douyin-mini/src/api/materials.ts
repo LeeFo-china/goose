@@ -12,25 +12,31 @@ import type {
 import { ApiClient, ApiRequestError } from "./request";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const DATE_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/;
+// Kept equivalent to z.iso.datetime({ offset: true }) without adding a mini runtime dependency.
+const DATE_TIME_PATTERN = /^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/;
 const MAX_CONTENT_BYTES = 512 * 1024;
-const MATERIAL_BUSINESS_ERROR_CODES = [
-  "MATERIAL_NOTE_NOT_FOUND",
-  "MATERIAL_NOTE_NOT_AVAILABLE",
-  "MATERIAL_NOTE_WITHDRAWN",
-  "MATERIAL_NOTE_CLAIM_NOT_FOUND",
-  "MATERIAL_NOTE_VERSION_CONFLICT",
-  "MATERIAL_NOTE_STATE_CONFLICT",
-] as const;
+const MATERIAL_BUSINESS_ERROR_STATUSES = {
+  MATERIAL_NOTE_NOT_FOUND: 404,
+  MATERIAL_NOTE_NOT_AVAILABLE: 409,
+  MATERIAL_NOTE_WITHDRAWN: 410,
+  MATERIAL_NOTE_CLAIM_NOT_FOUND: 404,
+  MATERIAL_NOTE_VERSION_CONFLICT: 409,
+  MATERIAL_NOTE_STATE_CONFLICT: 409,
+} as const;
 
-export type MaterialListQuery = {
+export type MaterialPaginationQuery = {
   page?: number;
   pageSize?: number;
+};
+
+export type PublicMaterialListQuery = MaterialPaginationQuery & {
   keyword?: string;
 };
 
+export type OwnedMaterialListQuery = MaterialPaginationQuery;
+
 export type MaterialBusinessErrorCode =
-  (typeof MATERIAL_BUSINESS_ERROR_CODES)[number];
+  keyof typeof MATERIAL_BUSINESS_ERROR_STATUSES;
 
 export type MaterialBusinessError = {
   statusCode: number;
@@ -40,7 +46,7 @@ export type MaterialBusinessError = {
 
 export async function fetchMaterials(
   client: ApiClient,
-  query: MaterialListQuery = {},
+  query: PublicMaterialListQuery = {},
 ): Promise<DouyinMaterialNotePublicPage> {
   const normalized = normalizeQuery(query, true);
   const value = await client.request<unknown>({
@@ -56,13 +62,13 @@ export async function fetchMaterialPreview(
   client: ApiClient,
   noteId: string,
 ): Promise<DouyinMaterialNotePreview> {
-  validateId(noteId);
+  const normalizedId = validateId(noteId);
   const value = await client.request<unknown>({
-    path: `/douyin-mini/material-notes/${encodeURIComponent(noteId)}`,
+    path: `/douyin-mini/material-notes/${encodeURIComponent(normalizedId)}`,
     method: "GET",
   });
   const result = parsePreview(value);
-  if (!result || result.id !== noteId) throw invalidResponse();
+  if (!result || result.id !== normalizedId) throw invalidResponse();
   return result;
 }
 
@@ -70,19 +76,19 @@ export async function claimMaterial(
   client: ApiClient,
   noteId: string,
 ): Promise<DouyinMaterialNoteClaimResponse> {
-  validateId(noteId);
+  const normalizedId = validateId(noteId);
   const value = await client.request<unknown>({
-    path: `/douyin-mini/material-notes/${encodeURIComponent(noteId)}/claim`,
+    path: `/douyin-mini/material-notes/${encodeURIComponent(normalizedId)}/claim`,
     method: "POST",
   });
   const result = parseClaimResponse(value);
-  if (!result || result.material.id !== noteId) throw invalidResponse();
+  if (!result || result.material.id !== normalizedId) throw invalidResponse();
   return result;
 }
 
 export async function fetchOwnedMaterials(
   client: ApiClient,
-  query: MaterialListQuery = {},
+  query: OwnedMaterialListQuery = {},
 ): Promise<DouyinMaterialNoteOwnedPage> {
   const normalized = normalizeQuery(query, false);
   const value = await client.request<unknown>({
@@ -98,13 +104,13 @@ export async function fetchOwnedMaterialDetail(
   client: ApiClient,
   claimId: string,
 ): Promise<DouyinMaterialNoteOwnedDetail> {
-  validateId(claimId);
+  const normalizedId = validateId(claimId);
   const value = await client.request<unknown>({
-    path: `/douyin-mini/my-material-notes/${encodeURIComponent(claimId)}`,
+    path: `/douyin-mini/my-material-notes/${encodeURIComponent(normalizedId)}`,
     method: "GET",
   });
   const result = parseOwnedDetail(value);
-  if (!result || result.claim_id !== claimId) throw invalidResponse();
+  if (!result || result.claim_id !== normalizedId) throw invalidResponse();
   return result;
 }
 
@@ -112,9 +118,9 @@ export async function removeOwnedMaterial(
   client: ApiClient,
   claimId: string,
 ): Promise<{ removed: true }> {
-  validateId(claimId);
+  const normalizedId = validateId(claimId);
   const value = await client.request<unknown>({
-    path: `/douyin-mini/my-material-notes/${encodeURIComponent(claimId)}/remove`,
+    path: `/douyin-mini/my-material-notes/${encodeURIComponent(normalizedId)}/remove`,
     method: "POST",
   });
   if (!isStrictRecord(value, ["removed"]) || value.removed !== true) throw invalidResponse();
@@ -139,12 +145,16 @@ export function toMaterialBusinessError(error: unknown): MaterialBusinessError |
   if (!(error instanceof ApiRequestError) || !isMaterialBusinessErrorCode(error.code)) {
     return null;
   }
+  if (error.statusCode !== MATERIAL_BUSINESS_ERROR_STATUSES[error.code]) return null;
   return { statusCode: error.statusCode, code: error.code, message: error.message };
 }
 
 type NormalizedQuery = { page: number; pageSize: number; keyword?: string };
 
-function normalizeQuery(query: MaterialListQuery, allowKeyword: boolean): NormalizedQuery {
+function normalizeQuery(
+  query: PublicMaterialListQuery | OwnedMaterialListQuery,
+  allowKeyword: boolean,
+): NormalizedQuery {
   const allowedKeys = allowKeyword
     ? ["page", "pageSize", "keyword"]
     : ["page", "pageSize"];
@@ -153,11 +163,14 @@ function normalizeQuery(query: MaterialListQuery, allowKeyword: boolean): Normal
   }
   const page = query.page ?? 1;
   const pageSize = query.pageSize ?? 20;
-  if (!isIntegerInRange(page, 1, 10_000) || !isIntegerInRange(pageSize, 1, 100)) {
+  if (!isIntegerInRange(page, 1, Number.MAX_SAFE_INTEGER)
+    || !isIntegerInRange(pageSize, 1, 100)) {
     throw invalidQuery();
   }
-  if (query.keyword === undefined) return { page, pageSize };
-  const keyword = query.keyword.trim();
+  const keywordValue = "keyword" in query ? query.keyword : undefined;
+  if (keywordValue === undefined) return { page, pageSize };
+  if (typeof keywordValue !== "string") throw invalidQuery();
+  const keyword = keywordValue.trim();
   if (!allowKeyword || keyword.length < 1 || keyword.length > 120) throw invalidQuery();
   return { page, pageSize, keyword };
 }
@@ -188,8 +201,10 @@ function parsePage<Item>(
 function parsePagination(value: unknown, itemCount: number): PaginationMeta | null {
   if (!isStrictRecord(value, ["page", "pageSize", "total", "totalPages"])) return null;
   const { page, pageSize, total, totalPages } = value;
-  if (!isIntegerInRange(page, 1, 10_000) || !isIntegerInRange(pageSize, 1, 100)
-    || !isIntegerInRange(total, 0, 10_000_000) || !isIntegerInRange(totalPages, 0, 10_000)
+  if (!isIntegerInRange(page, 1, Number.MAX_SAFE_INTEGER)
+    || !isIntegerInRange(pageSize, 1, 100)
+    || !isIntegerInRange(total, 0, Number.MAX_SAFE_INTEGER)
+    || !isIntegerInRange(totalPages, 0, Number.MAX_SAFE_INTEGER)
     || itemCount > pageSize || itemCount > total) return null;
   const expectedPages = total === 0 ? 0 : Math.ceil(total / pageSize);
   if (totalPages !== expectedPages) return null;
@@ -215,10 +230,11 @@ function parseClaimResponse(value: unknown): DouyinMaterialNoteClaimResponse | n
   }
   const material = parseClaimedMaterial(value.material);
   const claimedAt = parseDateTime(value.claimed_at);
-  return typeof value.claim_id === "string" && UUID_PATTERN.test(value.claim_id)
+  const claimId = parseUuid(value.claim_id);
+  return claimId
     && typeof value.already_claimed === "boolean" && claimedAt && material
     ? {
-      claim_id: value.claim_id,
+      claim_id: claimId,
       already_claimed: value.already_claimed,
       claimed_at: claimedAt,
       material,
@@ -243,10 +259,11 @@ function parseOwnedSummary(value: unknown): DouyinMaterialNoteOwnedSummary | nul
   ])) return null;
   const common = parseCommon(value);
   const claimedAt = parseDateTime(value.claimed_at);
-  return common && typeof value.claim_id === "string" && UUID_PATTERN.test(value.claim_id)
+  const claimId = parseUuid(value.claim_id);
+  return common && claimId
     && isIntegerInRange(value.version, 1, Number.MAX_SAFE_INTEGER) && claimedAt
     ? {
-      claim_id: value.claim_id,
+      claim_id: claimId,
       id: common.id,
       version: value.version,
       ...common.content,
@@ -281,26 +298,48 @@ function parseCommon(value: Record<string, unknown>): {
   const title = boundedText(value.title, 1, 300);
   const summary = boundedText(value.summary, 1, 1_000);
   const category = boundedText(value.category, 1, 100);
+  const id = parseUuid(value.id);
   let applicableTo: string | null = null;
   if (value.applicable_to !== null) {
     applicableTo = boundedText(value.applicable_to, 1, 300);
     if (!applicableTo) return null;
   }
-  if (typeof value.id !== "string" || !UUID_PATTERN.test(value.id)
-    || !title || !summary || !category) return null;
+  if (!id || !title || !summary || !category) return null;
   return {
-    id: value.id,
+    id,
     content: { title, summary, category, applicable_to: applicableTo },
   };
 }
 
 function parseBlocks(value: unknown): DouyinMaterialNoteBlock[] | null {
-  if (!Array.isArray(value) || value.length > 100
-    || new TextEncoder().encode(JSON.stringify(value)).byteLength > MAX_CONTENT_BYTES) return null;
+  if (!Array.isArray(value) || value.length > 100) return null;
   const blocks = value.map(parseBlock);
-  return blocks.every((block): block is DouyinMaterialNoteBlock => block !== null)
-    ? blocks
-    : null;
+  if (!blocks.every((block): block is DouyinMaterialNoteBlock => block !== null)) return null;
+  return utf8ByteLength(JSON.stringify(blocks)) <= MAX_CONTENT_BYTES ? blocks : null;
+}
+
+function utf8ByteLength(value: string): number {
+  let byteLength = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const codeUnit = value.charCodeAt(index);
+    if (codeUnit <= 0x7f) {
+      byteLength += 1;
+    } else if (codeUnit <= 0x7ff) {
+      byteLength += 2;
+    } else if (codeUnit >= 0xd800 && codeUnit <= 0xdbff
+      && index + 1 < value.length) {
+      const next = value.charCodeAt(index + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        byteLength += 4;
+        index += 1;
+      } else {
+        byteLength += 3;
+      }
+    } else {
+      byteLength += 3;
+    }
+  }
+  return byteLength;
 }
 
 function parseBlock(value: unknown): DouyinMaterialNoteBlock | null {
@@ -354,8 +393,16 @@ function parseBlock(value: unknown): DouyinMaterialNoteBlock | null {
   }
 }
 
-function validateId(id: string): void {
-  if (!UUID_PATTERN.test(id)) throw new ApiRequestError(0, "INVALID_MATERIAL_ID", "资料编号无效");
+function validateId(id: string): string {
+  const normalized = parseUuid(id);
+  if (!normalized) throw new ApiRequestError(0, "INVALID_MATERIAL_ID", "资料编号无效");
+  return normalized;
+}
+
+function parseUuid(value: unknown): string | null {
+  return typeof value === "string" && UUID_PATTERN.test(value)
+    ? value.toLowerCase()
+    : null;
 }
 
 function boundedText(value: unknown, minimum: number, maximum: number): string | null {
@@ -365,8 +412,7 @@ function boundedText(value: unknown, minimum: number, maximum: number): string |
 }
 
 function parseDateTime(value: unknown): string | null {
-  return typeof value === "string" && DATE_TIME_PATTERN.test(value)
-    && Number.isFinite(Date.parse(value)) ? value : null;
+  return typeof value === "string" && DATE_TIME_PATTERN.test(value) ? value : null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -384,7 +430,7 @@ function isIntegerInRange(value: unknown, minimum: number, maximum: number): val
 }
 
 function isMaterialBusinessErrorCode(value: string): value is MaterialBusinessErrorCode {
-  return MATERIAL_BUSINESS_ERROR_CODES.includes(value as MaterialBusinessErrorCode);
+  return Object.prototype.hasOwnProperty.call(MATERIAL_BUSINESS_ERROR_STATUSES, value);
 }
 
 function invalidQuery(): ApiRequestError {

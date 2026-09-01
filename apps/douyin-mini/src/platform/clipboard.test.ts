@@ -25,6 +25,32 @@ describe("Douyin clipboard adapter", () => {
     );
   });
 
+  test("normalizes a synchronous platform throw as a clipboard failure", async () => {
+    const setter: ClipboardSetter = () => {
+      throw new Error("native bridge unavailable");
+    };
+
+    await expect(copyTextToClipboard("正文", setter)).rejects.toEqual(
+      new ApiRequestError(0, "CLIPBOARD_WRITE_FAILED", "复制失败，请稍后重试"),
+    );
+  });
+
+  test("honors only the first success, failure or throw settlement", async () => {
+    const succeedsFirst: ClipboardSetter = (options) => {
+      options.success?.({ errMsg: "setClipboardData:ok" });
+      options.fail?.({ errMsg: "late fail" });
+      throw new Error("late throw");
+    };
+    await expect(copyTextToClipboard("正文", succeedsFirst)).resolves.toBeUndefined();
+
+    const failsFirst: ClipboardSetter = (options) => {
+      options.fail?.({ errMsg: "setClipboardData:fail" });
+      options.success?.({ errMsg: "late success" });
+    };
+    await expect(copyTextToClipboard("正文", failsFirst))
+      .rejects.toMatchObject({ code: "CLIPBOARD_WRITE_FAILED" });
+  });
+
   test("rejects empty or oversized clipboard input before invoking the platform", async () => {
     let callCount = 0;
     const setter: ClipboardSetter = () => { callCount += 1; };

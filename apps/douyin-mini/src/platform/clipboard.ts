@@ -16,14 +16,25 @@ export function copyTextToClipboard(
     ));
   }
   return new Promise((resolve, reject) => {
-    setter({
-      data: text,
-      success: () => resolve(),
-      fail: () => reject(new ApiRequestError(
+    let settled = false;
+    const succeed = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    const fail = () => {
+      if (settled) return;
+      settled = true;
+      reject(new ApiRequestError(
         0,
         "CLIPBOARD_WRITE_FAILED",
         "复制失败，请稍后重试",
-      )),
-    });
+      ));
+    };
+    try {
+      setter({ data: text, success: succeed, fail });
+    } catch {
+      fail();
+    }
   });
 }
