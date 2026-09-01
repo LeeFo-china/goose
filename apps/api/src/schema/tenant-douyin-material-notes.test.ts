@@ -7,6 +7,8 @@ import {
   TenantDouyinMaterialNoteCommandHeadersSchema,
   TenantDouyinMaterialNoteListQuerySchema,
   TenantDouyinMaterialNotePublishSchema,
+  TenantDouyinMaterialNoteVersionDetailResponseSchema,
+  TenantDouyinMaterialNoteVersionParamsSchema,
   TenantDouyinMaterialNoteWithdrawSchema,
 } from './tenant-douyin-material-notes';
 
@@ -90,11 +92,31 @@ describe('Tenant Douyin material note schemas', () => {
   test('requires a UUID Idempotency-Key HTTP header', () => {
     expect(TenantDouyinMaterialNoteCommandHeadersSchema.parse({
       'idempotency-key': ID,
+      host: 'api-dev.goodcms.cn',
+      authorization: 'Bearer test',
+      'content-type': 'application/json',
     })).toEqual({ 'idempotency-key': ID });
     expect(TenantDouyinMaterialNoteCommandHeadersSchema.safeParse({}).success)
       .toBe(false);
     expect(TenantDouyinMaterialNoteCommandHeadersSchema.safeParse({
       'idempotency-key': 'same-request',
     }).success).toBe(false);
+  });
+
+  test('validates the nested immutable version detail route and response', () => {
+    const params = { id: ID, versionId: '22222222-2222-4222-8222-222222222222' };
+    expect(TenantDouyinMaterialNoteVersionParamsSchema.parse(params)).toEqual(params);
+    expect(TenantDouyinMaterialNoteVersionParamsSchema.safeParse({
+      ...params,
+      versionId: 'bad',
+    }).success).toBe(false);
+    expect(TenantDouyinMaterialNoteVersionDetailResponseSchema.parse({
+      id: params.versionId,
+      note_id: ID,
+      version: 1,
+      ...draft,
+      created_by: '33333333-3333-4333-8333-333333333333',
+      created_at: '2026-09-01T08:00:00.000Z',
+    })).toMatchObject({ id: params.versionId, note_id: ID, version: 1 });
   });
 });

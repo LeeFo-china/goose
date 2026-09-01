@@ -202,11 +202,18 @@ GET  /tenant/douyin-material-notes?page=1&pageSize=20&status=&keyword=
 POST /tenant/douyin-material-notes
 GET  /tenant/douyin-material-notes/:id
 GET  /tenant/douyin-material-notes/:id/versions?page=1&pageSize=20
+GET  /tenant/douyin-material-notes/:id/versions/:versionId
 POST /tenant/douyin-material-notes/:id/versions
 POST /tenant/douyin-material-notes/:id/publish
 POST /tenant/douyin-material-notes/:id/archive
 POST /tenant/douyin-material-notes/:id/withdraw
 ```
+
+版本历史列表只返回版本号、标题、摘要、分类、适用场景、创建人和创建时间，
+不返回 `content_blocks`。查看某个不可变版本正文时，后台单独调用版本详情接口；
+该接口要求 `douyin_material_note.read` 权限，并同时按租户、资料 ID 和版本 ID
+过滤。资料或版本跨租户、版本不存在、版本不属于指定资料时统一返回 404
+`MATERIAL_NOTE_NOT_FOUND`，避免泄露资源存在性。
 
 创建资料时同时创建第一个不可变版本。后续编辑创建新版本，不直接更新历史版本。发布请求明确提交 `version_id` 和期望状态或版本，避免并发覆盖。归档和撤回要求显式原因；撤回后不能恢复，只能复制内容创建新资料。
 
@@ -279,6 +286,7 @@ pages/my-materials/index
 | 场景 | HTTP | 业务码 | 客户端处理 |
 | --- | --- | --- | --- |
 | 资料不存在或跨租户 | 404 | `MATERIAL_NOTE_NOT_FOUND` | 返回列表并提示资料不存在 |
+| 版本详情不存在、跨租户或不属于资料 | 404 | `MATERIAL_NOTE_NOT_FOUND` | 刷新资料和版本列表 |
 | 草稿、归档资料的新领取 | 409 | `MATERIAL_NOTE_NOT_AVAILABLE` | 刷新详情，不重试领取 |
 | 资料已撤回 | 410 | `MATERIAL_NOTE_WITHDRAWN` | 清空正文并展示停止提供 |
 | 领取记录已移除 | 404 | `MATERIAL_NOTE_CLAIM_NOT_FOUND` | 返回“我的资料”列表 |
@@ -302,6 +310,7 @@ pages/my-materials/index
 - 归档后不能新领取，既有领取仍可读取。
 - 撤回后新旧领取均不能读取正文。
 - 所有列表分页且 `pageSize` 最大 100。
+- 版本历史列表不返回正文；只有通过租户、资料和版本三重校验的版本详情返回 `content_blocks`。
 - 搜索、公开列表和我的资料查询命中预期索引；必要时使用 `EXPLAIN ANALYZE` 验证。
 - 无 `manage` 或 `publish` 权限的员工写操作返回 403。
 - 领取不创建 `marketing_leads`、短信验证码或量房预约。

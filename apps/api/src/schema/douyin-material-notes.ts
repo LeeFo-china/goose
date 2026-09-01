@@ -45,6 +45,10 @@ export const DouyinMaterialNoteRemoveResponseSchema = z.strictObject({
 export const DouyinMaterialNoteClearResponseSchema = z.strictObject({
   removed_count: z.number().int().nonnegative(),
 });
+export const DouyinMaterialNoteErasureResultSchema = z.strictObject({
+  deleted_claim_count: z.number().int().nonnegative(),
+  deleted_event_count: z.number().int().nonnegative(),
+});
 
 const RepositoryDateTimeSchema = z.iso.datetime({ offset: true });
 export const DouyinMaterialNoteRepositoryPreviewVersionSchema = z.strictObject({
@@ -73,11 +77,8 @@ export const DouyinMaterialNoteRepositoryOwnedRowSchema = z.strictObject({
 export const DouyinMaterialNoteRepositoryOwnedDetailRowSchema =
   DouyinMaterialNoteRepositoryOwnedRowSchema.extend({
     claimed_version: DouyinMaterialNoteRepositoryPreviewVersionSchema.extend({
-      id: z.uuid(),
       version_no: z.number().int().positive(),
       content_blocks: DouyinMaterialNoteContentBlocksSchema,
-      created_by: z.uuid(),
-      created_at: RepositoryDateTimeSchema,
     }).strict(),
   }).strict();
 

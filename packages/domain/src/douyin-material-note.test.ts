@@ -26,6 +26,7 @@ import {
   DouyinMaterialNoteTenantDetailSchema,
   DouyinMaterialNoteTenantListSchema,
   DouyinMaterialNoteTenantSummarySchema,
+  DouyinMaterialNoteTenantVersionSummarySchema,
   DouyinMaterialNoteTenantVersionListSchema,
   DouyinMaterialNoteTenantVersionSchema,
   DouyinMaterialNoteUnclaimedDetailSchema,
@@ -38,6 +39,7 @@ import {
   type DouyinMaterialNotePublicPreview,
   type DouyinMaterialNoteTenantDetail,
   type DouyinMaterialNoteTenantSummary,
+  type DouyinMaterialNoteTenantVersionSummary,
   type DouyinMaterialNoteTenantVersion,
   type DouyinMaterialNoteUnclaimedDetail,
 } from './douyin-material-note';
@@ -77,6 +79,9 @@ type TenantDetailHasNoIdentity = Assert<
 type TenantVersionHasNoIdentity = Assert<
   HasNoIdentityKeys<DouyinMaterialNoteTenantVersion>
 >;
+type TenantVersionSummaryHasNoIdentity = Assert<
+  HasNoIdentityKeys<DouyinMaterialNoteTenantVersionSummary>
+>;
 
 void (null as unknown as PublicPreviewHasNoIdentity);
 void (null as unknown as UnclaimedDetailHasNoIdentity);
@@ -87,6 +92,7 @@ void (null as unknown as ClaimResponseHasNoIdentity);
 void (null as unknown as TenantSummaryHasNoIdentity);
 void (null as unknown as TenantDetailHasNoIdentity);
 void (null as unknown as TenantVersionHasNoIdentity);
+void (null as unknown as TenantVersionSummaryHasNoIdentity);
 
 const noteId = '550e8400-e29b-41d4-a716-446655440000';
 const versionId = '550e8400-e29b-41d4-a716-446655440001';
@@ -154,6 +160,8 @@ const tenantVersion = {
   created_by: employeeId,
   created_at: occurredAt,
 };
+const { content_blocks: _tenantContentBlocks, ...tenantVersionSummary } =
+  tenantVersion;
 
 const tenantSummary = {
   id: noteId,
@@ -205,6 +213,19 @@ describe('Douyin material note domain contracts', () => {
     expect(DouyinMaterialNoteStatusSchema.safeParse('deleted').success).toBe(
       false,
     );
+  });
+
+  test('version history summaries contain metadata but never content blocks', () => {
+    expect(DouyinMaterialNoteTenantVersionSummarySchema.parse(tenantVersionSummary))
+      .toEqual(tenantVersionSummary);
+    expect(DouyinMaterialNoteTenantVersionSummarySchema.safeParse(tenantVersion).success)
+      .toBe(false);
+    expect(DouyinMaterialNoteTenantVersionListSchema.parse({
+      list: [tenantVersionSummary],
+      pagination,
+    }).list[0]).not.toHaveProperty('content_blocks');
+    expect(DouyinMaterialNoteTenantVersionSchema.parse(tenantVersion))
+      .toEqual(tenantVersion);
   });
 
   test('accepts only the five narrowed site-content text blocks', () => {
@@ -533,10 +554,10 @@ describe('Douyin material note domain contracts', () => {
     ).toEqual([tenantSummary]);
     expect(
       DouyinMaterialNoteTenantVersionListSchema.parse({
-        list: [tenantVersion],
+        list: [tenantVersionSummary],
         pagination,
       }).list,
-    ).toEqual([tenantVersion]);
+    ).toEqual([tenantVersionSummary]);
 
     expect(
       DouyinMaterialNotePublicListSchema.safeParse({
@@ -552,7 +573,7 @@ describe('Douyin material note domain contracts', () => {
     ).toBe(false);
     expect(
       DouyinMaterialNoteTenantVersionListSchema.safeParse({
-        list: [tenantVersion],
+        list: [tenantVersionSummary],
         pagination: { ...pagination, total: 0, totalPages: 0 },
       }).success,
     ).toBe(false);

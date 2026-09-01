@@ -109,6 +109,7 @@
   - `POST /tenant/douyin-material-notes`
   - `GET /tenant/douyin-material-notes/:id`
   - `GET /tenant/douyin-material-notes/:id/versions?page=1&pageSize=20`
+  - `GET /tenant/douyin-material-notes/:id/versions/:versionId`
   - `POST /tenant/douyin-material-notes/:id/versions`
   - `POST /tenant/douyin-material-notes/:id/publish`
   - `POST /tenant/douyin-material-notes/:id/archive`
@@ -116,7 +117,7 @@
 - Every list defaults to `page=1&pageSize=20`, caps `pageSize` at 100, filters before pagination, selects only necessary columns and orders by timestamp descending then ID descending.
 - Only `published` notes can be discovered or newly claimed. `archived` notes disappear from discovery but retain locked content for active owners. `withdrawn` notes return no content to anyone.
 - The server derives tenant, installation, AppID and subject hash from the authenticated session. These values are never accepted from a mini-program request and `subject_hash` is never returned or logged.
-- Preview responses contain no `content_blocks`. Claim and owned-detail responses contain only the exact immutable version owned by the current subject.
+- Preview and version-history list responses contain no `content_blocks`. Claim and owned-detail responses contain only the exact immutable version owned by the current subject; tenant version content is returned only by the triple-scoped version-detail route.
 - Claim, remove and clear accept no business body. Publish/archive/withdraw require a UUID `Idempotency-Key`; repeat keys replay only byte-equivalent canonical command parameters.
 - Claim never creates a phone identity, SMS code, marketing lead or measurement appointment. Budget and measurement remain explicit post-claim navigation actions.
 - All database objects and initialization data are delivered by migration. No implementation step may repair a remote database with manual DDL/DML.
@@ -136,7 +137,7 @@
 
 - [ ] Write failing domain tests for `draft | published | archived | withdrawn`, title/summary/category/applicable-to limits, and the allowed `heading | paragraph | list | quote | callout` block subset.
 - [ ] Add tests proving HTML/image/gallery/metrics blocks, external URLs, more than 100 blocks and serialized content over 512 KiB are rejected.
-- [ ] Add response-schema tests proving public previews cannot contain `content_blocks` and no public/admin DTO exposes `tenant_id` or `subject_hash`.
+- [ ] Add response-schema tests proving public previews and tenant version-history summaries cannot contain `content_blocks`, full tenant version detail retains the body, and no public/admin DTO exposes `tenant_id` or `subject_hash`.
 - [ ] Run `bun test packages/domain/src/douyin-material-note.test.ts` and confirm failure is caused by the missing module/exports.
 - [ ] Implement the narrow Zod schemas by reusing the existing site-content scalar limits while defining a material-only discriminated union; do not relax global site-content schemas.
 - [ ] Add the three permissions with labels: `查看抖音资料`, `管理抖音资料`, `发布抖音资料`.
@@ -183,16 +184,16 @@
 - Create: `apps/api/src/repositories/douyin-material-notes.ts`
 - Create: `apps/api/src/repositories/douyin-material-notes.test.ts`
 
-- [ ] Write failing schema tests for `page=1`, `pageSize=20`, maximum 100, optional trimmed keyword/status, UUID params, empty public command bodies and the admin command payloads.
+- [ ] Write failing schema tests for `page=1`, `pageSize=20`, maximum 100, optional trimmed keyword/status, note/version UUID params, empty public command bodies and the admin command payloads.
 - [ ] Specify admin command bodies exactly: publish `{ version_id, expected_status }`; archive/withdraw `{ expected_status, reason }`, with non-empty bounded reasons.
 - [ ] Specify that `Idempotency-Key` is a required UUID-format HTTP header for publish/archive/withdraw and is not accepted in the JSON body.
 - [ ] Write failing repository tests using a fake Supabase query builder/RPC client. Assert list queries select only preview/aggregate columns, use `.range(offset, offset + pageSize - 1)`, and order by timestamp descending then ID descending.
-- [ ] Add tests for strict Zod parsing of database rows and RPC results, including malformed nullable fields and a missing published-version relation.
+- [ ] Add tests for strict Zod parsing of database rows and RPC results, including malformed nullable fields, a missing published-version relation, complete transition publication shapes and service-only subject-erasure results.
 - [ ] Run the focused tests; expect missing implementation failures.
 - [ ] Implement public and admin schemas using shared domain schemas and existing Chinese validation messages.
-- [ ] Implement repository methods for tenant list/detail/version list and public list/preview/owned list; never select `content_blocks` in any list.
+- [ ] Implement repository methods for tenant list/detail/version-summary list/version detail and public list/preview/owned list. Never select `content_blocks` in a list; the tenant version-detail query must filter tenant ID, note ID and version ID together.
 - [ ] Keep direct Supabase/SQL/RPC calls exclusively in the repository. Map database codes to typed repository failures without throwing raw `Error` from controllers/services.
-- [ ] Implement command methods for create, append version, transition, claim, remove and clear using the migration RPC names and generated Supabase argument types where available.
+- [ ] Implement command methods for create, append version, transition, claim, remove and clear, plus the service-only subject-erasure gateway, using the migration RPC names and generated Supabase argument types where available.
 - [ ] Run `bun test apps/api/src/schema/douyin-material-notes.test.ts apps/api/src/schema/tenant-douyin-material-notes.test.ts apps/api/src/repositories/douyin-material-notes.test.ts`; expect pass.
 - [ ] Commit with `feat(api): add material note schemas and repository`.
 
@@ -207,13 +208,13 @@
 - Modify: `apps/api/src/routes/index.ts`
 - Modify: `apps/api/src/services/tenant-service-capability-map.test.ts`
 
-- [ ] Write failing service tests proving `read` gates list/detail/version history, `manage` gates create/new-version, and `publish` gates publish/archive/withdraw.
-- [ ] Add tests that tenant and employee IDs come only from `accessPolicyService.assertTenantContext`, cross-tenant resources become `MATERIAL_NOTE_NOT_FOUND`, and list responses expose aggregate counts but no claimant rows or subject hashes.
+- [ ] Write failing service tests proving `read` gates list/detail/version history/version detail, `manage` gates create/new-version, and `publish` gates publish/archive/withdraw.
+- [ ] Add tests that tenant and employee IDs come only from `accessPolicyService.assertTenantContext`, cross-tenant resources and version-detail note mismatches become `MATERIAL_NOTE_NOT_FOUND`, and list responses expose aggregate counts but no claimant rows, subject hashes or version bodies.
 - [ ] Add state tests for every allowed transition and reject draft withdrawal, archived archive, withdrawn recovery, mismatched target version, stale expected state and reused idempotency key with changed payload.
-- [ ] Write controller inventory tests for all eight `/tenant/douyin-material-notes` endpoints and verify `ResponseHandler.success` wrapping.
+- [ ] Write controller inventory tests for all nine `/tenant/douyin-material-notes` endpoints, including `GET /:id/versions/:versionId`, and verify `ResponseHandler.success` wrapping.
 - [ ] Add header tests for missing/invalid `Idempotency-Key`, body validation and default pagination.
 - [ ] Run the focused service/controller tests; expect missing implementation failures.
-- [ ] Implement the tenant service with access-policy checks, repository orchestration and error-factory mappings. Preserve 404 for cross-tenant access and 409 for state/version/idempotency conflicts.
+- [ ] Implement the tenant service with access-policy checks, repository orchestration and error-factory mappings. Preserve 404 for cross-tenant access, missing or mismatched version detail, and 409 for publish state/version/idempotency conflicts.
 - [ ] Implement the controller as HTTP-only glue: parse request, call service and wrap success. Do not query Supabase or perform state transitions in the controller.
 - [ ] Register the controller in `apps/api/src/routes/index.ts`.
 - [ ] Extend route capability classification tests to include every new tenant route and assert the existing top-level `tenant` exclusion reports `not_trial_capability`; do not add a new paid capability mapping.
@@ -270,11 +271,11 @@
 - Create: `apps/admin/app/(console)/douyin-miniapp/materials/new/page.tsx`
 - Create: `apps/admin/app/(console)/douyin-miniapp/materials/[id]/page.tsx`
 
-- [ ] Write failing contract/API tests for list filters, page/pageSize, create-with-version, append-version and UUID idempotency headers on state commands.
+- [ ] Write failing contract/API tests for list filters, page/pageSize, body-free version history plus the separate version-detail request, create-with-version, append-version and UUID idempotency headers on state commands.
 - [ ] Write failing UI tests for the status/action matrix and permissions: read-only users see content; manage controls require manage; publish/archive/withdraw require publish.
 - [ ] Add tests that withdrawn reason is required, withdrawal confirmation is distinct from archive, and no component renders claimant identity or a claimant-export action.
 - [ ] Run the focused tests; expect missing implementation failures.
-- [ ] Implement strict response parsing and calls through the existing authenticated `requestBackendJson` pattern.
+- [ ] Implement strict response parsing and calls through the existing authenticated `requestBackendJson` pattern. Load version history without `content_blocks`, then fetch the selected immutable version through `GET /tenant/douyin-material-notes/:id/versions/:versionId` for preview or publish confirmation.
 - [ ] Extend `SiteContentBlockEditor` with an optional allowed-types property defaulting to its current complete set. Pass only heading/paragraph/list/quote/callout in the material editor and retain server-schema validation as the final authority.
 - [ ] Implement the list with keyword/status controls, URL-backed page state, default 20, max 100, stable loading/empty/error states and aggregate columns only.
 - [ ] Implement create so one submission creates the note and immutable version 1. Implement later saves as new versions; never mutate an existing version.

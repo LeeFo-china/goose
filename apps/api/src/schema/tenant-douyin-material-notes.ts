@@ -4,6 +4,7 @@ import {
   DouyinMaterialNoteTenantDetailSchema,
   DouyinMaterialNoteTenantListSchema,
   DouyinMaterialNoteTenantVersionListSchema,
+  DouyinMaterialNoteTenantVersionSchema,
   DouyinMaterialNoteVersionDraftSchema,
 } from '@gooes/domain';
 import { z } from 'zod';
@@ -27,6 +28,10 @@ export const TenantDouyinMaterialNoteListQuerySchema =
 export const TenantDouyinMaterialNoteIdParamsSchema = z.strictObject({
   id: z.uuid('无效的资料 ID'),
 });
+export const TenantDouyinMaterialNoteVersionParamsSchema = z.strictObject({
+  id: z.uuid('无效的资料 ID'),
+  versionId: z.uuid('无效的资料版本 ID'),
+});
 
 export const CreateTenantDouyinMaterialNoteSchema =
   DouyinMaterialNoteVersionDraftSchema;
@@ -48,9 +53,9 @@ export const TenantDouyinMaterialNoteArchiveSchema =
 export const TenantDouyinMaterialNoteWithdrawSchema =
   z.strictObject(ReasonCommandShape);
 
-export const TenantDouyinMaterialNoteCommandHeadersSchema = z.strictObject({
+export const TenantDouyinMaterialNoteCommandHeadersSchema = z.object({
   'idempotency-key': z.uuid('Idempotency-Key 格式无效'),
-});
+}).strip();
 
 export const TenantDouyinMaterialNoteListResponseSchema =
   DouyinMaterialNoteTenantListSchema;
@@ -58,6 +63,40 @@ export const TenantDouyinMaterialNoteDetailResponseSchema =
   DouyinMaterialNoteTenantDetailSchema;
 export const TenantDouyinMaterialNoteVersionListResponseSchema =
   DouyinMaterialNoteTenantVersionListSchema;
+export const TenantDouyinMaterialNoteVersionDetailResponseSchema =
+  DouyinMaterialNoteTenantVersionSchema;
+
+export const TenantDouyinMaterialNoteCreateResultSchema = z.strictObject({
+  note_id: z.uuid(),
+  version_id: z.uuid(),
+  version_no: z.number().int().positive(),
+  status: z.literal('draft'),
+});
+export const TenantDouyinMaterialNoteAppendResultSchema =
+  TenantDouyinMaterialNoteCreateResultSchema.extend({
+    status: ExpectedStatusSchema,
+  }).strict();
+export const TenantDouyinMaterialNoteTransitionResultSchema = z.strictObject({
+  note_id: z.uuid(),
+  status: ExpectedStatusSchema,
+  published_version_id: z.uuid().nullable(),
+  published_at: z.iso.datetime({ offset: true }).nullable(),
+}).superRefine((value, context) => {
+  const hasPublishedVersion = value.published_version_id !== null;
+  const hasPublishedAt = value.published_at !== null;
+  const isInvalid = value.status === 'draft'
+    ? hasPublishedVersion || hasPublishedAt
+    : value.status === 'published'
+      ? !hasPublishedVersion || !hasPublishedAt
+      : hasPublishedVersion !== hasPublishedAt;
+  if (isInvalid) {
+    context.addIssue({
+      code: 'custom',
+      path: ['published_version_id'],
+      message: '资料发布版本和时间组合无效',
+    });
+  }
+});
 
 const RepositoryDateTimeSchema = z.iso.datetime({ offset: true });
 const RepositoryVersionPreviewShape = {
@@ -75,6 +114,10 @@ export const TenantDouyinMaterialNoteRepositoryVersionSchema = z.strictObject({
   created_by: z.uuid(),
   created_at: RepositoryDateTimeSchema,
 });
+export const TenantDouyinMaterialNoteRepositoryVersionSummarySchema =
+  TenantDouyinMaterialNoteRepositoryVersionSchema.omit({
+    content_blocks: true,
+  }).strict();
 const RepositoryLatestSummarySchema = z.strictObject({
   version_no: RepositoryVersionPreviewShape.version_no,
   title: RepositoryVersionPreviewShape.title,

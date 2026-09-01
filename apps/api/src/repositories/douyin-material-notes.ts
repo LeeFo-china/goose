@@ -1,5 +1,4 @@
 import {
-  DOUYIN_MATERIAL_NOTE_STATUS_VALUES,
   DouyinMaterialNoteClaimResponseSchema,
   type DouyinMaterialNoteStatus,
   type DouyinMaterialNoteVersionDraft,
@@ -12,12 +11,19 @@ import {
   DouyinMaterialNoteRepositoryOwnedDetailRowSchema,
   DouyinMaterialNoteRepositoryOwnedRowSchema,
   DouyinMaterialNoteRepositoryPublicRowSchema,
+  DouyinMaterialNoteClearResponseSchema,
+  DouyinMaterialNoteErasureResultSchema,
+  DouyinMaterialNoteRemoveResponseSchema,
 } from '@/schema/douyin-material-notes';
 import {
+  TenantDouyinMaterialNoteAppendResultSchema,
+  TenantDouyinMaterialNoteCreateResultSchema,
   TenantDouyinMaterialNoteRepositoryDetailRowSchema,
   TenantDouyinMaterialNoteRepositoryListRowSchema,
   TenantDouyinMaterialNoteRepositorySearchListRowSchema,
+  TenantDouyinMaterialNoteRepositoryVersionSummarySchema,
   TenantDouyinMaterialNoteRepositoryVersionSchema,
+  TenantDouyinMaterialNoteTransitionResultSchema,
 } from '@/schema/tenant-douyin-material-notes';
 import { SupabaseDB } from '@/utils/supabase';
 
@@ -49,6 +55,7 @@ const MATERIAL_NOTE_RPC_NAMES = [
   'claim_douyin_material_note',
   'remove_douyin_material_note_claim',
   'clear_douyin_material_note_claims',
+  'erase_douyin_material_note_subject_data',
 ] as const;
 type MaterialNoteRpcName = typeof MATERIAL_NOTE_RPC_NAMES[number];
 
@@ -60,43 +67,15 @@ export interface DouyinMaterialNotesDatabaseClient {
   ): PromiseLike<DouyinMaterialNotesDatabaseResult>;
 }
 
-const DateTimeSchema = z.iso.datetime({ offset: true });
-const CreateResultSchema = z.strictObject({
-  note_id: z.uuid(),
-  version_id: z.uuid(),
-  version_no: z.number().int().positive(),
-  status: z.literal('draft'),
-});
-const AppendResultSchema = CreateResultSchema.extend({
-  status: z.enum(DOUYIN_MATERIAL_NOTE_STATUS_VALUES),
-}).strict();
-const TransitionResultSchema = z.strictObject({
-  note_id: z.uuid(),
-  status: z.enum(DOUYIN_MATERIAL_NOTE_STATUS_VALUES),
-  published_version_id: z.uuid().nullable(),
-  published_at: DateTimeSchema.nullable(),
-}).superRefine((value, context) => {
-  if (
-    value.status === 'published'
-    && (value.published_version_id === null || value.published_at === null)
-  ) {
-    context.addIssue({
-      code: 'custom',
-      path: ['published_version_id'],
-      message: '已发布资料必须包含发布版本和时间',
-    });
-  }
-});
-const RemoveResultSchema = z.strictObject({ removed: z.literal(true) });
-const ClearResultSchema = z.strictObject({
-  removed_count: z.number().int().nonnegative(),
-});
-
 const PUBLIC_SELECT = [
   'id,published_at',
   'published_version:douyin_material_note_versions!douyin_material_notes_published_version_owner_fkey(title,summary,category,applicable_to)',
   'claims:douyin_material_note_claims!douyin_material_note_claims_note_tenant_fkey(id)',
 ].join(',');
+const PUBLIC_SEARCH_SELECT = PUBLIC_SELECT.replace(
+  'douyin_material_notes_published_version_owner_fkey(',
+  'douyin_material_notes_published_version_owner_fkey!inner(',
+);
 const TENANT_LIST_SELECT = [
   'id,status,published_at,updated_at',
   'latest_versions:douyin_material_note_versions!douyin_material_note_versions_note_tenant_fkey(version_no,title,category)',
@@ -104,11 +83,13 @@ const TENANT_LIST_SELECT = [
 ].join(',');
 const SEARCH_RELATION_SELECT =
   ',search_versions:douyin_material_note_versions!douyin_material_note_versions_note_tenant_fkey!inner(id)';
-const VERSION_SELECT =
+const VERSION_SUMMARY_SELECT =
+  'id,note_id,version_no,title,summary,category,applicable_to,created_by,created_at';
+const VERSION_DETAIL_SELECT =
   'id,note_id,version_no,title,summary,category,applicable_to,content_blocks,created_by,created_at';
 const TENANT_DETAIL_SELECT = [
   'id,status,published_version_id,published_at,created_at,updated_at',
-  `latest_versions:douyin_material_note_versions!douyin_material_note_versions_note_tenant_fkey(${VERSION_SELECT})`,
+  `latest_versions:douyin_material_note_versions!douyin_material_note_versions_note_tenant_fkey(${VERSION_DETAIL_SELECT})`,
   'claims:douyin_material_note_claims!douyin_material_note_claims_note_tenant_fkey(count)',
 ].join(',');
 const OWNED_SELECT = [
@@ -116,10 +97,11 @@ const OWNED_SELECT = [
   'note:douyin_material_notes!douyin_material_note_claims_note_tenant_fkey(id,status)',
   'claimed_version:douyin_material_note_versions!douyin_material_note_claims_version_owner_fkey(version_no,title,summary,category,applicable_to)',
 ].join(',');
-const OWNED_DETAIL_SELECT = OWNED_SELECT.replace(
-  'version_no,title,summary,category,applicable_to)',
-  'id,version_no,title,summary,category,applicable_to,content_blocks,created_by,created_at)',
-);
+const OWNED_DETAIL_SELECT = [
+  'id,claimed_at',
+  'note:douyin_material_notes!douyin_material_note_claims_note_tenant_fkey(id,status)',
+  'claimed_version:douyin_material_note_versions!douyin_material_note_claims_version_owner_fkey(version_no,title,summary,category,applicable_to,content_blocks)',
+].join(',');
 
 type PageInput = { readonly page: number; readonly pageSize: number };
 type PublicIdentityInput = {
@@ -136,7 +118,8 @@ export class DouyinMaterialNotesRepository {
 
   async listPublic(input: PublicIdentityInput & PageInput & { readonly keyword?: string }) {
     return execute('查询抖音资料列表失败', async () => {
-      let query = this.publicQuery(input, PUBLIC_SELECT, { count: 'exact' });
+      const columns = input.keyword ? PUBLIC_SEARCH_SELECT : PUBLIC_SELECT;
+      let query = this.publicQuery(input, columns, { count: 'exact' });
       if (input.keyword) query = query.or(searchFilter(input.keyword), {
         referencedTable: 'published_version',
       });
@@ -199,10 +182,23 @@ export class DouyinMaterialNotesRepository {
   async listVersions(input: PageInput & { readonly tenantId: string; readonly noteId: string }) {
     return execute('查询抖音资料版本失败', async () => {
       const result = await this.client.from('douyin_material_note_versions')
-        .select(VERSION_SELECT, { count: 'exact' }).eq('tenant_id', input.tenantId)
-        .eq('note_id', input.noteId).order('version_no', { ascending: false })
+        .select(VERSION_SUMMARY_SELECT, { count: 'exact' }).eq('tenant_id', input.tenantId)
+        .eq('note_id', input.noteId).order('created_at', { ascending: false })
         .order('id', { ascending: false }).range(...pageRange(input));
-      return pageResult(TenantDouyinMaterialNoteRepositoryVersionSchema, result);
+      return pageResult(TenantDouyinMaterialNoteRepositoryVersionSummarySchema, result);
+    });
+  }
+
+  async findTenantVersionDetail(input: {
+    readonly tenantId: string;
+    readonly noteId: string;
+    readonly versionId: string;
+  }) {
+    return execute('查询抖音资料版本详情失败', async () => {
+      const result = await this.client.from('douyin_material_note_versions')
+        .select(VERSION_DETAIL_SELECT).eq('tenant_id', input.tenantId)
+        .eq('note_id', input.noteId).eq('id', input.versionId).maybeSingle();
+      return optionalResult(TenantDouyinMaterialNoteRepositoryVersionSchema, result);
     });
   }
 
@@ -228,7 +224,11 @@ export class DouyinMaterialNotesRepository {
     readonly actorEmployeeId: string;
     readonly draft: DouyinMaterialNoteVersionDraft;
   }) {
-    return this.draftCommand('create_douyin_material_note', input, CreateResultSchema);
+    return this.draftCommand(
+      'create_douyin_material_note',
+      input,
+      TenantDouyinMaterialNoteCreateResultSchema,
+    );
   }
 
   appendVersion(input: {
@@ -237,7 +237,11 @@ export class DouyinMaterialNotesRepository {
     readonly actorEmployeeId: string;
     readonly draft: DouyinMaterialNoteVersionDraft;
   }) {
-    return this.draftCommand('append_douyin_material_note_version', input, AppendResultSchema);
+    return this.draftCommand(
+      'append_douyin_material_note_version',
+      input,
+      TenantDouyinMaterialNoteAppendResultSchema,
+    );
   }
 
   transition(input: {
@@ -259,7 +263,7 @@ export class DouyinMaterialNotesRepository {
       p_expected_status: input.expectedStatus,
       p_reason: input.reason,
       p_idempotency_key: input.idempotencyKey,
-    }, TransitionResultSchema, '执行抖音资料状态命令失败');
+    }, TenantDouyinMaterialNoteTransitionResultSchema, '执行抖音资料状态命令失败');
   }
 
   claim(input: PublicIdentityInput & { readonly noteId: string }) {
@@ -271,12 +275,17 @@ export class DouyinMaterialNotesRepository {
   remove(input: PublicIdentityInput & { readonly claimId: string }) {
     return this.rpc('remove_douyin_material_note_claim', publicRpcArgs(input, {
       p_claim_id: input.claimId,
-    }), RemoveResultSchema, '移除已领取抖音资料失败');
+    }), DouyinMaterialNoteRemoveResponseSchema, '移除已领取抖音资料失败');
   }
 
   clear(input: PublicIdentityInput) {
     return this.rpc('clear_douyin_material_note_claims', publicRpcArgs(input),
-      ClearResultSchema, '清空已领取抖音资料失败');
+      DouyinMaterialNoteClearResponseSchema, '清空已领取抖音资料失败');
+  }
+
+  eraseSubjectData(input: PublicIdentityInput) {
+    return this.rpc('erase_douyin_material_note_subject_data', publicRpcArgs(input),
+      DouyinMaterialNoteErasureResultSchema, '删除抖音资料主体关联数据失败');
   }
 
   private publicQuery(
@@ -360,9 +369,11 @@ function pageRange(input: PageInput): [number, number] {
 }
 
 function searchFilter(keyword: string): string {
-  const escaped = keyword.replace(/\\/g, '\\\\').replace(/[%_(),]/g, '\\$&');
+  const escaped = keyword.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+    .replace(/[%_]/g, '\\$&');
+  const operand = `"%${escaped}%"`;
   return ['title', 'summary', 'category']
-    .map((column) => `${column}.ilike.%${escaped}%`).join(',');
+    .map((column) => `${column}.ilike.${operand}`).join(',');
 }
 
 function pageResult<Schema extends z.ZodType>(
@@ -373,7 +384,8 @@ function pageResult<Schema extends z.ZodType>(
   if (!Number.isSafeInteger(result.count) || result.count! < 0) {
     throw invalidResponse();
   }
-  return { rows: parse(z.array(schema).max(100), result.data ?? []), total: result.count! };
+  if (!Array.isArray(result.data)) throw invalidResponse();
+  return { rows: parse(z.array(schema).max(100), result.data), total: result.count! };
 }
 
 function optionalResult<Schema extends z.ZodType>(
@@ -426,6 +438,8 @@ function databaseFailure(error: unknown, fallbackMessage: string): AppError {
     ['MATERIAL_NOTE_TENANT_NOT_ACTIVE', 409, '租户当前不可执行资料命令'],
     ['MATERIAL_NOTE_ACTOR_NOT_ACTIVE', 409, '员工当前不可执行资料命令'],
     ['MATERIAL_NOTE_INSTALLATION_NOT_ACTIVE', 409, '小程序安装当前不可用'],
+    ['MATERIAL_NOTE_TENANT_NOT_FOUND', 404, '租户不存在'],
+    ['MATERIAL_NOTE_INSTALLATION_NOT_FOUND', 404, '小程序安装不存在'],
   ];
   for (const [code, statusCode, message] of mappings) {
     if (text.includes(code)) return Errors.business(statusCode, message, code);

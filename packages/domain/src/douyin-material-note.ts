@@ -144,6 +144,9 @@ export const DouyinMaterialNoteTenantVersionSchema = z.strictObject({
   created_at: TimestampSchema,
 });
 
+export const DouyinMaterialNoteTenantVersionSummarySchema =
+  DouyinMaterialNoteTenantVersionSchema.omit({ content_blocks: true }).strict();
+
 const TenantSummaryShape = {
   id: IdSchema,
   status: DouyinMaterialNoteStatusSchema,
@@ -264,7 +267,7 @@ export const DouyinMaterialNoteTenantListSchema =
   createMaterialNoteListSchema(DouyinMaterialNoteTenantSummarySchema);
 
 export const DouyinMaterialNoteTenantVersionListSchema =
-  createMaterialNoteListSchema(DouyinMaterialNoteTenantVersionSchema);
+  createMaterialNoteListSchema(DouyinMaterialNoteTenantVersionSummarySchema);
 
 export type DouyinMaterialNoteStatus =
   (typeof DOUYIN_MATERIAL_NOTE_STATUS_VALUES)[number];
@@ -307,6 +310,9 @@ export type DouyinMaterialNoteTenantDetail = z.infer<
 >;
 export type DouyinMaterialNoteTenantVersion = z.infer<
   typeof DouyinMaterialNoteTenantVersionSchema
+>;
+export type DouyinMaterialNoteTenantVersionSummary = z.infer<
+  typeof DouyinMaterialNoteTenantVersionSummarySchema
 >;
 export type DouyinMaterialNotePagination = z.infer<
   typeof DouyinMaterialNotePaginationSchema
