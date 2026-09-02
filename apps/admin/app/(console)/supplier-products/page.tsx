@@ -13,6 +13,7 @@ export default async function SupplierProductsPage() {
     <SupplierProductWorkspace
       canViewProducts={permissions.has("supplier.product.view")}
       canManageProducts={permissions.has("supplier.product.manage")}
+      canManageCatalog={permissions.has("supplier.catalog.manage")}
       canViewCostPrice={permissions.has("supplier.cost-price.view")}
       canManageCostPrice={permissions.has("supplier.cost-price.manage")}
     />

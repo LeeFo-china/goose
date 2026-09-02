@@ -12,7 +12,9 @@ describe("SupplierCatalogController routes", () => {
     const fastify = {
       get: (path: string) => routes.push({ method: "GET", path }),
       post: (path: string) => routes.push({ method: "POST", path }),
+      put: (path: string) => routes.push({ method: "PUT", path }),
       patch: (path: string) => routes.push({ method: "PATCH", path }),
+      delete: (path: string) => routes.push({ method: "DELETE", path }),
     };
 
     controller.registerExtraRoutes(fastify as never);
@@ -26,6 +28,24 @@ describe("SupplierCatalogController routes", () => {
       { method: "POST", path: "/catalog/brands" },
       { method: "PATCH", path: "/catalog/brands/:id" },
       { method: "GET", path: "/catalog/units" },
+      { method: "GET", path: "/catalog/cost-category-options" },
+      { method: "GET", path: "/catalog/cost-category-rules" },
+      {
+        method: "PUT",
+        path: "/catalog/cost-category-rules/categories/:id",
+      },
+      {
+        method: "DELETE",
+        path: "/catalog/cost-category-rules/categories/:id",
+      },
+      {
+        method: "PUT",
+        path: "/catalog/cost-category-rules/products/:id",
+      },
+      {
+        method: "DELETE",
+        path: "/catalog/cost-category-rules/products/:id",
+      },
       { method: "GET", path: "/catalog/categories/:id/spec-definitions" },
       { method: "POST", path: "/catalog/categories/:id/spec-definitions" },
       {
@@ -166,7 +186,9 @@ function registeredHandlers(controller: {
   controller.registerExtraRoutes({
     get: register("GET"),
     post: register("POST"),
+    put: register("PUT"),
     patch: register("PATCH"),
+    delete: register("DELETE"),
   });
   return routes;
 }

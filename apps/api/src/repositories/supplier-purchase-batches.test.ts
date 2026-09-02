@@ -189,40 +189,38 @@ describe("SupplierPurchaseBatchesRepository", () => {
     }
   });
 
-  test("uses one catalog RPC with the exact bounded parameters", async () => {
-    const { repository, requests } = await repositoryFor(() => ({
-      body: { items: [catalogItem], total: 21, page: 2, page_size: 20 },
+  test("uses bounded catalog and cost category resolver RPC parameters", async () => {
+    const { repository, requests } = await repositoryFor((_request, index) => ({
+      body: index === 0
+        ? { items: [catalogItem], total: 21, page: 2, page_size: 20 }
+        : [{
+          supplier_sku_id: SKU_ID,
+          cost_category_id: CATEGORY_ID,
+          cost_category_name: "主材",
+          source: "category",
+        }],
     }));
 
     const result = await repository.listCatalog({
       tenant_id: TENANT_ID,
       project_id: PROJECT_ID,
-      keyword: "瓷砖",
-      category_id: CATEGORY_ID,
-      brand_id: BRAND_ID,
-      tenant_supplier_id: RELATIONSHIP_ID,
       priced_at: AT,
       page: 2,
       pageSize: 20,
     });
 
-    expect(result.list).toEqual([catalogItem]);
+    expect(result.list).toEqual([{
+      ...catalogItem,
+      default_cost_category_id: CATEGORY_ID,
+      default_cost_category_name: "主材",
+      cost_category_source: "category",
+    }]);
     expect(result.pagination).toEqual(page(2, 20, 21));
-    expect(requests).toHaveLength(1);
-    expect(new URL(requests[0]!.url).pathname).toEndWith(
-      "/rpc/resolve_supplier_purchase_batch_catalog",
-    );
-    expect(await requests[0]!.clone().json()).toEqual({
-      p_tenant_id: TENANT_ID,
-      p_project_id: PROJECT_ID,
-      p_keyword: "瓷砖",
-      p_category_id: CATEGORY_ID,
-      p_brand_id: BRAND_ID,
-      p_tenant_supplier_id: RELATIONSHIP_ID,
-      p_priced_at: AT,
-      p_page: 2,
-      p_page_size: 20,
-    });
+    expect(requests).toHaveLength(2);
+    expect(requests.map((request) => new URL(request.url).pathname)).toEqual([
+      "/rest/v1/rpc/resolve_supplier_purchase_batch_catalog",
+      "/rest/v1/rpc/resolve_tenant_supplier_sku_cost_categories",
+    ]);
   });
 
   test("lists bounded visible projects and active cost categories", async () => {

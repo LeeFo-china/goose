@@ -7,6 +7,7 @@ import { ArrowLeft, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 import { DataTable } from "@/components/admin/data-table";
+import { CostCategoryRuleDialog } from "@/components/supplier-cost-category/cost-category-rule-dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -44,6 +45,7 @@ export function SupplierProductList({
   products,
   loading,
   canManage,
+  canManageCatalog,
   inlinePriceEnabled = false,
   onRefresh,
   onAvailableSkusChange,
@@ -54,6 +56,7 @@ export function SupplierProductList({
   products: SupplierProductPage;
   loading: boolean;
   canManage: boolean;
+  canManageCatalog: boolean;
   inlinePriceEnabled?: boolean;
   onRefresh: () => void | Promise<void>;
   onAvailableSkusChange: (skus: SupplierSku[]) => void;
@@ -313,11 +316,19 @@ export function SupplierProductList({
                 </Button>
               </>
             ) : null}
+            {scope.kind === "tenant" && canManageCatalog ? (
+              <CostCategoryRuleDialog
+                scope="product"
+                targetId={row.original.id}
+                targetName={row.original.name}
+                onSaved={onRefresh}
+              />
+            ) : null}
           </div>
         );
       },
     },
-  ], [canManage, onRefresh, openSkuWorkspace, relationship, scope]);
+  ], [canManage, canManageCatalog, onRefresh, openSkuWorkspace, relationship, scope]);
 
   if (loading && products.list.length === 0) {
     return (

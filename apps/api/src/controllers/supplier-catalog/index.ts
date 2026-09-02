@@ -21,7 +21,16 @@ import {
   TenantCatalogCategoryUpdateSchema,
 } from "@/schema/supplier-catalog";
 import { supplierCatalogService } from "@/services/supplier-catalog";
-import { Get, Patch, Post } from "@/utils/decorators/route";
+import {
+  SupplierCostCategoryOptionQuerySchema,
+  SupplierCostCategoryRuleDeleteSchema,
+  SupplierCostCategoryRuleListQuerySchema,
+  SupplierCostCategoryRuleTargetParamSchema,
+  SupplierCostCategoryRuleUpsertSchema,
+  type SupplierCostCategoryRuleScope,
+} from "@/schema/supplier-cost-category-rules";
+import { supplierCostCategoryRulesService } from "@/services/supplier-cost-category-rules";
+import { Delete, Get, Patch, Post, Put } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import { parseCatalogRequest, requireIdempotencyKey } from "./http";
 
@@ -131,6 +140,50 @@ class SupplierCatalogController extends TenantBaseController {
     );
   }
 
+  @Get("/catalog/cost-category-options")
+  async listCostCategoryOptions(request: FastifyRequest) {
+    const auth = await this.getRequiredTenantContext(request);
+    const query = parseCatalogRequest(
+      SupplierCostCategoryOptionQuerySchema,
+      request.query,
+    );
+    return ResponseHandler.success(
+      await supplierCostCategoryRulesService.listCostCategoryOptions(auth, query),
+    );
+  }
+
+  @Get("/catalog/cost-category-rules")
+  async listCostCategoryRules(request: FastifyRequest) {
+    const auth = await this.getRequiredTenantContext(request);
+    const query = parseCatalogRequest(
+      SupplierCostCategoryRuleListQuerySchema,
+      request.query,
+    );
+    return ResponseHandler.success(
+      await supplierCostCategoryRulesService.listRules(auth, query),
+    );
+  }
+
+  @Put("/catalog/cost-category-rules/categories/:id")
+  saveCategoryCostCategoryRule(request: FastifyRequest) {
+    return this.saveCostCategoryRule(request, "category");
+  }
+
+  @Delete("/catalog/cost-category-rules/categories/:id")
+  deleteCategoryCostCategoryRule(request: FastifyRequest) {
+    return this.deleteCostCategoryRule(request, "category");
+  }
+
+  @Put("/catalog/cost-category-rules/products/:id")
+  saveProductCostCategoryRule(request: FastifyRequest) {
+    return this.saveCostCategoryRule(request, "product");
+  }
+
+  @Delete("/catalog/cost-category-rules/products/:id")
+  deleteProductCostCategoryRule(request: FastifyRequest) {
+    return this.deleteCostCategoryRule(request, "product");
+  }
+
   @Get("/catalog/categories/:id/spec-definitions")
   async listSpecDefinitions(request: FastifyRequest) {
     const auth = await this.getRequiredTenantContext(request);
@@ -227,6 +280,47 @@ class SupplierCatalogController extends TenantBaseController {
     );
     return ResponseHandler.success(
       await supplierCatalogService.submitTenantUnitSuggestion(auth, input, key),
+    );
+  }
+
+  private async saveCostCategoryRule(
+    request: FastifyRequest,
+    scope: SupplierCostCategoryRuleScope,
+  ) {
+    const auth = await this.getRequiredTenantContext(request);
+    const { id } = parseCatalogRequest(
+      SupplierCostCategoryRuleTargetParamSchema,
+      request.params,
+    );
+    const input = parseCatalogRequest(
+      SupplierCostCategoryRuleUpsertSchema,
+      request.body,
+    );
+    return ResponseHandler.success(
+      await supplierCostCategoryRulesService.saveRule(auth, scope, id, input),
+    );
+  }
+
+  private async deleteCostCategoryRule(
+    request: FastifyRequest,
+    scope: SupplierCostCategoryRuleScope,
+  ) {
+    const auth = await this.getRequiredTenantContext(request);
+    const { id } = parseCatalogRequest(
+      SupplierCostCategoryRuleTargetParamSchema,
+      request.params,
+    );
+    const { expected_version } = parseCatalogRequest(
+      SupplierCostCategoryRuleDeleteSchema,
+      request.body,
+    );
+    return ResponseHandler.success(
+      await supplierCostCategoryRulesService.deleteRule(
+        auth,
+        scope,
+        id,
+        expected_version,
+      ),
     );
   }
 }

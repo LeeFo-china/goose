@@ -194,7 +194,7 @@ export function PlatformSupplierProductWorkspace() {
             </CardHeader>
           ) : null}
           <CardContent className="p-0">
-            <SupplierProductList key={supplierId} scope={scope} products={products} loading={productLoading} canManage onRefresh={loadProducts} onAvailableSkusChange={() => undefined} onSkuWorkspaceChange={setSkuWorkspaceVisible} />
+            <SupplierProductList key={supplierId} scope={scope} products={products} loading={productLoading} canManage canManageCatalog={false} onRefresh={loadProducts} onAvailableSkusChange={() => undefined} onSkuWorkspaceChange={setSkuWorkspaceVisible} />
             {!skuWorkspaceVisible ? (
               <div className="flex items-center justify-between gap-3 border-t px-4 py-3">
                 <span className="text-sm text-muted-foreground">第 {products.pagination.page} / {totalPages} 页，共 {products.pagination.total} 个商品</span>

@@ -241,7 +241,7 @@ export const SupplierPurchaseBatchItemSchema = z.object({
   updated_at: dateTime,
 }).strict();
 
-export const SupplierPurchaseBatchCatalogItemSchema =
+export const SupplierPurchaseBatchCatalogBaseItemSchema =
   SupplierPurchaseOrderCatalogItemSchema.extend({
     category_id: uuid,
     category_name: z.string().min(1),
@@ -257,8 +257,26 @@ export const SupplierPurchaseBatchCatalogItemSchema =
     purchasable_status: z.literal("purchasable"),
   }).strict();
 
+export const SupplierPurchaseBatchCatalogItemSchema =
+  SupplierPurchaseBatchCatalogBaseItemSchema.extend({
+    default_cost_category_id: uuid.nullable(),
+    default_cost_category_name: z.string().min(1).nullable(),
+    cost_category_source: z.enum([
+      "product",
+      "category",
+      "ancestor",
+    ]).nullable(),
+  }).strict();
+
+export const SupplierSkuCostCategoryDefaultSchema = z.object({
+  supplier_sku_id: uuid,
+  cost_category_id: uuid,
+  cost_category_name: z.string().min(1),
+  source: z.enum(["product", "category", "ancestor"]),
+}).strict();
+
 export const SupplierPurchaseBatchCatalogResultSchema = z.object({
-  items: z.array(SupplierPurchaseBatchCatalogItemSchema).max(100),
+  items: z.array(SupplierPurchaseBatchCatalogBaseItemSchema).max(100),
   total: z.number().int().nonnegative(),
   page: z.number().int().positive(),
   page_size: z.number().int().positive().max(100),
@@ -320,6 +338,8 @@ export type SupplierPurchaseBatchItem =
   z.infer<typeof SupplierPurchaseBatchItemSchema>;
 export type SupplierPurchaseBatchCatalogItem =
   z.infer<typeof SupplierPurchaseBatchCatalogItemSchema>;
+export type SupplierSkuCostCategoryDefault =
+  z.infer<typeof SupplierSkuCostCategoryDefaultSchema>;
 export type SupplierPurchaseBatchRequisition =
   z.infer<typeof SupplierPurchaseBatchRequisitionSchema>;
 export type SupplierPurchaseBatchOrder =

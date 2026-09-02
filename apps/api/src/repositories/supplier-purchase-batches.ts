@@ -8,6 +8,7 @@ import {
 } from "@/repositories/supplier-purchase-batch-command-gateway";
 import { SupplierPurchaseBatchWorkflowRepository } from
   "@/repositories/supplier-purchase-batch-workflow";
+import { enrichCatalogCostCategoryDefaults, resolveSupplierSkuCostCategoryDefaults } from "@/repositories/supplier-purchase-cost-category-resolution";
 import {
   SUPPLIER_PURCHASE_BATCH_SELECT,
   SupplierPurchaseBatchCatalogResultSchema,
@@ -249,10 +250,19 @@ export class SupplierPurchaseBatchesRepository {
       data,
       "查询供应商采购批次目录失败",
     );
+    const items = await enrichCatalogCostCategoryDefaults(
+      this.client, input.tenant_id, result.items,
+    );
     return toPage(
-      result.items,
+      items,
       { page: result.page, pageSize: result.page_size },
       result.total,
+    );
+  }
+
+  resolveCostCategoryDefaults(tenantId: string, supplierSkuIds: string[]) {
+    return resolveSupplierSkuCostCategoryDefaults(
+      this.client, tenantId, supplierSkuIds,
     );
   }
 

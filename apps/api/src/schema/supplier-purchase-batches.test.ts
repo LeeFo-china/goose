@@ -184,6 +184,15 @@ describe("supplier purchase batch draft schema", () => {
     });
     expect(SupplierPurchaseBatchDraftSchema.parse(draft())
       .items[0]?.quantity).toBe("20.0000");
+    expect(SupplierPurchaseBatchDraftSchema.parse(draft({
+      items: [{
+        supplier_sku_id: SKU_ID,
+        quantity: "1",
+      }],
+    })).items[0]).toEqual({
+      supplier_sku_id: SKU_ID,
+      quantity: "1",
+    });
   });
 
   test("requires one to one hundred case-insensitively unique SKUs", () => {
