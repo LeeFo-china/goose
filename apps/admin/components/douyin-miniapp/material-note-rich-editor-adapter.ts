@@ -18,6 +18,26 @@ export type MaterialNoteTiptapDoc = {
 
 type ImagePreviewMap = Readonly<Record<string, string | undefined>>;
 
+export function buildMaterialNoteImagePreviewUrl(
+  fileId: string,
+  imagePreviews: ImagePreviewMap = {},
+): string {
+  const preview = imagePreviews[fileId]?.trim();
+  if (preview) return preview;
+  const normalizedFileId = fileId.trim();
+  if (!normalizedFileId) return "";
+  return `/api/backend/uploads/public-url?fileId=${encodeURIComponent(normalizedFileId)}`;
+}
+
+export function removeMaterialNoteImageBlock(
+  blocks: readonly DouyinMaterialNoteBlock[],
+  index: number,
+): DouyinMaterialNoteBlock[] {
+  return blocks.filter((block, blockIndex) =>
+    blockIndex !== index || block.type !== "image"
+  );
+}
+
 export function materialNoteBlocksToTiptapDoc(
   blocks: readonly DouyinMaterialNoteBlock[],
   imagePreviews: ImagePreviewMap = {},
@@ -70,7 +90,7 @@ function materialNoteBlockToTiptapNode(
         type: "materialImage",
         attrs: {
           fileId: block.fileId,
-          src: imagePreviews[block.fileId] ?? "",
+          src: buildMaterialNoteImagePreviewUrl(block.fileId, imagePreviews),
           alt: block.alt,
           caption: block.caption ?? "",
         },

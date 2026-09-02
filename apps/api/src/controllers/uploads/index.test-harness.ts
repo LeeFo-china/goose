@@ -85,6 +85,9 @@ const logUploadTiming = mock(() => undefined);
 export const resolveStoredFileUrl = mock(
   () => "https://example.com/resolved.jpg",
 );
+export const resolvePublicStoredFileUrlById = mock(
+  async () => "https://example.com/file-id-resolved.jpg",
+);
 export const assertDirectUploadAccess = mock(() => undefined);
 export const assertCanCustomize = mock(async () => ({
   tenantId,
@@ -170,6 +173,7 @@ mock.module("@/services/uploads", () => ({
     findDefaultActiveCustomerMembership: mock(async () => null),
     findLegacyCustomerBinding: mock(async () => null),
     assertDirectUploadAccess,
+    resolvePublicStoredFileUrlById,
   },
 }));
 mock.module("@/services/tenant-entitlements", () => ({
@@ -194,6 +198,10 @@ export function resetUploadControllerMocks() {
   canAccessProject.mockImplementation(async () => true);
   logUploadTiming.mockClear();
   resolveStoredFileUrl.mockClear();
+  resolvePublicStoredFileUrlById.mockClear();
+  resolvePublicStoredFileUrlById.mockImplementation(
+    async () => "https://example.com/file-id-resolved.jpg",
+  );
   assertDirectUploadAccess.mockClear();
   assertCanCustomize.mockClear();
   assertCanCustomize.mockImplementation(async () => ({
@@ -207,7 +215,10 @@ export const buildRequest = (
 ): FastifyRequest => ({
   body,
   method: "POST",
-  routeOptions: { config: { tenantServiceAccess: "write" } },
+  routeOptions: {
+    url: "/uploads/cos/direct-init",
+    config: { tenantServiceAccess: "write" },
+  },
   user: { sub: authUserId, tenant_id: tenantId, employee_id: employeeId },
   id: "req-test",
 }) as FastifyRequest;
@@ -217,7 +228,10 @@ export const buildPlatformRequest = (
 ): FastifyRequest => ({
   body,
   method: "POST",
-  routeOptions: { config: { tenantServiceAccess: "write" } },
+  routeOptions: {
+    url: "/uploads/cos/direct-init",
+    config: { tenantServiceAccess: "write" },
+  },
   user: { sub: platformAuthUserId },
   id: "req-platform-test",
 }) as FastifyRequest;
@@ -419,7 +433,10 @@ export const buildVisitorRequest = (
   body,
   query: {},
   method: "POST",
-  routeOptions: { config: { tenantServiceAccess: "write" } },
+  routeOptions: {
+    url: "/uploads/cos/direct-init",
+    config: { tenantServiceAccess: "write" },
+  },
   user: {
     token_type: "visitor_session",
     visitor_id: currentVisitorId,

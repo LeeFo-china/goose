@@ -1,7 +1,6 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { BaseController } from "@/controllers/BaseController";
 import { Errors } from "@/errors/error-factory";
-import { ErrorCodes } from "@/errors/error-codes";
 import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import { authorizationService, type AuthContext } from "@/services/authorization";
@@ -10,16 +9,11 @@ import { accessPolicyService } from "@/services/access-policy";
 import {
   platformFileStorageService,
 } from "@/services/files/platform-file-storage";
-import { resolveStoredFileUrl } from "@/services/files/file-url-resolver";
 import { uploadService } from "@/services/uploads";
 import { customerSelfServiceService } from "@/services/customer-self-service";
 import type { JwtPayload } from "@/utils/jwt";
 import { logUploadTiming } from "@/utils/upload-timing-logger";
 import { z } from "zod";
-import {
-  isPublicStoredFileScene,
-  parseStoredObjectKey,
-} from "./stored-object-policy";
 import { assertApplymentUploadSceneAccess } from "./applyment-upload-access";
 import { assertDirectUploadFileDeclaration } from "./direct-upload-file-policy";
 import { assertSupplierLicenseUploadSceneAccess } from "./supplier-license-upload-access";
@@ -28,6 +22,10 @@ import { assertVirtualGoodsUploadSceneAccess } from
   "./virtual-goods-upload-access";
 import { assertPlatformServiceFulfillmentUploadSceneAccess } from
   "./platform-service-fulfillment-upload-access";
+import {
+  parseUploadPublicUrlQuery,
+  resolveUploadPublicUrl,
+} from "./public-url";
 import {
   assertDirectObjectKeyBelongsToActor,
   isProjectRequiredUploadScene,
@@ -89,16 +87,6 @@ const DirectUploadCompleteSchema = DirectUploadInitSchema.extend({
     });
   }
 });
-const UploadPublicUrlQuerySchema = z.object({
-  path: z.string()
-    .trim()
-    .min(1, "缺少图片路径")
-    .max(1000, "图片路径过长")
-    .refine((value) => !/^https?:\/\//i.test(value), "图片路径不支持绝对 URL")
-    .refine((value) => !value.includes(".."), "图片路径不合法")
-    .refine((value) => !value.startsWith("/"), "图片路径不合法")
-    .refine((value) => !value.includes("\\"), "图片路径不合法"),
-});
 type UploadActorContext = DirectUploadActorContext & {
   authContext?: AuthContext;
 };
@@ -125,21 +113,12 @@ class UploadController extends BaseController {
       throw Errors.unauthorized("未登录或登录状态无效");
     }
 
-    const queryResult = UploadPublicUrlQuerySchema.safeParse(request.query || {});
-    if (!queryResult.success) {
-      throw Errors.fromZod(queryResult.error);
-    }
-
+    const query = parseUploadPublicUrlQuery(request.query);
     const actorContext = await this.resolveUploadActorContext(
       user,
       getTenantServiceAuthOptions(request),
     );
-    this.assertStoredFileAccess(queryResult.data.path, actorContext);
-
-    const publicUrl = resolveStoredFileUrl(queryResult.data.path);
-    if (!publicUrl) {
-      throw Errors.badRequest("图片路径不合法");
-    }
+    const publicUrl = await resolveUploadPublicUrl(query, actorContext);
 
     return reply.redirect(publicUrl);
   }
@@ -357,32 +336,6 @@ class UploadController extends BaseController {
       );
     if (!canWriteLog) {
       throw Errors.forbidden();
-    }
-  }
-
-  private assertStoredFileAccess(path: string, actorContext: UploadActorContext) {
-    const parsed = parseStoredObjectKey(path);
-    if (!parsed.isPlatformObjectKey) {
-      return;
-    }
-
-    if (parsed.isPrivateObjectKey) {
-      throw Errors.business(403, "私有文件不能通过公开地址访问", ErrorCodes.FORBIDDEN);
-    }
-
-    if (actorContext.isPlatformIdentity) {
-      return;
-    }
-
-    if (parsed.tenantId) {
-      if (!actorContext.tenantId || parsed.tenantId !== actorContext.tenantId) {
-        throw Errors.business(403, "图片不属于当前登录身份", ErrorCodes.FORBIDDEN);
-      }
-      return;
-    }
-
-    if (!isPublicStoredFileScene(parsed.scene)) {
-      throw Errors.business(403, "图片不属于当前登录身份", ErrorCodes.FORBIDDEN);
     }
   }
 

@@ -4,7 +4,10 @@ import { findWechatPayApplymentAttachmentOwner } from "@/repositories/wechat-pay
 import { Errors } from "@/errors/error-factory";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
-import { resolveSignedStoredFileUrl } from "@/services/files/file-url-resolver";
+import {
+  resolveSignedStoredFileUrl,
+  resolveStoredFileUrl,
+} from "@/services/files/file-url-resolver";
 import {
   PLATFORM_READ_PERMISSION,
   TENANT_READ_PERMISSION,
@@ -32,6 +35,31 @@ class UploadService {
 
   findLegacyCustomerBinding(authUserId: string) {
     return uploadRepository.findLegacyCustomerBinding(authUserId);
+  }
+
+  async resolvePublicStoredFileUrlById(input: {
+    fileObjectId: string;
+    tenantId: string | null;
+    isPlatformIdentity?: boolean;
+  }) {
+    const file = input.isPlatformIdentity
+      ? await platformFileObjectRepository.findActiveByIdForPlatform(input.fileObjectId)
+      : input.tenantId
+        ? await platformFileObjectRepository.findActiveById({
+          id: input.fileObjectId,
+          tenantId: input.tenantId,
+        })
+        : null;
+
+    if (!file || file.visibility !== "public") {
+      throw Errors.forbidden();
+    }
+
+    const publicUrl = resolveStoredFileUrl(file.object_key);
+    if (!publicUrl) {
+      throw Errors.badRequest("图片路径不合法");
+    }
+    return publicUrl;
   }
 
   async resolveWechatPayApplymentPreviewUrl(input: {

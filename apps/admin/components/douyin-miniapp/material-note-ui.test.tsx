@@ -5,6 +5,7 @@ import { createEmptySiteContentBlock, resolveAllowedSiteContentBlockTypes } from
   "@/components/site-content/site-content-block-editor";
 import {
   materialNoteBlocksToTiptapDoc,
+  removeMaterialNoteImageBlock,
   tiptapDocToMaterialNoteBlocks,
 } from "@/components/douyin-miniapp/material-note-rich-editor-adapter";
 import {
@@ -95,6 +96,46 @@ describe("抖音资料后台工作台 UI 合同", () => {
     expect(JSON.stringify(tiptapDocToMaterialNoteBlocks(doc))).not.toContain("cdn.goodcms.cn");
   });
 
+  test("富文本适配器为 fileId 图片生成后台预览 URL，仍优先使用本次上传预览", () => {
+    const fileId = "11111111-1111-4111-8111-111111111111";
+    const blocks = [{
+      type: "image" as const,
+      fileId,
+      alt: "现场截图",
+    }];
+    const persistedDoc = materialNoteBlocksToTiptapDoc(blocks);
+    const uploadedDoc = materialNoteBlocksToTiptapDoc(blocks, {
+      [fileId]: "blob:https://admin-dev.goodcms.cn/preview",
+    });
+
+    expect(persistedDoc.content[0]?.attrs?.src).toBe(
+      `/api/backend/uploads/public-url?fileId=${fileId}`,
+    );
+    expect(uploadedDoc.content[0]?.attrs?.src).toBe(
+      "blob:https://admin-dev.goodcms.cn/preview",
+    );
+    expect(tiptapDocToMaterialNoteBlocks(persistedDoc)).toEqual(blocks);
+  });
+
+  test("富文本适配器支持按图片块序号删除图片，不误删文本块", () => {
+    const image = {
+      type: "image" as const,
+      fileId: "11111111-1111-4111-8111-111111111111",
+      alt: "现场截图",
+    };
+    const blocks = [
+      { type: "paragraph" as const, text: "保留正文" },
+      image,
+      { type: "quote" as const, text: "保留引用" },
+    ];
+
+    expect(removeMaterialNoteImageBlock(blocks, 1)).toEqual([
+      { type: "paragraph", text: "保留正文" },
+      { type: "quote", text: "保留引用" },
+    ]);
+    expect(removeMaterialNoteImageBlock(blocks, 0)).toEqual(blocks);
+  });
+
   test("富文本适配器忽略 Tiptap 不支持的 HTML、链接和 base64 图片", () => {
     expect(tiptapDocToMaterialNoteBlocks({
       type: "doc",
@@ -146,12 +187,16 @@ describe("抖音资料后台工作台 UI 合同", () => {
 
   test("版本预览先单独取正文，保存只创建新版本", () => {
     const editor = read("components/douyin-miniapp/material-note-editor.tsx");
+    const richEditor = read("components/douyin-miniapp/material-note-rich-editor.tsx");
     const detail = read("components/douyin-miniapp/material-note-detail.tsx");
     expect(editor).toContain("MATERIAL_NOTE_ALLOWED_BLOCK_TYPES");
     expect(editor).toContain("appendMaterialNoteVersion");
     expect(editor).toContain("createMaterialNote");
     expect(editor).toContain("MaterialNoteRichEditor");
     expect(editor).toContain("onUploadStateChange");
+    expect(richEditor).toContain("buildMaterialNoteImagePreviewUrl");
+    expect(richEditor).toContain("removeMaterialNoteImageBlock");
+    expect(richEditor).toContain("删除图片");
     expect(editor).toContain("list-decimal");
     expect(editor).toContain("list-disc");
     expect(detail).toContain("getMaterialNoteVersion");

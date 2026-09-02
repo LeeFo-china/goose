@@ -63,6 +63,12 @@ async function installSpies() {
   ).mockImplementation(
     async () => "https://example.com/signed-preview.jpg",
   );
+  const resolveStoredFileUrl = spyOn(
+    fileUrlResolver,
+    "resolveStoredFileUrl",
+  ).mockImplementation(
+    () => "https://example.com/public-preview.jpg",
+  );
   const hasPermission = spyOn(
     accessPolicyService,
     "hasPermission",
@@ -84,6 +90,7 @@ async function installSpies() {
     findAttachmentOwnerByFileObjectId,
     hasPermission,
     resolveSignedStoredFileUrl,
+    resolveStoredFileUrl,
   };
 }
 
@@ -100,6 +107,7 @@ afterAll(() => {
   spies.findAttachmentOwnerByFileObjectId.mockRestore();
   spies.hasPermission.mockRestore();
   spies.resolveSignedStoredFileUrl.mockRestore();
+  spies.resolveStoredFileUrl.mockRestore();
 });
 
 function authContext(input: {
@@ -137,6 +145,7 @@ describe("UploadService wechat pay applyment previews", () => {
     spies.findActiveByIdForPlatform.mockClear();
     spies.findAttachmentOwnerByFileObjectId.mockClear();
     spies.resolveSignedStoredFileUrl.mockClear();
+    spies.resolveStoredFileUrl.mockClear();
     spies.hasPermission.mockClear();
     spies.assertTenantContext.mockClear();
   });
@@ -327,6 +336,73 @@ describe("UploadService wechat pay applyment previews", () => {
       fileObjectId: FILE_ID,
     })).rejects.toMatchObject({ statusCode: 403 });
     expect(spies.resolveSignedStoredFileUrl).not.toHaveBeenCalled();
+  });
+});
+
+describe("UploadService public stored file previews", () => {
+  beforeEach(() => {
+    spies.findActiveById.mockClear();
+    spies.findActiveByIdForPlatform.mockClear();
+    spies.resolveStoredFileUrl.mockClear();
+  });
+
+  test("resolves tenant-scoped public file IDs through the stored object URL resolver", async () => {
+    spies.findActiveById.mockImplementationOnce(async () => ({
+      id: FILE_ID,
+      tenant_id: "tenant-1",
+      scene: "picture_library",
+      provider: "tencent_cos",
+      object_key: "tenants/tenant-1/picture-library/body.jpg",
+      visibility: "public",
+      status: "active",
+      deleted_at: null,
+    }) as never);
+    const { uploadService } = await import("./uploads");
+
+    const url = await uploadService.resolvePublicStoredFileUrlById({
+      fileObjectId: FILE_ID,
+      tenantId: "tenant-1",
+      isPlatformIdentity: false,
+    });
+
+    expect(spies.findActiveById).toHaveBeenCalledWith({
+      id: FILE_ID,
+      tenantId: "tenant-1",
+    });
+    expect(spies.findActiveByIdForPlatform).not.toHaveBeenCalled();
+    expect(spies.resolveStoredFileUrl).toHaveBeenCalledWith(
+      "tenants/tenant-1/picture-library/body.jpg",
+    );
+    expect(url).toBe("https://example.com/public-preview.jpg");
+  });
+
+  test("rejects missing tenant context or private files before resolving a URL", async () => {
+    const { uploadService } = await import("./uploads");
+
+    await expect(uploadService.resolvePublicStoredFileUrlById({
+      fileObjectId: FILE_ID,
+      tenantId: null,
+      isPlatformIdentity: false,
+    })).rejects.toMatchObject({ statusCode: 403 });
+    expect(spies.findActiveById).not.toHaveBeenCalled();
+
+    spies.findActiveById.mockImplementationOnce(async () => ({
+      id: FILE_ID,
+      tenant_id: "tenant-1",
+      scene: "wechat_pay_applyment",
+      provider: "tencent_cos",
+      object_key: "tenants/tenant-1/wechat-pay-applyment/license.jpg",
+      visibility: "private",
+      status: "active",
+      deleted_at: null,
+    }) as never);
+
+    await expect(uploadService.resolvePublicStoredFileUrlById({
+      fileObjectId: FILE_ID,
+      tenantId: "tenant-1",
+      isPlatformIdentity: false,
+    })).rejects.toMatchObject({ statusCode: 403 });
+    expect(spies.resolveStoredFileUrl).not.toHaveBeenCalled();
   });
 });
 
