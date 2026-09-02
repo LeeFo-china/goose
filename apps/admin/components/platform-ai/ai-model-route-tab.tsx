@@ -1,7 +1,7 @@
 "use client";
 
 import { Edit3 } from "lucide-react";
-import type { AiModelRecord, AiSceneRouteRecord } from "@/components/platform-ai/ai-config-types";
+import type { AiModelRecord, AiSceneRouteRecord, PageData } from "@/components/platform-ai/ai-config-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,7 +9,7 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FormActions, RouteStatusSelect, StatusBadge } from "@/components/platform-ai/ai-model-routing-sections";
+import { FormActions, RouteStatusSelect, StatusBadge, TablePageFooter } from "@/components/platform-ai/ai-model-routing-sections";
 import {
   emptyRouteForm,
   modelLabel,
@@ -19,21 +19,25 @@ import {
 } from "@/components/platform-ai/ai-model-routing-shared";
 
 export function AiModelRouteTab({
-  routes,
+  routePage,
   models,
   routeForm,
   isPending,
+  isRouteLoading,
   onRouteFormChange,
   onRouteSubmit,
   onRouteEdit,
+  onRoutePageChange,
 }: {
-  routes: AiSceneRouteRecord[];
+  routePage: PageData<AiSceneRouteRecord>;
   models: AiModelRecord[];
   routeForm: RouteFormState;
   isPending: boolean;
+  isRouteLoading: boolean;
   onRouteFormChange: (form: RouteFormState) => void;
   onRouteSubmit: () => Promise<void>;
   onRouteEdit: (item: AiSceneRouteRecord) => void;
+  onRoutePageChange: (page: number) => void;
 }) {
   return (
     <div className="grid h-full min-h-0 gap-4 overflow-auto xl:grid-cols-[360px_minmax(0,1fr)] xl:overflow-hidden">
@@ -174,7 +178,19 @@ export function AiModelRouteTab({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {routes.map((item) => (
+              {isRouteLoading ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground">
+                    场景路由加载中
+                  </TableCell>
+                </TableRow>
+              ) : routePage.list.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground">
+                    暂无场景路由
+                  </TableCell>
+                </TableRow>
+              ) : routePage.list.map((item) => (
                 <TableRow key={item.id}>
                   <TableCell>
                     <div className="font-medium">{item.name}</div>
@@ -199,9 +215,15 @@ export function AiModelRouteTab({
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-    </div>
+        </Table>
+      </CardContent>
+      <TablePageFooter
+        pagination={routePage.pagination}
+        visibleCount={routePage.list.length}
+        pending={isRouteLoading}
+        onPageChange={onRoutePageChange}
+      />
+    </Card>
+  </div>
   );
 }

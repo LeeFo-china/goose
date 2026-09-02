@@ -1,14 +1,25 @@
 import { Errors } from "@/errors/error-factory";
 import { aiConfigRepository } from "@/repositories/ai-config";
+import { aiModelCatalogRepository } from "@/repositories/ai-model-catalog";
 import { platformAuditLogRepository } from "@/repositories/platform-audit-logs";
 import type {
+  AiCatalogEntryListQuery,
+  AiCatalogRunListQuery,
+  AiConfigListQuery,
+  AiModelCapabilityPayload,
+  AiModelListQuery,
   AiModelPayload,
   AiProviderPayload,
+  AiSceneRouteListQuery,
   AiSceneRoutePayload,
+  OpenRouterCatalogApplyPayload,
+  OpenRouterCatalogPreviewPayload,
+  OpenRouterProviderQuery,
   UpdateAiModelPayload,
   UpdateAiProviderPayload,
   UpdateAiSceneRoutePayload,
 } from "@/schema/ai-config";
+import { openRouterModelSyncService } from "@/services/ai-config/openrouter-model-sync";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 
@@ -19,17 +30,63 @@ class AiConfigService {
   async getConfig(authContext: AuthContext) {
     this.assertPlatformPermission(authContext, READ_PERMISSION);
 
-    const [providers, models, routes] = await Promise.all([
-      aiConfigRepository.listProviders(),
-      aiConfigRepository.listModels(),
-      aiConfigRepository.listSceneRoutes(),
+    const [counts, usageSummary] = await Promise.all([
+      aiModelCatalogRepository.getCounts(),
+      aiModelCatalogRepository.getOpenRouterUsageSummary(),
     ]);
 
     return {
-      providers,
-      models,
-      routes,
+      counts,
+      credits: null,
+      usage_summary: usageSummary,
     };
+  }
+
+  async listProviders(authContext: AuthContext, query: AiConfigListQuery) {
+    this.assertPlatformPermission(authContext, READ_PERMISSION);
+    return aiModelCatalogRepository.listProviders(query);
+  }
+
+  async listModels(authContext: AuthContext, query: AiModelListQuery) {
+    this.assertPlatformPermission(authContext, READ_PERMISSION);
+    return aiModelCatalogRepository.listModels(query);
+  }
+
+  async listSceneRoutes(authContext: AuthContext, query: AiSceneRouteListQuery) {
+    this.assertPlatformPermission(authContext, READ_PERMISSION);
+    return aiModelCatalogRepository.listSceneRoutes(query);
+  }
+
+  async listCatalogRuns(authContext: AuthContext, query: AiCatalogRunListQuery) {
+    this.assertPlatformPermission(authContext, READ_PERMISSION);
+    return aiModelCatalogRepository.listCatalogRuns(query);
+  }
+
+  async listCatalogEntries(authContext: AuthContext, runId: string, query: AiCatalogEntryListQuery) {
+    this.assertPlatformPermission(authContext, READ_PERMISSION);
+    return aiModelCatalogRepository.listCatalogEntries(runId, query);
+  }
+
+  async createOpenRouterPreview(authContext: AuthContext, input: OpenRouterCatalogPreviewPayload) {
+    return openRouterModelSyncService.createPreview(authContext, input);
+  }
+
+  async applyOpenRouterCatalog(authContext: AuthContext, input: OpenRouterCatalogApplyPayload) {
+    return openRouterModelSyncService.applyCatalog(authContext, input);
+  }
+
+  async updateModelCapability(authContext: AuthContext, id: string, input: AiModelCapabilityPayload) {
+    const record = await openRouterModelSyncService.saveCapability(authContext, id, input);
+    await this.audit(authContext, "ai_model", id, null, "更新 AI 模型能力");
+    return record;
+  }
+
+  async getOpenRouterCredits(authContext: AuthContext, input: OpenRouterProviderQuery) {
+    return openRouterModelSyncService.getCredits(authContext, input);
+  }
+
+  async getUsageSummary(authContext: AuthContext) {
+    return openRouterModelSyncService.getUsageSummary(authContext);
   }
 
   async createProvider(authContext: AuthContext, input: AiProviderPayload) {

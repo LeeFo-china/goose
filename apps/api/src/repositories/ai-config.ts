@@ -51,8 +51,28 @@ export type AiSceneRouteRecord = {
   fallback_model?: AiModelRecord | null;
 };
 
-class AiConfigRepository {
-  private client = SupabaseDB.getAdminClient();
+type AiConfigClient = {
+  from: (table: string) => any;
+};
+
+function isNoRowsError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const envelope = error as { code?: unknown; details?: unknown; message?: unknown };
+  return envelope.code === "PGRST116"
+    || (typeof envelope.details === "string" && envelope.details.includes("0 rows"))
+    || (typeof envelope.message === "string" && envelope.message.includes("0 rows"));
+}
+
+function staleVersionError() {
+  return Errors.business(409, "配置版本已变化，请重新加载后再保存", "AI_CONFIG_VERSION_STALE");
+}
+
+export class AiConfigRepository {
+  private readonly client: AiConfigClient;
+
+  constructor(client: AiConfigClient = SupabaseDB.getAdminClient() as unknown as AiConfigClient) {
+    this.client = client;
+  }
 
   private from(table: string) {
     return (this.client as unknown as { from: (table: string) => any }).from(table);
@@ -123,13 +143,16 @@ class AiConfigRepository {
   }
 
   async updateProvider(id: string, input: UpdateAiProviderPayload) {
+    const { expected_version, ...payload } = input;
     const { data, error } = await this.from("ai_providers")
-      .update(input)
+      .update(payload)
       .eq("id", id)
+      .eq("version", expected_version)
       .select("*")
       .single();
 
     if (error) {
+      if (isNoRowsError(error)) throw staleVersionError();
       throw Errors.dbError("更新 AI 供应商失败", error);
     }
 
@@ -150,13 +173,16 @@ class AiConfigRepository {
   }
 
   async updateModel(id: string, input: UpdateAiModelPayload) {
+    const { expected_version, ...payload } = input;
     const { data, error } = await this.from("ai_models")
-      .update(input)
+      .update(payload)
       .eq("id", id)
+      .eq("version", expected_version)
       .select("*")
       .single();
 
     if (error) {
+      if (isNoRowsError(error)) throw staleVersionError();
       throw Errors.dbError("更新 AI 模型失败", error);
     }
 
@@ -177,13 +203,16 @@ class AiConfigRepository {
   }
 
   async updateSceneRoute(id: string, input: UpdateAiSceneRoutePayload) {
+    const { expected_version, ...payload } = input;
     const { data, error } = await this.from("ai_scene_routes")
-      .update(input)
+      .update(payload)
       .eq("id", id)
+      .eq("version", expected_version)
       .select("*")
       .single();
 
     if (error) {
+      if (isNoRowsError(error)) throw staleVersionError();
       throw Errors.dbError("更新 AI 场景路由失败", error);
     }
 

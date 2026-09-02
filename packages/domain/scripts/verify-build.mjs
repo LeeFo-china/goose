@@ -31,6 +31,28 @@ if (!parsed.success) {
 if (!(domain.DouyinContactSlaTextSchema instanceof z.ZodType)) {
   throw new Error('domain dist 缺少抖音联系时限 schema');
 }
+if (!(domain.AiGenerationJobSchema instanceof z.ZodType)) {
+  throw new Error('domain dist 缺少多模态生成任务 schema');
+}
+if (!domain.AiGenerationJobSchema.safeParse({
+  id: '00000000-0000-4000-8000-000000000101',
+  scope: {
+    scope_type: 'platform',
+    tenant_id: null,
+  },
+  modality: 'text',
+  quality_tier: 'fast',
+  status: 'queued',
+  billing_status: 'reserved',
+  estimated_cost: '000000000000.010000000000',
+  reserved_cost: '000000000000.020000000000',
+  actual_cost: null,
+  currency: 'USD',
+  created_at: '2026-09-01T00:00:00.000Z',
+  updated_at: '2026-09-01T00:00:00.000Z',
+}).success) {
+  throw new Error('domain dist 无法解析多模态生成任务 schema');
+}
 if (
   domain.DOUYIN_DEFAULT_CONTACT_SLA_TEXT
     !== '工作人员将在营业时间内与你联系'

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Edit3, Plus, RotateCcw, Save } from "lucide-react";
 import { toast } from "sonner";
-import type { AiModelRecord, AiProviderRecord } from "@/components/platform-ai/ai-config-types";
+import type { AiModelRecord, AiProviderRecord, PageData } from "@/components/platform-ai/ai-config-types";
 import { statusLabel } from "@/components/platform-ai/ai-config-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,13 +22,45 @@ export function StatusBadge({ status }: { status: string }) {
   );
 }
 
-
-
-export function countModelsByProvider(models: AiModelRecord[]) {
-  return models.reduce((map, item) => {
-    map.set(item.provider_id, (map.get(item.provider_id) || 0) + 1);
-    return map;
-  }, new Map<string, number>());
+export function TablePageFooter({
+  pagination,
+  visibleCount,
+  pending,
+  onPageChange,
+}: {
+  pagination: PageData<unknown>["pagination"];
+  visibleCount: number;
+  pending: boolean;
+  onPageChange: (page: number) => void;
+}) {
+  const totalPages = Math.max(pagination.totalPages, 1);
+  return (
+    <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t bg-card px-4 py-3 text-sm">
+      <div className="text-muted-foreground">
+        第 {pagination.page} / {totalPages} 页，当前显示 {visibleCount} 条，共 {pagination.total} 条
+      </div>
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={pending || pagination.page <= 1}
+          onClick={() => onPageChange(Math.max(1, pagination.page - 1))}
+        >
+          上一页
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={pending || pagination.page >= totalPages}
+          onClick={() => onPageChange(pagination.page + 1)}
+        >
+          下一页
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 export function RouteStatusSelect({
@@ -123,6 +155,26 @@ export function ProviderFormCard({
             <Input id="ai-provider-name" value={form.name} onChange={(event) => onChange({ ...form, name: event.target.value })} />
           </Field>
           <Field>
+            <FieldLabel>类型</FieldLabel>
+            <Select
+              value={form.provider_type}
+              onValueChange={(value) => onChange({
+                ...form,
+                provider_type: value === "openrouter" ? "openrouter" : "openai_compatible",
+              })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="openai_compatible">OpenAI Compatible</SelectItem>
+                  <SelectItem value="openrouter">OpenRouter</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field>
             <FieldLabel htmlFor="ai-provider-endpoint">Endpoint</FieldLabel>
             <Input id="ai-provider-endpoint" value={form.endpoint_url} onChange={(event) => onChange({ ...form, endpoint_url: event.target.value })} />
           </Field>
@@ -208,11 +260,15 @@ export function ModelFormCard({
 }
 
 export function ModelTable({
-  models,
+  page,
+  pending,
   onEdit,
+  onPageChange,
 }: {
-  models: AiModelRecord[];
+  page: PageData<AiModelRecord>;
+  pending: boolean;
   onEdit: (item: AiModelRecord) => void;
+  onPageChange: (page: number) => void;
 }) {
   return (
     <Card className="flex min-h-0 flex-col overflow-hidden">
@@ -232,7 +288,19 @@ export function ModelTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {models.map((item) => (
+            {pending ? (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center text-muted-foreground">
+                  模型列表加载中
+                </TableCell>
+              </TableRow>
+            ) : page.list.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center text-muted-foreground">
+                  暂无模型
+                </TableCell>
+              </TableRow>
+            ) : page.list.map((item) => (
               <TableRow key={item.id}>
                 <TableCell>
                   <div className="font-medium">{item.name}</div>
@@ -252,18 +320,26 @@ export function ModelTable({
           </TableBody>
         </Table>
       </CardContent>
+      <TablePageFooter
+        pagination={page.pagination}
+        visibleCount={page.list.length}
+        pending={pending}
+        onPageChange={onPageChange}
+      />
     </Card>
   );
 }
 
 export function ProviderTable({
-  providers,
-  modelCountByProvider,
+  page,
+  pending,
   onEdit,
+  onPageChange,
 }: {
-  providers: AiProviderRecord[];
-  modelCountByProvider: Map<string, number>;
+  page: PageData<AiProviderRecord>;
+  pending: boolean;
   onEdit: (item: AiProviderRecord) => void;
+  onPageChange: (page: number) => void;
 }) {
   return (
     <Card className="flex min-h-0 flex-col overflow-hidden">
@@ -278,12 +354,24 @@ export function ProviderTable({
               <TableHead>供应商</TableHead>
               <TableHead>Endpoint</TableHead>
               <TableHead>密钥 Key</TableHead>
-              <TableHead>模型数</TableHead>
+              <TableHead>状态</TableHead>
               <TableHead className="text-right">操作</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {providers.map((item) => (
+            {pending ? (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center text-muted-foreground">
+                  供应商列表加载中
+                </TableCell>
+              </TableRow>
+            ) : page.list.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center text-muted-foreground">
+                  暂无供应商
+                </TableCell>
+              </TableRow>
+            ) : page.list.map((item) => (
               <TableRow key={item.id}>
                 <TableCell>
                   <div className="font-medium">{item.name}</div>
@@ -294,7 +382,6 @@ export function ProviderTable({
                 <TableCell>
                   <div className="flex items-center gap-2">
                     <StatusBadge status={item.status} />
-                    <Badge variant="secondary">{modelCountByProvider.get(item.id) || 0} 个模型</Badge>
                   </div>
                 </TableCell>
                 <TableCell className="text-right">
@@ -308,6 +395,12 @@ export function ProviderTable({
           </TableBody>
         </Table>
       </CardContent>
+      <TablePageFooter
+        pagination={page.pagination}
+        visibleCount={page.list.length}
+        pending={pending}
+        onPageChange={onPageChange}
+      />
     </Card>
   );
 }
