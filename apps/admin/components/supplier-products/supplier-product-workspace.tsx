@@ -31,11 +31,13 @@ const page = <T,>(): PageData<T> => ({
 export function SupplierProductWorkspace({
   canViewProducts,
   canManageProducts,
+  canManageCatalog,
   canViewCostPrice,
   canManageCostPrice,
 }: {
   canViewProducts: boolean;
   canManageProducts: boolean;
+  canManageCatalog: boolean;
   canViewCostPrice: boolean;
   canManageCostPrice: boolean;
 }) {
@@ -257,7 +259,7 @@ export function SupplierProductWorkspace({
                 </CardHeader>
               ) : null}
               <CardContent className="p-0">
-                <SupplierProductList key={relationshipId} scope={scope} relationship={relationship} products={products} loading={loadingProducts} canManage={canManageProducts} inlinePriceEnabled={inlineSkuPriceEnabled} onRefresh={loadProducts} onAvailableSkusChange={setAvailableSkus} onSkuWorkspaceChange={setSkuWorkspaceVisible} />
+                <SupplierProductList key={relationshipId} scope={scope} relationship={relationship} products={products} loading={loadingProducts} canManage={canManageProducts} canManageCatalog={canManageCatalog} inlinePriceEnabled={inlineSkuPriceEnabled} onRefresh={loadProducts} onAvailableSkusChange={setAvailableSkus} onSkuWorkspaceChange={setSkuWorkspaceVisible} />
                 {!skuWorkspaceVisible ? <Paginator page={productPage} totalPages={totalPages} total={products.pagination.total} loading={loadingProducts} onPageChange={setProductPage} /> : null}
               </CardContent>
             </Card>

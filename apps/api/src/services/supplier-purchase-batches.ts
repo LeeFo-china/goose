@@ -1,7 +1,6 @@
 import { Errors } from "@/errors/error-factory";
 import { supplierPurchaseBatchWorkflowRepository } from "@/repositories/supplier-purchase-batch-workflow";
-import { supplierPurchaseBatchesRepository } from
-  "@/repositories/supplier-purchase-batches";
+import { supplierPurchaseBatchesRepository } from "@/repositories/supplier-purchase-batches";
 import type {
   SupplierPurchaseBatchCancelInput,
   SupplierPurchaseBatchCatalogQuery,
@@ -21,8 +20,8 @@ import {
   deriveSupplierPurchaseBatchActions,
   supplierPurchaseBatchAccessService,
 } from "@/services/supplier-purchase-batch-access";
-import { resolveSupplierPurchaseBatchProjectOptionWindow } from
-  "@/services/supplier-purchase-batch-project-option-window";
+import { resolveSupplierPurchaseBatchDraftCostCategories } from "@/services/supplier-purchase-batch-cost-category-resolution";
+import { resolveSupplierPurchaseBatchProjectOptionWindow } from "@/services/supplier-purchase-batch-project-option-window";
 import {
   assertLegacySupplierPurchaseBatchReviewSelf,
   assertSupplierPurchaseBatchReviewVersion,
@@ -30,10 +29,8 @@ import {
   executeSupplierPurchaseBatchReview,
 } from
   "@/services/supplier-purchase-batch-review";
-import { supplierPurchaseBatchWorkflowRuntime } from
-  "@/services/supplier-purchase-batch-workflow-runtime";
-import { workflowTaskSupplierPurchaseBatchBridge } from
-  "@/services/workflow-task-supplier-purchase-batch-bridge";
+import { supplierPurchaseBatchWorkflowRuntime } from "@/services/supplier-purchase-batch-workflow-runtime";
+import { workflowTaskSupplierPurchaseBatchBridge } from "@/services/workflow-task-supplier-purchase-batch-bridge";
 import {
   SupplierPurchaseBatchWorkflowProjectionService,
   supplierPurchaseBatchWorkflowProjectionService,
@@ -62,6 +59,7 @@ type BatchRepositoryPort = Pick<
   | "listProjectOptions"
   | "listCostCategories"
   | "listCatalog"
+  | "resolveCostCategoryDefaults"
   | "saveDraft"
   | "submit"
   | "review"
@@ -295,13 +293,16 @@ export class SupplierPurchaseBatchesService {
         await this.access.assertProjectUpdate(auth, input.project_id);
       }
     }
+    const items = await resolveSupplierPurchaseBatchDraftCostCategories(
+      this.repository, scope.tenantId, input.items,
+    );
     return this.repository.saveDraft({
       ...this.commandContext(scope, batchId, input, idempotencyKey),
       project_id: input.project_id,
       reason: input.reason,
       expected_delivery_date: input.expected_delivery_date ?? null,
       remark: input.remark ?? null,
-      items: input.items,
+      items,
     });
   }
 

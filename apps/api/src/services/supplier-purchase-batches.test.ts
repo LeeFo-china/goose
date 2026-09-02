@@ -64,14 +64,10 @@ function dependencies(overrides: Record<string, unknown> = {}) {
       requireFinanceBudgetManage: mock(() => events.push("finance")),
       getVisibleProjectIds: mock(async () => [PROJECT_ID]),
       getVisibleProjectUpdateIds: mock(async () => [PROJECT_ID]),
-      assertProjectRead: mock(async (
-        _context: AuthContext,
-        _projectId: string,
-      ) => events.push("project-read")),
-      assertProjectUpdate: mock(async (
-        _context: AuthContext,
-        _projectId: string,
-      ) => events.push("project-update")),
+      assertProjectRead: mock(async (_context: AuthContext, _projectId: string) =>
+        events.push("project-read")),
+      assertProjectUpdate: mock(async (_context: AuthContext, _projectId: string) =>
+        events.push("project-update")),
     },
     repository: {
       listBatches: mock(async (input: unknown) => ({ input })),
@@ -82,6 +78,7 @@ function dependencies(overrides: Record<string, unknown> = {}) {
       listProjectOptions: mock(async (input: unknown) => ({ input })),
       listCatalog: mock(async (input: unknown) => ({ input })),
       listCostCategories: mock(async (input: unknown) => ({ input })),
+      resolveCostCategoryDefaults: mock(async () => []),
       saveDraft: mock(async (input: unknown) => {
         events.push("save");
         return { status: "saved", input };

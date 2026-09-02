@@ -70,7 +70,7 @@ export const SupplierPurchaseBatchCatalogQuerySchema =
 
 export const SupplierPurchaseBatchDraftItemSchema = z.object({
   supplier_sku_id: uuid("无效的供应商 SKU ID"),
-  cost_category_id: uuid("无效的成本分类 ID"),
+  cost_category_id: uuid("无效的成本分类 ID").optional(),
   quantity,
 }).strict();
 

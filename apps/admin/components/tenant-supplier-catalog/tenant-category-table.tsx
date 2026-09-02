@@ -6,6 +6,7 @@ import { ChevronRight } from "lucide-react";
 
 import { DataTable } from "@/components/admin/data-table";
 import { PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME } from "@/components/platform/platform-list-page-size";
+import { CostCategoryRuleDialog } from "@/components/supplier-cost-category/cost-category-rule-dialog";
 import { catalogStatusMeta } from "@/components/supplier-catalog/supplier-catalog-types";
 import { CatalogSpecDefinitionsDialogButton } from "@/components/supplier-catalog/catalog-spec-definitions-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -90,6 +91,11 @@ export function TenantCategoryTable({
         const capabilities = getTenantCatalogCapabilities(row.original);
         return (
           <div className="flex justify-end gap-1 whitespace-nowrap">
+            <CostCategoryRuleDialog
+              scope="category"
+              targetId={row.original.id}
+              targetName={row.original.full_name}
+            />
             <CatalogSpecDefinitionsDialogButton
               scope="tenant"
               category={row.original}
