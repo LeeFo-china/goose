@@ -20,6 +20,7 @@ import {
 } from "@/components/douyin-miniapp/material-note-api";
 import { MaterialNoteCategorySelect } from "@/components/douyin-miniapp/material-note-category-select";
 import { MaterialNoteRichEditor } from "@/components/douyin-miniapp/material-note-rich-editor";
+import { buildMaterialNoteImagePreviewUrl } from "@/components/douyin-miniapp/material-note-rich-editor-adapter";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -303,6 +304,12 @@ export function MaterialNoteDraftPreview({ draft }: { draft: DouyinMaterialNoteV
   );
 }
 
+export function resolveMaterialNoteDraftPreviewImageSrc(
+  block: Extract<DouyinMaterialNoteBlock, { type: "image" }>,
+): string {
+  return buildMaterialNoteImagePreviewUrl(block.fileId);
+}
+
 function MaterialBlock({ block }: { block: DouyinMaterialNoteVersionDraft["content_blocks"][number] }) {
   if (block.type === "heading") {
     return block.level === 2
@@ -320,9 +327,11 @@ function MaterialBlock({ block }: { block: DouyinMaterialNoteVersionDraft["conte
   }
   if (block.type === "image") {
     return <figure className="rounded-md border bg-muted/30 p-3">
-      <div className="flex h-28 items-center justify-center rounded bg-background text-xs text-muted-foreground">
-        图片已绑定：{block.alt}
-      </div>
+      <img
+        src={resolveMaterialNoteDraftPreviewImageSrc(block)}
+        alt={block.alt}
+        className="max-h-48 w-full rounded bg-background object-contain"
+      />
       {block.caption ? <figcaption className="mt-2 text-xs text-muted-foreground">{block.caption}</figcaption> : null}
     </figure>;
   }

@@ -10,6 +10,7 @@ import {
 } from "@/components/douyin-miniapp/material-note-rich-editor-adapter";
 import {
   narrowMaterialNoteEditorBlocks,
+  resolveMaterialNoteDraftPreviewImageSrc,
   validateMaterialNoteEditorDraft,
 } from
   "@/components/douyin-miniapp/material-note-editor";
@@ -115,6 +116,29 @@ describe("抖音资料后台工作台 UI 合同", () => {
       "blob:https://admin-dev.goodcms.cn/preview",
     );
     expect(tiptapDocToMaterialNoteBlocks(persistedDoc)).toEqual(blocks);
+  });
+
+  test("资料图片编辑和小程序预览都使用可访问图片 URL", () => {
+    const fileId = "11111111-1111-4111-8111-111111111111";
+    const imageBlock = {
+      type: "image" as const,
+      fileId,
+      alt: "好店智装云-logo-200x200",
+    };
+    const richEditor = read("components/douyin-miniapp/material-note-rich-editor.tsx");
+    const editor = read("components/douyin-miniapp/material-note-editor.tsx");
+
+    expect(resolveMaterialNoteDraftPreviewImageSrc(imageBlock)).toBe(
+      `/api/backend/uploads/public-url?fileId=${fileId}`,
+    );
+    expect(richEditor).toContain("result.url || result.publicUrl");
+    expect(richEditor).toContain('className="flex items-center gap-3 rounded-md border bg-background p-2"');
+    expect(richEditor).toContain("truncate text-sm font-medium");
+    expect(richEditor).not.toContain("图片替代文本");
+    expect(richEditor).not.toContain("图片说明");
+    expect(editor).toContain("<img");
+    expect(editor).toContain("resolveMaterialNoteDraftPreviewImageSrc");
+    expect(editor).not.toContain("图片已绑定");
   });
 
   test("富文本适配器支持按图片块序号删除图片，不误删文本块", () => {

@@ -22,9 +22,6 @@ import {
 } from "@/components/douyin-miniapp/material-note-rich-editor-adapter";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Button } from "@/components/ui/button";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { buildUploadPreviewUrl, uploadDirectToCos, validateUploadFile } from "@/lib/cos-direct-upload";
 import { cn } from "@/lib/utils";
 
@@ -162,13 +159,6 @@ export function MaterialNoteRichEditor({
     onChange(nextBlocks);
   }
 
-  function updateImage(index: number, patch: Partial<Extract<DouyinMaterialNoteBlock, { type: "image" }>>) {
-    emit(blocks.map((block, blockIndex) =>
-      blockIndex === index && block.type === "image"
-        ? { ...block, ...patch }
-        : block));
-  }
-
   function removeImage(index: number) {
     emit(removeMaterialNoteImageBlock(blocks, index));
   }
@@ -195,7 +185,7 @@ export function MaterialNoteRichEditor({
         setUploadError("图片上传成功但未返回文件 ID");
         return;
       }
-      const src = result.publicUrl || result.url || buildUploadPreviewUrl(result.storagePath);
+      const src = result.url || result.publicUrl || buildUploadPreviewUrl(result.storagePath);
       setImagePreviews((current) => ({ ...current, [result.fileId!]: src }));
       const alt = file.name.replace(/\.[^.]+$/, "") || "资料图片";
       editor.chain().focus().insertContent({
@@ -242,56 +232,33 @@ export function MaterialNoteRichEditor({
       </div>
       <EditorContent editor={editor} />
       {imageBlocks.length > 0 ? (
-        <FieldGroup className="rounded-md border bg-muted/20 p-3">
-          <FieldDescription>图片只保存文件 ID、替代文本和图片说明；小程序展示 URL 由 API 下发。</FieldDescription>
+        <div className="flex flex-col gap-2 rounded-md border bg-muted/20 p-2">
           {imageBlocks.map(({ block, index }) => (
-            <div key={`${block.fileId}-${index}`} className="grid gap-3 rounded-md border bg-background p-3 md:grid-cols-2">
-              <div className="space-y-3">
-                <div className="overflow-hidden rounded-md border bg-muted/30">
-                  <img
-                    src={buildMaterialNoteImagePreviewUrl(block.fileId, imagePreviews)}
-                    alt={block.alt || "资料图片预览"}
-                    className="h-36 w-full object-contain"
-                  />
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="text-destructive hover:text-destructive"
-                  disabled={disabled}
-                  onClick={() => removeImage(index)}
-                >
-                  <Trash2 data-icon="inline-start" />
-                  删除图片
-                </Button>
+            <div key={`${block.fileId}-${index}`} className="flex items-center gap-3 rounded-md border bg-background p-2">
+              <div className="h-12 w-12 shrink-0 overflow-hidden rounded border bg-muted/30">
+                <img
+                  src={buildMaterialNoteImagePreviewUrl(block.fileId, imagePreviews)}
+                  alt={block.alt || "资料图片预览"}
+                  className="h-full w-full object-cover"
+                />
               </div>
-              <div className="grid gap-3">
-                <Field>
-                  <FieldLabel htmlFor={`material-image-alt-${index}`}>图片替代文本</FieldLabel>
-                  <Input
-                    id={`material-image-alt-${index}`}
-                    value={block.alt}
-                    disabled={disabled}
-                    maxLength={300}
-                    onChange={(event) => updateImage(index, { alt: event.target.value })}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor={`material-image-caption-${index}`}>图片说明</FieldLabel>
-                  <Textarea
-                    id={`material-image-caption-${index}`}
-                    value={block.caption ?? ""}
-                    disabled={disabled}
-                    maxLength={1_000}
-                    rows={2}
-                    onChange={(event) => updateImage(index, { caption: event.target.value || undefined })}
-                  />
-                </Field>
-              </div>
+              <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                {block.alt || "资料图片"}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="text-destructive hover:text-destructive"
+                disabled={disabled}
+                onClick={() => removeImage(index)}
+              >
+                <Trash2 data-icon="inline-start" />
+                删除图片
+              </Button>
             </div>
           ))}
-        </FieldGroup>
+        </div>
       ) : null}
     </div>
   );

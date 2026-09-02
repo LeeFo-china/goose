@@ -103,6 +103,7 @@ export const DouyinMaterialNoteRepositoryImageAssetRowSchema = z.strictObject({
   id: z.uuid(),
   tenant_id: z.uuid(),
   public_url: z.string().nullable(),
+  object_key: z.string().trim().min(1).nullable(),
   width: z.number().int().positive().nullable(),
   height: z.number().int().positive().nullable(),
   mime_type: z.string().trim().min(1),

@@ -5,6 +5,10 @@ import type {
   DouyinMaterialNotesQuery,
 } from './douyin-material-notes';
 
+process.env.SUPABASE_URL ??= 'http://127.0.0.1:54321';
+process.env.SUPABASE_PUBLISH ??= 'test-publish-key';
+process.env.SUPABASE_SERVICE_ROLE_KEY ??= 'test-service-role-key';
+
 let Repository: typeof import('./douyin-material-notes').DouyinMaterialNotesRepository;
 beforeAll(async () => {
   ({ DouyinMaterialNotesRepository: Repository } = await import('./douyin-material-notes'));
@@ -16,6 +20,7 @@ const imageAssetRow = {
   id: IMAGE_FILE_ID,
   tenant_id: TENANT_ID,
   public_url: 'https://cdn.goodcms.cn/material-notes/checklist.webp',
+  object_key: 'tenants/11111111-1111-4111-8111-111111111111/picture-library/unassigned/checklist.webp',
   width: 1200,
   height: 800,
   mime_type: 'image/webp',
@@ -82,7 +87,7 @@ describe('DouyinMaterialNotesRepository material note image assets', () => {
     expect(context.calls).toContainEqual({ method: 'from', args: ['platform_file_objects'] });
     expect(context.calls).toContainEqual({
       method: 'select',
-      args: ['id,tenant_id,public_url,width,height,mime_type,status,visibility'],
+      args: ['id,tenant_id,public_url,object_key,width,height,mime_type,status,visibility'],
     });
     for (const call of [
       { method: 'eq', args: ['tenant_id', TENANT_ID] },
