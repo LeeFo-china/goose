@@ -1,34 +1,109 @@
 import { redirect } from "next/navigation";
 import { Cpu, GitBranch, ServerCog } from "lucide-react";
 import { AiModelRoutingPanel } from "@/components/platform-ai/ai-model-routing-panel";
-import type { AiConfigData } from "@/components/platform-ai/ai-config-types";
+import type {
+  AiCatalogEntryRecord,
+  AiCatalogRunRecord,
+  AiConfigData,
+  AiModelRecord,
+  AiProviderRecord,
+  AiSceneRouteRecord,
+  PageData,
+} from "@/components/platform-ai/ai-config-types";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Card, CardContent } from "@/components/ui/card";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
+const emptyPage = <T,>(): PageData<T> => ({
+  list: [],
+  pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+});
+
+const emptyConfig = (): AiConfigData => ({
+  counts: { providers: 0, models: 0, routes: 0 },
+  credits: null,
+  usage_summary: { requests_24h: 0, estimated_cost_usd_24h: 0 },
+  providers: [],
+  models: [],
+  routes: [],
+});
+
+async function fetchBackendData<T>(token: string, path: string) {
+  const response = await fetch(buildBackendUrl(path), {
+    headers: { authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  const payload = await parseBackendJson<T>(response);
+  return payload.data;
+}
+
 async function getAiConfig() {
   const token = await getAdminToken();
   if (!token) {
     return {
-      data: { providers: [], models: [], routes: [] } as AiConfigData,
+      data: emptyConfig(),
+      providerPage: emptyPage<AiProviderRecord>(),
+      modelPage: emptyPage<AiModelRecord>(),
+      routePage: emptyPage<AiSceneRouteRecord>(),
+      providerOptions: [],
+      modelOptions: [],
+      catalogRuns: emptyPage<AiCatalogRunRecord>(),
+      catalogEntries: emptyPage<AiCatalogEntryRecord>(),
       error: "缺少登录凭证",
     };
   }
 
   try {
-    const response = await fetch(buildBackendUrl("/platform/ai-config"), {
-      headers: { authorization: `Bearer ${token}` },
-      cache: "no-store",
-    });
-    const payload = await parseBackendJson<AiConfigData>(response);
+    const [summary, providers, models, routes, providerOptions, modelOptions] = await Promise.all([
+      fetchBackendData<AiConfigData>(token, "/platform/ai-config"),
+      fetchBackendData<PageData<AiProviderRecord>>(token, "/platform/ai-config/providers?page=1&pageSize=20"),
+      fetchBackendData<PageData<AiModelRecord>>(token, "/platform/ai-config/models?page=1&pageSize=20"),
+      fetchBackendData<PageData<AiSceneRouteRecord>>(token, "/platform/ai-config/routes?page=1&pageSize=20"),
+      fetchBackendData<PageData<AiProviderRecord>>(token, "/platform/ai-config/providers?page=1&pageSize=100"),
+      fetchBackendData<PageData<AiModelRecord>>(token, "/platform/ai-config/models?page=1&pageSize=100"),
+    ]);
+    const openRouterProviderId = providerOptions?.list
+      ?.find((provider) => provider.provider_type === "openrouter")?.id;
+    const catalogRuns = openRouterProviderId
+      ? await fetchBackendData<PageData<AiCatalogRunRecord>>(
+        token,
+        `/platform/ai-config/catalog-runs?page=1&pageSize=20&provider_id=${openRouterProviderId}`,
+      )
+      : emptyPage<AiCatalogRunRecord>();
+    const firstRunId = catalogRuns?.list?.[0]?.id;
+    const catalogEntries = firstRunId
+      ? await fetchBackendData<PageData<AiCatalogEntryRecord>>(
+        token,
+        `/platform/ai-config/catalog-runs/${firstRunId}/entries?page=1&pageSize=20`,
+      )
+      : emptyPage<AiCatalogEntryRecord>();
     return {
-      data: payload.data || { providers: [], models: [], routes: [] },
+      data: {
+        ...(summary || emptyConfig()),
+        providers: providers?.list || [],
+        models: models?.list || [],
+        routes: routes?.list || [],
+      },
+      providerPage: providers || emptyPage<AiProviderRecord>(),
+      modelPage: models || emptyPage<AiModelRecord>(),
+      routePage: routes || emptyPage<AiSceneRouteRecord>(),
+      providerOptions: providerOptions?.list || providers?.list || [],
+      modelOptions: modelOptions?.list || models?.list || [],
+      catalogRuns: catalogRuns || emptyPage<AiCatalogRunRecord>(),
+      catalogEntries: catalogEntries || emptyPage<AiCatalogEntryRecord>(),
       error: null,
     };
   } catch (error) {
     return {
-      data: { providers: [], models: [], routes: [] } as AiConfigData,
+      data: emptyConfig(),
+      providerPage: emptyPage<AiProviderRecord>(),
+      modelPage: emptyPage<AiModelRecord>(),
+      routePage: emptyPage<AiSceneRouteRecord>(),
+      providerOptions: [],
+      modelOptions: [],
+      catalogRuns: emptyPage<AiCatalogRunRecord>(),
+      catalogEntries: emptyPage<AiCatalogEntryRecord>(),
       error: error instanceof Error ? error.message : "AI 模型路由配置加载失败",
     };
   }
@@ -44,13 +119,20 @@ export default async function PlatformAiModelsPage() {
   const result = hasPlatformAccess
     ? await getAiConfig()
     : {
-      data: { providers: [], models: [], routes: [] } as AiConfigData,
+      data: emptyConfig(),
+      providerPage: emptyPage<AiProviderRecord>(),
+      modelPage: emptyPage<AiModelRecord>(),
+      routePage: emptyPage<AiSceneRouteRecord>(),
+      providerOptions: [],
+      modelOptions: [],
+      catalogRuns: emptyPage<AiCatalogRunRecord>(),
+      catalogEntries: emptyPage<AiCatalogEntryRecord>(),
       error: "当前账号不是平台超管，无法维护 AI 模型路由",
     };
 
-  const activeRoutes = result.data.routes.filter((item) => item.status === "active").length;
-  const activeModels = result.data.models.filter((item) => item.status === "active").length;
-  const activeProviders = result.data.providers.filter((item) => item.status === "active").length;
+  const totalRoutes = result.data.counts?.routes ?? result.data.routes.length;
+  const totalModels = result.data.counts?.models ?? result.data.models.length;
+  const totalProviders = result.data.counts?.providers ?? result.data.providers.length;
 
   return (
     <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
@@ -68,10 +150,8 @@ export default async function PlatformAiModelsPage() {
               <GitBranch className="size-5" />
             </div>
             <div>
-              <div className="text-sm text-muted-foreground">启用场景</div>
-              <div className="text-xl font-semibold">
-                {activeRoutes} / {result.data.routes.length}
-              </div>
+              <div className="text-sm text-muted-foreground">场景路由</div>
+              <div className="text-xl font-semibold">{totalRoutes}</div>
             </div>
           </CardContent>
         </Card>
@@ -81,10 +161,8 @@ export default async function PlatformAiModelsPage() {
               <Cpu className="size-5" />
             </div>
             <div>
-              <div className="text-sm text-muted-foreground">启用模型</div>
-              <div className="text-xl font-semibold">
-                {activeModels} / {result.data.models.length}
-              </div>
+              <div className="text-sm text-muted-foreground">模型总数</div>
+              <div className="text-xl font-semibold">{totalModels}</div>
             </div>
           </CardContent>
         </Card>
@@ -94,10 +172,8 @@ export default async function PlatformAiModelsPage() {
               <ServerCog className="size-5" />
             </div>
             <div>
-              <div className="text-sm text-muted-foreground">启用供应商</div>
-              <div className="text-xl font-semibold">
-                {activeProviders} / {result.data.providers.length}
-              </div>
+              <div className="text-sm text-muted-foreground">供应商总数</div>
+              <div className="text-xl font-semibold">{totalProviders}</div>
             </div>
           </CardContent>
         </Card>
@@ -109,7 +185,18 @@ export default async function PlatformAiModelsPage() {
         </div>
       ) : null}
 
-      {hasPlatformAccess ? <AiModelRoutingPanel data={result.data} /> : null}
+      {hasPlatformAccess ? (
+        <AiModelRoutingPanel
+          data={result.data}
+          providerPage={result.providerPage}
+          modelPage={result.modelPage}
+          routePage={result.routePage}
+          providerOptions={result.providerOptions}
+          modelOptions={result.modelOptions}
+          catalogRuns={result.catalogRuns}
+          catalogEntries={result.catalogEntries}
+        />
+      ) : null}
     </div>
   );
 }

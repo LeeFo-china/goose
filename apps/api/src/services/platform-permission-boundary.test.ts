@@ -394,7 +394,7 @@ describe("platform permission boundaries", () => {
   });
 
   test("platform operating services check concrete permissions", () => {
-    const ai = readFileSync(new URL("../services/ai-config.ts", import.meta.url), "utf8");
+    const ai = readFileSync(new URL("../services/ai-config/index.ts", import.meta.url), "utf8");
     const site = readFileSync(new URL("../services/site-content.ts", import.meta.url), "utf8");
     const douyin = readFileSync(
       new URL("../services/platform-douyin-miniapps.ts", import.meta.url),

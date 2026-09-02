@@ -3,8 +3,10 @@ import { requestBackendJson } from "@/lib/backend-client";
 
 export type ProviderFormState = {
   id?: string;
+  version?: number | null;
   code: string;
   name: string;
+  provider_type: "openai_compatible" | "openrouter";
   endpoint_url: string;
   api_key_setting_key: string;
   status: "active" | "inactive";
@@ -13,6 +15,7 @@ export type ProviderFormState = {
 
 export type ModelFormState = {
   id?: string;
+  version?: number | null;
   provider_id: string;
   code: string;
   name: string;
@@ -23,10 +26,13 @@ export type ModelFormState = {
 
 export type RouteFormState = {
   id?: string;
+  version?: number | null;
   scene_code: string;
   name: string;
   primary_model_id: string;
   fallback_model_id: string;
+  quality_tier: "fast" | "balanced" | "quality";
+  modality: "text" | "image" | "video" | "speech";
   temperature: string;
   response_format: "json_object" | "text";
   timeout_ms: string;
@@ -39,6 +45,7 @@ export function emptyProviderForm(): ProviderFormState {
   return {
     code: "",
     name: "",
+    provider_type: "openai_compatible",
     endpoint_url: "",
     api_key_setting_key: "",
     status: "active",
@@ -63,6 +70,8 @@ export function emptyRouteForm(modelId = ""): RouteFormState {
     name: "",
     primary_model_id: modelId,
     fallback_model_id: NONE_VALUE,
+    quality_tier: "balanced",
+    modality: "text",
     temperature: "0.7",
     response_format: "json_object",
     timeout_ms: "60000",
