@@ -27,6 +27,7 @@ import {
   DouyinMaterialNoteRemoveResponseSchema,
   type DouyinMaterialNoteListQuery,
 } from '@/schema/douyin-material-notes';
+import { resolveStoredFileUrl } from '@/services/files/file-url-resolver';
 import { PaginationQuerySchema, type PaginationQuery } from '@/schema/request';
 import type { JwtPayload } from '@/utils/jwt';
 
@@ -209,9 +210,11 @@ export class DouyinMiniappMaterialNotesService {
       || asset.visibility !== 'public' || !asset.mime_type.toLowerCase().startsWith('image/')) {
       return null;
     }
+    const src = resolveStoredFileUrl(asset.public_url || asset.object_key);
+    if (!src) return null;
     const result = DouyinMaterialNotePublicAssetSchema.safeParse({
       fileId: asset.id,
-      src: asset.public_url,
+      src,
       alt: '资料图片',
       width: asset.width,
       height: asset.height,

@@ -389,7 +389,7 @@ export class DouyinMaterialNotesRepository {
     if (input.fileIds.length === 0) return [];
     return execute('查询抖音资料图片素材失败', async () => {
       const result = await this.client.from('platform_file_objects')
-        .select('id,tenant_id,public_url,width,height,mime_type,status,visibility')
+        .select('id,tenant_id,public_url,object_key,width,height,mime_type,status,visibility')
         .eq('tenant_id', input.tenantId)
         .in('id', input.fileIds)
         .eq('status', 'active')
