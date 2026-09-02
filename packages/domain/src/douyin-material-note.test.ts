@@ -82,6 +82,10 @@ type TenantVersionHasNoIdentity = Assert<
 type TenantVersionSummaryHasNoIdentity = Assert<
   HasNoIdentityKeys<DouyinMaterialNoteTenantVersionSummary>
 >;
+type DouyinMaterialNoteTextBlock = Exclude<
+  DouyinMaterialNoteContentBlocks[number],
+  { type: 'image' }
+>;
 
 void (null as unknown as PublicPreviewHasNoIdentity);
 void (null as unknown as UnclaimedDetailHasNoIdentity);
@@ -100,7 +104,7 @@ const claimId = '550e8400-e29b-41d4-a716-446655440002';
 const employeeId = '550e8400-e29b-41d4-a716-446655440003';
 const occurredAt = '2026-09-01T00:00:00.000Z';
 
-const contentBlocks: DouyinMaterialNoteContentBlocks = [
+const contentBlocks: DouyinMaterialNoteTextBlock[] = [
   { type: 'heading', level: 2, text: '开工前准备' },
   { type: 'paragraph', text: '确认施工图纸和现场交底。' },
   { type: 'list', style: 'unordered', items: ['核对图纸', '确认工期'] },
