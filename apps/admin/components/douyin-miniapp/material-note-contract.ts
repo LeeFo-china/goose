@@ -1,11 +1,17 @@
 import {
   DOUYIN_MATERIAL_NOTE_STATUS_VALUES,
+  DOUYIN_MATERIAL_NOTE_CATEGORY_STATUS_VALUES,
+  DouyinMaterialNoteCategoryListSchema,
+  DouyinMaterialNoteCategorySchema,
   DouyinMaterialNoteTenantDetailSchema,
   DouyinMaterialNoteTenantListSchema,
   DouyinMaterialNoteTenantVersionListSchema,
   DouyinMaterialNoteTenantVersionSchema,
   DouyinMaterialNoteVersionDraftSchema,
   type DouyinMaterialNoteStatus,
+  type DouyinMaterialNoteCategory,
+  type DouyinMaterialNoteCategoryList,
+  type DouyinMaterialNoteCategoryStatus,
   type DouyinMaterialNoteTenantDetail,
   type DouyinMaterialNoteTenantList,
   type DouyinMaterialNoteTenantVersion,
@@ -24,10 +30,28 @@ export type MaterialNoteFilters = {
   keyword: string;
 };
 
+export type MaterialNoteCategoryFilters = {
+  page: number;
+  pageSize: number;
+  keyword: string;
+  status: DouyinMaterialNoteCategoryStatus | "";
+};
+
 export type MaterialNoteAction = "publish" | "archive" | "withdraw";
 
 const idSchema = z.string().uuid();
 const timestampSchema = z.string().datetime({ offset: true });
+const categoryStatusSet = new Set<string>(DOUYIN_MATERIAL_NOTE_CATEGORY_STATUS_VALUES);
+
+export const MaterialNoteCategoryCreateSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+  description: z.preprocess((value) => {
+    if (typeof value !== "string") return value;
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+  }, z.string().trim().min(1).max(300).nullable()).optional().default(null),
+  sort_order: z.number().int().min(0).max(100_000).optional().default(0),
+}).strict();
 
 export const MaterialNoteCreateResultSchema = z.object({
   note_id: idSchema,
@@ -109,6 +133,18 @@ export function buildMaterialNoteListQuery(filters: MaterialNoteFilters): URLSea
   return query;
 }
 
+export function buildMaterialNoteCategoryListQuery(
+  filters: MaterialNoteCategoryFilters,
+): URLSearchParams {
+  const query = new URLSearchParams({
+    page: String(filters.page),
+    pageSize: String(Math.min(MATERIAL_NOTE_MAX_PAGE_SIZE, filters.pageSize)),
+  });
+  if (filters.keyword) query.set("keyword", filters.keyword);
+  if (categoryStatusSet.has(filters.status)) query.set("status", filters.status);
+  return query;
+}
+
 export function assertMaterialNoteRequestedPage(
   actual: { page: number; pageSize: number },
   requested: { page: number; pageSize: number },
@@ -136,8 +172,20 @@ export function parseMaterialNoteVersion(value: unknown): DouyinMaterialNoteTena
   return DouyinMaterialNoteTenantVersionSchema.parse(value);
 }
 
+export function parseMaterialNoteCategory(value: unknown): DouyinMaterialNoteCategory {
+  return DouyinMaterialNoteCategorySchema.parse(value);
+}
+
+export function parseMaterialNoteCategoryList(value: unknown): DouyinMaterialNoteCategoryList {
+  return DouyinMaterialNoteCategoryListSchema.parse(value);
+}
+
 export function parseMaterialNoteDraft(value: unknown): DouyinMaterialNoteVersionDraft {
   return DouyinMaterialNoteVersionDraftSchema.parse(value);
+}
+
+export function parseMaterialNoteCategoryCreate(value: unknown) {
+  return MaterialNoteCategoryCreateSchema.parse(value);
 }
 
 export function parseMaterialNoteCreateResult(value: unknown) {

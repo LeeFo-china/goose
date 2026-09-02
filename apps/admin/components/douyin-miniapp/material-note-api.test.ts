@@ -2,11 +2,13 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import {
   appendMaterialNoteVersion,
+  createMaterialNoteCategory,
   createMaterialNote,
   createMaterialNoteCommandRequest,
   executeMaterialNoteCommand,
   getMaterialNote,
   getMaterialNoteVersion,
+  listMaterialNoteCategories,
   listMaterialNoteVersions,
   listMaterialNotes,
 } from "./material-note-api";
@@ -14,6 +16,7 @@ import {
 const noteId = "11111111-1111-4111-8111-111111111111";
 const versionId = "22222222-2222-4222-8222-222222222222";
 const employeeId = "33333333-3333-4333-8333-333333333333";
+const categoryId = "66666666-6666-4666-8666-666666666666";
 const commandKey = "44444444-4444-4444-8444-444444444444";
 const secondCommandKey = "55555555-5555-4555-8555-555555555555";
 const timestamp = "2026-09-01T08:00:00.000+08:00";
@@ -22,6 +25,7 @@ const draft = {
   title: "装修开工清单",
   summary: "开工前逐项确认",
   category: "施工避坑",
+  category_id: categoryId,
   applicable_to: "准备开工的业主",
   content_blocks: [{ type: "paragraph" as const, text: "先核对施工图。" }],
 };
@@ -126,6 +130,57 @@ describe("抖音资料后台 API", () => {
         url: `/api/backend/tenant/douyin-material-notes/${noteId}/versions`,
         method: "POST",
         body: { ...draft, title: "装修开工清单（修订）" },
+      },
+    ]);
+  });
+
+  test("分类列表和快速新建使用独立租户接口", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const category = {
+      id: categoryId,
+      name: "施工避坑",
+      description: null,
+      status: "active",
+      sort_order: 0,
+      created_at: timestamp,
+      updated_at: timestamp,
+    };
+    globalThis.fetch = (async (url, init) => {
+      calls.push({ url: String(url), init });
+      return jsonResponse(calls.length === 1
+        ? {
+          list: [category],
+          pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+        }
+        : category);
+    }) as typeof fetch;
+
+    await listMaterialNoteCategories({
+      page: 1,
+      pageSize: 20,
+      keyword: "避坑",
+      status: "active",
+    });
+    await createMaterialNoteCategory({
+      name: " 施工避坑 ",
+      description: null,
+      sort_order: 0,
+    });
+
+    expect(calls.map((call) => ({
+      url: call.url,
+      method: call.init?.method ?? "GET",
+      body: call.init?.body ? JSON.parse(String(call.init.body)) : undefined,
+    }))).toEqual([
+      {
+        url: "/api/backend/tenant/douyin-material-note-categories?page=1&pageSize=20&keyword=%E9%81%BF%E5%9D%91&status=active",
+        method: "GET",
+        body: undefined,
+      },
+      {
+        url: "/api/backend/tenant/douyin-material-note-categories",
+        method: "POST",
+        body: { name: "施工避坑", description: null, sort_order: 0 },
       },
     ]);
   });

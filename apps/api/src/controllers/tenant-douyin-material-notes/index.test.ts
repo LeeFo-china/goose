@@ -12,6 +12,7 @@ beforeAll(async () => {
 
 const NOTE_ID = '11111111-1111-4111-8111-111111111111';
 const VERSION_ID = '22222222-2222-4222-8222-222222222222';
+const CATEGORY_ID = '66666666-6666-4666-8666-666666666666';
 const IDEMPOTENCY_KEY = '33333333-3333-4333-8333-333333333333';
 const authContext = {
   tenantId: '44444444-4444-4444-8444-444444444444',
@@ -33,6 +34,9 @@ function createController() {
   const service = {
     list: mock(async () => emptyPage),
     create: mock(async () => ({ note_id: NOTE_ID })),
+    listCategories: mock(async () => emptyPage),
+    createCategory: mock(async () => ({ id: CATEGORY_ID })),
+    updateCategory: mock(async () => ({ id: CATEGORY_ID })),
     getDetail: mock(async () => ({ id: NOTE_ID })),
     listVersions: mock(async () => emptyPage),
     getVersionDetail: mock(async () => ({ id: VERSION_ID })),
@@ -49,18 +53,22 @@ function createController() {
 }
 
 describe('TenantDouyinMaterialNotesController', () => {
-  test('registers exactly nine routes in the root registry', async () => {
+  test('registers material note and category routes in the root registry', async () => {
     const { controller } = createController();
     const routes: Array<{ method: string; path: string }> = [];
     const fastify = {
       get: (path: string) => routes.push({ method: 'GET', path }),
       post: (path: string) => routes.push({ method: 'POST', path }),
+      patch: (path: string) => routes.push({ method: 'PATCH', path }),
     };
     controller.registerExtraRoutes(fastify as never);
 
     expect(routes).toEqual([
       { method: 'GET', path: '/tenant/douyin-material-notes' },
       { method: 'POST', path: '/tenant/douyin-material-notes' },
+      { method: 'GET', path: '/tenant/douyin-material-note-categories' },
+      { method: 'POST', path: '/tenant/douyin-material-note-categories' },
+      { method: 'PATCH', path: '/tenant/douyin-material-note-categories/:id' },
       { method: 'GET', path: '/tenant/douyin-material-notes/:id' },
       { method: 'GET', path: '/tenant/douyin-material-notes/:id/versions' },
       { method: 'GET', path: '/tenant/douyin-material-notes/:id/versions/:versionId' },
@@ -75,6 +83,49 @@ describe('TenantDouyinMaterialNotesController', () => {
       'import TenantDouyinMaterialNotesController from "@/controllers/tenant-douyin-material-notes";',
     );
     expect(source).toContain('TenantDouyinMaterialNotesController.registerExtraRoutes(app);');
+  });
+
+  test('validates category list, create and update before auth', async () => {
+    const invalid = createController();
+    await expect(invalid.controller.listCategories({
+      query: { pageSize: 101 },
+    } as never)).rejects.toMatchObject({ statusCode: 400 });
+    await expect(invalid.controller.createCategory({
+      body: { name: '' },
+    } as never)).rejects.toMatchObject({ statusCode: 400 });
+    await expect(invalid.controller.updateCategory({
+      params: { id: 'bad' },
+      body: { name: '施工避坑' },
+    } as never)).rejects.toMatchObject({ statusCode: 400 });
+    expect(invalid.getRequiredTenantContext).not.toHaveBeenCalled();
+
+    const valid = createController();
+    await valid.controller.listCategories({
+      query: { keyword: '  避坑  ', status: 'active' },
+    } as never);
+    await valid.controller.createCategory({
+      body: { name: '  施工避坑  ', description: '', sort_order: 10 },
+    } as never);
+    await valid.controller.updateCategory({
+      params: { id: CATEGORY_ID },
+      body: { name: '报价资料', status: 'disabled' },
+    } as never);
+
+    expect(valid.service.listCategories).toHaveBeenCalledWith(authContext, {
+      page: 1,
+      pageSize: 20,
+      keyword: '避坑',
+      status: 'active',
+    });
+    expect(valid.service.createCategory).toHaveBeenCalledWith(authContext, {
+      name: '施工避坑',
+      description: null,
+      sort_order: 10,
+    });
+    expect(valid.service.updateCategory).toHaveBeenCalledWith(authContext, CATEGORY_ID, {
+      name: '报价资料',
+      status: 'disabled',
+    });
   });
 
   test('validates list defaults before auth and wraps successful responses', async () => {

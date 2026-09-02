@@ -34,8 +34,16 @@ export const DOUYIN_MATERIAL_NOTE_ERROR_CODE_VALUES = [
   'MATERIAL_NOTE_STATE_CONFLICT',
 ] as const;
 
+export const DOUYIN_MATERIAL_NOTE_CATEGORY_STATUS_VALUES = [
+  'active',
+  'disabled',
+] as const;
+
 export const DouyinMaterialNoteStatusSchema = z.enum(
   DOUYIN_MATERIAL_NOTE_STATUS_VALUES,
+);
+export const DouyinMaterialNoteCategoryStatusSchema = z.enum(
+  DOUYIN_MATERIAL_NOTE_CATEGORY_STATUS_VALUES,
 );
 
 const MAX_BLOCK_COUNT = 100;
@@ -121,6 +129,7 @@ const VersionContentShape = {
   title: TitleSchema,
   summary: SummarySchema,
   category: CategorySchema,
+  category_id: IdSchema.nullable().optional(),
   applicable_to: ApplicableToSchema,
   content_blocks: DouyinMaterialNoteContentBlocksSchema,
 };
@@ -134,6 +143,7 @@ const PublicPreviewShape = {
   title: TitleSchema,
   summary: SummarySchema,
   category: CategorySchema,
+  category_id: IdSchema.nullable().optional(),
   applicable_to: ApplicableToSchema,
   published_at: TimestampSchema,
   claimed: z.boolean(),
@@ -153,6 +163,7 @@ const ClaimedMaterialShape = {
   title: TitleSchema,
   summary: SummarySchema,
   category: CategorySchema,
+  category_id: IdSchema.nullable().optional(),
   applicable_to: ApplicableToSchema,
   content_blocks: DouyinMaterialNotePublicContentBlocksSchema,
 };
@@ -175,6 +186,7 @@ const OwnedSummaryShape = {
   title: TitleSchema,
   summary: SummarySchema,
   category: CategorySchema,
+  category_id: IdSchema.nullable().optional(),
   applicable_to: ApplicableToSchema,
   claimed_at: TimestampSchema,
 };
@@ -205,6 +217,7 @@ const TenantSummaryShape = {
   status: DouyinMaterialNoteStatusSchema,
   title: TitleSchema,
   category: CategorySchema,
+  category_id: IdSchema.nullable().optional(),
   current_version: z.number().int().positive(),
   claim_count: z.number().int().nonnegative(),
   published_at: TimestampSchema.nullable(),
@@ -234,6 +247,16 @@ export const DouyinMaterialNoteTenantDetailSchema = z
 
 export const DouyinMaterialNotePaginationSchema =
   SiteContentPaginationSchema;
+
+export const DouyinMaterialNoteCategorySchema = z.strictObject({
+  id: IdSchema,
+  name: CategorySchema,
+  description: z.string().trim().min(1).max(300).nullable(),
+  status: DouyinMaterialNoteCategoryStatusSchema,
+  sort_order: z.number().int().min(0).max(100_000),
+  created_at: TimestampSchema,
+  updated_at: TimestampSchema,
+});
 
 const createMaterialNoteListSchema = <ItemSchema extends z.ZodType>(
   itemSchema: ItemSchema,
@@ -314,8 +337,13 @@ export const DouyinMaterialNoteTenantListSchema =
 export const DouyinMaterialNoteTenantVersionListSchema =
   createMaterialNoteListSchema(DouyinMaterialNoteTenantVersionSummarySchema);
 
+export const DouyinMaterialNoteCategoryListSchema =
+  createMaterialNoteListSchema(DouyinMaterialNoteCategorySchema);
+
 export type DouyinMaterialNoteStatus =
   (typeof DOUYIN_MATERIAL_NOTE_STATUS_VALUES)[number];
+export type DouyinMaterialNoteCategoryStatus =
+  (typeof DOUYIN_MATERIAL_NOTE_CATEGORY_STATUS_VALUES)[number];
 export type DouyinMaterialNoteBlockType =
   (typeof DOUYIN_MATERIAL_NOTE_BLOCK_TYPE_VALUES)[number];
 export type DouyinMaterialNoteErrorCode =
@@ -368,6 +396,9 @@ export type DouyinMaterialNoteTenantVersionSummary = z.infer<
 export type DouyinMaterialNotePagination = z.infer<
   typeof DouyinMaterialNotePaginationSchema
 >;
+export type DouyinMaterialNoteCategory = z.infer<
+  typeof DouyinMaterialNoteCategorySchema
+>;
 export type DouyinMaterialNotePublicList = z.infer<
   typeof DouyinMaterialNotePublicListSchema
 >;
@@ -379,4 +410,7 @@ export type DouyinMaterialNoteTenantList = z.infer<
 >;
 export type DouyinMaterialNoteTenantVersionList = z.infer<
   typeof DouyinMaterialNoteTenantVersionListSchema
+>;
+export type DouyinMaterialNoteCategoryList = z.infer<
+  typeof DouyinMaterialNoteCategoryListSchema
 >;

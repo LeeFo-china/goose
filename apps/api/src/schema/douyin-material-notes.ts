@@ -55,6 +55,7 @@ export const DouyinMaterialNoteRepositoryPreviewVersionSchema = z.strictObject({
   title: z.string().trim().min(1).max(300),
   summary: z.string().trim().min(1).max(1_000),
   category: z.string().trim().min(1).max(100),
+  category_id: z.uuid().nullable().optional(),
   applicable_to: z.string().trim().min(1).max(300).nullable(),
 });
 export const DouyinMaterialNoteRepositoryPublicRowSchema = z.strictObject({

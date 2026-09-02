@@ -18,6 +18,7 @@ import {
   createMaterialNote,
   getMaterialNoteErrorMessage,
 } from "@/components/douyin-miniapp/material-note-api";
+import { MaterialNoteCategorySelect } from "@/components/douyin-miniapp/material-note-category-select";
 import { MaterialNoteRichEditor } from "@/components/douyin-miniapp/material-note-rich-editor";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,7 @@ const emptyDraft: DouyinMaterialNoteVersionDraft = {
   title: "",
   summary: "",
   category: "",
+  category_id: null,
   applicable_to: null,
   content_blocks: [],
 };
@@ -48,13 +50,18 @@ const emptyDraft: DouyinMaterialNoteVersionDraft = {
 type MaterialNoteEditorField = keyof DouyinMaterialNoteVersionDraft;
 type MaterialNoteEditorFieldErrors = Partial<Record<MaterialNoteEditorField, string>>;
 
-const materialNoteFieldErrorMessages: Record<MaterialNoteEditorField, string> = {
+const materialNoteFieldErrorMessages = {
   title: "请输入 1～300 个字符的资料标题",
   summary: "请输入 1～1000 个字符的资料摘要",
   category: "请输入 1～100 个字符的资料分类",
-  applicable_to: "适用场景不能超过 300 个字符",
+  category_id: "请选择资料分类",
   content_blocks: "请检查正文内容块，确保必填内容完整且格式有效",
-};
+} satisfies Partial<Record<MaterialNoteEditorField, string>>;
+type MaterialNoteEditorErrorField = keyof typeof materialNoteFieldErrorMessages;
+
+function hasMaterialNoteFieldErrorMessage(field: string): field is MaterialNoteEditorErrorField {
+  return Object.prototype.hasOwnProperty.call(materialNoteFieldErrorMessages, field);
+}
 
 export function validateMaterialNoteEditorDraft(value: unknown):
   | { success: true; data: DouyinMaterialNoteVersionDraft }
@@ -67,11 +74,10 @@ export function validateMaterialNoteEditorDraft(value: unknown):
     const field = issue.path[0];
     if (
       typeof field === "string"
-      && field in materialNoteFieldErrorMessages
-      && !fieldErrors[field as MaterialNoteEditorField]
+      && hasMaterialNoteFieldErrorMessage(field)
+      && !fieldErrors[field]
     ) {
-      fieldErrors[field as MaterialNoteEditorField] =
-        materialNoteFieldErrorMessages[field as MaterialNoteEditorField];
+      fieldErrors[field] = materialNoteFieldErrorMessages[field];
     }
   }
   return { success: false, fieldErrors };
@@ -103,7 +109,8 @@ function draftFromVersion(
     title: version.title,
     summary: version.summary,
     category: version.category,
-    applicable_to: version.applicable_to,
+    category_id: version.category_id ?? null,
+    applicable_to: null,
     content_blocks: version.content_blocks,
   };
 }
@@ -144,6 +151,22 @@ export function MaterialNoteEditor({
   function updateBlocks(blocks: DouyinMaterialNoteBlock[]) {
     const result = narrowMaterialNoteEditorBlocks(blocks);
     if (result) setField("content_blocks", result);
+  }
+
+  function setCategory(category: { id: string; name: string }) {
+    setDraft((current) => ({
+      ...current,
+      category: category.name,
+      category_id: category.id,
+    }));
+    setFieldErrors((current) => {
+      if (!current.category && !current.category_id) return current;
+      const next = { ...current };
+      delete next.category;
+      delete next.category_id;
+      return next;
+    });
+    setError("");
   }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -207,13 +230,18 @@ export function MaterialNoteEditor({
                     <FieldDescription>1～300 个字符。</FieldDescription>
                     <FieldError id="material-title-error">{fieldErrors.title}</FieldError>
                   </Field>
-                  <Field data-invalid={Boolean(fieldErrors.category)}><FieldLabel htmlFor="material-category">分类</FieldLabel>
-                    <Input id="material-category" value={draft.category} maxLength={100} required aria-required aria-invalid={Boolean(fieldErrors.category)} aria-describedby="material-category-error" disabled={pending || !canManage} onChange={(event) => setField("category", event.target.value)} />
-                    <FieldError id="material-category-error">{fieldErrors.category}</FieldError>
-                  </Field>
-                  <Field data-invalid={Boolean(fieldErrors.applicable_to)}><FieldLabel htmlFor="material-applicable">适用场景</FieldLabel>
-                    <Input id="material-applicable" value={draft.applicable_to ?? ""} maxLength={300} aria-invalid={Boolean(fieldErrors.applicable_to)} aria-describedby="material-applicable-error" disabled={pending || !canManage} onChange={(event) => setField("applicable_to", event.target.value || null)} />
-                    <FieldError id="material-applicable-error">{fieldErrors.applicable_to}</FieldError>
+                  <Field data-invalid={Boolean(fieldErrors.category || fieldErrors.category_id)}>
+                    <FieldLabel htmlFor="material-category">分类</FieldLabel>
+                    <MaterialNoteCategorySelect
+                      categoryId={draft.category_id}
+                      categoryName={draft.category}
+                      disabled={pending || !canManage}
+                      invalid={Boolean(fieldErrors.category || fieldErrors.category_id)}
+                      onChange={setCategory}
+                    />
+                    <FieldError id="material-category-error">
+                      {fieldErrors.category ?? fieldErrors.category_id}
+                    </FieldError>
                   </Field>
                   <Field className="md:col-span-2" data-invalid={Boolean(fieldErrors.summary)}><FieldLabel htmlFor="material-summary">摘要</FieldLabel>
                     <Textarea id="material-summary" rows={4} value={draft.summary} maxLength={1_000} required aria-required aria-invalid={Boolean(fieldErrors.summary)} aria-describedby="material-summary-error" disabled={pending || !canManage} onChange={(event) => setField("summary", event.target.value)} />

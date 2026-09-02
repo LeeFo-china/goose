@@ -90,6 +90,9 @@ describe("tenant service capability map", () => {
   test.each([
     ["GET", "/tenant/douyin-material-notes", "read"],
     ["POST", "/tenant/douyin-material-notes", "write"],
+    ["GET", "/tenant/douyin-material-note-categories", "read"],
+    ["POST", "/tenant/douyin-material-note-categories", "write"],
+    ["PATCH", "/tenant/douyin-material-note-categories/:id", "write"],
     ["GET", "/tenant/douyin-material-notes/:id", "read"],
     ["GET", "/tenant/douyin-material-notes/:id/versions", "read"],
     ["GET", "/tenant/douyin-material-notes/:id/versions/:versionId", "read"],

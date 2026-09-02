@@ -6,11 +6,16 @@ import { z } from "zod";
 
 import {
   assertMaterialNoteRequestedPage,
+  buildMaterialNoteCategoryListQuery,
   buildMaterialNoteListQuery,
   getMaterialNoteActions,
   type MaterialNoteAction,
+  type MaterialNoteCategoryFilters,
   type MaterialNoteFilters,
   parseMaterialNoteAppendResult,
+  parseMaterialNoteCategory,
+  parseMaterialNoteCategoryCreate,
+  parseMaterialNoteCategoryList,
   parseMaterialNoteCreateResult,
   parseMaterialNoteDetail,
   parseMaterialNoteDraft,
@@ -22,6 +27,7 @@ import {
 import { requestBackendJson } from "@/lib/backend-client";
 
 const API_PATH = "/tenant/douyin-material-notes";
+const CATEGORY_API_PATH = "/tenant/douyin-material-note-categories";
 const idSchema = z.string().uuid();
 
 type ReasonCommandBody = {
@@ -51,6 +57,30 @@ export async function listMaterialNotes(filters: MaterialNoteFilters) {
   const result = parseMaterialNoteList(raw);
   assertMaterialNoteRequestedPage(result.pagination, filters);
   return result;
+}
+
+export async function listMaterialNoteCategories(filters: MaterialNoteCategoryFilters) {
+  const requested = {
+    page: filters.page,
+    pageSize: Math.min(100, filters.pageSize),
+  };
+  const raw = await requestBackendJson<unknown>(
+    `${CATEGORY_API_PATH}?${buildMaterialNoteCategoryListQuery(filters)}`,
+    { cache: "no-store", fallbackMessage: "资料分类加载失败" },
+  );
+  const result = parseMaterialNoteCategoryList(raw);
+  assertMaterialNoteRequestedPage(result.pagination, requested);
+  return result;
+}
+
+export async function createMaterialNoteCategory(input: unknown) {
+  const body = parseMaterialNoteCategoryCreate(input);
+  const raw = await requestBackendJson<unknown>(CATEGORY_API_PATH, {
+    method: "POST",
+    body: JSON.stringify(body),
+    fallbackMessage: "创建资料分类失败",
+  });
+  return parseMaterialNoteCategory(raw);
 }
 
 export async function getMaterialNote(noteId: string) {

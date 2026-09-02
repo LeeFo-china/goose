@@ -5,6 +5,9 @@ import {
   CreateTenantDouyinMaterialNoteVersionSchema,
   TenantDouyinMaterialNoteArchiveSchema,
   TenantDouyinMaterialNoteCommandHeadersSchema,
+  TenantDouyinMaterialNoteCategoryCreateSchema,
+  TenantDouyinMaterialNoteCategoryListQuerySchema,
+  TenantDouyinMaterialNoteCategoryUpdateSchema,
   TenantDouyinMaterialNoteDetailResponseSchema,
   TenantDouyinMaterialNoteListQuerySchema,
   TenantDouyinMaterialNotePublishSchema,
@@ -14,10 +17,12 @@ import {
 } from './tenant-douyin-material-notes';
 
 const ID = '11111111-1111-4111-8111-111111111111';
+const CATEGORY_ID = '44444444-4444-4444-8444-444444444444';
 const draft = {
   title: ' 装修开工清单 ',
   summary: ' 开工前检查事项 ',
   category: ' 施工避坑 ',
+  category_id: CATEGORY_ID,
   applicable_to: null,
   content_blocks: [{ type: 'paragraph', text: '确认施工图纸。' }],
 };
@@ -46,6 +51,8 @@ describe('Tenant Douyin material note schemas', () => {
   test('create and append version accept the same strict material draft', () => {
     expect(CreateTenantDouyinMaterialNoteSchema.parse(draft).title)
       .toBe('装修开工清单');
+    expect(CreateTenantDouyinMaterialNoteSchema.parse(draft).category_id)
+      .toBe(CATEGORY_ID);
     expect(CreateTenantDouyinMaterialNoteVersionSchema.parse(draft).category)
       .toBe('施工避坑');
     for (const schema of [
@@ -55,6 +62,47 @@ describe('Tenant Douyin material note schemas', () => {
       expect(schema.safeParse({ ...draft, tenant_id: ID }).success).toBe(false);
       expect(schema.safeParse({ ...draft, content_blocks: [] }).success).toBe(true);
     }
+  });
+
+  test('material note categories are paginated tenant resources', () => {
+    expect(TenantDouyinMaterialNoteCategoryListQuerySchema.parse({
+      keyword: '  避坑  ',
+      status: 'active',
+      pageSize: 100,
+    })).toEqual({
+      keyword: '避坑',
+      status: 'active',
+      page: 1,
+      pageSize: 100,
+    });
+    expect(TenantDouyinMaterialNoteCategoryListQuerySchema.safeParse({
+      status: 'deleted',
+    }).success).toBe(false);
+    expect(TenantDouyinMaterialNoteCategoryCreateSchema.parse({
+      name: '  施工避坑  ',
+      description: '  开工和施工阶段资料  ',
+      sort_order: 20,
+    })).toEqual({
+      name: '施工避坑',
+      description: '开工和施工阶段资料',
+      sort_order: 20,
+    });
+    expect(TenantDouyinMaterialNoteCategoryCreateSchema.safeParse({
+      name: '',
+    }).success).toBe(false);
+    expect(TenantDouyinMaterialNoteCategoryUpdateSchema.parse({
+      name: '  报价资料  ',
+      description: '',
+      status: 'disabled',
+      sort_order: 30,
+    })).toEqual({
+      name: '报价资料',
+      description: null,
+      status: 'disabled',
+      sort_order: 30,
+    });
+    expect(TenantDouyinMaterialNoteCategoryUpdateSchema.safeParse({}).success)
+      .toBe(false);
   });
 
   test('publish body is exact and never accepts the idempotency key', () => {
