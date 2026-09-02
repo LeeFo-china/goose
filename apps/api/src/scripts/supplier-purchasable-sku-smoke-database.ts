@@ -1,5 +1,10 @@
 import type { SupplierPurchasableSkuSmokeGateway } from
   "./supplier-purchasable-sku-smoke";
+import {
+  SUPPLIER_PURCHASABLE_SKU_CLOSE_OPTIONS,
+  createSupplierPurchasableSkuDatabaseOptions,
+  type SupplierPurchasableSkuDatabaseConnection,
+} from "./supplier-purchasable-sku-development-database";
 import { verifySupplierPurchasableSkuBoundaries } from
   "./supplier-purchasable-sku-smoke-boundaries";
 import {
@@ -11,19 +16,17 @@ import {
 import { runSupplierPurchasableSkuCoreScenarios } from
   "./supplier-purchasable-sku-smoke-scenarios";
 
-const CONNECTION_OPTIONS = {
-  max: 4,
-  prepare: false,
-  connectionTimeout: 10,
-} as const;
-
 export class DirectSupplierPurchasableSkuSmokeGateway
 implements SupplierPurchasableSkuSmokeGateway {
   private readonly database: Bun.SQL;
   private readonly fixture = createSupplierPurchasableSkuSmokeFixture();
 
-  constructor(private readonly databaseUrl: string) {
-    this.database = new Bun.SQL(databaseUrl, CONNECTION_OPTIONS);
+  constructor(
+    private readonly databaseConnection: SupplierPurchasableSkuDatabaseConnection,
+  ) {
+    this.database = new Bun.SQL(
+      createSupplierPurchasableSkuDatabaseOptions(databaseConnection, 4),
+    );
   }
 
   async runScenarios() {
@@ -41,21 +44,23 @@ implements SupplierPurchasableSkuSmokeGateway {
       this.database,
       this.fixture,
     );
-    const verification = new Bun.SQL(this.databaseUrl, {
-      ...CONNECTION_OPTIONS,
-      max: 1,
-    });
+    const verification = new Bun.SQL(
+      createSupplierPurchasableSkuDatabaseOptions(
+        this.databaseConnection,
+        1,
+      ),
+    );
     try {
       return await countSupplierPurchasableSkuSmokeResiduals(
         verification,
         this.fixture,
       ) === 0;
     } finally {
-      await verification.close();
+      await verification.close(SUPPLIER_PURCHASABLE_SKU_CLOSE_OPTIONS);
     }
   }
 
   close(): Promise<void> {
-    return this.database.close();
+    return this.database.close(SUPPLIER_PURCHASABLE_SKU_CLOSE_OPTIONS);
   }
 }

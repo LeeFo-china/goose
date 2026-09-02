@@ -113,6 +113,53 @@ export type SupplierSkuDialogSavePlan = {
   scope: ProductApiScope;
 };
 
+export type SupplierSkuDialogSaveFailureDisposition =
+  | "version-conflict"
+  | "transport-uncertain"
+  | "definitive";
+
+const VERSION_CONFLICT_CODES = new Set([
+  "SUPPLIER_SKU_VERSION_CONFLICT",
+  "SUPPLIER_PRICE_LIST_VERSION_CONFLICT",
+]);
+
+export function classifySupplierSkuDialogSaveFailure(
+  error: unknown,
+): SupplierSkuDialogSaveFailureDisposition {
+  const status = getErrorField(error, "status");
+  const code = getErrorField(error, "code");
+  if (status === 409 && typeof code === "string" &&
+    VERSION_CONFLICT_CODES.has(code)) {
+    return "version-conflict";
+  }
+  if (typeof status !== "number" || status === 408 || status >= 500) {
+    return "transport-uncertain";
+  }
+  return "definitive";
+}
+
+export async function refreshSupplierSkuDialogVersionConflict(
+  input: {
+    inlinePriceEnabled: boolean;
+    scope: ProductApiScope;
+    productId: string;
+    sku: Pick<SupplierSku, "id" | "sku_code" | "status">;
+    priceForm: SupplierSkuPriceForm;
+  },
+  dependencies: {
+    loadCurrentSku: () => Promise<SupplierSku>;
+    loadCurrentPrice: (skuId: string) => Promise<SupplierSkuPriceContext>;
+  },
+) {
+  if (!input.inlinePriceEnabled || input.scope.kind !== "tenant") return null;
+
+  const sku = await dependencies.loadCurrentSku();
+  const priceContext = sku.status === "inactive"
+    ? null
+    : await dependencies.loadCurrentPrice(sku.id);
+  return { sku, priceContext, priceForm: input.priceForm };
+}
+
 export function prepareSupplierSkuDialogSave(
   input: SaveInput,
   currentAttempt: SupplierCommandAttempt | null,
@@ -265,6 +312,12 @@ async function sendSupplierSkuDialogSave(
       plan.attempt.idempotencyKey,
     );
   }
+}
+
+function getErrorField(error: unknown, field: "status" | "code"): unknown {
+  return typeof error === "object" && error !== null && field in error
+    ? (error as Record<string, unknown>)[field]
+    : undefined;
 }
 
 export function isSupplierSkuPriceFieldsDisabled({

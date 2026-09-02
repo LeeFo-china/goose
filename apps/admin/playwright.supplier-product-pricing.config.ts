@@ -8,6 +8,7 @@ export default defineConfig({
   testDir: "./e2e",
   testMatch: [
     "supplier-product-pricing-workflow.spec.ts",
+    "supplier-sku-inline-price-conflict.spec.ts",
     "supplier-sku-inline-price-workflow.spec.ts",
   ],
   timeout: 60_000,

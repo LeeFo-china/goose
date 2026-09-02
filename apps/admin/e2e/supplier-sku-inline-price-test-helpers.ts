@@ -99,6 +99,45 @@ export async function login(page: Page) {
   expect(response.ok()).toBe(true);
 }
 
+export async function selectSupplier(page: Page, platform = false) {
+  const name = platform ? "第21家平台供应商" : "第21家合作供应商";
+  const search = platform ? "搜索平台供应商" : "搜索合作供应商";
+  const select = platform ? "平台供应商" : "合作供应商";
+  await page.getByLabel(search).fill(name);
+  await page.getByRole("button", { name: search, exact: true }).click();
+  await page.getByLabel(select, { exact: true }).click();
+  await page.getByRole("option", { name: new RegExp(name) }).click();
+}
+
+export async function openTenantSkuWorkspace(
+  page: Page,
+  request: APIRequestContext,
+  config: ResetConfig = {},
+) {
+  await resetMock(request, config);
+  await login(page);
+  await page.goto("/supplier-products", { waitUntil: "networkidle" });
+  await selectSupplier(page);
+  const productRow = page.getByRole("row").filter({ hasText: "租户私有瓷砖" });
+  await expect(page.getByLabel("合作供应商", { exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "新增商品" })).toBeEnabled();
+  await expect(productRow.getByRole("button", { name: "查看 SKU" }))
+    .toBeEnabled();
+  await productRow.getByRole("button", { name: "查看 SKU" }).click();
+  await expect(page).toHaveURL(new RegExp(`productId=${tenantProductId}`));
+  const skuRow = page.getByRole("row").filter({
+    hasText: "租户私有瓷砖 600×600",
+  });
+  await expect(page.getByRole("heading", { name: "租户私有瓷砖 · SKU" }))
+    .toBeVisible();
+  await expect(skuRow).toBeVisible();
+  await expect(page.getByRole("button", { name: "刷新" })).toBeEnabled();
+  await page.waitForLoadState("networkidle");
+  await expect(page.getByLabel("合作供应商", { exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "刷新" })).toBeEnabled();
+  await expect(skuRow.getByRole("button", { name: "编辑 SKU" })).toBeEnabled();
+}
+
 export async function readMutations(
   request: APIRequestContext,
 ): Promise<Mutation[]> {

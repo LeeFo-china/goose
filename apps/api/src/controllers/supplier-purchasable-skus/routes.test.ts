@@ -24,6 +24,13 @@ const context = {
   next_scheduled_effective_from: null, current_price: null,
 } as const;
 const saved = { status: "saved", idempotent: false } as const;
+const gapSaved = {
+  status: "saved",
+  idempotent: true,
+  price_version_created: false,
+  current_price: { effective_until: "2026-09-09T00:00:00Z" },
+  next_scheduled_effective_from: "2026-09-10T00:00:00Z",
+} as const;
 const createBody = {
   sku: {
     name: "净味乳胶漆 18L", purchase_unit_id: UNIT_ID,
@@ -162,10 +169,14 @@ describe("SupplierPurchasableSkusController", () => {
       .toMatchObject({
       data: saved, message: "success",
     });
-    await expect(value.updatePurchasableSku(
+    update.mockImplementationOnce(async () => gapSaved as never);
+    const gapResponse = await value.updatePurchasableSku(
       request({ body: updateBody }) as never,
-    )).resolves
-      .toMatchObject({ data: saved, message: "success" });
+    );
+    expect(gapResponse as unknown).toEqual({
+      data: gapSaved,
+      message: "success",
+    });
     expect(create).toHaveBeenCalledWith(auth, {
       tenantSupplierId: TENANT_SUPPLIER_ID, productId: PRODUCT_ID,
       skuId: SKU_ID, body: createBody, idempotencyKey: "sku:write",

@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
+import { Errors } from "@/errors/error-factory";
+import { assertSupplierPurchasableSkuPermissionBoundary } from
+  "./supplier-purchasable-sku-permission-boundary";
 import {
   createSupplierPurchasableSkuSmokeSummary,
   redactSupplierPurchasableSkuDatabaseUrl,
@@ -7,11 +10,118 @@ import {
   runSupplierPurchasableSkuSmokeCli,
   resolveSmokeConfig,
 } from "./supplier-purchasable-sku-smoke";
+import {
+  assertSupplierPriceListItemsCopied,
+  runSupplierPurchasableSkuConcurrentCommands,
+} from "./supplier-purchasable-sku-smoke-scenarios";
 
 const DATABASE_URL =
   "postgresql://fixture-user:fixture-password@api-dev.goodcms.cn:5432/postgres?sslmode=require";
 
 describe("supplier purchasable SKU smoke command", () => {
+  test("concurrency harness reserves two connections and synchronizes both commands", async () => {
+    const events: string[] = [];
+    const connections = ["left", "right"].map((name) => ({
+      name,
+      release: () => events.push(`release:${name}`),
+    }));
+    let reservation = 0;
+
+    const results = await runSupplierPurchasableSkuConcurrentCommands(
+      {
+        reserve: async () => connections[reservation++]!,
+      },
+      ["a", "b"] as const,
+      async (connection, input, atBarrier) => {
+        events.push(`start:${connection.name}`);
+        await atBarrier();
+        events.push(`command:${connection.name}`);
+        return input;
+      },
+      { barrierTimeoutMs: 20, completionTimeoutMs: 50 },
+    );
+
+    expect(results).toEqual(["a", "b"]);
+    expect(events.slice(0, 2)).toEqual(["start:left", "start:right"]);
+    expect(events.indexOf("command:left")).toBeGreaterThan(1);
+    expect(events.indexOf("command:right")).toBeGreaterThan(1);
+    expect(events.slice(-2)).toEqual(["release:left", "release:right"]);
+  });
+
+  test("concurrency barrier timeout is bounded and always releases reservations", async () => {
+    const releases: string[] = [];
+    const connections = ["left", "right"].map((name) => ({
+      name,
+      release: () => releases.push(name),
+    }));
+    let reservation = 0;
+
+    await expect(runSupplierPurchasableSkuConcurrentCommands(
+      {
+        reserve: async () => connections[reservation++]!,
+      },
+      ["a", "b"] as const,
+      async (_connection, input, atBarrier) => {
+        if (input === "a") await atBarrier();
+        return input;
+      },
+      { barrierTimeoutMs: 5, completionTimeoutMs: 20 },
+    )).rejects.toThrow("SMOKE_CONCURRENCY_BARRIER_TIMEOUT");
+    expect(releases).toEqual(["left", "right"]);
+  });
+
+  test("multi-item copy preserves every business field with new row identities", () => {
+    const source = [
+      {
+        id: "source-target",
+        supplier_price_list_id: "source-list",
+        supplier_sku_id: "target-sku",
+        supplier_product_id: "target-product",
+        unit_price: "110.00",
+        tax_rate: "0.13",
+        tax_inclusive: false,
+        created_at: "before",
+        updated_at: "before",
+      },
+      {
+        id: "source-other",
+        supplier_price_list_id: "source-list",
+        supplier_sku_id: "other-sku",
+        supplier_product_id: "other-product",
+        unit_price: "77.77",
+        tax_rate: "0.13",
+        tax_inclusive: false,
+        created_at: "before",
+        updated_at: "before",
+      },
+    ];
+    const copied = source.map((item) => ({
+      ...item,
+      id: `copy-${item.id}`,
+      supplier_price_list_id: "copied-list",
+      unit_price: item.supplier_sku_id === "target-sku"
+        ? "130.00"
+        : item.unit_price,
+      created_at: "after",
+      updated_at: "after",
+    }));
+
+    expect(() => assertSupplierPriceListItemsCopied(
+      source,
+      copied,
+      "target-sku",
+      "130.00",
+    )).not.toThrow();
+    expect(() => assertSupplierPriceListItemsCopied(
+      source,
+      copied.map((item) => item.supplier_sku_id === "other-sku"
+        ? { ...item, unit_price: "99.99" }
+        : item),
+      "target-sku",
+      "130.00",
+    )).toThrow("SMOKE_COPIED_PRICE_ITEMS_MISMATCH");
+  });
+
   test("requires its explicit database URL", () => {
     expect(() => resolveSmokeConfig({})).toThrowError(
       "缺少 SUPPLIER_PURCHASABLE_SKU_SMOKE_DB_URL",
@@ -23,8 +133,18 @@ describe("supplier purchasable SKU smoke command", () => {
       SUPPLIER_PURCHASABLE_SKU_SMOKE_DB_URL: DATABASE_URL,
     });
 
-    expect(config.databaseUrl).toBe(DATABASE_URL);
     expect(config.databaseHost).toBe("api-dev.goodcms.cn");
+    expect(config.databaseConnection).toEqual({
+      adapter: "postgres",
+      hostname: "api-dev.goodcms.cn",
+      port: 5432,
+      database: "postgres",
+      username: "fixture-user",
+      password: "fixture-password",
+      tls: true,
+      url: DATABASE_URL,
+    });
+    expect(config).not.toHaveProperty("databaseUrl");
     expect(config.redactedDatabaseUrl).toBe(
       "postgresql://***:***@api-dev.goodcms.cn:5432/postgres?sslmode=require",
     );
@@ -32,6 +152,53 @@ describe("supplier purchasable SKU smoke command", () => {
       .not.toContain("fixture-user");
     expect(redactSupplierPurchasableSkuDatabaseUrl(DATABASE_URL))
       .not.toContain("fixture-password");
+  });
+
+  test.each([
+    "api.goodcms.cn",
+    "api-dev.goodcms.cn.attacker.invalid",
+    "unknown-db.internal",
+  ])("rejects non-development database host %s", (host) => {
+    expect(() => resolveSmokeConfig({
+      SUPPLIER_PURCHASABLE_SKU_SMOKE_DB_URL:
+        `postgresql://fixture:fixture@${host}:5432/postgres`,
+    })).toThrowError(
+      "SUPPLIER_PURCHASABLE_SKU_SMOKE_DB_URL 仅允许连接开发数据库主机",
+    );
+  });
+
+  test("accepts an explicitly allowlisted local database host", () => {
+    expect(resolveSmokeConfig({
+      SUPPLIER_PURCHASABLE_SKU_SMOKE_DB_URL:
+        "postgresql://fixture:fixture@127.0.0.1:5432/postgres",
+    }).databaseHost).toBe("127.0.0.1");
+  });
+
+  test.each([
+    [
+      "postgresql://fixture:fixture@api-dev.goodcms.cn:5432/postgres?path=%2Ftmp%2Fpostgres",
+      "SUPPLIER_PURCHASABLE_SKU_SMOKE_DB_URL 不允许数据库 URL 查询参数 path",
+    ],
+    [
+      "postgresql://fixture:fixture@api-dev.goodcms.cn:5432/postgres",
+      "SUPPLIER_PURCHASABLE_SKU_SMOKE_DB_URL 远程开发数据库必须显式使用安全 sslmode",
+    ],
+    [
+      "postgresql://fixture:fixture@api-dev.goodcms.cn:5432/postgres?sslmode=disable",
+      "SUPPLIER_PURCHASABLE_SKU_SMOKE_DB_URL 远程开发数据库必须显式使用安全 sslmode",
+    ],
+    [
+      "postgresql://fixture:fixture@api-dev.goodcms.cn:5432/postgres?sslmode=prefer",
+      "SUPPLIER_PURCHASABLE_SKU_SMOKE_DB_URL 远程开发数据库必须显式使用安全 sslmode",
+    ],
+    [
+      "postgresql://fixture:fixture@api-dev.goodcms.cn:5432/postgres?sslmode=require&application_name=task8",
+      "SUPPLIER_PURCHASABLE_SKU_SMOKE_DB_URL 不允许数据库 URL 查询参数 application_name",
+    ],
+  ])("rejects unsafe database routing or TLS input %#", (databaseUrl, error) => {
+    expect(() => resolveSmokeConfig({
+      SUPPLIER_PURCHASABLE_SKU_SMOKE_DB_URL: databaseUrl,
+    })).toThrowError(error);
   });
 
   test("returns the complete structured verification summary", () => {
@@ -57,6 +224,21 @@ describe("supplier purchasable SKU smoke command", () => {
     expect(source).toContain("if (import.meta.main)");
     expect(packageJson.scripts?.["supplier:purchasable-sku:smoke"])
       .toBe("bun src/scripts/supplier-purchasable-sku-smoke.ts");
+  });
+
+  test("requires the exact access denial before any repository read", async () => {
+    await expect(assertSupplierPurchasableSkuPermissionBoundary(
+      async () => { throw Errors.forbidden(); },
+      () => 0,
+    )).resolves.toBeUndefined();
+    await expect(assertSupplierPurchasableSkuPermissionBoundary(
+      async () => { throw new Error("unrelated failure"); },
+      () => 0,
+    )).rejects.toThrow("SMOKE_PERMISSION_BOUNDARY_INVALID");
+    await expect(assertSupplierPurchasableSkuPermissionBoundary(
+      async () => { throw Errors.forbidden(); },
+      () => 1,
+    )).rejects.toThrow("SMOKE_PERMISSION_BOUNDARY_INVALID");
   });
 
   test("always verifies cleanup and records exact concurrency evidence", async () => {

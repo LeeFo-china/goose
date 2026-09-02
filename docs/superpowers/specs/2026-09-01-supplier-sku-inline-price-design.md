@@ -1,7 +1,7 @@
 # 租户私有 SKU 保存并立即生效价格设计
 
 **日期：** 2026-09-01
-**状态：** 待实施
+**状态：** 主功能已合入 main，最终评审修正已在 DEV 验证，待合并/发布
 **范围：** 租户 Admin 私有供应商商品、SKU、默认基础供货价
 
 ## 1. 背景与问题
@@ -62,6 +62,11 @@ SKU 表单目前只提交名称、规格、型号、采购单位和管理属性�
 `effective_from`，不得退役、覆盖或延后未来计划版本；到达计划时间后仍按原计划
 切换。若当前时间已经落入不可安全切分的重叠区间，则返回价格周期冲突，不用
 覆盖计划的方式兜底。
+
+若本次命令没有创建新价格版本，既有当前周期可以早于未来计划结束，响应保留该合法
+non-overlap gap；只有本次命令创建新的立即生效版本时，`effective_until` 才必须精确等于
+最早未来版本的 `effective_from`。任何 current/future overlap 都必须在 SKU、价格和审计
+mutation 之前返回 `SUPPLIER_PRICE_PERIOD_CONFLICT`。
 
 ### 3.2 默认未税
 
@@ -125,7 +130,10 @@ SKU 表单目前只提交名称、规格、型号、采购单位和管理属性�
 - SKU 为草稿时，填写价格并保存会启用 SKU。
 - SKU 已停用时不隐式恢复。表单可编辑主数据，但价格区只读，主按钮为“保存
   修改”；用户需要先通过既有“启用 SKU”动作恢复后才能调价。
-- 价格发生并发变化时不覆盖新版本，保留用户输入并提示刷新当前价格后重试。
+- SKU 或价格发生确定的版本冲突时不覆盖新版本：弹窗保持打开并保留全部可见输入，
+  重新读取当前 SKU 状态和隐藏版本；只有三项组合权限仍齐全且 SKU 非停用时才读取当前
+  价格。用户录入的价格不被服务端新价格覆盖，下一次保存使用刷新后的 expected versions
+  和新幂等键。只有传输结果不确定时才复用原 payload 和幂等键。
 
 ### 4.5 高级价格页
 
@@ -254,7 +262,9 @@ PATCH /supplier-products/:productId/purchasable-skus/:skuId
 
 ### 7.4 Migration 与复合 RPC
 
-通过 migration 新增 `command_supplier_purchasable_sku_v1`，复用既有
+通过 migration `20260901130000` 新增 `command_supplier_purchasable_sku_v1`，并通过
+forward migration `20260902110000` 将 metadata-only overlap guard 提升到首个 mutation
+之前；复用既有
 `command_supplier_sku_v3`、`command_supplier_price_list_v2` 和
 `command_supplier_price_item_v2`。事务顺序固定为：
 
@@ -281,6 +291,8 @@ forward-only 回滚说明。
 
 - 相同 auth user、幂等键和请求指纹必须返回同一结果。
 - 相同幂等键但不同请求指纹返回 `SUPPLIER_IDEMPOTENCY_CONFLICT`。
+- Admin 只对 transport-uncertain 重试复用相同幂等键；确定的 SKU/价格版本冲突刷新隐藏
+  versions、清除已完成 attempt，并为下一次显式重试分配新键。
 - SKU 使用 `expected_version` 防止覆盖并发主数据修改。
 - 价格使用当前 price list ID 和 row version 防止覆盖并发调价。
 - 同一供应商默认价格系列串行发布，避免两个 SKU 同时保存导致版本交叠。
@@ -335,7 +347,8 @@ forward-only 回滚说明。
 - Admin：新建默认未税、编辑预填、价格未变不发新版本、无价格权限不请求价格。
 - Admin：存在未来计划价格时展示“本次价格有效至计划版本生效前”，不要求用户
   手工填写结束时间。
-- E2E：创建、编辑调价、并发冲突恢复、停用 SKU 和产品停用边界。
+- E2E：创建、编辑调价、首存 409 后刷新隐藏版本并以新 key 成功重试、停用 SKU 和产品
+  停用边界；price-only save 保持 SKU version，retired source 保持原周期。
 
 ### 11.2 数据库与接口 Smoke
 
@@ -344,10 +357,13 @@ forward-only 回滚说明。
 3. 仅修改 SKU 名称不产生价格版本。
 4. 重放相同幂等请求不重复创建 SKU 或价格版本。
 5. 两个并发调价只有一个按旧 expected version 成功，另一个稳定冲突。
-6. 已有未来计划版本时，即时版本只生效至该计划开始时间，未来计划保持不变。
-7. 无成本价权限不能读取或写入价格；无商品权限不能借价格接口修改 SKU。
-8. 平台共享 SKU、其它租户 SKU 和非 active 合作关系均被拒绝。
-9. 开发环境 migration Local/Remote 对齐，接口和采购解析 smoke 通过后才能部署
+6. 使用两条 reserved connection 和显式 barrier 强制并发，验证无死锁并始终释放连接。
+7. 无未来计划时成功复制多条 source items，逐项保持业务字段并生成新 row/list identities。
+8. 已有未来计划版本时，合法 gap 的 metadata-only no-op 可保存/回放；overlap 在 mutation
+   前冲突；价格变化冲突不修改未来计划。
+9. 无成本价权限不能读取或写入价格；无商品权限不能借价格接口修改 SKU。
+10. 平台共享 SKU、其它租户 SKU 和非 active 合作关系均被拒绝。
+11. 开发环境 migration Local/Remote 对齐，接口和采购解析 smoke 通过后才能部署
    生产。
 
 ## 12. 验收标准

@@ -1,14 +1,21 @@
-import { redactSupplierPurchasableSkuDatabaseUrl } from
-  "./supplier-purchasable-sku-smoke";
+import {
+  parseSupplierPurchasableSkuDevelopmentDatabaseUrl,
+  redactSupplierPurchasableSkuDevelopmentDatabaseUrl,
+  type SupplierPurchasableSkuDatabaseConnection,
+} from "./supplier-purchasable-sku-development-database";
 
 export type SupplierPurchasableSkuExplainConfig = {
-  databaseUrl: string;
+  databaseConnection: SupplierPurchasableSkuDatabaseConnection;
   databaseHost: string;
   redactedDatabaseUrl: string;
 };
 
 export type SupplierPurchasableSkuExplainPlan = {
   indexNames: string[];
+  relationAccesses: Record<
+    string,
+    { indexNames: string[]; nodeTypes: string[] }
+  >;
   sequentialScans: string[];
   buffers: { sharedHit: number; sharedRead: number };
   hasRuntimeEvidence: boolean;
@@ -44,6 +51,12 @@ const SCOPED_PRICE_TABLES = new Set([
   "supplier_price_lists",
   "supplier_price_list_items",
 ]);
+const EXPECTED_INDEXED_RELATIONS: Record<ExplainQueryName, string[]> = {
+  currentDefault: ["supplier_price_lists", "supplier_price_list_items"],
+  earliestFuture: ["supplier_price_lists", "supplier_price_list_items"],
+  targetCurrentItem: ["supplier_price_list_items"],
+  setBasedCopy: ["supplier_price_list_items"],
+};
 
 class SupplierPurchasableSkuExplainError extends Error {}
 
@@ -70,6 +83,18 @@ function blockCount(node: Record<string, unknown>, key: string): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
+function descendantIndexNames(value: unknown): string[] {
+  const node = object(value, "EXPLAIN plan node");
+  const indexes = typeof node["Index Name"] === "string"
+    ? [node["Index Name"]]
+    : [];
+  if (!Array.isArray(node.Plans)) return indexes;
+  for (const child of node.Plans) {
+    indexes.push(...descendantIndexNames(child));
+  }
+  return indexes;
+}
+
 function collectPlanEvidence(
   value: unknown,
   evidence: Omit<SupplierPurchasableSkuExplainPlan, "hasRuntimeEvidence">,
@@ -87,6 +112,18 @@ function collectPlanEvidence(
     SCOPED_PRICE_TABLES.has(relation)) {
     evidence.sequentialScans.push(relation);
   }
+  if (typeof relation === "string") {
+    const access = evidence.relationAccesses[relation] ??= {
+      indexNames: [],
+      nodeTypes: [],
+    };
+    access.nodeTypes.push(nodeType);
+    if (typeof node["Index Name"] === "string") {
+      access.indexNames.push(node["Index Name"]);
+    } else if (nodeType === "Bitmap Heap Scan") {
+      access.indexNames.push(...descendantIndexNames(node));
+    }
+  }
   evidence.buffers.sharedHit += blockCount(node, "Shared Hit Blocks");
   evidence.buffers.sharedRead += blockCount(node, "Shared Read Blocks");
   if (node.Plans === undefined) return;
@@ -100,20 +137,17 @@ export function resolveExplainConfig(
   env: Record<string, string | undefined>,
 ): SupplierPurchasableSkuExplainConfig {
   const databaseUrl = env[EXPLAIN_DATABASE_URL] ?? "";
-  if (!databaseUrl) throw new Error(`缺少 ${EXPLAIN_DATABASE_URL}`);
-  let parsed: URL;
-  try {
-    parsed = new URL(databaseUrl);
-  } catch {
-    throw new Error(`${EXPLAIN_DATABASE_URL} 必须是 PostgreSQL URL`);
-  }
-  if (parsed.protocol !== "postgres:" && parsed.protocol !== "postgresql:") {
-    throw new Error(`${EXPLAIN_DATABASE_URL} 必须是 PostgreSQL URL`);
-  }
-  return {
+  const parsed = parseSupplierPurchasableSkuDevelopmentDatabaseUrl(
     databaseUrl,
-    databaseHost: parsed.hostname,
-    redactedDatabaseUrl: redactSupplierPurchasableSkuDatabaseUrl(databaseUrl),
+    EXPLAIN_DATABASE_URL,
+  );
+  return {
+    databaseConnection: parsed.connection,
+    databaseHost: parsed.connection.hostname,
+    redactedDatabaseUrl: redactSupplierPurchasableSkuDevelopmentDatabaseUrl(
+      databaseUrl,
+      EXPLAIN_DATABASE_URL,
+    ),
   };
 }
 
@@ -135,6 +169,7 @@ export function parseSupplierPurchasableSkuExplainPlan(
   const root = object(planJson[0], "EXPLAIN root");
   const evidence: SupplierPurchasableSkuExplainPlan = {
     indexNames: [],
+    relationAccesses: {},
     sequentialScans: [],
     buffers: { sharedHit: 0, sharedRead: 0 },
     hasRuntimeEvidence:
@@ -144,11 +179,16 @@ export function parseSupplierPurchasableSkuExplainPlan(
   collectPlanEvidence(root.Plan, evidence);
   evidence.indexNames = [...new Set(evidence.indexNames)];
   evidence.sequentialScans = [...new Set(evidence.sequentialScans)];
+  for (const access of Object.values(evidence.relationAccesses)) {
+    access.indexNames = [...new Set(access.indexNames)];
+    access.nodeTypes = [...new Set(access.nodeTypes)];
+  }
   return evidence;
 }
 
 export function assertSupplierPurchasableSkuExplainPlan(
   plan: SupplierPurchasableSkuExplainPlan,
+  queryName: ExplainQueryName,
 ): true {
   if (!plan.hasRuntimeEvidence) {
     throw new SupplierPurchasableSkuExplainError(
@@ -160,6 +200,13 @@ export function assertSupplierPurchasableSkuExplainPlan(
     throw new SupplierPurchasableSkuExplainError(
       `${relation} scoped Seq Scan`,
     );
+  }
+  for (const expectedRelation of EXPECTED_INDEXED_RELATIONS[queryName]) {
+    if (!plan.relationAccesses[expectedRelation]?.indexNames.length) {
+      throw new SupplierPurchasableSkuExplainError(
+        `${queryName} requires indexed ${expectedRelation} access`,
+      );
+    }
   }
   return true;
 }
@@ -173,7 +220,7 @@ export async function runSupplierPurchasableSkuExplain(
       const plan = parseSupplierPurchasableSkuExplainPlan(
         await gateway.explain(name),
       );
-      assertSupplierPurchasableSkuExplainPlan(plan);
+      assertSupplierPurchasableSkuExplainPlan(plan, name);
       plans[name] = plan;
     }
   } finally {
@@ -229,7 +276,9 @@ if (import.meta.main) {
       runSupplierPurchasableSkuExplainCli({
         env: process.env,
         createGateway: (config) =>
-          new DirectSupplierPurchasableSkuExplainGateway(config.databaseUrl),
+          new DirectSupplierPurchasableSkuExplainGateway(
+            config.databaseConnection,
+          ),
         writeOutput: console.log,
         writeError: console.error,
       }),

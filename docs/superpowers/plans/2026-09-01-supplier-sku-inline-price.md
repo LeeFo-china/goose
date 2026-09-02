@@ -10,6 +10,31 @@
 
 ---
 
+## Final Review Hardening Status (2026-09-02)
+
+Implementation commit: `0fd2e4e102b9b00aa28f1ba76b7c72616ddb59c6`.
+
+- [x] Repository/service/API accept metadata-only no-op responses with a legal future gap and
+  parse first execution plus idempotent replay.
+- [x] Forward migration `20260902110000` rejects every current/future overlap before the first
+  mutation; original applied migration `20260901130000` remains unchanged.
+- [x] Admin distinguishes definitive version conflicts from transport-uncertain failures,
+  preserves visible input, refreshes permission-gated hidden versions, and allocates a new key.
+- [x] E2E mock matches production retirement and price-only SKU version semantics; the first
+  conflict save returns 409 and the second succeeds with refreshed versions and a new key.
+- [x] DEV smoke forces two reserved connections through a barrier with bounded timeouts and
+  verifies one success, one conflict, no deadlock, release, and zero residuals.
+- [x] DEV smoke verifies successful multi-item copy before a separate future conflict and checks
+  every copied business field and generated row/list identity.
+- [x] Supabase migration/typegen child execution uses bounded async `Bun.spawn`, SIGTERM grace,
+  SIGKILL fallback, sanitized output, and stable exit codes.
+- [x] Final gates: API 145 pass, Admin 80 pass, Playwright 18 pass, API/Admin checks and build,
+  permission/write audits, DEV target/list/dry-run, smoke, EXPLAIN, and cleanup all completed.
+
+Type generation was retried because the SQL function body changed; the Supabase postgres-meta
+container failed with DNS `EAI_AGAIN`. It emitted no partial types or credentials, did not change
+the checked-in type file, and TLS was not weakened. Both RPC signatures are unchanged.
+
 ## Delivery Rules
 
 - Execute every production-code step test-first: write the test, run it, verify the expected RED, then implement the minimum GREEN change.
@@ -1158,6 +1183,11 @@ git commit -m "test(admin): 覆盖 SKU 即时价格流程"
 - Create: `apps/api/src/scripts/supplier-purchasable-sku-smoke.ts`
 - Create: `apps/api/src/scripts/supplier-purchasable-sku-explain.test.ts`
 - Create: `apps/api/src/scripts/supplier-purchasable-sku-explain.ts`
+- Create: `apps/api/src/scripts/supplier-purchasable-sku-development-database.test.ts`
+- Create: `apps/api/src/scripts/supplier-purchasable-sku-development-database-command.ts`
+- Create: `apps/api/src/scripts/supplier-purchasable-sku-dev-direct.test.ts`
+- Create: `apps/api/src/scripts/supplier-purchasable-sku-dev-direct.ts`
+- Modify: `package.json`
 - Modify: `apps/api/package.json`
 - Modify after migration application: `apps/api/src/types/database.ts`
 
@@ -1179,9 +1209,16 @@ Assert that smoke output redacts credentials and returns a structured summary co
 - [ ] **Step 2: Run tests and verify RED**
 
 ```bash
-cd apps/api && bun test \
-  src/scripts/supplier-purchasable-sku-smoke.test.ts \
-  src/scripts/supplier-purchasable-sku-explain.test.ts
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+(
+  set -euo pipefail
+  cd "$REPO_ROOT/apps/api"
+  bun test \
+    src/scripts/supplier-purchasable-sku-development-database.test.ts \
+    src/scripts/supplier-purchasable-sku-dev-direct.test.ts \
+    src/scripts/supplier-purchasable-sku-smoke.test.ts \
+    src/scripts/supplier-purchasable-sku-explain.test.ts
+)
 ```
 
 Expected: FAIL because both scripts are absent.
@@ -1211,7 +1248,20 @@ Add package commands:
 
 ```json
 "supplier:purchasable-sku:smoke": "bun src/scripts/supplier-purchasable-sku-smoke.ts",
-"supplier:purchasable-sku:explain": "bun src/scripts/supplier-purchasable-sku-explain.ts"
+"supplier:purchasable-sku:explain": "bun src/scripts/supplier-purchasable-sku-explain.ts",
+"supplier:purchasable-sku:smoke:dev-direct": "bun src/scripts/supplier-purchasable-sku-dev-direct.ts smoke",
+"supplier:purchasable-sku:explain:dev-direct": "bun src/scripts/supplier-purchasable-sku-dev-direct.ts explain"
+```
+
+The repository root package also exposes the git-common-dir-aware development
+target and migration wrappers:
+
+```json
+"supplier:purchasable-sku:target:dev-direct": "bun apps/api/src/scripts/supplier-purchasable-sku-development-database-command.ts target",
+"supplier:purchasable-sku:migration:list:dev-direct": "bun apps/api/src/scripts/supplier-purchasable-sku-development-database-command.ts migration-list",
+"supplier:purchasable-sku:migration:dry-run:dev-direct": "bun apps/api/src/scripts/supplier-purchasable-sku-development-database-command.ts migration-dry-run",
+"supplier:purchasable-sku:migration:apply:dev-direct": "bun apps/api/src/scripts/supplier-purchasable-sku-development-database-command.ts migration-apply",
+"supplier:purchasable-sku:db:gen-types:dev-direct": "bun apps/api/src/scripts/supplier-purchasable-sku-development-database-command.ts gen-types"
 ```
 
 - [ ] **Step 4: Verify script tests GREEN**
@@ -1220,17 +1270,21 @@ Expected: both unit tests PASS without accessing a remote database.
 
 - [ ] **Step 5: Review and apply only the new migration to development**
 
-Load the root `.env` without printing secrets:
+The root package command locates the main checkout `.env` through
+`git rev-parse --git-common-dir`, discards any ambient direct URL, normalizes
+`sslmode=require` in memory, and prints only host/database/TLS. Guard each migration
+sequence immediately before execution:
 
 ```bash
-set -a
-source ../../.env
-set +a
-test -n "$SUPABASE_DB_DIRECT_URL"
-pnpm dlx supabase@2.99.0 migration list \
-  --db-url "$SUPABASE_DB_DIRECT_URL"
-pnpm dlx supabase@2.99.0 db push --dry-run \
-  --db-url "$SUPABASE_DB_DIRECT_URL"
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+(
+  set -euo pipefail
+  cd "$REPO_ROOT"
+  bun run supplier:purchasable-sku:target:dev-direct &&
+    bun run supplier:purchasable-sku:migration:list:dev-direct
+  bun run supplier:purchasable-sku:target:dev-direct &&
+    bun run supplier:purchasable-sku:migration:dry-run:dev-direct
+)
 ```
 
 Expected before apply: the only pending migration for this feature is `20260901130000_create_supplier_purchasable_sku_command.sql`. Stop if unrelated pending migrations or a production URL are detected.
@@ -1238,10 +1292,15 @@ Expected before apply: the only pending migration for this feature is `202609011
 After explicit development-database confirmation in the execution session:
 
 ```bash
-pnpm dlx supabase@2.99.0 db push --yes \
-  --db-url "$SUPABASE_DB_DIRECT_URL"
-pnpm dlx supabase@2.99.0 migration list \
-  --db-url "$SUPABASE_DB_DIRECT_URL"
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+(
+  set -euo pipefail
+  cd "$REPO_ROOT"
+  bun run supplier:purchasable-sku:target:dev-direct &&
+    bun run supplier:purchasable-sku:migration:apply:dev-direct
+  bun run supplier:purchasable-sku:target:dev-direct &&
+    bun run supplier:purchasable-sku:migration:list:dev-direct
+)
 ```
 
 Expected: Local/Remote align through `20260901130000`. This is the only supported DDL/DML application path.
@@ -1249,38 +1308,72 @@ Expected: Local/Remote align through `20260901130000`. This is the only supporte
 - [ ] **Step 6: Regenerate database types from development**
 
 ```bash
-pnpm dlx supabase@2.99.0 gen types typescript \
-  --db-url "$SUPABASE_DB_DIRECT_URL" \
-  --schema public,graphql_public \
-  > apps/api/src/types/database.ts
-rg -n "get_supplier_purchasable_sku_price_context_v1|command_supplier_purchasable_sku_v1" \
-  apps/api/src/types/database.ts
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+(
+  set -euo pipefail
+  cd "$REPO_ROOT"
+  TEMP_TYPES="$(mktemp "$REPO_ROOT/apps/api/src/types/database.ts.XXXXXX")"
+  trap 'rm -f "$TEMP_TYPES"' EXIT
+  bun run supplier:purchasable-sku:db:gen-types:dev-direct > "$TEMP_TYPES"
+  if ! cmp -s "$TEMP_TYPES" "$REPO_ROOT/apps/api/src/types/database.ts"; then
+    chmod 0644 "$TEMP_TYPES"
+    mv "$TEMP_TYPES" "$REPO_ROOT/apps/api/src/types/database.ts"
+  fi
+  rm -f "$TEMP_TYPES"
+  trap - EXIT
+  rg -n "get_supplier_purchasable_sku_price_context_v1|command_supplier_purchasable_sku_v1" \
+    "$REPO_ROOT/apps/api/src/types/database.ts"
+)
 ```
 
-Expected: both function signatures exist with the exact migration argument names.
+The guarded command loads the root `.env` through git common dir and passes the
+normalized exact development URL to Supabase CLI `2.99.0` internally. Stdout contains
+only generated TypeScript. Expected: both function signatures exist with the exact
+migration argument names.
 
 - [ ] **Step 7: Run the real development smoke and EXPLAIN**
 
 ```bash
-cd apps/api
-SUPPLIER_PURCHASABLE_SKU_SMOKE_DB_URL="$SUPABASE_DB_DIRECT_URL" \
-  bun run supplier:purchasable-sku:smoke
-SUPPLIER_PURCHASABLE_SKU_EXPLAIN_DB_URL="$SUPABASE_DB_DIRECT_URL" \
-  bun run supplier:purchasable-sku:explain
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+MAIN_WORKTREE_ROOT="$(cd "$(dirname "$(git rev-parse --git-common-dir)")" && pwd)"
+(
+  set -euo pipefail
+  set -a
+  source "$MAIN_WORKTREE_ROOT/.env"
+  set +a
+  cd "$REPO_ROOT/apps/api"
+  bun run supplier:purchasable-sku:smoke:dev-direct
+  bun run supplier:purchasable-sku:explain:dev-direct
+)
 ```
+
+The dev-direct wrapper requires `SUPABASE_DB_DIRECT_URL`, derives
+`sslmode=require` in memory for the exact allowlisted development host, and never
+prints the URL. The original explicit-URL commands remain fail closed and require
+callers to provide a fully validated URL including `sslmode`.
 
 Expected: all smoke booleans true, cleanup true, no credentials printed, and scoped plans use indexes without N+1 behavior. If a required index is missing, add it through a new reviewed migration; do not edit the already-applied migration or create it manually.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add apps/api/src/scripts/supplier-purchasable-sku-smoke.ts \
-  apps/api/src/scripts/supplier-purchasable-sku-smoke.test.ts \
-  apps/api/src/scripts/supplier-purchasable-sku-explain.ts \
-  apps/api/src/scripts/supplier-purchasable-sku-explain.test.ts \
-  apps/api/src/types/database.ts \
-  apps/api/package.json
-git commit -m "test(supplier): 验证 SKU 即时价格事务"
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+(
+  set -euo pipefail
+  cd "$REPO_ROOT"
+  git add apps/api/src/scripts/supplier-purchasable-sku-smoke.ts \
+    apps/api/src/scripts/supplier-purchasable-sku-smoke.test.ts \
+    apps/api/src/scripts/supplier-purchasable-sku-explain.ts \
+    apps/api/src/scripts/supplier-purchasable-sku-explain.test.ts \
+    apps/api/src/scripts/supplier-purchasable-sku-development-database.ts \
+    apps/api/src/scripts/supplier-purchasable-sku-development-database.test.ts \
+    apps/api/src/scripts/supplier-purchasable-sku-development-database-command.ts \
+    apps/api/src/scripts/supplier-purchasable-sku-dev-direct.ts \
+    apps/api/src/scripts/supplier-purchasable-sku-dev-direct.test.ts \
+    apps/api/src/types/database.ts \
+    apps/api/package.json package.json
+  git commit -m "test(supplier): 验证 SKU 即时价格事务"
+)
 ```
 
 ## Task 9: Final Verification and Release Handoff
@@ -1292,20 +1385,29 @@ git commit -m "test(supplier): 验证 SKU 即时价格事务"
 - [ ] **Step 1: Run the focused API regression suite**
 
 ```bash
-cd apps/api && bun test \
-  src/schema/supplier-purchasable-skus.test.ts \
-  src/repositories/supplier-purchasable-skus.test.ts \
-  src/services/supplier-purchasable-skus.test.ts \
-  src/controllers/supplier-purchasable-skus/routes.test.ts \
-  src/services/supplier-purchasable-sku-migration-contract.test.ts \
-  src/services/supplier-product-access.test.ts \
-  src/schema/supplier-purchasable-products.test.ts \
-  src/services/supplier-purchasable-products.test.ts \
-  src/repositories/supplier-price-lists.test.ts \
-  src/services/supplier-price-lists.test.ts \
-  src/services/supplier-products.test.ts \
-  src/scripts/supplier-purchasable-sku-smoke.test.ts \
-  src/scripts/supplier-purchasable-sku-explain.test.ts
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+(
+  set -euo pipefail
+  cd "$REPO_ROOT/apps/api"
+  bun test \
+    src/schema/supplier-purchasable-skus.test.ts \
+    src/repositories/supplier-purchasable-skus.test.ts \
+    src/repositories/supplier-purchasable-skus-save.test.ts \
+    src/services/supplier-purchasable-skus.test.ts \
+    src/services/supplier-purchasable-skus-write.test.ts \
+    src/controllers/supplier-purchasable-skus/routes.test.ts \
+    src/services/supplier-purchasable-sku-migration-contract.test.ts \
+    src/services/supplier-product-access.test.ts \
+    src/schema/supplier-purchasable-products.test.ts \
+    src/services/supplier-purchasable-products.test.ts \
+    src/repositories/supplier-price-lists.test.ts \
+    src/services/supplier-price-lists.test.ts \
+    src/services/supplier-products.test.ts \
+    src/scripts/supplier-purchasable-sku-smoke.test.ts \
+    src/scripts/supplier-purchasable-sku-explain.test.ts \
+    src/scripts/supplier-purchasable-sku-development-database.test.ts \
+    src/scripts/supplier-purchasable-sku-dev-direct.test.ts
+)
 ```
 
 Expected: all focused API tests PASS.
@@ -1313,12 +1415,17 @@ Expected: all focused API tests PASS.
 - [ ] **Step 2: Run full static/build gates**
 
 ```bash
-bun run api:check
-pnpm --dir apps/admin check
-pnpm --dir apps/admin build
-pnpm --dir apps/admin test:e2e:supplier-product-pricing
-bun run check:permission-boundaries
-bun run audit:supabase-writes
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+(
+  set -euo pipefail
+  cd "$REPO_ROOT"
+  bun run api:check
+  pnpm --dir apps/admin check
+  pnpm --dir apps/admin build
+  pnpm --dir apps/admin test:e2e:supplier-product-pricing
+  bun run check:permission-boundaries
+  bun run audit:supabase-writes
+)
 ```
 
 Expected: every command exits 0; no file-size, permission-boundary, direct-write, type, build, or browser-console violations.
@@ -1326,13 +1433,22 @@ Expected: every command exits 0; no file-size, permission-boundary, direct-write
 - [ ] **Step 3: Reconfirm migration alignment and API smoke**
 
 ```bash
-set -a
-source .env
-set +a
-pnpm dlx supabase@2.99.0 migration list \
-  --db-url "$SUPABASE_DB_DIRECT_URL"
-pnpm dlx supabase@2.99.0 db push --dry-run \
-  --db-url "$SUPABASE_DB_DIRECT_URL"
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+MAIN_WORKTREE_ROOT="$(cd "$(dirname "$(git rev-parse --git-common-dir)")" && pwd)"
+(
+  set -euo pipefail
+  cd "$REPO_ROOT"
+  bun run supplier:purchasable-sku:target:dev-direct &&
+    bun run supplier:purchasable-sku:migration:list:dev-direct
+  bun run supplier:purchasable-sku:target:dev-direct &&
+    bun run supplier:purchasable-sku:migration:dry-run:dev-direct
+  set -a
+  source "$MAIN_WORKTREE_ROOT/.env"
+  set +a
+  cd "$REPO_ROOT/apps/api"
+  bun run supplier:purchasable-sku:smoke:dev-direct
+  bun run supplier:purchasable-sku:explain:dev-direct
+)
 ```
 
 Expected: Local/Remote align and dry-run reports the development database is up to date.
@@ -1340,12 +1456,17 @@ Expected: Local/Remote align and dry-run reports the development database is up 
 - [ ] **Step 4: Review the diff for scope and sensitive data**
 
 ```bash
-git diff --check origin/main...HEAD
-git diff --stat origin/main...HEAD
-git status --short
-rg -n "SUPABASE_DB_DIRECT_URL=|service_role|postgres(?:ql)?://|api[_-]?key" \
-  docs/operations/evidence/2026-09-01-supplier-sku-inline-price.md \
-  apps/api/src/scripts/supplier-purchasable-sku-*.ts
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+(
+  set -euo pipefail
+  cd "$REPO_ROOT"
+  git diff --check origin/main...HEAD
+  git diff --stat origin/main...HEAD
+  git status --short
+  rg -n "SUPABASE_DB_DIRECT_URL=|service_role|postgres(?:ql)?://|api[_-]?key" \
+    docs/operations/evidence/2026-09-01-supplier-sku-inline-price.md \
+    apps/api/src/scripts/supplier-purchasable-sku-*.ts
+)
 ```
 
 Expected: no whitespace errors, no unrelated Orange/workspace files, no credentials, and only intended files are tracked.
@@ -1357,9 +1478,14 @@ Mark the design status as implemented only after all gates pass. The evidence do
 - [ ] **Step 6: Final commit**
 
 ```bash
-git add docs/superpowers/specs/2026-09-01-supplier-sku-inline-price-design.md \
-  docs/operations/evidence/2026-09-01-supplier-sku-inline-price.md
-git commit -m "docs(supplier): 记录 SKU 即时价格验收"
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+(
+  set -euo pipefail
+  cd "$REPO_ROOT"
+  git add docs/superpowers/specs/2026-09-01-supplier-sku-inline-price-design.md \
+    docs/operations/evidence/2026-09-01-supplier-sku-inline-price.md
+  git commit -m "docs(supplier): 记录 SKU 即时价格验收"
+)
 ```
 
 - [ ] **Step 7: Integration and deployment order**

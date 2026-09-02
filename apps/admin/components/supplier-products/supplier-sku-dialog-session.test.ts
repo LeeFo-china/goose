@@ -4,6 +4,7 @@ import {
   getSupplierSkuDialogSaveMode,
 } from "./supplier-sku-price-form";
 import {
+  classifySupplierSkuDialogSaveFailure,
   createSupplierSkuDialogLoadWorkflow,
   createSupplierSkuDialogSaveWorkflow,
   isSupplierSkuPriceFieldsDisabled,
@@ -66,25 +67,37 @@ describe("SupplierSkuDialog save session gate", () => {
     expect(callbacks.values()).toEqual({ success: 0, error: 0, settled: 0 });
   });
 
-  test("同一 session 409 保留 attempt，retry 复用并在成功后回写", async () => {
+  test("同一 session 稳定版本冲突清除 attempt，transport failure 才保留", async () => {
     const workflow = createSupplierSkuDialogSaveWorkflow();
     workflow.beginSession();
     let attempt = null;
-    const first = prepareSupplierSkuDialogSave(saveInput(), attempt)!;
+    const editInput = {
+      ...saveInput(),
+      sku: { id: "sku-1", version: 3 },
+    };
+    const first = prepareSupplierSkuDialogSave(editInput, attempt)!;
     attempt = first.attempt;
     const failed = callbackCounters();
 
     await workflow.execute(workflow.beginSave(), first, {
-      create: async () => {
+      create: async () => undefined,
+      mutate: async () => {
         throw conflict();
       },
-      mutate: async () => undefined,
-    }, failed.handlers);
+    }, {
+      ...failed.handlers,
+      onError: (error) => {
+        failed.handlers.onError();
+        if (classifySupplierSkuDialogSaveFailure(error) !== "transport-uncertain") {
+          attempt = null;
+        }
+      },
+    });
     expect(failed.values()).toEqual({ success: 0, error: 1, settled: 1 });
-    expect(attempt).toBe(first.attempt);
+    expect(attempt).toBeNull();
 
-    const retry = prepareSupplierSkuDialogSave(saveInput(), attempt)!;
-    expect(retry.attempt).toBe(first.attempt);
+    const retry = prepareSupplierSkuDialogSave(editInput, attempt)!;
+    expect(retry.attempt.idempotencyKey).not.toBe(first.attempt.idempotencyKey);
     expect(retry.requestPath).toBe(first.requestPath);
     expect(retry.payload).toEqual(first.payload);
     const succeeded = callbackCounters();
@@ -93,6 +106,36 @@ describe("SupplierSkuDialog save session gate", () => {
       mutate: async () => undefined,
     }, succeeded.handlers);
     expect(succeeded.values()).toEqual({ success: 1, error: 0, settled: 1 });
+  });
+
+  test("传输结果不确定时 retry 复用同一 payload 和幂等 key", async () => {
+    const workflow = createSupplierSkuDialogSaveWorkflow();
+    workflow.beginSession();
+    const input = {
+      ...saveInput(),
+      sku: { id: "sku-1", version: 3 },
+    };
+    const attempt = prepareSupplierSkuDialogSave(input, null)!.attempt;
+    const first = prepareSupplierSkuDialogSave(input, attempt)!;
+
+    await workflow.execute(workflow.beginSave(), first, {
+      create: async () => undefined,
+      mutate: async () => {
+        throw new TypeError("fetch failed");
+      },
+    }, {
+      onSuccess: () => undefined,
+      onError: (error) => {
+        expect(classifySupplierSkuDialogSaveFailure(error))
+          .toBe("transport-uncertain");
+      },
+      onSettled: () => undefined,
+    });
+
+    const retry = prepareSupplierSkuDialogSave(input, attempt)!;
+    expect(retry.attempt).toBe(first.attempt);
+    expect(retry.payload).toEqual(first.payload);
+    expect(retry.attempt.idempotencyKey).toBe(first.attempt.idempotencyKey);
   });
 });
 
@@ -212,8 +255,9 @@ function callbackCounters() {
 }
 
 function conflict() {
-  const error = new Error("conflict") as Error & { status: number };
+  const error = new Error("conflict") as Error & { status: number; code: string };
   error.status = 409;
+  error.code = "SUPPLIER_SKU_VERSION_CONFLICT";
   return error;
 }
 

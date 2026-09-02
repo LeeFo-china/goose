@@ -11,6 +11,7 @@ import type {
   SupplierPriceListPage,
   SupplierProduct,
   SupplierProductPage,
+  SupplierSku,
   SupplierSkuPriceContext,
   SupplierSkuPage,
   SupplierSkuUnitConversion,
@@ -144,11 +145,39 @@ export function loadSupplierSkus(
   scope: ProductApiScope,
   productId: string,
   page = 1,
+  keyword = "",
 ) {
   return requestBackendJson<SupplierSkuPage>(
-    `${productBase(scope)}/${productId}/skus?${scopeQuery(scope, page)}`,
+    buildSupplierSkuListPath(scope, productId, page, keyword),
     { fallbackMessage: "供应商 SKU 加载失败" },
   );
+}
+
+export function buildSupplierSkuListPath(
+  scope: ProductApiScope,
+  productId: string,
+  page = 1,
+  keyword = "",
+) {
+  const query = scopeQuery(scope, page);
+  if (keyword.trim()) query.set("keyword", keyword.trim());
+  return `${productBase(scope)}/${productId}/skus?${query}`;
+}
+
+export async function loadSupplierSkuCurrent(
+  scope: ProductApiScope,
+  productId: string,
+  identity: Pick<SupplierSku, "id" | "sku_code">,
+) {
+  const page = await loadSupplierSkus(
+    scope,
+    productId,
+    1,
+    identity.sku_code,
+  );
+  const current = page.list.find((candidate) => candidate.id === identity.id);
+  if (!current) throw new Error("SKU 最新状态加载失败");
+  return current;
 }
 
 export function loadSkuUnitConversions(

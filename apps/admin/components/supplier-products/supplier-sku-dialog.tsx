@@ -30,6 +30,7 @@ import { Spinner } from "@/components/ui/spinner";
 import {
   createSupplierResource,
   loadAllSpecDefinitions,
+  loadSupplierSkuCurrent,
   loadSupplierSkuCurrentPrice,
   loadSupplierSkuPriceDefaults,
   mutateSupplierResource,
@@ -38,6 +39,8 @@ import { CatalogSearchSelect } from "./catalog-search-select";
 import type { SupplierCommandAttempt } from "./supplier-command-attempt";
 import { buildSuggestedSkuName } from "./supplier-product-rules";
 import { SupplierSkuPriceFields } from "./supplier-sku-price-fields";
+import { SupplierSkuDialogConflictNotice } from
+  "./supplier-sku-dialog-conflict-notice";
 import { SupplierSkuDialogLoadError } from "./supplier-sku-dialog-load-error";
 import {
   createInitialSkuPriceForm,
@@ -47,10 +50,12 @@ import {
   type SupplierSkuPriceForm,
 } from "./supplier-sku-price-form";
 import {
+  classifySupplierSkuDialogSaveFailure,
   createSupplierSkuDialogLoadWorkflow,
   createSupplierSkuDialogSaveWorkflow,
   isSupplierSkuPriceFieldsDisabled,
   prepareSupplierSkuDialogSave,
+  refreshSupplierSkuDialogVersionConflict,
   resolveSupplierSkuPurchaseUnitLabel,
 } from "./supplier-sku-dialog-workflow";
 import { SupplierSpecFields } from "./supplier-spec-fields";
@@ -87,6 +92,7 @@ export function SupplierSkuDialog({
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [currentSku, setCurrentSku] = useState(sku);
   const [definitions, setDefinitions] = useState<CatalogSpecDefinition[]>([]);
   const [name, setName] = useState(sku?.name ?? "");
   const [specification, setSpecification] = useState(sku?.specification ?? "");
@@ -103,13 +109,16 @@ export function SupplierSkuDialog({
   const [priceTouched, setPriceTouched] = useState(false);
   const [purchaseUnitOptions, setPurchaseUnitOptions] = useState<CatalogOption[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [conflictState, setConflictState] = useState<
+    "refreshed" | "refreshing" | "failed" | null
+  >(null);
   const [loadWorkflow] = useState(createSupplierSkuDialogLoadWorkflow);
   const [saveWorkflow] = useState(createSupplierSkuDialogSaveWorkflow);
   const attemptRef = useRef<SupplierCommandAttempt | null>(null);
   const saveMode = getSupplierSkuDialogSaveMode({
     inlinePriceEnabled,
     scope,
-    skuStatus: sku?.status,
+    skuStatus: currentSku?.status,
   });
 
   const loadResources = useCallback(() => {
@@ -143,8 +152,48 @@ export function SupplierSkuDialog({
     });
   }, [inlinePriceEnabled, loadWorkflow, product.category.id, product.id, scope, sku]);
 
+  const refreshVersionConflict = useCallback(async () => {
+    if (!currentSku || !inlinePriceEnabled || scope.kind !== "tenant") {
+      return false;
+    }
+    setConflictState("refreshing");
+    try {
+      const refreshed = await refreshSupplierSkuDialogVersionConflict({
+        inlinePriceEnabled,
+        scope,
+        productId: product.id,
+        sku: currentSku,
+        priceForm,
+      }, {
+        loadCurrentSku: () => loadSupplierSkuCurrent(
+          scope,
+          product.id,
+          currentSku,
+        ),
+        loadCurrentPrice: (skuId) => loadSupplierSkuCurrentPrice(
+          scope,
+          product.id,
+          skuId,
+        ),
+      });
+      if (!refreshed) {
+        setConflictState("failed");
+        return false;
+      }
+      setCurrentSku(refreshed.sku);
+      setPriceContext(refreshed.priceContext);
+      setConflictState("refreshed");
+      return true;
+    } catch {
+      setConflictState("failed");
+      return false;
+    }
+  }, [currentSku, inlinePriceEnabled, priceForm, product.id, scope]);
+
   useEffect(() => {
     if (!open) return;
+    setCurrentSku(sku);
+    setConflictState(null);
     setName(sku?.name ?? "");
     setSpecification(sku?.specification ?? "");
     setModel(sku?.model ?? "");
@@ -170,7 +219,9 @@ export function SupplierSkuDialog({
 
   const priceInvalid = saveMode === "inline-price" &&
     (!priceContext || !isSupplierSkuPriceFormValid(priceForm));
-  const invalid = loading || Boolean(loadError) || !name.trim() || !purchaseUnitId ||
+  const invalid = loading || Boolean(loadError) ||
+    conflictState === "refreshing" || conflictState === "failed" ||
+    !name.trim() || !purchaseUnitId ||
     !requiredSpecsPresent(definitions, specValues) || priceInvalid;
 
   async function submit() {
@@ -188,7 +239,7 @@ export function SupplierSkuDialog({
       saveMode,
       scope,
       productId: product.id,
-      sku,
+      sku: currentSku,
       fields,
       purchaseUnitId,
       priceForm,
@@ -210,7 +261,18 @@ export function SupplierSkuDialog({
         setOpen(false);
         await onSaved();
       },
-      onError: (error) => {
+      onError: async (error) => {
+        const disposition = classifySupplierSkuDialogSaveFailure(error);
+        if (disposition !== "transport-uncertain") {
+          attemptRef.current = null;
+        }
+        if (disposition === "version-conflict") {
+          const refreshed = await refreshVersionConflict();
+          toast.error(refreshed
+            ? "数据已更新，请确认后重试"
+            : "数据已更新，但最新版本加载失败");
+          return;
+        }
         toast.error(error instanceof Error ? error.message : "保存 SKU 失败");
       },
       onSettled: () => setSaving(false),
@@ -224,11 +286,13 @@ export function SupplierSkuDialog({
       attemptRef.current = null;
       setSaving(false);
       setDefinitions([]);
+      setCurrentSku(sku);
       setPriceContext(null);
       setPriceForm(emptyPriceForm);
       setPriceTouched(false);
       setPurchaseUnitOptions([]);
       setLoadError(null);
+      setConflictState(null);
       setLoading(true);
       setOpen(true);
       return;
@@ -265,20 +329,27 @@ export function SupplierSkuDialog({
         {loadError ? (
           <SupplierSkuDialogLoadError message={loadError} onRetry={loadResources} />
         ) : null}
+        {conflictState ? (
+          <SupplierSkuDialogConflictNotice
+            refreshFailed={conflictState === "failed"}
+            refreshing={conflictState === "refreshing"}
+            onRetry={() => void refreshVersionConflict()}
+          />
+        ) : null}
         <FieldGroup>
           <div className="grid gap-4 md:grid-cols-2">
             <Field>
-              <FieldLabel htmlFor={`supplier-sku-code-${sku?.id ?? "new"}`}>SKU 编码</FieldLabel>
+              <FieldLabel htmlFor={`supplier-sku-code-${currentSku?.id ?? "new"}`}>SKU 编码</FieldLabel>
               <Input
-                id={`supplier-sku-code-${sku?.id ?? "new"}`}
-                value={sku?.sku_code ?? "保存后系统自动生成"}
+                id={`supplier-sku-code-${currentSku?.id ?? "new"}`}
+                value={currentSku?.sku_code ?? "保存后系统自动生成"}
                 disabled readOnly
               />
             </Field>
             <Field>
-              <FieldLabel htmlFor={`supplier-sku-name-${sku?.id ?? "new"}`}>SKU 名称</FieldLabel>
+              <FieldLabel htmlFor={`supplier-sku-name-${currentSku?.id ?? "new"}`}>SKU 名称</FieldLabel>
               <div className="flex gap-2">
-                <Input id={`supplier-sku-name-${sku?.id ?? "new"}`} value={name} maxLength={160} onChange={(event) => setName(event.target.value)} />
+                <Input id={`supplier-sku-name-${currentSku?.id ?? "new"}`} value={name} maxLength={160} onChange={(event) => setName(event.target.value)} />
                 <Button
                   type="button"
                   variant="outline"
@@ -304,19 +375,19 @@ export function SupplierSkuDialog({
           />
           <div className="grid gap-4 md:grid-cols-3">
             <Field>
-              <FieldLabel htmlFor={`supplier-sku-specification-${sku?.id ?? "new"}`}>可读规格说明</FieldLabel>
-              <Input id={`supplier-sku-specification-${sku?.id ?? "new"}`} value={specification} maxLength={240} onChange={(event) => setSpecification(event.target.value)} />
+              <FieldLabel htmlFor={`supplier-sku-specification-${currentSku?.id ?? "new"}`}>可读规格说明</FieldLabel>
+              <Input id={`supplier-sku-specification-${currentSku?.id ?? "new"}`} value={specification} maxLength={240} onChange={(event) => setSpecification(event.target.value)} />
             </Field>
             <Field>
-              <FieldLabel htmlFor={`supplier-sku-model-${sku?.id ?? "new"}`}>型号</FieldLabel>
-              <Input id={`supplier-sku-model-${sku?.id ?? "new"}`} value={model} maxLength={160} onChange={(event) => setModel(event.target.value)} />
+              <FieldLabel htmlFor={`supplier-sku-model-${currentSku?.id ?? "new"}`}>型号</FieldLabel>
+              <Input id={`supplier-sku-model-${currentSku?.id ?? "new"}`} value={model} maxLength={160} onChange={(event) => setModel(event.target.value)} />
             </Field>
-            {sku ? (
+            {currentSku ? (
               <Field data-disabled>
-                <FieldLabel htmlFor={`supplier-sku-unit-${sku.id}`}>采购单位</FieldLabel>
+                <FieldLabel htmlFor={`supplier-sku-unit-${currentSku.id}`}>采购单位</FieldLabel>
                 <Input
-                  id={`supplier-sku-unit-${sku.id}`}
-                  value={`${sku.purchase_unit.name}（${sku.purchase_unit.symbol}）`}
+                  id={`supplier-sku-unit-${currentSku.id}`}
+                  value={`${currentSku.purchase_unit.name}（${currentSku.purchase_unit.symbol}）`}
                   disabled
                 />
                 <FieldDescription>
@@ -348,12 +419,12 @@ export function SupplierSkuDialog({
           </FieldSet>
           {inlinePriceEnabled && scope.kind === "tenant" ? (
             <SupplierSkuPriceFields
-              idPrefix={`supplier-sku-price-${sku?.id ?? "new"}`}
+              idPrefix={`supplier-sku-price-${currentSku?.id ?? "new"}`}
               value={priceForm}
               purchaseUnitSymbol={resolveSupplierSkuPurchaseUnitLabel(
                 purchaseUnitId,
                 purchaseUnitOptions,
-                sku?.purchase_unit,
+                currentSku?.purchase_unit,
               )}
               disabled={isSupplierSkuPriceFieldsDisabled({ loading, saveMode })}
               disabledNotice={saveMode === "metadata-only"

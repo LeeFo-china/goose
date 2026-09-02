@@ -135,6 +135,38 @@ describe("SupplierPurchasableSkusRepository composite save", () => {
     });
   });
 
+  test("accepts a metadata-only price no-op across a future gap and its replay", async () => {
+    const gapResult = (idempotent: boolean) => {
+      const result = commandResult();
+      return {
+        ...result,
+        idempotent,
+        price_version_created: false,
+        current_price: {
+          ...result.current_price,
+          effective_until: "2026-09-09T00:00:00Z",
+        },
+        catalog_item: {
+          ...result.catalog_item,
+          effective_until: "2026-09-09T00:00:00Z",
+        },
+        next_scheduled_effective_from: "2026-09-10T00:00:00Z",
+      };
+    };
+    const responses = [gapResult(false), gapResult(true)];
+    const rpc = mock(async () => ({ data: responses.shift(), error: null }));
+    const { SupplierPurchasableSkusRepository } = await import(
+      "./supplier-purchasable-skus"
+    );
+    const repository = new SupplierPurchasableSkusRepository(
+      () => ({ rpc } as never),
+    );
+
+    await expect(repository.save(updateInput)).resolves.toEqual(gapResult(false));
+    await expect(repository.save(updateInput)).resolves.toEqual(gapResult(true));
+    expect(rpc).toHaveBeenCalledTimes(2);
+  });
+
   test("accepts supported historical audit fields, SKU codes, and null specs", async () => {
     const base = commandResult();
     const legacyCode = `TS-${SKU_ID.replaceAll("-", "").slice(0, 16)}`;

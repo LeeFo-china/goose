@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from "node:util";
+
 import {
   currentTenantId,
   ids,
@@ -6,7 +8,7 @@ import {
   units,
 } from "./supplier-product-pricing-mock-state.mjs";
 import {
-  advanceCurrentPriceRowVersion,
+  advanceCurrentVersionsForConflict,
   cannotPreserveFutureVersion,
   createImmediatePriceVersion,
   earliestFutureList,
@@ -127,7 +129,7 @@ async function savePurchasableSku(request, response, url, productId, skuId) {
   }
   if (inlineState.conflictRemaining > 0) {
     inlineState.conflictRemaining -= 1;
-    advanceCurrentPriceRowVersion(skuId);
+    advanceCurrentVersionsForConflict(skuId);
   }
   const issue = validateSave(url, productId, skuId, payload, request.method);
   if (issue) {
@@ -225,7 +227,11 @@ function applySave(productId, skuId, payload, method) {
     mockStore.state.skus.push(sku);
   } else {
     const { expected_version: _expectedVersion, ...metadata } = payload.sku;
-    Object.assign(sku, metadata, { version: sku.version + 1, updated_at: now });
+    const metadataChanged = Object.entries(metadata).some(([field, value]) =>
+      !isDeepStrictEqual(sku[field], value));
+    if (metadataChanged) {
+      Object.assign(sku, metadata, { version: sku.version + 1, updated_at: now });
+    }
   }
   product.status = "active";
   const before = resolveCurrentPrice(skuId);

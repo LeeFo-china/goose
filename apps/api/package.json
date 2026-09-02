@@ -37,6 +37,8 @@
     "douyin:material-note:explain": "bun src/scripts/douyin-material-note-explain.ts",
     "supplier:purchasable-sku:smoke": "bun src/scripts/supplier-purchasable-sku-smoke.ts",
     "supplier:purchasable-sku:explain": "bun src/scripts/supplier-purchasable-sku-explain.ts",
+    "supplier:purchasable-sku:smoke:dev-direct": "bun src/scripts/supplier-purchasable-sku-dev-direct.ts smoke",
+    "supplier:purchasable-sku:explain:dev-direct": "bun src/scripts/supplier-purchasable-sku-dev-direct.ts explain",
     "smoke:supplier-purchase-fulfillment": "bun src/scripts/supplier-purchase-fulfillment-smoke.ts",
     "billing:subscription-lock": "bun --env-file=.env src/scripts/tenant-subscription-billing-lock.ts",
     "workflow:cleanup-readiness": "bun src/scripts/workflow-cleanup-readiness.ts",

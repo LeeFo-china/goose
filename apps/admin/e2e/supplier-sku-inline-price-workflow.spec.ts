@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import type { APIRequestContext, Locator, Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 import {
   assertCreateDialogLayout,
@@ -18,52 +18,16 @@ import {
   login,
   mockBackendBaseUrl,
   monitorBrowser,
+  openTenantSkuWorkspace,
   readMutations,
   readState,
   relationshipId,
   resetMock,
+  selectSupplier,
   skuPostMutations,
   tenantProductId,
   tenantSkuId,
 } from "./supplier-sku-inline-price-test-helpers";
-import type { ResetConfig } from "./supplier-sku-inline-price-test-helpers";
-
-async function selectSupplier(page: Page, platform = false) {
-  const name = platform ? "第21家平台供应商" : "第21家合作供应商";
-  const search = platform ? "搜索平台供应商" : "搜索合作供应商";
-  const select = platform ? "平台供应商" : "合作供应商";
-  await page.getByLabel(search).fill(name);
-  await page.getByRole("button", { name: search, exact: true }).click();
-  await page.getByLabel(select, { exact: true }).click();
-  await page.getByRole("option", { name: new RegExp(name) }).click();
-}
-
-async function openTenantSkuWorkspace(
-  page: Page,
-  request: APIRequestContext,
-  config: ResetConfig = {},
-) {
-  await resetMock(request, config);
-  await login(page);
-  await page.goto("/supplier-products", { waitUntil: "networkidle" });
-  await selectSupplier(page);
-  const productRow = page.getByRole("row").filter({ hasText: "租户私有瓷砖" });
-  await expect(page.getByLabel("合作供应商", { exact: true })).toBeEnabled();
-  await expect(page.getByRole("button", { name: "新增商品" })).toBeEnabled();
-  await expect(productRow.getByRole("button", { name: "查看 SKU" })).toBeEnabled();
-  await productRow.getByRole("button", { name: "查看 SKU" }).click();
-  await expect(page).toHaveURL(new RegExp(`productId=${tenantProductId}`));
-  const skuRow = page.getByRole("row").filter({
-    hasText: "租户私有瓷砖 600×600",
-  });
-  await expect(page.getByRole("heading", { name: "租户私有瓷砖 · SKU" })).toBeVisible();
-  await expect(skuRow).toBeVisible();
-  await expect(page.getByRole("button", { name: "刷新" })).toBeEnabled();
-  await page.waitForLoadState("networkidle");
-  await expect(page.getByLabel("合作供应商", { exact: true })).toBeEnabled();
-  await expect(page.getByRole("button", { name: "刷新" })).toBeEnabled();
-  await expect(skuRow.getByRole("button", { name: "编辑 SKU" })).toBeEnabled();
-}
 
 async function choosePurchaseUnit(page: Page, dialog: Locator) {
   await dialog.getByRole("combobox", { name: "采购单位" }).click();
@@ -194,6 +158,13 @@ test("编辑预填当前价并区分元数据更新与新价格版本", async ({
   expect(composite[0].result?.price_version_created).toBe(false);
   expect((await readState(request)).priceLists).toHaveLength(1);
 
+  const beforePriceOnly = await readState(request);
+  const sourceBeforePriceOnly = beforePriceOnly.priceLists.find(
+    ({ lifecycle_status }) => lifecycle_status === "published",
+  );
+  const skuVersionBeforePriceOnly = beforePriceOnly.skus.find(
+    ({ id }) => id === tenantSkuId,
+  )?.version;
   row = page.getByRole("row").filter({ hasText: "租户私有瓷砖 600×600 新包装" });
   await row.getByRole("button", { name: "编辑 SKU" }).click();
   dialog = page.getByRole("dialog", { name: "编辑供应商 SKU" });
@@ -206,6 +177,14 @@ test("编辑预填当前价并区分元数据更新与新价格版本", async ({
   expect(composite[1].result?.price_version_created).toBe(true);
   const state = await readState(request);
   expect(state.priceLists).toHaveLength(2);
+  const retiredSource = state.priceLists.find(({ id }) =>
+    id === sourceBeforePriceOnly?.id);
+  expect(retiredSource).toMatchObject({
+    effective_from: sourceBeforePriceOnly?.effective_from,
+    effective_until: sourceBeforePriceOnly?.effective_until,
+  });
+  expect(state.skus.find(({ id }) => id === tenantSkuId)?.version)
+    .toBe(skuVersionBeforePriceOnly);
   const currentList = state.priceLists.find(({ lifecycle_status }) =>
     lifecycle_status === "published");
   expect(currentList?.version_number).toBe(2);
@@ -374,87 +353,6 @@ test("仅商品权限沿用 legacy 创建并显式启用 SKU 与商品", async (
   });
   await page.waitForLoadState("networkidle");
   await expectNoPriceTraffic(request);
-  assertNoBrowserErrors();
-});
-
-test("价格冲突保留输入并以同一幂等尝试重试", async ({ page, request }) => {
-  const assertNoBrowserErrors = monitorBrowser(page, [{
-    status: 409,
-    path: `/purchasable-skus/${tenantSkuId}`,
-    count: 2,
-  }]);
-  await openTenantSkuWorkspace(page, request, {
-    priceScenario: "current",
-    compositeConflictOnce: true,
-  });
-  const before = await readState(request);
-  const currentBefore = before.priceLists.find(({ lifecycle_status }) =>
-    lifecycle_status === "published");
-  const row = page.getByRole("row").filter({ hasText: "租户私有瓷砖 600×600" });
-  await row.getByRole("button", { name: "编辑 SKU" }).click();
-  const dialog = page.getByRole("dialog", { name: "编辑供应商 SKU" });
-  await dialog.getByLabel("SKU 名称").fill("冲突后保留的 SKU 名称");
-  await priceInput(dialog).fill("333.00");
-  const conflictResponsePromise = page.waitForResponse((response) =>
-    response.request().method() === "PATCH" &&
-    response.url().includes(`/purchasable-skus/${tenantSkuId}`));
-  await dialog.getByRole("button", { name: "保存并生效" }).click();
-  const conflictResponse = await conflictResponsePromise;
-  expect(conflictResponse.status()).toBe(409);
-  expect(await conflictResponse.json()).toEqual({
-    success: false,
-    code: "SUPPLIER_PRICE_LIST_VERSION_CONFLICT",
-    message: "价格版本已变化，请重试",
-  });
-  await expect(dialog).toBeVisible();
-  await expect(dialog.getByLabel("SKU 名称")).toHaveValue("冲突后保留的 SKU 名称");
-  await expect(priceInput(dialog)).toHaveValue("333.00");
-  const refreshedPrice = await request.get(
-    `${mockBackendBaseUrl}/supplier-products/${tenantProductId}` +
-    `/purchasable-skus/${tenantSkuId}/price?tenantSupplierId=${relationshipId}`,
-  );
-  expect(refreshedPrice.ok()).toBe(true);
-  expect(await refreshedPrice.json()).toMatchObject({
-    data: {
-      current_price: {
-        supplier_price_list_id: currentBefore?.id,
-        supplier_price_list_row_version: (currentBefore?.row_version ?? 0) + 1,
-        unit_price: "128.00",
-      },
-    },
-  });
-  const retryResponsePromise = page.waitForResponse((response) =>
-    response.request().method() === "PATCH" &&
-    response.url().includes(`/purchasable-skus/${tenantSkuId}`));
-  await dialog.getByRole("button", { name: "保存并生效" }).click();
-  const retryResponse = await retryResponsePromise;
-  expect(retryResponse.status()).toBe(409);
-  expect(await retryResponse.json()).toMatchObject({
-    success: false,
-    code: "SUPPLIER_PRICE_LIST_VERSION_CONFLICT",
-  });
-  await expect(dialog).toBeVisible();
-  await expect(dialog.getByLabel("SKU 名称")).toHaveValue("冲突后保留的 SKU 名称");
-  await expect(priceInput(dialog)).toHaveValue("333.00");
-
-  const attempts = compositeMutations(await readMutations(request));
-  expect(attempts).toHaveLength(2);
-  expect(attempts[0].idempotencyKey).not.toBeNull();
-  expect(attempts[1].method).toBe(attempts[0].method);
-  expect(attempts[1].path).toBe(attempts[0].path);
-  expect(attempts[1].idempotencyKey).toBe(attempts[0].idempotencyKey);
-  expect(attempts[1].payload).toEqual(attempts[0].payload);
-  expect(attempts.map(({ result }) => result)).toEqual([
-    { error_code: "SUPPLIER_PRICE_LIST_VERSION_CONFLICT" },
-    { error_code: "SUPPLIER_PRICE_LIST_VERSION_CONFLICT" },
-  ]);
-  const after = await readState(request);
-  expect(after.priceLists).toHaveLength(before.priceLists.length);
-  expect(after.items).toEqual(before.items);
-  expect(after.priceLists.find(({ id }) => id === currentBefore?.id)?.row_version)
-    .toBe((currentBefore?.row_version ?? 0) + 1);
-  expect(after.skus.find(({ id }) => id === tenantSkuId)?.name)
-    .toBe("租户私有瓷砖 600×600");
   assertNoBrowserErrors();
 });
 
