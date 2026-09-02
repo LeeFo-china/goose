@@ -1,0 +1,33 @@
+{
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "catalogs": [
+    {
+      "endpoint": "/api/v1/models",
+      "modelCount": 1
+    }
+  ],
+  "modalities": [
+    {
+      "endpoint": "/api/v1/chat/completions",
+      "modality": "text",
+      "requestSchemaVersion": "openrouter-contract-v1",
+      "responseShape": {
+        "keys": [
+          "choices",
+          "created",
+          "id",
+          "model",
+          "object"
+        ]
+      },
+      "billingIdKind": "id",
+      "capabilities": {
+        "async": false,
+        "query": true,
+        "cancel": false,
+        "webhook": false
+      },
+      "eligible": true
+    }
+  ]
+}

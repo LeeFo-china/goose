@@ -67,6 +67,7 @@
     "picture-library:variants-backfill": "bun --env-file=.env src/scripts/picture-library-variants-backfill.ts",
     "project-health:release-readiness": "bun --env-file=.env --env-file=.env.local src/scripts/project-operational-risk-release-readiness.ts",
     "wechat-pay:applyment-preflight": "bun --env-file=.env --env-file=.env.local src/scripts/wechat-pay-applyment-preflight.ts",
+    "ai:openrouter:probe": "bun src/scripts/openrouter-capability-probe.ts",
     "ocr:cam:readiness": "bun --env-file=.env src/scripts/tencent-ocr-cam-readiness.ts",
     "ocr:results:cleanup": "bun src/scripts/ocr-result-cleanup.ts",
     "marketing:claim-voucher:fixtures": "bun src/scripts/marketing-claim-voucher-fixtures.ts",
