@@ -7,6 +7,7 @@ if (process.env.FORCE_COLOR && process.env.NO_COLOR) {
 export default defineConfig({
   testDir: "./e2e",
   testMatch: [
+    "supplier-product-page-scroll.spec.ts",
     "supplier-product-pricing-workflow.spec.ts",
     "supplier-sku-inline-price-conflict.spec.ts",
     "supplier-sku-inline-price-workflow.spec.ts",

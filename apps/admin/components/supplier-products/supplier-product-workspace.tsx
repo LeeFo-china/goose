@@ -193,7 +193,10 @@ export function SupplierProductWorkspace({
   const totalPages = Math.max(1, products.pagination.totalPages || 1);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-5">
+    <div
+      className="flex h-full min-h-0 flex-1 flex-col gap-5 overflow-y-auto pb-6 pr-1 [scrollbar-gutter:stable]"
+      data-testid="supplier-product-workspace"
+    >
       <PageHeading />
       <SupplierSearchSelect
         id="supplier-product-relationship"

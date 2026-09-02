@@ -59,6 +59,25 @@ const tenantProduct = {
 } as SupplierProduct;
 
 describe("供应商品与供货价行为", () => {
+  test("商品工作区在固定后台壳层内接管纵向滚动", () => {
+    const workspaceSource = readFileSync(
+      new URL("./supplier-product-workspace.tsx", import.meta.url),
+      "utf8",
+    );
+    const loadingSource = readFileSync(
+      new URL("../../app/(console)/supplier-products/loading.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(workspaceSource).toContain('data-testid="supplier-product-workspace"');
+    expect(workspaceSource).toContain("h-full");
+    expect(workspaceSource).toContain("overflow-y-auto");
+    expect(workspaceSource).toContain("[scrollbar-gutter:stable]");
+    expect(loadingSource).toContain("h-full");
+    expect(loadingSource).toContain("overflow-y-auto");
+    expect(loadingSource).toContain("[scrollbar-gutter:stable]");
+  });
+
   test("商品列表展示 SKU 数量并使用同区域下钻工作区", () => {
     const listSource = readFileSync(
       new URL("./supplier-product-list.tsx", import.meta.url),
@@ -134,7 +153,7 @@ describe("供应商品与供货价行为", () => {
     );
 
     expect(source).toContain(
-      "xl:grid-cols-[minmax(28rem,0.9fr)_minmax(32rem,1.1fr)]",
+      "2xl:grid-cols-[minmax(28rem,0.9fr)_minmax(32rem,1.1fr)]",
     );
     expect(source).toContain('className="flex min-w-0 gap-2"');
     expect(source).toContain('className="min-w-0 flex-1"');
