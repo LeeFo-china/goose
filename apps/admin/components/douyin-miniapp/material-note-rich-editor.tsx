@@ -8,11 +8,14 @@ import StarterKit from "@tiptap/starter-kit";
 import {
   EditorContent,
   Node,
+  NodeViewWrapper,
+  ReactNodeViewRenderer,
   mergeAttributes,
   useEditor,
   type JSONContent,
+  type ReactNodeViewProps,
 } from "@tiptap/react";
-import { Heading2, Heading3, ImagePlus, Loader2, List, ListOrdered, Quote, Trash2 } from "lucide-react";
+import { GripVertical, Heading2, Heading3, ImagePlus, Loader2, List, ListOrdered, Quote, Trash2 } from "lucide-react";
 
 import {
   buildMaterialNoteImagePreviewUrl,
@@ -32,6 +35,7 @@ const MaterialImage = Image.extend({
   name: "materialImage",
   group: "block",
   inline: false,
+  draggable: true,
   addAttributes() {
     return {
       ...this.parent?.(),
@@ -61,12 +65,66 @@ const MaterialImage = Image.extend({
       alt: HTMLAttributes.alt || "",
     }], ["figcaption", {}, HTMLAttributes.caption || ""]];
   },
+  addNodeView() {
+    return ReactNodeViewRenderer(MaterialImageNodeView);
+  },
 }).configure({
   allowBase64: false,
   HTMLAttributes: {
     class: "max-h-72 rounded-md border object-contain",
   },
 });
+
+function MaterialImageNodeView({
+  node,
+  selected,
+}: ReactNodeViewProps) {
+  const src = readNodeStringAttr(node.attrs, "src");
+  const alt = readNodeStringAttr(node.attrs, "alt") || "资料图片";
+  const caption = readNodeStringAttr(node.attrs, "caption");
+
+  return (
+    <NodeViewWrapper
+      as="figure"
+      className={cn(
+        "group relative my-3 rounded-lg border bg-background p-2 transition",
+        "hover:border-primary/40 hover:bg-muted/20",
+        selected && "border-primary/60 ring-2 ring-primary/20",
+      )}
+    >
+      <span
+        role="button"
+        data-drag-handle=""
+        draggable
+        contentEditable={false}
+        aria-label="拖动图片调整位置"
+        className={cn(
+          "absolute left-2 top-2 z-10 inline-flex h-8 w-8 cursor-grab items-center justify-center rounded-md border bg-background/95 text-muted-foreground shadow-sm",
+          "opacity-0 transition hover:text-foreground active:cursor-grabbing group-hover:opacity-100 group-focus-within:opacity-100",
+        )}
+      >
+        <GripVertical className="h-4 w-4" aria-hidden="true" />
+      </span>
+      <img
+        src={src}
+        alt={alt}
+        draggable={false}
+        className="max-h-72 w-full rounded-md border object-contain"
+      />
+      {caption ? (
+        <figcaption className="mt-2 text-center text-xs text-muted-foreground">
+          {caption}
+        </figcaption>
+      ) : null}
+    </NodeViewWrapper>
+  );
+}
+
+function readNodeStringAttr(attrs: unknown, key: string): string {
+  if (!attrs || typeof attrs !== "object") return "";
+  const value = (attrs as Record<string, unknown>)[key];
+  return typeof value === "string" ? value : "";
+}
 
 const MaterialCallout = Node.create({
   name: "materialCallout",
@@ -146,7 +204,8 @@ export function MaterialNoteRichEditor({
         void handleFiles(imageFiles);
         return !hasTextPayload;
       },
-      handleDrop: (view, event) => {
+      handleDrop: (view, event, _slice, moved) => {
+        if (moved) return false;
         const imageFiles = extractImageFiles(event.dataTransfer?.items, event.dataTransfer?.files);
         if (imageFiles.length === 0) return false;
         event.preventDefault();
