@@ -15,6 +15,10 @@ import {
 } from
   "@/components/douyin-miniapp/material-note-editor";
 import {
+  hasRetainedPasteContent,
+  removePastedImageTags,
+} from "@/components/douyin-miniapp/material-note-rich-editor";
+import {
   resolveSelectedMaterialVersionDetail,
   selectMaterialVersionAfterPageLoad,
 } from
@@ -174,6 +178,44 @@ describe("抖音资料后台工作台 UI 合同", () => {
         html: "<script />",
       }],
     })).toEqual([{ type: "paragraph", text: "保留纯文本" }]);
+  });
+
+  test("富文本编辑器支持粘贴和拖拽真实图片文件自动上传，不接收外链和 base64 图片", () => {
+    const richEditor = read("components/douyin-miniapp/material-note-rich-editor.tsx");
+
+    expect(richEditor).toContain("handlePaste");
+    expect(richEditor).toContain("handleDrop");
+    expect(richEditor).toContain("transformPastedHTML");
+    expect(richEditor).toContain("removePastedImageTags");
+    expect(richEditor).toContain("extractImageFiles");
+    expect(richEditor).toContain("clipboardData?.items");
+    expect(richEditor).toContain("dataTransfer?.items");
+    expect(richEditor).toContain('item.type.startsWith("image/")');
+    expect(richEditor).toContain("event.preventDefault()");
+    expect(richEditor).toContain("void handleFiles(imageFiles)");
+    expect(richEditor).toContain("posAtCoords");
+    expect(richEditor).toContain("insertContentAt(insertAt, imageContents)");
+    expect(richEditor).toContain("allowBase64: false");
+
+    expect(removePastedImageTags('<p>保留文字</p><img src="https://example.com/a.png"><p>继续</p>'))
+      .toBe("<p>保留文字</p><p>继续</p>");
+    expect(removePastedImageTags('<img src="data:image/png;base64,xxx">').trim()).toBe("");
+    expect(hasRetainedPasteContent({
+      html: '<p><img src="https://example.com/a.png"></p>',
+      plainText: "",
+    })).toBe(false);
+    expect(hasRetainedPasteContent({
+      html: '<html><body><meta charset="utf-8"><img src="https://example.com/a.png"></body></html>',
+      plainText: "",
+    })).toBe(false);
+    expect(hasRetainedPasteContent({
+      html: '<p>保留文字</p><img src="https://example.com/a.png">',
+      plainText: "",
+    })).toBe(true);
+    expect(hasRetainedPasteContent({
+      html: "",
+      plainText: "保留纯文本",
+    })).toBe(true);
   });
 
   test("菜单和页面按 read/manage/publish 三层权限收口", () => {

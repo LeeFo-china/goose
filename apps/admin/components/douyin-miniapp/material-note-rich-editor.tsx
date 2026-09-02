@@ -133,6 +133,31 @@ export function MaterialNoteRichEditor({
         ),
         "aria-label": "资料笔记富文本正文",
       },
+      transformPastedHTML: removePastedImageTags,
+      handlePaste: (_view, event) => {
+        const imageFiles = extractImageFiles(event.clipboardData?.items, event.clipboardData?.files);
+        if (imageFiles.length === 0) return false;
+        const hasTextPayload = hasClipboardTextPayload(event.clipboardData);
+        if (disabled || uploading) {
+          if (!hasTextPayload) event.preventDefault();
+          return !hasTextPayload;
+        }
+        if (!hasTextPayload) event.preventDefault();
+        void handleFiles(imageFiles);
+        return !hasTextPayload;
+      },
+      handleDrop: (view, event) => {
+        const imageFiles = extractImageFiles(event.dataTransfer?.items, event.dataTransfer?.files);
+        if (imageFiles.length === 0) return false;
+        event.preventDefault();
+        if (disabled || uploading) return true;
+        const dropPosition = view.posAtCoords({
+          left: event.clientX,
+          top: event.clientY,
+        })?.pos;
+        void handleFiles(imageFiles, dropPosition);
+        return true;
+      },
     },
     onUpdate: ({ editor: currentEditor }) => {
       const nextBlocks = tiptapDocToMaterialNoteBlocks(currentEditor.getJSON());
@@ -164,34 +189,48 @@ export function MaterialNoteRichEditor({
   }
 
   async function handleFile(file: File | undefined) {
-    if (!file || !editor) return;
+    if (!file) return;
+    await handleFiles([file]);
+  }
+
+  async function handleFiles(files: readonly File[], insertAt?: number) {
+    if (files.length === 0 || !editor) return;
     setUploadError("");
     setUploading(true);
     onUploadStateChange?.(true);
     try {
-      validateUploadFile(file, {
-        allowedTypes: IMAGE_TYPES,
-        maxSizeBytes: IMAGE_MAX_BYTES,
-        typeMessage: "仅支持 JPG、PNG 或 WebP 图片",
-        sizeMessage: "单张图片不能超过 5MB",
-      });
-      const result = await uploadDirectToCos(file, {
-        scene: "picture_library",
-        uploadErrorLabel: "上传资料笔记图片",
-        initFallbackMessage: "初始化资料笔记图片直传失败",
-        completeFallbackMessage: "登记资料笔记图片失败",
-      });
-      if (!result.fileId) {
-        setUploadError("图片上传成功但未返回文件 ID");
-        return;
+      const imageContents: JSONContent[] = [];
+      for (const file of files) {
+        validateUploadFile(file, {
+          allowedTypes: IMAGE_TYPES,
+          maxSizeBytes: IMAGE_MAX_BYTES,
+          typeMessage: "仅支持 JPG、PNG 或 WebP 图片",
+          sizeMessage: "单张图片不能超过 5MB",
+        });
+        const result = await uploadDirectToCos(file, {
+          scene: "picture_library",
+          uploadErrorLabel: "上传资料笔记图片",
+          initFallbackMessage: "初始化资料笔记图片直传失败",
+          completeFallbackMessage: "登记资料笔记图片失败",
+        });
+        if (!result.fileId) {
+          setUploadError("图片上传成功但未返回文件 ID");
+          return;
+        }
+        const src = result.url || result.publicUrl || buildUploadPreviewUrl(result.storagePath);
+        setImagePreviews((current) => ({ ...current, [result.fileId!]: src }));
+        const alt = file.name.replace(/\.[^.]+$/, "") || "资料图片";
+        imageContents.push({
+          type: "materialImage",
+          attrs: { fileId: result.fileId, src, alt, caption: "" },
+        });
       }
-      const src = result.url || result.publicUrl || buildUploadPreviewUrl(result.storagePath);
-      setImagePreviews((current) => ({ ...current, [result.fileId!]: src }));
-      const alt = file.name.replace(/\.[^.]+$/, "") || "资料图片";
-      editor.chain().focus().insertContent({
-        type: "materialImage",
-        attrs: { fileId: result.fileId, src, alt, caption: "" },
-      }).run();
+      if (imageContents.length === 0) return;
+      if (typeof insertAt === "number") {
+        editor.chain().focus().insertContentAt(insertAt, imageContents).run();
+      } else {
+        editor.chain().focus().insertContent(imageContents).run();
+      }
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : "上传资料笔记图片失败");
     } finally {
@@ -274,4 +313,48 @@ function ToolbarButton({
   onClick: () => void;
 }) {
   return <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={onClick}>{children}</Button>;
+}
+
+function extractImageFiles(
+  items?: DataTransferItemList | null,
+  files?: FileList | null,
+): File[] {
+  const itemFiles = Array.from(items ?? [])
+    .filter((item) => item.type.startsWith("image/"))
+    .map((item) => item.getAsFile())
+    .filter((file): file is File => Boolean(file));
+  if (itemFiles.length > 0) return itemFiles;
+
+  return Array.from(files ?? []).filter((file) => file.type.startsWith("image/"));
+}
+
+function hasClipboardTextPayload(data?: DataTransfer | null): boolean {
+  if (!data) return false;
+  return hasRetainedPasteContent({
+    html: data.getData("text/html"),
+    plainText: data.getData("text/plain"),
+  });
+}
+
+export function removePastedImageTags(html: string): string {
+  return html.replace(/<img\b[^>]*>/gi, "");
+}
+
+export function hasRetainedPasteContent({
+  html,
+  plainText,
+}: {
+  html: string;
+  plainText: string;
+}): boolean {
+  const normalizedHtml = html.trim();
+  const retainedHtmlText = removePastedImageTags(normalizedHtml)
+    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<(meta|link)\b[^>]*>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .trim();
+  if (retainedHtmlText) return true;
+
+  return !normalizedHtml && Boolean(plainText.trim());
 }
