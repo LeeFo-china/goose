@@ -56,10 +56,15 @@ async function repositoryFor(
 
 describe("SupplierProductsRepository", () => {
   test("paginates the exact platform plus current-tenant product scope", async () => {
-    const { repository, requests } = await repositoryFor((request) =>
-      new URL(request.url).pathname.includes("/rpc/")
-        ? { body: [] }
-        : { body: [product], count: 21 });
+    const { repository, requests } = await repositoryFor((request) => {
+      const pathname = new URL(request.url).pathname;
+      if (
+        pathname.includes("/rpc/")
+        || pathname.endsWith("/tenant_catalog_cost_category_rules")
+        || pathname.endsWith("/finance_cost_categories")
+      ) return { body: [] };
+      return { body: [product], count: 21 };
+    });
 
     const result = await repository.listProducts({
       supplier_id: SUPPLIER_ID,
@@ -84,6 +89,15 @@ describe("SupplierProductsRepository", () => {
     const { repository, requests } = await repositoryFor((request) => {
       const url = new URL(request.url);
       if (url.pathname.includes("/rpc/")) return { body: [] };
+      if (url.pathname.endsWith("/tenant_catalog_cost_category_rules")) {
+        return { body: [] };
+      }
+      if (url.pathname.endsWith("/finance_cost_categories")) {
+        return { body: [] };
+      }
+      if (url.pathname.endsWith("/supplier_price_list_items")) {
+        return { body: [] };
+      }
       return {
         body: request.url.includes("supplier_skus") ? [] : product,
         count: 0,
@@ -95,6 +109,7 @@ describe("SupplierProductsRepository", () => {
       supplier_id: SUPPLIER_ID,
       supplier_product_id: PRODUCT_ID,
       tenant_id: TENANT_ID,
+      tenant_supplier_id: TENANT_SUPPLIER_ID,
       page: 1,
       pageSize: 20,
     });
@@ -102,24 +117,34 @@ describe("SupplierProductsRepository", () => {
     for (const request of requests.filter((item) =>
       !new URL(item.url).pathname.includes("/rpc/"))) {
       const url = new URL(request.url);
+      if (
+        url.pathname.endsWith("/tenant_catalog_cost_category_rules")
+        || url.pathname.endsWith("/finance_cost_categories")
+        || url.pathname.endsWith("/supplier_price_list_items")
+      ) continue;
       expect(url.searchParams.get("supplier_id")).toBe(`eq.${SUPPLIER_ID}`);
       expect(url.searchParams.get("or")).toBe(PRODUCT_READ_SCOPE_FILTER);
       expect(url.searchParams.get("select")).not.toContain("*");
     }
-    expect(new URL(requests[2]!.url).searchParams.get("select"))
+    const skuRequest = requests.find((request) =>
+      new URL(request.url).pathname.endsWith("/supplier_skus")
+    );
+    expect(new URL(skuRequest!.url).searchParams.get("select"))
       .toContain("spec_values");
   });
 
   test("preserves legacy NULL spec values without failing the whole SKU page", async () => {
-    const { repository } = await repositoryFor(() => ({
-      body: [{ ...sku, spec_values: null }],
-      count: 1,
-    }));
+    const { repository } = await repositoryFor((request) =>
+      new URL(request.url).pathname.endsWith("/supplier_price_list_items")
+        ? { body: [] }
+        : { body: [{ ...sku, spec_values: null }], count: 1 }
+    );
 
     const result = await repository.listSkus({
       supplier_id: SUPPLIER_ID,
       supplier_product_id: PRODUCT_ID,
       tenant_id: TENANT_ID,
+      tenant_supplier_id: TENANT_SUPPLIER_ID,
       page: 1,
       pageSize: 20,
     });
@@ -137,6 +162,7 @@ describe("SupplierProductsRepository", () => {
       supplier_id: SUPPLIER_ID,
       supplier_product_id: PRODUCT_ID,
       tenant_id: TENANT_ID,
+      tenant_supplier_id: TENANT_SUPPLIER_ID,
       keyword: "SKU-1",
       page: 1,
       pageSize: 20,
@@ -419,18 +445,8 @@ const product = {
   version: 1,
   ownership_scope: "platform",
   owner_tenant_id: null,
-  category: {
-    id: CATEGORY_ID,
-    code: "CAT",
-    name: "瓷砖",
-    status: "active",
-  },
-  brand: {
-    id: BRAND_ID,
-    code: "BRAND",
-    name: "品牌",
-    status: "active",
-  },
+  category: { id: CATEGORY_ID, code: "CAT", name: "瓷砖", status: "active" },
+  brand: { id: BRAND_ID, code: "BRAND", name: "品牌", status: "active" },
   updated_at: "2026-07-29T00:00:00.000Z",
 };
 
@@ -453,20 +469,8 @@ const sku = {
   version: 1,
   ownership_scope: "tenant",
   owner_tenant_id: TENANT_ID,
-  purchase_unit: {
-    id: CATEGORY_ID,
-    code: "BOX",
-    name: "箱",
-    symbol: "箱",
-    status: "active",
-  },
-  base_unit: {
-    id: CATEGORY_ID,
-    code: "BOX",
-    name: "箱",
-    symbol: "箱",
-    status: "active",
-  },
+  purchase_unit: { id: CATEGORY_ID, code: "BOX", name: "箱", symbol: "箱", status: "active" },
+  base_unit: { id: CATEGORY_ID, code: "BOX", name: "箱", symbol: "箱", status: "active" },
   updated_at: "2026-08-19T00:00:00.000Z",
 };
 
@@ -474,18 +478,6 @@ const conversion = {
   from_unit_id: CATEGORY_ID,
   to_unit_id: BRAND_ID,
   factor: "8.000000",
-  from_unit: {
-    id: CATEGORY_ID,
-    code: "BOX",
-    name: "箱",
-    symbol: "箱",
-    unit_dimension: "count",
-  },
-  to_unit: {
-    id: BRAND_ID,
-    code: "PIECE",
-    name: "片",
-    symbol: "片",
-    unit_dimension: "count",
-  },
+  from_unit: { id: CATEGORY_ID, code: "BOX", name: "箱", symbol: "箱", unit_dimension: "count" },
+  to_unit: { id: BRAND_ID, code: "PIECE", name: "片", symbol: "片", unit_dimension: "count" },
 };

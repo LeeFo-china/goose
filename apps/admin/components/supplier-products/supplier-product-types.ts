@@ -19,9 +19,12 @@ export type CatalogReference = {
   code: string;
   name: string;
   status: "active" | "inactive";
+  parent_id?: string | null;
+  full_name?: string;
 };
 
 export type OwnershipScope = "platform" | "tenant";
+export type SupplierCostCategorySource = "product" | "category" | "ancestor";
 
 export type UnitReference = CatalogReference & {
   symbol: string;
@@ -41,6 +44,9 @@ export type SupplierProduct = {
   brand: CatalogReference;
   sku_count: number;
   active_sku_count: number;
+  default_cost_category_id: string | null;
+  default_cost_category_name: string | null;
+  cost_category_source: SupplierCostCategorySource | null;
   updated_at: string;
 };
 
@@ -65,6 +71,7 @@ export type SupplierSku = {
   owner_tenant_id: string | null;
   purchase_unit: UnitReference;
   base_unit: UnitReference;
+  current_price?: SupplierSkuCurrentPrice | null;
   updated_at: string;
 };
 

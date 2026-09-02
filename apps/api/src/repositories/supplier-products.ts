@@ -8,6 +8,22 @@ import {
   type ProductCountScope,
 } from "@/repositories/supplier-product-sku-counts";
 import {
+  attachProductCostCategories,
+  attachSkuCurrentPrices,
+  type SupplierSkuCurrentPriceScope,
+} from "@/repositories/supplier-product-list-summaries";
+import type {
+  CommandActor,
+  OwnershipScope,
+  PlatformSupplierProductListInput,
+  PlatformSupplierSkuListInput,
+  ProductFilters,
+  SupplierCommandContext,
+  SupplierProductCreateCommand,
+  SupplierProductListInput,
+  SupplierSkuListInput,
+} from "@/repositories/supplier-products-inputs";
+import {
   listPlatformSkuUnitConversions,
   listTenantSkuUnitConversions,
   type PlatformSkuUnitConversionListInput,
@@ -29,7 +45,6 @@ import {
   tenantReadScopeFilter,
   toPage,
   type Page,
-  type PageInput,
   type SupplierProduct,
   type SupplierProductCommandResult,
   type SupplierSku,
@@ -38,60 +53,20 @@ import {
 import { Errors } from "@/errors/error-factory";
 import { SupabaseDB } from "@/utils/supabase";
 
-export type {
-  Page,
-  SupplierProduct,
-  SupplierProductCommandResult,
-  SupplierSku,
-  SupplierSkuUnitConversion,
-} from "@/repositories/supplier-products-model";
+export type { Page, SupplierProduct, SupplierProductCommandResult, SupplierSku, SupplierSkuUnitConversion } from "@/repositories/supplier-products-model";
 export type {
   PlatformSkuUnitConversionListInput,
   TenantSkuUnitConversionListInput,
 } from "@/repositories/supplier-product-subresources";
-
-type ProductFilters = PageInput & {
-  supplier_id: string;
-  keyword?: string;
-  status?: string;
-  category_id?: string;
-  brand_id?: string;
-};
-
-export type SupplierProductListInput = ProductFilters & { tenant_id: string };
-export type PlatformSupplierProductListInput = ProductFilters;
-export type SupplierSkuListInput = PageInput & {
-  supplier_id: string;
-  tenant_id: string;
-  supplier_product_id: string;
-  keyword?: string;
-  status?: string;
-};
-export type PlatformSupplierSkuListInput = Omit<SupplierSkuListInput, "tenant_id">;
-
-type OwnershipScope = "platform" | "tenant";
-type CommandActor = {
-  tenant_id: string | null;
-  tenant_supplier_id: string | null;
-  supplier_id: string;
-  actor_user_id: string;
-  actor_employee_id: string;
-  idempotency_key: string;
-};
-
-export type SupplierCommandContext = Omit<CommandActor, "tenant_id" | "tenant_supplier_id"> & {
-  tenant_id: string;
-  tenant_supplier_id: string;
-};
-
-export type SupplierProductCreateCommand = SupplierCommandContext & {
-  product_id: string;
-  product_code: string;
-  name: string;
-  category_id: string;
-  brand_id: string;
-  description?: string | null;
-};
+export type {
+  PlatformSupplierProductListInput,
+  PlatformSupplierSkuListInput,
+  ProductFilters,
+  SupplierCommandContext,
+  SupplierProductCreateCommand,
+  SupplierProductListInput,
+  SupplierSkuListInput,
+} from "@/repositories/supplier-products-inputs";
 
 export class SupplierProductsRepository {
   constructor(
@@ -151,7 +126,12 @@ export class SupplierProductsRepository {
 
   async listSkus(input: SupplierSkuListInput): Promise<Page<SupplierSku>> {
     return this.listSkusByScope(input, (request) =>
-      request.or(tenantReadScopeFilter(input.tenant_id)));
+      request.or(tenantReadScopeFilter(input.tenant_id)), {
+        supplierId: input.supplier_id,
+        supplierProductId: input.supplier_product_id,
+        tenantId: input.tenant_id,
+        tenantSupplierId: input.tenant_supplier_id,
+      });
   }
 
   listPlatformSkus(
@@ -176,6 +156,7 @@ export class SupplierProductsRepository {
     input: PlatformSupplierSkuListInput,
     applyScope: (request: import("./supplier-products-model").Query) =>
       import("./supplier-products-model").Query,
+    priceScope: SupplierSkuCurrentPriceScope | null = null,
   ): Promise<Page<SupplierSku>> {
     const pagination = normalizePage(input);
     let request = applyScope(this.client.from("supplier_skus")
@@ -189,8 +170,9 @@ export class SupplierProductsRepository {
       .order("id", { ascending: false })
       .range(...pageRange(pagination));
     if (error) throw Errors.dbError("查询供应商 SKU 失败", error);
+    const skus = parseRows(SkuSchema, data, "查询供应商 SKU 失败");
     return toPage(
-      parseRows(SkuSchema, data, "查询供应商 SKU 失败"),
+      await attachSkuCurrentPrices(this.client, skus, priceScope),
       pagination,
       count,
     );
@@ -409,12 +391,17 @@ export class SupplierProductsRepository {
       data,
       "查询供应商商品失败",
     );
-    return toPage(
-      await attachProductSkuCounts(
+    const countedProducts = await attachProductSkuCounts(
         this.client,
         input.supplier_id,
         products,
         countScope,
+      );
+    return toPage(
+      await attachProductCostCategories(
+        this.client,
+        countedProducts,
+        countScope.tenantId,
       ),
       pagination,
       count,
@@ -436,12 +423,26 @@ export class SupplierProductsRepository {
     if (error) throw Errors.dbError("查询供应商商品失败", error);
     if (data === null) return null;
     const product = parse(ProductRowSchema, data, "查询供应商商品失败");
-    if (!countScope) return { ...product, sku_count: 0, active_sku_count: 0 };
-    return (await attachProductSkuCounts(
+    if (!countScope) {
+      return {
+        ...product,
+        sku_count: 0,
+        active_sku_count: 0,
+        default_cost_category_id: null,
+        default_cost_category_name: null,
+        cost_category_source: null,
+      };
+    }
+    const counted = await attachProductSkuCounts(
       this.client,
       supplierId,
       [product],
       countScope,
+    );
+    return (await attachProductCostCategories(
+      this.client,
+      counted,
+      countScope.tenantId,
     ))[0]!;
   }
 

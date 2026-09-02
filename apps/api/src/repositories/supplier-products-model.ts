@@ -16,7 +16,7 @@ export const PRODUCT_SELECT = [
   "version",
   "ownership_scope",
   "owner_tenant_id",
-  "category:catalog_categories!category_id(id,code,name,status)",
+  "category:catalog_categories!category_id(id,code,name,status,parent_id,full_name)",
   "brand:catalog_brands!brand_id(id,code,name,status)",
   "updated_at",
 ].join(",");
@@ -58,6 +58,8 @@ const CatalogReferenceSchema = z.object({
   code: z.string(),
   name: z.string(),
   status: z.enum(["active", "inactive"]),
+  parent_id: z.uuid().nullable().optional(),
+  full_name: z.string().nullable().optional(),
 }).strict();
 
 const UnitReferenceSchema = CatalogReferenceSchema.extend({
@@ -90,6 +92,11 @@ export const ProductRowSchema = z.object({
 export const ProductSchema = ProductRowSchema.extend({
   sku_count: z.number().int().nonnegative(),
   active_sku_count: z.number().int().nonnegative(),
+  default_cost_category_id: z.uuid().nullable().default(null),
+  default_cost_category_name: z.string().nullable().default(null),
+  cost_category_source: z.enum(["product", "category", "ancestor"])
+    .nullable()
+    .default(null),
 }).strict().refine(
   ({ sku_count, active_sku_count }) => active_sku_count <= sku_count,
   { message: "已启用 SKU 数量不能超过 SKU 总数" },
@@ -103,6 +110,23 @@ export const ProductSkuCountSchema = z.object({
   ({ sku_count, active_sku_count }) => active_sku_count <= sku_count,
   { message: "已启用 SKU 数量不能超过 SKU 总数" },
 );
+
+export const ProductCostCategoryRuleSchema = z.object({
+  rule_scope: z.enum(["product", "category"]),
+  catalog_category_id: z.uuid().nullable(),
+  supplier_product_id: z.uuid().nullable(),
+  cost_category_id: z.uuid(),
+}).strict();
+
+export const FinanceCostCategorySummarySchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+}).strict();
+
+export const CatalogCategoryParentSchema = z.object({
+  id: z.uuid(),
+  parent_id: z.uuid().nullable(),
+}).strict();
 
 const SpecValueSchema = z.union([
   z.string(),
@@ -133,7 +157,35 @@ export const SkuSchema = z.object({
   owner_tenant_id: z.uuid().nullable(),
   purchase_unit: UnitReferenceSchema,
   base_unit: UnitReferenceSchema,
+  current_price: z.object({
+    supplier_price_list_id: z.uuid(),
+    supplier_price_list_version: z.number().int().nonnegative(),
+    supplier_price_list_row_version: z.number().int().nonnegative(),
+    supplier_price_list_item_id: z.uuid(),
+    unit_price: z.string(),
+    tax_rate: z.string(),
+    tax_inclusive: z.boolean(),
+    effective_from: z.string(),
+    effective_until: z.string().nullable(),
+  }).nullable().default(null),
   updated_at: z.string(),
+}).strict();
+
+export const SupplierSkuPriceListItemSummarySchema = z.object({
+  id: z.uuid(),
+  supplier_sku_id: z.uuid(),
+  supplier_price_list_id: z.uuid(),
+  minimum_quantity: z.string(),
+  unit_price: z.string(),
+  tax_rate: z.string(),
+  tax_inclusive: z.boolean(),
+  price_list: z.object({
+    id: z.uuid(),
+    version_number: z.number().int().nonnegative(),
+    row_version: z.number().int().nonnegative(),
+    effective_from: z.string(),
+    effective_until: z.string().nullable(),
+  }).strict(),
 }).strict();
 
 export const SkuUnitConversionSchema = z.object({
@@ -158,7 +210,14 @@ export const ProductCommandResultSchema = z.object({
 export type SupplierProduct = z.infer<typeof ProductSchema>;
 export type SupplierProductRow = z.infer<typeof ProductRowSchema>;
 export type SupplierProductSkuCount = z.infer<typeof ProductSkuCountSchema>;
+export type SupplierProductCostCategoryRule =
+  z.infer<typeof ProductCostCategoryRuleSchema>;
+export type FinanceCostCategorySummary =
+  z.infer<typeof FinanceCostCategorySummarySchema>;
+export type CatalogCategoryParent = z.infer<typeof CatalogCategoryParentSchema>;
 export type SupplierSku = z.infer<typeof SkuSchema>;
+export type SupplierSkuPriceListItemSummary =
+  z.infer<typeof SupplierSkuPriceListItemSummarySchema>;
 export type SupplierSkuUnitConversion = z.infer<
   typeof SkuUnitConversionSchema
 >;
@@ -182,11 +241,16 @@ export type SingleResult = { data: unknown; error: unknown };
 export type Query = {
   select: (...args: unknown[]) => Query;
   eq: (column: string, value: unknown) => Query;
+  in: (column: string, values: readonly unknown[]) => Query;
+  lte: (column: string, value: unknown) => Query;
   is: (column: string, value: null) => Query;
   or: (value: string) => Query;
-  order: (column: string, options: { ascending: boolean }) => Query;
+  order: (
+    column: string,
+    options: { ascending: boolean; referencedTable?: string },
+  ) => Query;
   range: (start: number, end: number) => Query;
-  limit: (count: number) => Query;
+  limit: (count: number, options?: { referencedTable: string }) => Query;
   maybeSingle: () => Promise<SingleResult>;
   then: Promise<Result>["then"];
 };
