@@ -192,6 +192,7 @@ describe("抖音资料后台工作台 UI 合同", () => {
     expect(richEditor).toContain("dataTransfer?.items");
     expect(richEditor).toContain('item.type.startsWith("image/")');
     expect(richEditor).toContain("event.preventDefault()");
+    expect(richEditor).toContain("if (moved) return false");
     expect(richEditor).toContain("void handleFiles(imageFiles)");
     expect(richEditor).toContain("posAtCoords");
     expect(richEditor).toContain("insertContentAt(insertAt, imageContents)");
@@ -216,6 +217,38 @@ describe("抖音资料后台工作台 UI 合同", () => {
       html: "",
       plainText: "保留纯文本",
     })).toBe(true);
+  });
+
+  test("富文本图片块支持在正文中拖拽排序且不重新上传", () => {
+    const richEditor = read("components/douyin-miniapp/material-note-rich-editor.tsx");
+    const blocks = [
+      { type: "paragraph" as const, text: "第一段" },
+      {
+        type: "image" as const,
+        fileId: "11111111-1111-4111-8111-111111111111",
+        alt: "现场图",
+      },
+      { type: "paragraph" as const, text: "第二段" },
+    ];
+
+    expect(richEditor).toContain("ReactNodeViewRenderer(MaterialImageNodeView)");
+    expect(richEditor).toContain("NodeViewWrapper");
+    expect(richEditor).toContain("data-drag-handle");
+    expect(richEditor).toContain("GripVertical");
+    expect(richEditor).toContain('aria-label="拖动图片调整位置"');
+    expect(richEditor).toContain('draggable: true');
+    expect(JSON.stringify(materialNoteBlocksToTiptapDoc(blocks))).toContain(
+      "11111111-1111-4111-8111-111111111111",
+    );
+    expect(tiptapDocToMaterialNoteBlocks(materialNoteBlocksToTiptapDoc([
+      blocks[0],
+      blocks[2],
+      blocks[1],
+    ]))).toEqual([
+      blocks[0],
+      blocks[2],
+      blocks[1],
+    ]);
   });
 
   test("菜单和页面按 read/manage/publish 三层权限收口", () => {
