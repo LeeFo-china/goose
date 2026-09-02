@@ -8,12 +8,15 @@ import type {
 import {
   assertMaterialNoteRequestedPage,
   buildMaterialNoteListQuery,
+  buildMaterialNoteCategoryListQuery,
   getMaterialNoteActions,
   getMaterialNotePermissions,
   MATERIAL_NOTE_DEFAULT_PAGE_SIZE,
   MATERIAL_NOTE_MAX_PAGE_SIZE,
   normalizeMaterialNoteFilters,
   parseMaterialNoteDetail,
+  parseMaterialNoteCategory,
+  parseMaterialNoteCategoryList,
   parseMaterialNoteList,
   parseMaterialNoteVersion,
   parseMaterialNoteVersionList,
@@ -22,6 +25,7 @@ import {
 const noteId = "11111111-1111-4111-8111-111111111111";
 const versionId = "22222222-2222-4222-8222-222222222222";
 const employeeId = "33333333-3333-4333-8333-333333333333";
+const categoryId = "44444444-4444-4444-8444-444444444444";
 const timestamp = "2026-09-01T08:00:00.000+08:00";
 
 const versionSummary = {
@@ -31,6 +35,7 @@ const versionSummary = {
   title: "装修开工清单",
   summary: "开工前逐项确认",
   category: "施工避坑",
+  category_id: categoryId,
   applicable_to: "准备开工的业主",
   created_by: employeeId,
   created_at: timestamp,
@@ -76,6 +81,37 @@ describe("抖音资料后台客户端契约", () => {
     expect(query.toString()).toBe(
       "page=2&pageSize=50&status=archived&keyword=%E6%B8%85%E5%8D%95",
     );
+  });
+
+  test("资料分类列表使用分页查询并严格解析", () => {
+    const query = buildMaterialNoteCategoryListQuery({
+      page: 2,
+      pageSize: 50,
+      keyword: "避坑",
+      status: "active" as const,
+    });
+    expect(query.toString()).toBe(
+      "page=2&pageSize=50&keyword=%E9%81%BF%E5%9D%91&status=active",
+    );
+
+    const category = {
+      id: categoryId,
+      name: "施工避坑",
+      description: null,
+      status: "active" as const,
+      sort_order: 10,
+      created_at: timestamp,
+      updated_at: timestamp,
+    };
+    expect(parseMaterialNoteCategory(category)).toEqual(category);
+    expect(parseMaterialNoteCategoryList({
+      list: [category],
+      pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+    }).list[0]).toEqual(category);
+    expect(() => parseMaterialNoteCategoryList({
+      list: [{ ...category, content_blocks: [] }],
+      pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+    })).toThrow();
   });
 
   test("重复和畸形 searchParams 只取首个字符串或安全回退", () => {

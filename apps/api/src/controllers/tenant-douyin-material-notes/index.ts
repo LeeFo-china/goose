@@ -8,6 +8,10 @@ import {
   CreateTenantDouyinMaterialNoteSchema,
   CreateTenantDouyinMaterialNoteVersionSchema,
   TenantDouyinMaterialNoteArchiveSchema,
+  TenantDouyinMaterialNoteCategoryCreateSchema,
+  TenantDouyinMaterialNoteCategoryListQuerySchema,
+  TenantDouyinMaterialNoteCategoryParamsSchema,
+  TenantDouyinMaterialNoteCategoryUpdateSchema,
   TenantDouyinMaterialNoteCommandHeadersSchema,
   TenantDouyinMaterialNoteIdParamsSchema,
   TenantDouyinMaterialNoteListQuerySchema,
@@ -19,11 +23,12 @@ import {
   tenantDouyinMaterialNotesService,
   type TenantDouyinMaterialNotesService,
 } from '@/services/tenant-douyin-material-notes';
-import { Get, Post } from '@/utils/decorators/route';
+import { Get, Patch, Post } from '@/utils/decorators/route';
 import { ResponseHandler } from '@/utils/response';
 
 type ServicePort = Pick<TenantDouyinMaterialNotesService,
-  'list' | 'create' | 'getDetail' | 'listVersions' | 'getVersionDetail' |
+  'list' | 'create' | 'listCategories' | 'createCategory' | 'updateCategory' |
+  'getDetail' | 'listVersions' | 'getVersionDetail' |
   'appendVersion' | 'publish' | 'archive' | 'withdraw'>;
 
 export class TenantDouyinMaterialNotesController extends TenantBaseController {
@@ -45,6 +50,46 @@ export class TenantDouyinMaterialNotesController extends TenantBaseController {
     const body = parse(CreateTenantDouyinMaterialNoteSchema, request.body || {});
     const authContext = await this.getRequiredTenantContext(request);
     return ResponseHandler.success(await this.service.create(authContext, body));
+  }
+
+  @Get('/tenant/douyin-material-note-categories')
+  async listCategories(request: FastifyRequest) {
+    const query = parse(
+      TenantDouyinMaterialNoteCategoryListQuerySchema,
+      request.query || {},
+    );
+    const authContext = await this.getRequiredTenantContext(request);
+    return ResponseHandler.success(
+      await this.service.listCategories(authContext, query),
+    );
+  }
+
+  @Post('/tenant/douyin-material-note-categories')
+  async createCategory(request: FastifyRequest) {
+    const body = parse(
+      TenantDouyinMaterialNoteCategoryCreateSchema,
+      request.body || {},
+    );
+    const authContext = await this.getRequiredTenantContext(request);
+    return ResponseHandler.success(
+      await this.service.createCategory(authContext, body),
+    );
+  }
+
+  @Patch('/tenant/douyin-material-note-categories/:id')
+  async updateCategory(request: FastifyRequest) {
+    const { id } = parse(
+      TenantDouyinMaterialNoteCategoryParamsSchema,
+      request.params || {},
+    );
+    const body = parse(
+      TenantDouyinMaterialNoteCategoryUpdateSchema,
+      request.body || {},
+    );
+    const authContext = await this.getRequiredTenantContext(request);
+    return ResponseHandler.success(
+      await this.service.updateCategory(authContext, id, body),
+    );
   }
 
   @Get('/tenant/douyin-material-notes/:id')

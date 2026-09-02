@@ -4,7 +4,6 @@ import type {
 } from '@gooes/domain';
 import { z } from 'zod';
 
-import { AppError } from '@/errors/app-error';
 import { Errors } from '@/errors/error-factory';
 import {
   DouyinMaterialNoteRepositoryOwnedDetailRowSchema,
@@ -19,6 +18,7 @@ import {
 } from '@/schema/douyin-material-notes';
 import {
   TenantDouyinMaterialNoteAppendResultSchema,
+  TenantDouyinMaterialNoteCategoryRepositoryRowSchema,
   TenantDouyinMaterialNoteCreateResultSchema,
   TenantDouyinMaterialNoteRepositoryDetailRowSchema,
   TenantDouyinMaterialNoteRepositoryListRowSchema,
@@ -28,6 +28,19 @@ import {
   TenantDouyinMaterialNoteTransitionResultSchema,
 } from '@/schema/tenant-douyin-material-notes';
 import { SupabaseDB } from '@/utils/supabase';
+
+import {
+  assertSuccess,
+  categorySearchFilter,
+  execute,
+  invalidResponse,
+  optionalResult,
+  pageRange,
+  pageResult,
+  parse,
+  removeUndefined,
+  searchFilter,
+} from './douyin-material-notes-repository-utils';
 
 export type DouyinMaterialNotesDatabaseResult = {
   readonly data: unknown;
@@ -48,7 +61,10 @@ export interface DouyinMaterialNotesQuery
   order(column: string, options: OrderOptions): DouyinMaterialNotesQuery;
   range(from: number, to: number): DouyinMaterialNotesQuery;
   limit(count: number, options?: ReferencedTableOptions): DouyinMaterialNotesQuery;
+  insert(values: Readonly<Record<string, unknown>>): DouyinMaterialNotesQuery;
+  update(values: Readonly<Record<string, unknown>>): DouyinMaterialNotesQuery;
   maybeSingle(): Promise<DouyinMaterialNotesDatabaseResult>;
+  single(): Promise<DouyinMaterialNotesDatabaseResult>;
 }
 
 const MATERIAL_NOTE_RPC_NAMES = [
@@ -72,7 +88,7 @@ export interface DouyinMaterialNotesDatabaseClient {
 
 const PUBLIC_SELECT = [
   'id,published_at',
-  'published_version:douyin_material_note_versions!douyin_material_notes_published_version_owner_fkey(title,summary,category,applicable_to)',
+  'published_version:douyin_material_note_versions!douyin_material_notes_published_version_owner_fkey(title,summary,category,category_id,applicable_to)',
   'claims:douyin_material_note_claims!douyin_material_note_claims_note_tenant_fkey(id)',
 ].join(',');
 const PUBLIC_SEARCH_SELECT = PUBLIC_SELECT.replace(
@@ -81,15 +97,15 @@ const PUBLIC_SEARCH_SELECT = PUBLIC_SELECT.replace(
 );
 const TENANT_LIST_SELECT = [
   'id,status,published_at,updated_at',
-  'latest_versions:douyin_material_note_versions!douyin_material_note_versions_note_tenant_fkey(version_no,title,category)',
+  'latest_versions:douyin_material_note_versions!douyin_material_note_versions_note_tenant_fkey(version_no,title,category,category_id)',
   'claims:douyin_material_note_claims!douyin_material_note_claims_note_tenant_fkey(count)',
 ].join(',');
 const SEARCH_RELATION_SELECT =
   ',search_versions:douyin_material_note_versions!douyin_material_note_versions_note_tenant_fkey!inner(id)';
 const VERSION_SUMMARY_SELECT =
-  'id,note_id,version_no,title,summary,category,applicable_to,created_by,created_at';
+  'id,note_id,version_no,title,summary,category,category_id,applicable_to,created_by,created_at';
 const VERSION_DETAIL_SELECT =
-  'id,note_id,version_no,title,summary,category,applicable_to,content_blocks,created_by,created_at';
+  'id,note_id,version_no,title,summary,category,category_id,applicable_to,content_blocks,created_by,created_at';
 const TENANT_DETAIL_SELECT = [
   'id,status,published_version_id,published_at,created_at,updated_at',
   `latest_versions:douyin_material_note_versions!douyin_material_note_versions_note_tenant_fkey(${VERSION_SUMMARY_SELECT})`,
@@ -98,7 +114,7 @@ const TENANT_DETAIL_SELECT = [
 const OWNED_SELECT = [
   'id,claimed_at',
   'note:douyin_material_notes!douyin_material_note_claims_note_tenant_fkey(id,status)',
-  'claimed_version:douyin_material_note_versions!douyin_material_note_claims_version_owner_fkey(version_no,title,summary,category,applicable_to)',
+  'claimed_version:douyin_material_note_versions!douyin_material_note_claims_version_owner_fkey(version_no,title,summary,category,category_id,applicable_to)',
 ].join(',');
 const OWNED_ACCESS_SELECT = [
   'id',
@@ -107,8 +123,10 @@ const OWNED_ACCESS_SELECT = [
 const OWNED_DETAIL_SELECT = [
   'id,claimed_at',
   'note:douyin_material_notes!douyin_material_note_claims_note_tenant_fkey!inner(id,status)',
-  'claimed_version:douyin_material_note_versions!douyin_material_note_claims_version_owner_fkey(version_no,title,summary,category,applicable_to,content_blocks)',
+  'claimed_version:douyin_material_note_versions!douyin_material_note_claims_version_owner_fkey(version_no,title,summary,category,category_id,applicable_to,content_blocks)',
 ].join(',');
+const CATEGORY_SELECT =
+  'id,name,description,status,sort_order,created_at,updated_at';
 
 type PageInput = { readonly page: number; readonly pageSize: number };
 type PublicIdentityInput = {
@@ -206,6 +224,82 @@ export class DouyinMaterialNotesRepository {
         .select(VERSION_DETAIL_SELECT).eq('tenant_id', input.tenantId)
         .eq('note_id', input.noteId).eq('id', input.versionId).maybeSingle();
       return optionalResult(TenantDouyinMaterialNoteRepositoryVersionSchema, result);
+    });
+  }
+
+  async listCategories(input: PageInput & {
+    readonly tenantId: string;
+    readonly keyword?: string;
+    readonly status?: 'active' | 'disabled';
+  }) {
+    return execute('查询抖音资料分类失败', async () => {
+      let query = this.client.from('douyin_material_note_categories')
+        .select(CATEGORY_SELECT, { count: 'exact' })
+        .eq('tenant_id', input.tenantId)
+        .is('deleted_at', null);
+      if (input.status) query = query.eq('status', input.status);
+      if (input.keyword) query = query.or(categorySearchFilter(input.keyword));
+      const result = await query.order('sort_order', { ascending: true })
+        .order('updated_at', { ascending: false })
+        .order('id', { ascending: false })
+        .range(...pageRange(input));
+      return pageResult(TenantDouyinMaterialNoteCategoryRepositoryRowSchema, result);
+    });
+  }
+
+  async createCategory(input: {
+    readonly tenantId: string;
+    readonly actorEmployeeId: string;
+    readonly name: string;
+    readonly description: string | null;
+    readonly sortOrder: number;
+  }) {
+    return execute('创建抖音资料分类失败', async () => {
+      const result = await this.client.from('douyin_material_note_categories')
+        .insert({
+          tenant_id: input.tenantId,
+          name: input.name,
+          description: input.description,
+          status: 'active',
+          sort_order: input.sortOrder,
+          created_by: input.actorEmployeeId,
+          updated_by: input.actorEmployeeId,
+        })
+        .select(CATEGORY_SELECT)
+        .single();
+      assertSuccess(result, '创建抖音资料分类失败');
+      return parse(TenantDouyinMaterialNoteCategoryRepositoryRowSchema, result.data);
+    });
+  }
+
+  async updateCategory(input: {
+    readonly tenantId: string;
+    readonly actorEmployeeId: string;
+    readonly categoryId: string;
+    readonly name?: string;
+    readonly description?: string | null;
+    readonly status?: 'active' | 'disabled';
+    readonly sortOrder?: number;
+  }) {
+    return execute('更新抖音资料分类失败', async () => {
+      const result = await this.client.from('douyin_material_note_categories')
+        .update(removeUndefined({
+          name: input.name,
+          description: input.description,
+          status: input.status,
+          sort_order: input.sortOrder,
+          updated_by: input.actorEmployeeId,
+        }))
+        .eq('tenant_id', input.tenantId)
+        .eq('id', input.categoryId)
+        .is('deleted_at', null)
+        .select(CATEGORY_SELECT)
+        .maybeSingle();
+      assertSuccess(result, '更新抖音资料分类失败');
+      if (result.data === null) {
+        throw Errors.business(404, '资料分类不存在', 'MATERIAL_NOTE_CATEGORY_NOT_FOUND');
+      }
+      return parse(TenantDouyinMaterialNoteCategoryRepositoryRowSchema, result.data);
     });
   }
 
@@ -364,6 +458,7 @@ export class DouyinMaterialNotesRepository {
       p_title: input.draft.title,
       p_summary: input.draft.summary,
       p_category: input.draft.category,
+      p_category_id: input.draft.category_id ?? null,
       p_applicable_to: input.draft.applicable_to,
       p_content_blocks: input.draft.content_blocks,
     }, schema, '保存抖音资料版本失败');
@@ -396,100 +491,6 @@ function publicRpcArgs(input: PublicIdentityInput, extra: Readonly<Record<string
     p_subject_hash: input.subjectHash,
     ...extra,
   };
-}
-
-function pageRange(input: PageInput): [number, number] {
-  const from = (input.page - 1) * input.pageSize;
-  return [from, from + input.pageSize - 1];
-}
-
-function searchFilter(keyword: string): string {
-  const escaped = keyword.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
-    .replace(/[%_]/g, '\\$&');
-  const operand = `"%${escaped}%"`;
-  return ['title', 'summary', 'category']
-    .map((column) => `${column}.ilike.${operand}`).join(',');
-}
-
-function pageResult<Schema extends z.ZodType>(
-  schema: Schema,
-  result: DouyinMaterialNotesDatabaseResult,
-) {
-  assertSuccess(result, '查询抖音资料分页失败');
-  if (!Number.isSafeInteger(result.count) || result.count! < 0) {
-    throw invalidResponse();
-  }
-  if (!Array.isArray(result.data)) throw invalidResponse();
-  return { rows: parse(z.array(schema).max(100), result.data), total: result.count! };
-}
-
-function optionalResult<Schema extends z.ZodType>(
-  schema: Schema,
-  result: DouyinMaterialNotesDatabaseResult,
-): z.output<Schema> | null {
-  assertSuccess(result, '查询抖音资料详情失败');
-  return result.data === null ? null : parse(schema, result.data);
-}
-
-function parse<Schema extends z.ZodType>(schema: Schema, value: unknown): z.output<Schema> {
-  const parsed = schema.safeParse(value);
-  if (!parsed.success) throw invalidResponse();
-  return parsed.data;
-}
-
-function assertSuccess(result: DouyinMaterialNotesDatabaseResult, message: string): void {
-  if (!result.error) return;
-  throw databaseFailure(result.error, message);
-}
-
-async function execute<Result>(message: string, operation: () => Promise<Result>) {
-  try {
-    return await operation();
-  } catch (error) {
-    if (error instanceof AppError) throw error;
-    throw Errors.dbError(message);
-  }
-}
-
-function invalidResponse(): AppError {
-  return Errors.business(
-    500,
-    '抖音资料数据库响应格式无效',
-    'MATERIAL_NOTE_REPOSITORY_RESPONSE_INVALID',
-  );
-}
-
-function databaseFailure(error: unknown, fallbackMessage: string): AppError {
-  const text = errorText(error);
-  const mappings: ReadonlyArray<readonly [string, number, string]> = [
-    ['MATERIAL_NOTE_CLAIM_NOT_FOUND', 404, '领取记录不存在'],
-    ['MATERIAL_NOTE_NOT_FOUND', 404, '资料不存在'],
-    ['MATERIAL_NOTE_NOT_AVAILABLE', 409, '资料当前不可领取'],
-    ['MATERIAL_NOTE_VERSION_CONFLICT', 409, '资料版本冲突'],
-    ['MATERIAL_NOTE_STATE_CONFLICT', 409, '资料状态已变化'],
-    ['MATERIAL_NOTE_IDEMPOTENCY_CONFLICT', 409, '幂等键已用于不同请求'],
-    ['MATERIAL_NOTE_WITHDRAWN', 410, '资料已停止提供'],
-    ['MATERIAL_NOTE_INVALID_INPUT', 400, '资料命令参数无效'],
-    ['MATERIAL_NOTE_TENANT_NOT_ACTIVE', 409, '租户当前不可执行资料命令'],
-    ['MATERIAL_NOTE_ACTOR_NOT_ACTIVE', 409, '员工当前不可执行资料命令'],
-    ['MATERIAL_NOTE_INSTALLATION_NOT_ACTIVE', 409, '小程序安装当前不可用'],
-    ['MATERIAL_NOTE_TENANT_NOT_FOUND', 404, '租户不存在'],
-    ['MATERIAL_NOTE_INSTALLATION_NOT_FOUND', 404, '小程序安装不存在'],
-  ];
-  for (const [code, statusCode, message] of mappings) {
-    if (text.includes(code)) return Errors.business(statusCode, message, code);
-  }
-  return Errors.dbError(fallbackMessage);
-}
-
-function errorText(error: unknown): string {
-  if (typeof error === 'string') return error;
-  if (typeof error !== 'object' || error === null) return '';
-  const values = ['message', 'details', 'hint', 'code'].map((key) => {
-    const value = (error as Record<string, unknown>)[key];
-    return typeof value === 'string' ? value : '';
-  });
-  return values.join(' ');
 }
 
 export const douyinMaterialNotesRepository = new DouyinMaterialNotesRepository();

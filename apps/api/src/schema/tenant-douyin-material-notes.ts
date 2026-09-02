@@ -1,5 +1,8 @@
 import {
   DOUYIN_MATERIAL_NOTE_STATUS_VALUES,
+  DOUYIN_MATERIAL_NOTE_CATEGORY_STATUS_VALUES,
+  DouyinMaterialNoteCategoryListSchema,
+  DouyinMaterialNoteCategorySchema,
   DouyinMaterialNoteContentBlocksSchema,
   DouyinMaterialNoteTenantDetailSchema,
   DouyinMaterialNoteTenantListSchema,
@@ -12,6 +15,7 @@ import { z } from 'zod';
 import { PaginationQuerySchema } from '@/schema/request';
 
 const ExpectedStatusSchema = z.enum(DOUYIN_MATERIAL_NOTE_STATUS_VALUES);
+const CategoryStatusSchema = z.enum(DOUYIN_MATERIAL_NOTE_CATEGORY_STATUS_VALUES);
 const ReasonSchema = z.string().trim()
   .min(1, '操作原因不能为空')
   .max(1_000, '操作原因不能超过 1000 个字符');
@@ -32,11 +36,46 @@ export const TenantDouyinMaterialNoteVersionParamsSchema = z.strictObject({
   id: z.uuid('无效的资料 ID'),
   versionId: z.uuid('无效的资料版本 ID'),
 });
+export const TenantDouyinMaterialNoteCategoryParamsSchema = z.strictObject({
+  id: z.uuid('无效的资料分类 ID'),
+});
 
 export const CreateTenantDouyinMaterialNoteSchema =
   DouyinMaterialNoteVersionDraftSchema;
 export const CreateTenantDouyinMaterialNoteVersionSchema =
   DouyinMaterialNoteVersionDraftSchema;
+
+const CategoryDescriptionSchema = z.preprocess((value) => {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}, z.string().trim().min(1).max(300).nullable());
+
+const CategorySortOrderSchema = z.number().int().min(0).max(100_000);
+
+export const TenantDouyinMaterialNoteCategoryListQuerySchema =
+  PaginationQuerySchema.extend({
+    keyword: z.string().trim()
+      .min(1, '关键词不能为空')
+      .max(120, '关键词不能超过 120 个字符')
+      .optional(),
+    status: CategoryStatusSchema.optional(),
+  }).strict();
+
+export const TenantDouyinMaterialNoteCategoryCreateSchema = z.strictObject({
+  name: z.string().trim().min(1, '资料分类名称不能为空').max(100),
+  description: CategoryDescriptionSchema.optional().default(null),
+  sort_order: CategorySortOrderSchema.optional().default(0),
+});
+
+export const TenantDouyinMaterialNoteCategoryUpdateSchema = z.strictObject({
+  name: z.string().trim().min(1, '资料分类名称不能为空').max(100).optional(),
+  description: CategoryDescriptionSchema.optional(),
+  status: CategoryStatusSchema.optional(),
+  sort_order: CategorySortOrderSchema.optional(),
+}).refine((value) => Object.keys(value).length > 0, {
+  message: '至少提供一个资料分类更新字段',
+});
 
 export const TenantDouyinMaterialNotePublishSchema = z.strictObject({
   version_id: z.uuid('无效的资料版本 ID'),
@@ -65,6 +104,10 @@ export const TenantDouyinMaterialNoteVersionListResponseSchema =
   DouyinMaterialNoteTenantVersionListSchema;
 export const TenantDouyinMaterialNoteVersionDetailResponseSchema =
   DouyinMaterialNoteTenantVersionSchema;
+export const TenantDouyinMaterialNoteCategoryListResponseSchema =
+  DouyinMaterialNoteCategoryListSchema;
+export const TenantDouyinMaterialNoteCategoryResponseSchema =
+  DouyinMaterialNoteCategorySchema;
 
 export const TenantDouyinMaterialNoteCreateResultSchema = z.strictObject({
   note_id: z.uuid(),
@@ -104,6 +147,7 @@ const RepositoryVersionPreviewShape = {
   title: z.string().trim().min(1).max(300),
   summary: z.string().trim().min(1).max(1_000),
   category: z.string().trim().min(1).max(100),
+  category_id: z.uuid().nullable().optional(),
   applicable_to: z.string().trim().min(1).max(300).nullable(),
 };
 export const TenantDouyinMaterialNoteRepositoryVersionSchema = z.strictObject({
@@ -122,6 +166,7 @@ const RepositoryLatestSummarySchema = z.strictObject({
   version_no: RepositoryVersionPreviewShape.version_no,
   title: RepositoryVersionPreviewShape.title,
   category: RepositoryVersionPreviewShape.category,
+  category_id: RepositoryVersionPreviewShape.category_id,
 });
 const RepositoryCountRelationSchema = z.strictObject({
   count: z.number().int().nonnegative(),
@@ -150,9 +195,20 @@ export const TenantDouyinMaterialNoteRepositoryDetailRowSchema = z.strictObject(
   ).length(1),
   claims: z.array(RepositoryCountRelationSchema).length(1),
 });
+export const TenantDouyinMaterialNoteCategoryRepositoryRowSchema =
+  DouyinMaterialNoteCategorySchema;
 
 export type TenantDouyinMaterialNoteListQuery = z.infer<
   typeof TenantDouyinMaterialNoteListQuerySchema
+>;
+export type TenantDouyinMaterialNoteCategoryListQuery = z.infer<
+  typeof TenantDouyinMaterialNoteCategoryListQuerySchema
+>;
+export type TenantDouyinMaterialNoteCategoryCreateInput = z.infer<
+  typeof TenantDouyinMaterialNoteCategoryCreateSchema
+>;
+export type TenantDouyinMaterialNoteCategoryUpdateInput = z.infer<
+  typeof TenantDouyinMaterialNoteCategoryUpdateSchema
 >;
 export type CreateTenantDouyinMaterialNoteInput = z.infer<
   typeof CreateTenantDouyinMaterialNoteSchema

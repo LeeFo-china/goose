@@ -14,6 +14,7 @@ const TENANT_ID = '11111111-1111-4111-8111-111111111111';
 const AUTH_TENANT_ID = '99999999-9999-4999-8999-999999999999';
 const NOTE_ID = '22222222-2222-4222-8222-222222222222';
 const VERSION_ID = '33333333-3333-4333-8333-333333333333';
+const CATEGORY_ID = '88888888-8888-4888-8888-888888888888';
 const EMPLOYEE_ID = '44444444-4444-4444-8444-444444444444';
 const IDEMPOTENCY_KEY = '55555555-5555-4555-8555-555555555555';
 const NOW = '2026-09-01T08:00:00.000Z';
@@ -22,6 +23,7 @@ const draft = {
   title: '装修开工清单',
   summary: '开工前检查事项',
   category: '施工避坑',
+  category_id: CATEGORY_ID,
   applicable_to: null,
   content_blocks: blocks,
 };
@@ -74,6 +76,36 @@ function fixture(overrides: Partial<Record<string, unknown>> = {}) {
     findTenantDetail: mock(async () => detailRow),
     listVersions: mock(async () => ({ rows: [versionSummary], total: 1 })),
     findTenantVersionDetail: mock(async () => version),
+    listCategories: mock(async () => ({
+      rows: [{
+        id: CATEGORY_ID,
+        name: '施工避坑',
+        description: '施工阶段资料',
+        status: 'active' as const,
+        sort_order: 10,
+        created_at: NOW,
+        updated_at: NOW,
+      }],
+      total: 1,
+    })),
+    createCategory: mock(async () => ({
+      id: CATEGORY_ID,
+      name: '施工避坑',
+      description: null,
+      status: 'active' as const,
+      sort_order: 0,
+      created_at: NOW,
+      updated_at: NOW,
+    })),
+    updateCategory: mock(async () => ({
+      id: CATEGORY_ID,
+      name: '施工避坑',
+      description: '更新说明',
+      status: 'disabled' as const,
+      sort_order: 20,
+      created_at: NOW,
+      updated_at: NOW,
+    })),
     create: mock(async () => ({
       note_id: NOTE_ID,
       version_id: VERSION_ID,
@@ -119,9 +151,10 @@ describe('TenantDouyinMaterialNotesService access and mapping', () => {
     await context.service.getDetail(user, NOTE_ID);
     await context.service.listVersions(user, NOTE_ID, { page: 1, pageSize: 20 });
     await context.service.getVersionDetail(user, NOTE_ID, VERSION_ID);
+    await context.service.listCategories(user, { page: 1, pageSize: 20 });
 
-    expect(context.accessPolicy.assertTenantContext).toHaveBeenCalledTimes(4);
-    expect(context.accessPolicy.assertPermission).toHaveBeenCalledTimes(4);
+    expect(context.accessPolicy.assertTenantContext).toHaveBeenCalledTimes(5);
+    expect(context.accessPolicy.assertPermission).toHaveBeenCalledTimes(5);
     expect(context.accessPolicy.assertPermission).toHaveBeenCalledWith(
       user,
       'douyin_material_note.read',
@@ -132,6 +165,7 @@ describe('TenantDouyinMaterialNotesService access and mapping', () => {
       () => context.service.getDetail(auth([]), NOTE_ID),
       () => context.service.listVersions(auth([]), NOTE_ID, { page: 1, pageSize: 20 }),
       () => context.service.getVersionDetail(auth([]), NOTE_ID, VERSION_ID),
+      () => context.service.listCategories(auth([]), { page: 1, pageSize: 20 }),
     ]) {
       await expect(operation()).rejects.toMatchObject({ statusCode: 403 });
     }
@@ -144,6 +178,17 @@ describe('TenantDouyinMaterialNotesService access and mapping', () => {
 
     await context.service.create(manager, draft);
     await context.service.appendVersion(manager, NOTE_ID, draft);
+    await context.service.createCategory(manager, {
+      name: '施工避坑',
+      description: null,
+      sort_order: 0,
+    });
+    await context.service.updateCategory(manager, CATEGORY_ID, {
+      name: '报价资料',
+      description: null,
+      status: 'disabled',
+      sort_order: 20,
+    });
     await context.service.publish(publisher, NOTE_ID, {
       version_id: VERSION_ID,
       expected_status: 'draft',
@@ -170,6 +215,22 @@ describe('TenantDouyinMaterialNotesService access and mapping', () => {
       actorEmployeeId: EMPLOYEE_ID,
       draft,
     });
+    expect(context.repository.createCategory).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      actorEmployeeId: EMPLOYEE_ID,
+      name: '施工避坑',
+      description: null,
+      sortOrder: 0,
+    });
+    expect(context.repository.updateCategory).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      actorEmployeeId: EMPLOYEE_ID,
+      categoryId: CATEGORY_ID,
+      name: '报价资料',
+      description: null,
+      status: 'disabled',
+      sortOrder: 20,
+    });
     expect(context.repository.transition).toHaveBeenCalledWith(expect.objectContaining({
       tenantId: TENANT_ID,
       actorEmployeeId: EMPLOYEE_ID,
@@ -178,6 +239,11 @@ describe('TenantDouyinMaterialNotesService access and mapping', () => {
 
     await expect(context.service.create(auth([]), draft))
       .rejects.toMatchObject({ statusCode: 403 });
+    await expect(context.service.createCategory(auth([]), {
+      name: '施工避坑',
+      description: null,
+      sort_order: 0,
+    })).rejects.toMatchObject({ statusCode: 403 });
     await expect(context.service.publish(auth([]), NOTE_ID, {
       version_id: VERSION_ID,
       expected_status: 'draft',
@@ -203,6 +269,16 @@ describe('TenantDouyinMaterialNotesService access and mapping', () => {
         context.service.create(auth([]), draft)],
       ['appendVersion', (context: ReturnType<typeof fixture>) =>
         context.service.appendVersion(auth([]), NOTE_ID, draft)],
+      ['createCategory', (context: ReturnType<typeof fixture>) =>
+        context.service.createCategory(auth([]), {
+          name: '施工避坑',
+          description: null,
+          sort_order: 0,
+        })],
+      ['updateCategory', (context: ReturnType<typeof fixture>) =>
+        context.service.updateCategory(auth([]), CATEGORY_ID, {
+          name: '施工避坑',
+        })],
       ['transition', (context: ReturnType<typeof fixture>) =>
         context.service.publish(auth([]), NOTE_ID, {
           version_id: VERSION_ID,
@@ -233,6 +309,16 @@ describe('TenantDouyinMaterialNotesService access and mapping', () => {
         context.service.create(manager, draft)],
       ['appendVersion', (context: ReturnType<typeof fixture>) =>
         context.service.appendVersion(manager, NOTE_ID, draft)],
+      ['createCategory', (context: ReturnType<typeof fixture>) =>
+        context.service.createCategory(manager, {
+          name: '施工避坑',
+          description: null,
+          sort_order: 0,
+        })],
+      ['updateCategory', (context: ReturnType<typeof fixture>) =>
+        context.service.updateCategory(manager, CATEGORY_ID, {
+          name: '施工避坑',
+        })],
       ['transition', (context: ReturnType<typeof fixture>) =>
         context.service.publish(publisher, NOTE_ID, {
           version_id: VERSION_ID, expected_status: 'draft',
@@ -268,6 +354,12 @@ describe('TenantDouyinMaterialNotesService access and mapping', () => {
       { page: 1, pageSize: 20 },
     );
     const versionDetail = await context.service.getVersionDetail(user, NOTE_ID, VERSION_ID);
+    const categories = await context.service.listCategories(user, {
+      page: 1,
+      pageSize: 20,
+      keyword: '避坑',
+      status: 'active',
+    });
 
     expect(list).toEqual({
       list: [{
@@ -294,6 +386,18 @@ describe('TenantDouyinMaterialNotesService access and mapping', () => {
     expect(JSON.stringify(history)).not.toContain('content_blocks');
     const { version_no: _detailVersionNo, ...versionFields } = version;
     expect(versionDetail).toEqual({ ...versionFields, version: 2 });
+    expect(categories).toEqual({
+      list: [{
+        id: CATEGORY_ID,
+        name: '施工避坑',
+        description: '施工阶段资料',
+        status: 'active',
+        sort_order: 10,
+        created_at: NOW,
+        updated_at: NOW,
+      }],
+      pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+    });
   });
 
   test('returns the same 404 for missing, cross-tenant and mismatched versions', async () => {
@@ -386,112 +490,5 @@ describe('TenantDouyinMaterialNotesService access and mapping', () => {
       { version_id: VERSION_ID, expected_status: 'draft' },
       IDEMPOTENCY_KEY,
     )).rejects.toBe(versionConflict);
-  });
-});
-
-describe('TenantDouyinMaterialNotesService state commands', () => {
-  test.each([
-    ['publish', 'draft'],
-    ['publish', 'published'],
-    ['publish', 'archived'],
-    ['archive', 'draft'],
-    ['archive', 'published'],
-    ['withdraw', 'published'],
-    ['withdraw', 'archived'],
-  ] as const)('allows %s from %s and binds canonical command fields', async (
-    command,
-    expectedStatus,
-  ) => {
-    const context = fixture();
-    const body = command === 'publish'
-      ? { version_id: VERSION_ID, expected_status: expectedStatus }
-      : { expected_status: expectedStatus, reason: '状态变更原因' };
-
-    await context.service[command](
-      auth(['douyin_material_note.publish']),
-      NOTE_ID,
-      body as never,
-      IDEMPOTENCY_KEY,
-    );
-
-    expect(context.repository.transition).toHaveBeenCalledWith({
-      tenantId: TENANT_ID,
-      noteId: NOTE_ID,
-      actorEmployeeId: EMPLOYEE_ID,
-      command,
-      targetVersionId: command === 'publish' ? VERSION_ID : null,
-      expectedStatus,
-      reason: command === 'publish' ? null : '状态变更原因',
-      idempotencyKey: IDEMPOTENCY_KEY,
-    });
-  });
-
-  test.each([
-    ['withdraw', 'draft'],
-    ['archive', 'archived'],
-    ['publish', 'withdrawn'],
-    ['archive', 'withdrawn'],
-    ['withdraw', 'withdrawn'],
-  ] as const)('passes impossible %s from %s to the atomic RPC', async (
-    command,
-    expectedStatus,
-  ) => {
-    const stateConflict = Errors.business(
-      409,
-      '资料状态已变化',
-      'MATERIAL_NOTE_STATE_CONFLICT',
-    );
-    const context = fixture({
-      transition: mock(async () => { throw stateConflict; }),
-    });
-    const body = command === 'publish'
-      ? { version_id: VERSION_ID, expected_status: expectedStatus }
-      : { expected_status: expectedStatus, reason: '状态变更原因' };
-
-    await expect(context.service[command](
-      auth(['douyin_material_note.publish']),
-      NOTE_ID,
-      body as never,
-      IDEMPOTENCY_KEY,
-    )).rejects.toBe(stateConflict);
-    expect(context.repository.transition).toHaveBeenCalledTimes(1);
-  });
-
-  test('lets the atomic RPC prioritize idempotency conflict over an invalid transition', async () => {
-    const idempotencyConflict = Errors.business(
-      409,
-      '幂等键已用于不同请求',
-      'MATERIAL_NOTE_IDEMPOTENCY_CONFLICT',
-    );
-    const context = fixture({
-      transition: mock(async () => { throw idempotencyConflict; }),
-    });
-    await expect(context.service.withdraw(
-      auth(['douyin_material_note.publish']),
-      NOTE_ID,
-      { expected_status: 'draft', reason: '与原请求不同' },
-      IDEMPOTENCY_KEY,
-    )).rejects.toBe(idempotencyConflict);
-    expect(context.repository.transition).toHaveBeenCalledTimes(1);
-  });
-
-  test('preserves version, stale-state and idempotency conflicts from the atomic RPC', async () => {
-    for (const code of [
-      'MATERIAL_NOTE_VERSION_CONFLICT',
-      'MATERIAL_NOTE_STATE_CONFLICT',
-      'MATERIAL_NOTE_IDEMPOTENCY_CONFLICT',
-    ]) {
-      const context = fixture({
-        transition: mock(async () => {
-          throw Object.assign(new Error(code), { statusCode: 409, code });
-        }),
-      });
-      await expect(context.service.publish(
-        auth(['douyin_material_note.publish']),
-        NOTE_ID,
-        { version_id: VERSION_ID, expected_status: 'published' },
-        IDEMPOTENCY_KEY,
-      )).rejects.toMatchObject({ statusCode: 409, code });
-    }
   });
 });

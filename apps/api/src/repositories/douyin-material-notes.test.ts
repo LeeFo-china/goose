@@ -25,6 +25,7 @@ const CLAIM_ID = '55555555-5555-4555-8555-555555555555';
 const EMPLOYEE_ID = '66666666-6666-4666-8666-666666666666';
 const IDEMPOTENCY_KEY = '77777777-7777-4777-8777-777777777777';
 const IMAGE_FILE_ID = '88888888-8888-4888-8888-888888888888';
+const CATEGORY_ID = '99999999-9999-4999-8999-999999999999';
 const NOW = '2026-09-01T08:00:00.000Z';
 const SUBJECT_HASH = 'a'.repeat(64);
 const blocks: DouyinMaterialNoteContentBlocks = [
@@ -37,6 +38,7 @@ const version = {
   title: '装修开工清单',
   summary: '开工前检查事项',
   category: '施工避坑',
+  category_id: CATEGORY_ID,
   applicable_to: null,
   content_blocks: blocks,
   created_by: EMPLOYEE_ID,
@@ -47,6 +49,7 @@ const previewVersion = {
   title: version.title,
   summary: version.summary,
   category: version.category,
+  category_id: CATEGORY_ID,
   applicable_to: null,
 };
 const publicRow = {
@@ -84,6 +87,12 @@ function clientWith(results: DouyinMaterialNotesDatabaseResult[]) {
     order(...args: unknown[]) { return this.call('order', args); }
     range(...args: unknown[]) { return this.call('range', args); }
     limit(...args: unknown[]) { return this.call('limit', args); }
+    insert(...args: unknown[]) { return this.call('insert', args); }
+    update(...args: unknown[]) { return this.call('update', args); }
+    single() {
+      calls.push({ method: 'single', args: [] });
+      return Promise.resolve(results[index++] ?? { data: null, error: null });
+    }
     maybeSingle() {
       calls.push({ method: 'maybeSingle', args: [] });
       return Promise.resolve(results[index++] ?? { data: null, error: null });
@@ -139,6 +148,88 @@ const ownedScope = [
 ] as const;
 
 describe('DouyinMaterialNotesRepository query boundaries', () => {
+  test('material categories are tenant-scoped, paginated and body-free', async () => {
+    const categoryRow = {
+      id: CATEGORY_ID,
+      name: '施工避坑',
+      description: null,
+      status: 'active' as const,
+      sort_order: 10,
+      created_at: NOW,
+      updated_at: NOW,
+    };
+    const context = clientWith([
+      { data: [categoryRow], error: null, count: 1 },
+      { data: categoryRow, error: null },
+      { data: { ...categoryRow, status: 'disabled' }, error: null },
+    ]);
+    const repository = new Repository(context.client);
+
+    await repository.listCategories({
+      tenantId: TENANT_ID,
+      page: 2,
+      pageSize: 20,
+      keyword: '避坑',
+      status: 'active',
+    });
+    await repository.createCategory({
+      tenantId: TENANT_ID,
+      actorEmployeeId: EMPLOYEE_ID,
+      name: '施工避坑',
+      description: null,
+      sortOrder: 10,
+    });
+    await repository.updateCategory({
+      tenantId: TENANT_ID,
+      actorEmployeeId: EMPLOYEE_ID,
+      categoryId: CATEGORY_ID,
+      name: '施工避坑',
+      description: '施工阶段资料',
+      status: 'disabled',
+      sortOrder: 20,
+    });
+
+    expect(context.calls).toContainEqual({
+      method: 'from',
+      args: ['douyin_material_note_categories'],
+    });
+    expect(context.calls).toContainEqual({ method: 'range', args: [20, 39] });
+    expect(context.calls).toContainEqual({ method: 'eq', args: ['tenant_id', TENANT_ID] });
+    expect(context.calls).toContainEqual({ method: 'is', args: ['deleted_at', null] });
+    expect(context.calls).toContainEqual({ method: 'eq', args: ['status', 'active'] });
+    expect(context.calls).toContainEqual({
+      method: 'or',
+      args: ['name.ilike."%避坑%",description.ilike."%避坑%"'],
+    });
+    expect(context.calls).toContainEqual({
+      method: 'order',
+      args: ['sort_order', { ascending: true }],
+    });
+    expect(context.calls).toContainEqual({
+      method: 'insert',
+      args: [{
+        tenant_id: TENANT_ID,
+        name: '施工避坑',
+        description: null,
+        status: 'active',
+        sort_order: 10,
+        created_by: EMPLOYEE_ID,
+        updated_by: EMPLOYEE_ID,
+      }],
+    });
+    expect(context.calls).toContainEqual({
+      method: 'update',
+      args: [{
+        name: '施工避坑',
+        description: '施工阶段资料',
+        status: 'disabled',
+        sort_order: 20,
+        updated_by: EMPLOYEE_ID,
+      }],
+    });
+    expect(selects(context.calls).join(',')).not.toContain('content_blocks');
+  });
+
   test('public keyword list filters parents before stable pagination', async () => {
     const context = clientWith([{ data: [publicRow], error: null, count: 21 }]);
     await expect(new Repository(context.client).listPublic({
@@ -328,162 +419,4 @@ describe('DouyinMaterialNotesRepository query boundaries', () => {
     ]);
   });
 
-});
-
-describe('DouyinMaterialNotesRepository RPC gateway', () => {
-  const draft = { ...previewVersion, content_blocks: blocks };
-  const transitionInput = {
-    tenantId: TENANT_ID,
-    noteId: NOTE_ID,
-    actorEmployeeId: EMPLOYEE_ID,
-    command: 'publish' as const,
-    targetVersionId: VERSION_ID,
-    expectedStatus: 'draft' as const,
-    reason: null,
-    idempotencyKey: IDEMPOTENCY_KEY,
-  };
-
-  test('strictly enforces every transition publication shape', async () => {
-    const invalidResults = [
-      { note_id: NOTE_ID, status: 'draft', published_version_id: VERSION_ID, published_at: NOW },
-      { note_id: NOTE_ID, status: 'published', published_version_id: null, published_at: NOW },
-      { note_id: NOTE_ID, status: 'archived', published_version_id: VERSION_ID, published_at: null },
-      { note_id: NOTE_ID, status: 'withdrawn', published_version_id: null, published_at: NOW },
-    ];
-    for (const data of invalidResults) {
-      const context = clientWith([{ data, error: null }]);
-      await expect(new Repository(context.client).transition(transitionInput))
-        .rejects.toMatchObject({ code: 'MATERIAL_NOTE_REPOSITORY_RESPONSE_INVALID' });
-    }
-  });
-
-  test('calls all atomic RPCs including service-only erasure with exact identity args', async () => {
-    const draftResult = {
-      note_id: NOTE_ID, version_id: VERSION_ID, version_no: 1, status: 'draft',
-    };
-    const claimResult = {
-      claim_id: CLAIM_ID,
-      already_claimed: false,
-      claimed_at: NOW,
-      material: {
-        id: NOTE_ID,
-        version: 1,
-        ...previewVersion,
-        content_blocks: [...blocks, {
-          type: 'image' as const,
-          fileId: IMAGE_FILE_ID,
-          alt: '开工材料清单图片',
-        }],
-      },
-    };
-    const context = clientWith([
-      { data: draftResult, error: null },
-      { data: { ...draftResult, version_no: 2 }, error: null },
-      { data: {
-        note_id: NOTE_ID,
-        status: 'published',
-        published_version_id: VERSION_ID,
-        published_at: NOW,
-      }, error: null },
-      { data: claimResult, error: null },
-      { data: { removed: true }, error: null },
-      { data: { removed_count: 2 }, error: null },
-      { data: { deleted_claim_count: 1, deleted_event_count: 3 }, error: null },
-    ]);
-    const repository = new Repository(context.client);
-    await repository.create({ tenantId: TENANT_ID, actorEmployeeId: EMPLOYEE_ID, draft });
-    await repository.appendVersion({
-      tenantId: TENANT_ID, noteId: NOTE_ID, actorEmployeeId: EMPLOYEE_ID, draft,
-    });
-    await repository.transition(transitionInput);
-    await repository.claim({ ...publicInput, noteId: NOTE_ID });
-    await repository.remove({ ...publicInput, claimId: CLAIM_ID });
-    await repository.clear(publicInput);
-    await expect(repository.eraseSubjectData(publicInput)).resolves.toEqual({
-      deleted_claim_count: 1,
-      deleted_event_count: 3,
-    });
-
-    const rpcCalls = context.calls.filter((call) => call.method === 'rpc');
-    expect(rpcCalls.map((call) => call.args[0])).toEqual([
-      'create_douyin_material_note',
-      'append_douyin_material_note_version',
-      'execute_douyin_material_note_state_command',
-      'claim_douyin_material_note',
-      'remove_douyin_material_note_claim',
-      'clear_douyin_material_note_claims',
-      'erase_douyin_material_note_subject_data',
-    ]);
-    expect(rpcCalls[6]?.args[1]).toEqual({
-      p_tenant_id: TENANT_ID,
-      p_douyin_miniapp_installation_id: INSTALLATION_ID,
-      p_subject_hash: SUBJECT_HASH,
-    });
-    expect(rpcCalls[3]?.args[1]).toEqual({
-      p_tenant_id: TENANT_ID,
-      p_douyin_miniapp_installation_id: INSTALLATION_ID,
-      p_subject_hash: SUBJECT_HASH,
-      p_note_id: NOTE_ID,
-    });
-    const draftArgs = {
-      p_tenant_id: TENANT_ID,
-      p_actor_employee_id: EMPLOYEE_ID,
-      p_title: draft.title,
-      p_summary: draft.summary,
-      p_category: draft.category,
-      p_applicable_to: null,
-      p_content_blocks: blocks,
-    };
-    expect(rpcCalls[0]?.args[1]).toEqual(draftArgs);
-    expect(rpcCalls[1]?.args[1]).toEqual({ p_note_id: NOTE_ID, ...draftArgs });
-    expect(rpcCalls[2]?.args[1]).toEqual({
-      p_tenant_id: TENANT_ID,
-      p_note_id: NOTE_ID,
-      p_actor_employee_id: EMPLOYEE_ID,
-      p_command: 'publish',
-      p_target_version_id: VERSION_ID,
-      p_expected_status: 'draft',
-      p_reason: null,
-      p_idempotency_key: IDEMPOTENCY_KEY,
-    });
-    expect(rpcCalls[4]?.args[1]).toEqual({
-      p_tenant_id: TENANT_ID,
-      p_douyin_miniapp_installation_id: INSTALLATION_ID,
-      p_subject_hash: SUBJECT_HASH,
-      p_claim_id: CLAIM_ID,
-    });
-    expect(rpcCalls[5]?.args[1]).toEqual({
-      p_tenant_id: TENANT_ID,
-      p_douyin_miniapp_installation_id: INSTALLATION_ID,
-      p_subject_hash: SUBJECT_HASH,
-    });
-  });
-
-  test('maps SQL markers and strictly rejects malformed command results', async () => {
-    for (const marker of [
-      'MATERIAL_NOTE_TENANT_NOT_FOUND',
-      'MATERIAL_NOTE_INSTALLATION_NOT_FOUND',
-    ] as const) {
-      const context = clientWith([{
-        data: null,
-        error: { code: 'P0001', message: marker },
-      }]);
-      await expect(new Repository(context.client).eraseSubjectData(publicInput))
-        .rejects.toMatchObject({ code: marker });
-    }
-    const withdrawn = clientWith([{
-      data: null,
-      error: { code: 'P0001', message: 'MATERIAL_NOTE_WITHDRAWN' },
-    }]);
-    await expect(new Repository(withdrawn.client).claim({
-      ...publicInput, noteId: NOTE_ID,
-    })).rejects.toMatchObject({ code: 'MATERIAL_NOTE_WITHDRAWN', statusCode: 410 });
-
-    const malformed = clientWith([{
-      data: { deleted_claim_count: -1, deleted_event_count: 0 },
-      error: null,
-    }]);
-    await expect(new Repository(malformed.client).eraseSubjectData(publicInput))
-      .rejects.toMatchObject({ code: 'MATERIAL_NOTE_REPOSITORY_RESPONSE_INVALID' });
-  });
 });

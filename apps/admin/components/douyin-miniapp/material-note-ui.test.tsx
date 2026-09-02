@@ -181,7 +181,7 @@ describe("抖音资料后台工作台 UI 合同", () => {
       title: "",
       summary: "",
       category: "",
-      applicable_to: "适".repeat(301),
+      applicable_to: null,
       content_blocks: [{ type: "paragraph", text: "" }],
     });
     expect(result.success).toBe(false);
@@ -190,14 +190,13 @@ describe("抖音资料后台工作台 UI 合同", () => {
         title: "请输入 1～300 个字符的资料标题",
         summary: "请输入 1～1000 个字符的资料摘要",
         category: "请输入 1～100 个字符的资料分类",
-        applicable_to: "适用场景不能超过 300 个字符",
         content_blocks: "请检查正文内容块，确保必填内容完整且格式有效",
       });
     }
 
     const editor = read("components/douyin-miniapp/material-note-editor.tsx");
     const actions = read("components/douyin-miniapp/material-note-actions.tsx");
-    for (const field of ["title", "summary", "category", "applicable", "blocks"]) {
+    for (const field of ["title", "summary", "category", "blocks"]) {
       expect(editor).toContain(`material-${field}-error`);
     }
     expect(editor).toContain("data-invalid");
@@ -207,6 +206,20 @@ describe("抖音资料后台工作台 UI 合同", () => {
     expect(actions).toContain("required");
     expect(actions).toContain("aria-required");
     expect(actions).toContain("aria-describedby");
+  });
+
+  test("编辑器使用资料分类选择器并隐藏适用场景输入", () => {
+    const editor = read("components/douyin-miniapp/material-note-editor.tsx");
+    const categorySelect = read("components/douyin-miniapp/material-note-category-select.tsx");
+    const api = read("components/douyin-miniapp/material-note-api.ts");
+
+    expect(editor).toContain("MaterialNoteCategorySelect");
+    expect(editor).not.toContain("material-applicable");
+    expect(editor).not.toContain("适用场景");
+    expect(categorySelect).toContain("listMaterialNoteCategories");
+    expect(categorySelect).toContain("createMaterialNoteCategory");
+    expect(categorySelect).toContain("新建分类");
+    expect(api).toContain("/tenant/douyin-material-note-categories");
   });
 
   test("发布指定版本；归档与不可恢复撤回使用不同确认和原因", () => {

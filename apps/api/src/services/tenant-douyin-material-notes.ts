@@ -1,4 +1,5 @@
 import {
+  type DouyinMaterialNoteCategory,
   type DouyinMaterialNoteTenantDetail,
   type DouyinMaterialNoteTenantSummary,
   type DouyinMaterialNoteTenantVersion,
@@ -16,6 +17,12 @@ import {
   CreateTenantDouyinMaterialNoteSchema,
   CreateTenantDouyinMaterialNoteVersionSchema,
   TenantDouyinMaterialNoteArchiveSchema,
+  TenantDouyinMaterialNoteCategoryCreateSchema,
+  TenantDouyinMaterialNoteCategoryListQuerySchema,
+  TenantDouyinMaterialNoteCategoryListResponseSchema,
+  TenantDouyinMaterialNoteCategoryParamsSchema,
+  TenantDouyinMaterialNoteCategoryResponseSchema,
+  TenantDouyinMaterialNoteCategoryUpdateSchema,
   TenantDouyinMaterialNoteCommandHeadersSchema,
   TenantDouyinMaterialNoteDetailResponseSchema,
   TenantDouyinMaterialNoteIdParamsSchema,
@@ -28,6 +35,9 @@ import {
   TenantDouyinMaterialNoteWithdrawSchema,
   type CreateTenantDouyinMaterialNoteInput,
   type CreateTenantDouyinMaterialNoteVersionInput,
+  type TenantDouyinMaterialNoteCategoryCreateInput,
+  type TenantDouyinMaterialNoteCategoryListQuery,
+  type TenantDouyinMaterialNoteCategoryUpdateInput,
   type TenantDouyinMaterialNoteListQuery,
   type TenantDouyinMaterialNotePublishInput,
   type TenantDouyinMaterialNoteReasonCommandInput,
@@ -41,7 +51,8 @@ const PUBLISH_PERMISSION = 'douyin_material_note.publish';
 
 type RepositoryPort = Pick<DouyinMaterialNotesRepository,
   'listTenant' | 'findTenantDetail' | 'listVersions' |
-  'findTenantVersionDetail' | 'create' | 'appendVersion' | 'transition'>;
+  'findTenantVersionDetail' | 'listCategories' | 'createCategory' |
+  'updateCategory' | 'create' | 'appendVersion' | 'transition'>;
 type AccessPolicyPort = Pick<typeof accessPolicyService,
   'assertTenantContext' | 'assertPermission'>;
 type TenantListRow = Awaited<ReturnType<RepositoryPort['listTenant']>>['rows'][number];
@@ -54,6 +65,7 @@ type TenantVersionRow = NonNullable<Awaited<
 type TenantVersionSummaryRow = Awaited<
   ReturnType<RepositoryPort['listVersions']>
 >['rows'][number];
+type CategoryRow = Awaited<ReturnType<RepositoryPort['listCategories']>>['rows'][number];
 
 type TransitionCommand = 'publish' | 'archive' | 'withdraw';
 
@@ -130,6 +142,58 @@ export class TenantDouyinMaterialNotesService {
       TenantDouyinMaterialNoteVersionDetailResponseSchema,
       mapVersion(row),
     );
+  }
+
+  async listCategories(
+    authContext: AuthContext,
+    input: TenantDouyinMaterialNoteCategoryListQuery,
+  ) {
+    const tenantId = this.requirePermission(authContext, READ_PERMISSION);
+    const query = parseInput(TenantDouyinMaterialNoteCategoryListQuerySchema, input);
+    const result = await this.dependencies.repository.listCategories({
+      tenantId,
+      ...query,
+    });
+    return parseOutput(TenantDouyinMaterialNoteCategoryListResponseSchema, {
+      list: result.rows.map(mapCategory),
+      pagination: pagination(query, result.total),
+    });
+  }
+
+  async createCategory(
+    authContext: AuthContext,
+    input: TenantDouyinMaterialNoteCategoryCreateInput,
+  ) {
+    const identity = this.requireWriteIdentity(authContext, MANAGE_PERMISSION);
+    const body = parseInput(TenantDouyinMaterialNoteCategoryCreateSchema, input);
+    const category = await this.dependencies.repository.createCategory({
+      ...identity,
+      name: body.name,
+      description: body.description,
+      sortOrder: body.sort_order,
+    });
+    return parseOutput(TenantDouyinMaterialNoteCategoryResponseSchema, mapCategory(category));
+  }
+
+  async updateCategory(
+    authContext: AuthContext,
+    categoryId: string,
+    input: TenantDouyinMaterialNoteCategoryUpdateInput,
+  ) {
+    const identity = this.requireWriteIdentity(authContext, MANAGE_PERMISSION);
+    const { id } = parseInput(TenantDouyinMaterialNoteCategoryParamsSchema, {
+      id: categoryId,
+    });
+    const body = parseInput(TenantDouyinMaterialNoteCategoryUpdateSchema, input);
+    const category = await this.dependencies.repository.updateCategory({
+      ...identity,
+      categoryId: id,
+      name: body.name,
+      description: body.description,
+      status: body.status,
+      sortOrder: body.sort_order,
+    });
+    return parseOutput(TenantDouyinMaterialNoteCategoryResponseSchema, mapCategory(category));
   }
 
   async create(authContext: AuthContext, input: CreateTenantDouyinMaterialNoteInput) {
@@ -238,6 +302,7 @@ function mapTenantSummary(row: TenantListRow): DouyinMaterialNoteTenantSummary {
     status: row.status,
     title: latest.title,
     category: latest.category,
+    category_id: latest.category_id,
     current_version: latest.version_no,
     claim_count: claimCount,
     published_at: row.published_at,
@@ -274,6 +339,18 @@ function mapVersionSummary(
 ): DouyinMaterialNoteTenantVersionSummary {
   const { version_no, ...fields } = row;
   return { ...fields, version: version_no };
+}
+
+function mapCategory(row: CategoryRow): DouyinMaterialNoteCategory {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    status: row.status,
+    sort_order: row.sort_order,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
 }
 
 function pagination(input: PaginationQuery, total: number) {

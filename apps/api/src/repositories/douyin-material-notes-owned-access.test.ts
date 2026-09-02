@@ -62,8 +62,14 @@ function clientWith(results: DouyinMaterialNotesDatabaseResult[]) {
     order(...args: unknown[]) { return this.record('order', args); }
     range(...args: unknown[]) { return this.record('range', args); }
     limit(...args: unknown[]) { return this.record('limit', args); }
+    insert(...args: unknown[]) { return this.record('insert', args); }
+    update(...args: unknown[]) { return this.record('update', args); }
     maybeSingle() {
       calls.push({ method: 'maybeSingle', args: [] });
+      return Promise.resolve(results[index++] ?? { data: null, error: null });
+    }
+    single() {
+      calls.push({ method: 'single', args: [] });
       return Promise.resolve(results[index++] ?? { data: null, error: null });
     }
     then<TResult1 = DouyinMaterialNotesDatabaseResult, TResult2 = never>(
