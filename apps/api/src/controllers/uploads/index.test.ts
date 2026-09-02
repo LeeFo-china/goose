@@ -15,6 +15,7 @@ import {
   otherVisitorId,
   projectId,
   resetUploadControllerMocks,
+  resolvePublicStoredFileUrlById,
   resolveStoredFileUrl,
   tenantId,
   visitorId,
@@ -37,9 +38,9 @@ describe("UploadController project payment direct upload", () => {
     );
 
     expect(getRequiredAuthContext).toHaveBeenCalledTimes(1);
-    expect(getRequiredAuthContext).toHaveBeenCalledWith("auth-1", {
+    expect(getRequiredAuthContext).toHaveBeenCalledWith("auth-1", expect.objectContaining({
       tenantServiceAccess: "write",
-    });
+    }));
   });
 
   test("rejects read-only applyment upload init before creating an upload", async () => {
@@ -409,7 +410,10 @@ describe("UploadController tenant onboarding license direct upload", () => {
     await expect(controller.getPublicUrl({
       ...buildVisitorRequest({}, visitorId),
       method: "GET",
-      routeOptions: { config: { tenantServiceAccess: "read" } },
+      routeOptions: {
+        url: "/uploads/public-url",
+        config: { tenantServiceAccess: "read" },
+      },
       query: { path },
     } as FastifyRequest, {} as never)).rejects.toMatchObject({ statusCode: 403 });
     expect(resolveStoredFileUrl).not.toHaveBeenCalled();
@@ -421,15 +425,47 @@ describe("UploadController tenant onboarding license direct upload", () => {
     await controller.getPublicUrl({
       ...buildRequest({}),
       method: "GET",
-      routeOptions: { config: { tenantServiceAccess: "read" } },
+      routeOptions: {
+        url: "/uploads/public-url",
+        config: { tenantServiceAccess: "read" },
+      },
       query: { path: `tenants/${tenantId}/project-log/file.jpg` },
     } as FastifyRequest, {
       redirect: () => undefined,
     } as never);
 
     expect(getRequiredAuthContext).toHaveBeenCalledTimes(1);
-    expect(getRequiredAuthContext).toHaveBeenCalledWith("auth-1", {
+    expect(getRequiredAuthContext).toHaveBeenCalledWith("auth-1", expect.objectContaining({
       tenantServiceAccess: "read",
+    }));
+  });
+
+  test("resolves an employee public preview URL by tenant-scoped fileId", async () => {
+    const fileId = "00000000-0000-4000-8000-000000000123";
+    const { default: controller } = await import("./index");
+
+    await controller.getPublicUrl({
+      ...buildRequest({}),
+      method: "GET",
+      routeOptions: {
+        url: "/uploads/public-url",
+        config: { tenantServiceAccess: "read" },
+      },
+      query: { fileId },
+    } as FastifyRequest, {
+      redirect: (url: string) => {
+        expect(url).toBe("https://example.com/file-id-resolved.jpg");
+      },
+    } as never);
+
+    expect(getRequiredAuthContext).toHaveBeenCalledWith("auth-1", expect.objectContaining({
+      tenantServiceAccess: "read",
+    }));
+    expect(resolvePublicStoredFileUrlById).toHaveBeenCalledWith({
+      fileObjectId: fileId,
+      tenantId,
+      isPlatformIdentity: false,
     });
+    expect(resolveStoredFileUrl).not.toHaveBeenCalled();
   });
 });
