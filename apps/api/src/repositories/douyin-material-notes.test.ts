@@ -24,6 +24,7 @@ const VERSION_ID = '44444444-4444-4444-8444-444444444444';
 const CLAIM_ID = '55555555-5555-4555-8555-555555555555';
 const EMPLOYEE_ID = '66666666-6666-4666-8666-666666666666';
 const IDEMPOTENCY_KEY = '77777777-7777-4777-8777-777777777777';
+const IMAGE_FILE_ID = '88888888-8888-4888-8888-888888888888';
 const NOW = '2026-09-01T08:00:00.000Z';
 const SUBJECT_HASH = 'a'.repeat(64);
 const blocks: DouyinMaterialNoteContentBlocks = [
@@ -326,6 +327,7 @@ describe('DouyinMaterialNotesRepository query boundaries', () => {
       { method: 'eq', args: ['id', VERSION_ID] },
     ]);
   });
+
 });
 
 describe('DouyinMaterialNotesRepository RPC gateway', () => {
@@ -363,7 +365,16 @@ describe('DouyinMaterialNotesRepository RPC gateway', () => {
       claim_id: CLAIM_ID,
       already_claimed: false,
       claimed_at: NOW,
-      material: { id: NOTE_ID, version: 1, ...previewVersion, content_blocks: blocks },
+      material: {
+        id: NOTE_ID,
+        version: 1,
+        ...previewVersion,
+        content_blocks: [...blocks, {
+          type: 'image' as const,
+          fileId: IMAGE_FILE_ID,
+          alt: '开工材料清单图片',
+        }],
+      },
     };
     const context = clientWith([
       { data: draftResult, error: null },

@@ -35,6 +35,10 @@
         <view tt:elif="{{block.type === 'list'}}" class="body-list"><view tt:for="{{block.items}}" tt:key="key" tt:for-item="listItem" class="body-list-item"><text class="body-list-marker">{{listItem.marker}}</text><text>{{listItem.text}}</text></view></view>
         <view tt:elif="{{block.type === 'quote'}}" class="body-quote"><view>“{{block.text}}”</view><view tt:if="{{block.attribution}}" class="quote-attribution">——{{block.attribution}}</view></view>
         <view tt:elif="{{block.type === 'callout'}}" class="body-callout body-callout--{{block.tone}}"><view class="callout-title">{{block.title}}</view><view class="callout-text">{{block.text}}</view></view>
+        <view tt:elif="{{block.type === 'image'}}" class="body-image-card">
+          <image class="body-image" src="{{block.src}}" mode="widthFix" show-menu-by-longpress="true" />
+          <view tt:if="{{block.caption}}" class="body-image-caption">{{block.caption}}</view>
+        </view>
       </view>
     </view>
     <view class="reader-actions">

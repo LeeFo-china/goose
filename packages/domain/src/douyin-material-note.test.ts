@@ -112,6 +112,23 @@ const contentBlocks: DouyinMaterialNoteContentBlocks = [
     text: '未交底前不要拆改。',
   },
 ];
+const draftImageBlock = {
+  type: 'image',
+  fileId: noteId,
+  alt: '客厅墙面基层处理示意图',
+  caption: '施工前确认墙面平整度',
+} as const;
+const publicImageBlock = {
+  type: 'image',
+  asset: {
+    fileId: noteId,
+    src: 'https://assets.example.com/material-note/wall.webp',
+    alt: draftImageBlock.alt,
+    width: 1200,
+    height: 800,
+  },
+  caption: draftImageBlock.caption,
+} as const;
 
 const versionDraft = {
   title: '装修开工前检查清单',
@@ -195,6 +212,7 @@ describe('Douyin material note domain contracts', () => {
       'list',
       'quote',
       'callout',
+      'image',
     ]);
     expect(DOUYIN_MATERIAL_NOTE_ERROR_CODE_VALUES).toEqual([
       'MATERIAL_NOTE_NOT_FOUND',
@@ -228,10 +246,16 @@ describe('Douyin material note domain contracts', () => {
       .toEqual(tenantVersion);
   });
 
-  test('accepts only the five narrowed site-content text blocks', () => {
+  test('accepts the narrowed text blocks and controlled draft image blocks', () => {
     for (const block of contentBlocks) {
       expect(DouyinMaterialNoteBlockSchema.safeParse(block).success).toBe(true);
     }
+    expect(DouyinMaterialNoteBlockSchema.safeParse(draftImageBlock).success)
+      .toBe(true);
+    expect(DouyinMaterialNoteVersionDraftSchema.safeParse({
+      ...versionDraft,
+      content_blocks: [...contentBlocks, draftImageBlock],
+    }).success).toBe(true);
 
     const sharedBoundaryCases = [
       [
@@ -287,7 +311,8 @@ describe('Douyin material note domain contracts', () => {
       {
         type: 'image',
         fileId: noteId,
-        alt: '不允许图片',
+        alt: '不允许外部图片地址',
+        src: 'https://attacker.example/material.jpg',
       },
       {
         type: 'gallery',
@@ -432,20 +457,24 @@ describe('Douyin material note domain contracts', () => {
   });
 
   test('defines claimed and owned DTOs without identity leakage', () => {
+    const claimedMaterialWithImage = {
+      ...claimedMaterial,
+      content_blocks: [...contentBlocks, publicImageBlock],
+    };
     const claimResponse = {
       claim_id: claimId,
       already_claimed: false,
       claimed_at: occurredAt,
-      material: claimedMaterial,
+      material: claimedMaterialWithImage,
     };
     const ownedDetail = {
       ...ownedSummary,
-      content_blocks: contentBlocks,
+      content_blocks: [...contentBlocks, publicImageBlock],
     };
 
     expect(
-      DouyinMaterialNoteClaimedMaterialSchema.parse(claimedMaterial),
-    ).toEqual(claimedMaterial);
+      DouyinMaterialNoteClaimedMaterialSchema.parse(claimedMaterialWithImage),
+    ).toEqual(claimedMaterialWithImage);
     expect(DouyinMaterialNoteClaimResponseSchema.parse(claimResponse)).toEqual(
       claimResponse,
     );
@@ -470,6 +499,25 @@ describe('Douyin material note domain contracts', () => {
         }).success,
       ).toBe(false);
     }
+
+    expect(DouyinMaterialNoteClaimedMaterialSchema.safeParse({
+      ...claimedMaterial,
+      content_blocks: [...contentBlocks, draftImageBlock],
+    }).success).toBe(false);
+    expect(DouyinMaterialNoteOwnedDetailSchema.safeParse({
+      ...ownedDetail,
+      content_blocks: [...contentBlocks, draftImageBlock],
+    }).success).toBe(false);
+    expect(DouyinMaterialNoteOwnedDetailSchema.safeParse({
+      ...ownedDetail,
+      content_blocks: [{
+        ...publicImageBlock,
+        asset: {
+          ...publicImageBlock.asset,
+          src: 'http://assets.example.com/material-note/wall.webp',
+        },
+      }],
+    }).success).toBe(false);
   });
 
   test('defines aggregate-only tenant summary, detail and version DTOs', () => {

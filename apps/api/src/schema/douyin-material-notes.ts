@@ -88,6 +88,26 @@ export const DouyinMaterialNoteRepositoryOwnedDetailRowSchema =
       content_blocks: DouyinMaterialNoteContentBlocksSchema,
     }).strict(),
   }).strict();
+export const DouyinMaterialNoteRepositoryClaimResponseSchema = z.strictObject({
+  claim_id: z.uuid(),
+  already_claimed: z.boolean(),
+  claimed_at: RepositoryDateTimeSchema,
+  material: DouyinMaterialNoteRepositoryPreviewVersionSchema.extend({
+    id: z.uuid(),
+    version: z.number().int().positive(),
+    content_blocks: DouyinMaterialNoteContentBlocksSchema,
+  }).strict(),
+});
+export const DouyinMaterialNoteRepositoryImageAssetRowSchema = z.strictObject({
+  id: z.uuid(),
+  tenant_id: z.uuid(),
+  public_url: z.string().nullable(),
+  width: z.number().int().positive().nullable(),
+  height: z.number().int().positive().nullable(),
+  mime_type: z.string().trim().min(1),
+  status: z.string(),
+  visibility: z.string(),
+});
 
 export type DouyinMaterialNoteListQuery = z.infer<
   typeof DouyinMaterialNoteListQuerySchema
@@ -97,4 +117,10 @@ export type DouyinMaterialNoteIdParams = z.infer<
 >;
 export type DouyinMaterialNoteClaimIdParams = z.infer<
   typeof DouyinMaterialNoteClaimIdParamsSchema
+>;
+export type DouyinMaterialNoteRepositoryClaimResponse = z.infer<
+  typeof DouyinMaterialNoteRepositoryClaimResponseSchema
+>;
+export type DouyinMaterialNoteRepositoryImageAssetRow = z.infer<
+  typeof DouyinMaterialNoteRepositoryImageAssetRowSchema
 >;

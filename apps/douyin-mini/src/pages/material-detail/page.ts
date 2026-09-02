@@ -302,6 +302,17 @@ function projectMaterialBlocks(
 ): Array<Record<string, unknown>> {
   return blocks.map((block, blockIndex) => {
     const key = `${blockIndex}-${block.type}`;
+    if (block.type === "image") {
+      return {
+        type: "image",
+        key,
+        src: block.asset.src,
+        alt: block.asset.alt,
+        width: block.asset.width,
+        height: block.asset.height,
+        caption: block.caption ?? "",
+      };
+    }
     if (block.type !== "list") return { ...block, key };
     return {
       ...block,

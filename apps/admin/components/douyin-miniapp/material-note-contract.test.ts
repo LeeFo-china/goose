@@ -188,9 +188,18 @@ describe("抖音资料后台客户端契约", () => {
       content_blocks: [{ type: "paragraph", text: "先核对施工图。" }],
     };
     expect(parseMaterialNoteVersion(fullVersion)).toEqual(fullVersion);
-    expect(() => parseMaterialNoteVersion({
+    expect(parseMaterialNoteVersion({
       ...fullVersion,
       content_blocks: [{ type: "image", fileId: versionId, alt: "图片" }],
+    }).content_blocks).toEqual([{ type: "image", fileId: versionId, alt: "图片" }]);
+    expect(() => parseMaterialNoteVersion({
+      ...fullVersion,
+      content_blocks: [{
+        type: "image",
+        fileId: versionId,
+        alt: "图片",
+        src: "https://cdn.goodcms.cn/raw.webp",
+      }],
     })).toThrow();
   });
 

@@ -1,5 +1,8 @@
 import { beforeAll, describe, expect, mock, test } from 'bun:test';
-import type { DouyinMaterialNoteClaimResponse } from '@gooes/domain';
+import type {
+  DouyinMaterialNoteRepositoryClaimResponse,
+} from '@/schema/douyin-material-notes';
+import type { DouyinMaterialNoteContentBlocks } from '@gooes/domain';
 import type { JwtPayload } from '@/utils/jwt';
 
 process.env.SUPABASE_URL ??= 'http://127.0.0.1:54321';
@@ -22,7 +25,8 @@ const NOTE_ID = '33333333-3333-4333-8333-333333333333';
 const CLAIM_ID = '44444444-4444-4444-8444-444444444444';
 const SUBJECT_HASH = 'a'.repeat(64);
 const NOW = '2026-09-01T08:00:00.000Z';
-const blocks = [{ type: 'paragraph' as const, text: '确认施工图纸。' }];
+const paragraphBlock = { type: 'paragraph' as const, text: '确认施工图纸。' };
+const blocks: DouyinMaterialNoteContentBlocks = [paragraphBlock];
 
 const user: JwtPayload = {
   sub: SUBJECT_HASH,
@@ -66,7 +70,7 @@ const claimResult = {
     ...previewVersion,
     content_blocks: blocks,
   },
-} satisfies DouyinMaterialNoteClaimResponse;
+} satisfies DouyinMaterialNoteRepositoryClaimResponse;
 
 type IdentityInput = {
   readonly tenantId: string;
@@ -147,8 +151,9 @@ function serviceHarness() {
   const findOwnedDetail = mock(async (
     _input: OwnedDetailInput,
   ): Promise<OwnedDetailRow | null> => ownedDetailRow);
-  const claim = mock(async (_input: ClaimInput): Promise<DouyinMaterialNoteClaimResponse> =>
+  const claim = mock(async (_input: ClaimInput): Promise<DouyinMaterialNoteRepositoryClaimResponse> =>
     claimResult);
+  const findMaterialImageAssets = mock(async () => []);
   const remove = mock(async (_input: OwnedDetailInput) => ({ removed: true as const }));
   const clear = mock(async (_input: IdentityInput) => ({ removed_count: 1 }));
   const service = new MaterialNotesService({
@@ -159,6 +164,7 @@ function serviceHarness() {
       listOwned,
       findOwnedAccess,
       findOwnedDetail,
+      findMaterialImageAssets,
       claim,
       remove,
       clear,
@@ -167,6 +173,7 @@ function serviceHarness() {
   return {
     claim,
     clear,
+    findMaterialImageAssets,
     findOwnedDetail,
     findOwnedAccess,
     findPublicPreview,
@@ -338,6 +345,7 @@ describe('DouyinMiniappMaterialNotesService claims', () => {
     );
     expect(source).not.toMatch(/insertEvents|sendCode|submitMeasurementAppointment/);
   });
+
 });
 
 describe('DouyinMiniappMaterialNotesService owned materials', () => {
@@ -373,7 +381,7 @@ describe('DouyinMiniappMaterialNotesService owned materials', () => {
       claimed_at: NOW,
     };
     expect(page.list[0]).toEqual(expectedSummary);
-    expect(detail).toEqual({ ...expectedSummary, content_blocks: blocks });
+    expect(detail).toEqual({ ...expectedSummary, content_blocks: [paragraphBlock] });
     expect(JSON.stringify({ page, detail })).not.toMatch(
       /tenantId|tenant_id|installation|subject_hash|status/,
     );

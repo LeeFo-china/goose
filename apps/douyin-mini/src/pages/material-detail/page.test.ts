@@ -8,6 +8,7 @@ import { createMaterialDetailPageDefinition } from "./page";
 
 const NOTE_ID = "11111111-1111-4111-8111-111111111111";
 const CLAIM_ID = "22222222-2222-4222-8222-222222222222";
+const IMAGE_FILE_ID = "33333333-3333-4333-8333-333333333333";
 const preview: DouyinMaterialNotePreview = {
   id: NOTE_ID,
   title: "开工清单",
@@ -30,6 +31,17 @@ const claim: DouyinMaterialNoteClaimResponse = {
     applicable_to: preview.applicable_to,
     content_blocks: [{ type: "paragraph", text: "正文" }],
   },
+};
+const imageBlock = {
+  type: "image" as const,
+  asset: {
+    fileId: IMAGE_FILE_ID,
+    src: "https://cdn.goodcms.cn/material-notes/checklist.webp",
+    alt: "开工材料清单图片",
+    width: 1200,
+    height: 800,
+  },
+  caption: "保存到手机后按房间核对。",
 };
 const bootstrap = { theme: { primary_color: "#191817" } };
 
@@ -128,6 +140,29 @@ describe("material detail page controller", () => {
         { key: "0-list-0", marker: "1.", text: "同一项" },
         { key: "0-list-1", marker: "2.", text: "同一项" },
       ],
+    }]);
+  });
+
+  test("projects image blocks to render-ready miniapp data", async () => {
+    const context = harness({
+      claimMaterial: mock(async () => ({
+        ...claim,
+        material: {
+          ...claim.material,
+          content_blocks: [imageBlock],
+        },
+      })),
+    });
+    await context.page.load();
+    await context.page.executeClaim();
+    expect(context.page.data.blocks).toEqual([{
+      type: "image",
+      key: "0-image",
+      src: imageBlock.asset.src,
+      alt: imageBlock.asset.alt,
+      width: imageBlock.asset.width,
+      height: imageBlock.asset.height,
+      caption: imageBlock.caption,
     }]);
   });
 
