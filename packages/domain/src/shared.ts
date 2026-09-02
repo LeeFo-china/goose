@@ -2,6 +2,34 @@ export { AI_MESSAGE_ROLE_VALUES } from './ai';
 export type { AiMessageRole } from './ai';
 
 export {
+  AI_BILLING_STATUS_VALUES,
+  AI_GENERATION_STATUS_VALUES,
+  AI_MODALITY_VALUES,
+  AI_QUALITY_TIER_VALUES,
+  AiBillingStatusSchema,
+  AiGenerationJobSchema,
+  AiGenerationStatusSchema,
+  AiImageCapabilitySchema,
+  AiModelCapabilitySchema,
+  AiModalitySchema,
+  AiMoneySchema,
+  AiQualityTierSchema,
+  AiScopeSchema,
+  AiSpeechCapabilitySchema,
+  AiTextCapabilitySchema,
+  AiVideoCapabilitySchema,
+} from './ai-generation';
+export type {
+  AiBillingStatus,
+  AiGenerationJob,
+  AiGenerationStatus,
+  AiModality,
+  AiModelCapability,
+  AiQualityTier,
+  AiScope,
+} from './ai-generation';
+
+export {
   AUTH_TARGET_ROLE_VALUES,
   SMS_SCENE_VALUES,
   SMS_VERIFICATION_STATUS_VALUES,

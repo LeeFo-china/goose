@@ -1,4 +1,5 @@
 export * from './ai';
+export * from './ai-generation';
 export * from './admin-service-access';
 export * from './auth';
 export * from './branding-virtual-payment';
