@@ -115,6 +115,21 @@ export async function snapshotSupplierPriceItem(
   return rows[0]?.snapshot;
 }
 
+export async function snapshotSupplierPriceListItems(
+  sql: SupplierPurchasableSkuSmokeSql,
+  priceListId: string,
+): Promise<unknown[]> {
+  const rows = await sql<{ snapshot: unknown }[]>`
+    select coalesce(
+      jsonb_agg(to_jsonb(item) order by item.supplier_sku_id, item.id),
+      '[]'::jsonb
+    ) as snapshot
+    from public.supplier_price_list_items as item
+    where item.supplier_price_list_id = ${priceListId}::uuid
+  `;
+  return Array.isArray(rows[0]?.snapshot) ? rows[0].snapshot : [];
+}
+
 export async function snapshotSupplierPriceSeries(
   sql: SupplierPurchasableSkuSmokeSql,
   fixture: SupplierPurchasableSkuSmokeFixture,
@@ -153,6 +168,17 @@ export async function snapshotFutureSupplierPrice(
     group by price_list.id
   `;
   return rows[0]?.snapshot;
+}
+
+export async function setSupplierPriceListEffectiveUntil(
+  sql: SupplierPurchasableSkuSmokeSql,
+  priceListId: string,
+  effectiveUntil: string,
+): Promise<void> {
+  await sql`update public.supplier_price_lists
+    set effective_until = ${effectiveUntil}::timestamptz,
+      row_version = row_version + 1, updated_at = now()
+    where id = ${priceListId}::uuid`;
 }
 
 export async function countSupplierPriceVersions(
@@ -226,7 +252,6 @@ export async function createFutureSupplierPriceVersion(
     )).*
     from public.supplier_price_list_items as source_item
     where source_item.supplier_price_list_id = ${currentListId}::uuid
-      and source_item.supplier_sku_id = ${fixture.skuId}::uuid
   `;
   await sql`
     update public.supplier_price_lists

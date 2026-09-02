@@ -93,6 +93,13 @@ describe("SupplierPurchasableSkusService composite writes", () => {
 
   test("updates only schema fields with exact SKU and price-list versions", async () => {
     const calls: string[] = [];
+    const gapSaved = {
+      status: "saved",
+      idempotent: false,
+      price_version_created: false,
+      current_price: { effective_until: "2026-09-09T00:00:00Z" },
+      next_scheduled_effective_from: "2026-09-10T00:00:00Z",
+    } as const;
     const body = {
       sku: { expected_version: 4, name: "新包装", spec_values: {} },
       price: { unit_price: "299.90", tax_rate: "0.13",
@@ -122,7 +129,7 @@ describe("SupplierPurchasableSkusService composite writes", () => {
         expect((input as { sku: object }).sku).not.toHaveProperty(
           "purchase_unit_id",
         );
-        return { status: "saved" };
+        return gapSaved;
       }),
     };
     const { SupplierPurchasableSkusService } = await import(
@@ -144,10 +151,10 @@ describe("SupplierPurchasableSkusService composite writes", () => {
       repository,
     } as never);
 
-    await service.update(auth, {
+    await expect(service.update(auth, {
       tenantSupplierId: TENANT_SUPPLIER_ID, productId: PRODUCT_ID,
       skuId: SKU_ID, body, idempotencyKey: "sku:update:price",
-    });
+    })).resolves.toBe(gapSaved as never);
     expect(calls).toEqual(["access", "product", "sku", "specs", "save"]);
     expect(repository.save).toHaveBeenCalledTimes(1);
   });

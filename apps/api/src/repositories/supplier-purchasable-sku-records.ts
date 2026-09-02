@@ -179,8 +179,11 @@ export const SupplierPurchasableSkuCommandResultSchema = z.object({
     Date.parse(price.effective_until) > Date.parse(price.effective_from);
   const nextPeriodIsValid = result.next_scheduled_effective_from === null ||
     (price.effective_until !== null &&
-      Date.parse(price.effective_until) ===
-        Date.parse(result.next_scheduled_effective_from));
+      (result.price_version_created
+        ? Date.parse(price.effective_until) ===
+          Date.parse(result.next_scheduled_effective_from)
+        : Date.parse(price.effective_until) <=
+          Date.parse(result.next_scheduled_effective_from)));
   if (identitiesMatch.every(Boolean) && periodIsValid && nextPeriodIsValid) {
     return;
   }

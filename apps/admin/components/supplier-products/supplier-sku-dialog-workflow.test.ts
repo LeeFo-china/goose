@@ -9,14 +9,17 @@ import {
   type SupplierSkuPriceForm,
 } from "./supplier-sku-price-form";
 import {
+  classifySupplierSkuDialogSaveFailure,
   createSupplierSkuDialogLoadWorkflow,
   executeSupplierSkuDialogSave,
   prepareSupplierSkuDialogSave,
+  refreshSupplierSkuDialogVersionConflict,
   resolveSupplierSkuPurchaseUnitLabel,
 } from "./supplier-sku-dialog-workflow";
 import type {
   CatalogSpecDefinition,
   ProductApiScope,
+  SupplierSku,
   SupplierSkuPriceContext,
 } from "./supplier-product-types";
 
@@ -241,7 +244,7 @@ describe("SupplierSkuDialog 保存工作流", () => {
     });
   });
 
-  test("409 后保留 caller attempt 和表单，retry 复用 path/payload/key；成功才 close/reset", async () => {
+  test("稳定版本冲突刷新隐藏版本并保留可见表单，retry 使用新 key", async () => {
     const callerForm = { ...priceForm };
     let callerAttempt = null;
     let closes = 0;
@@ -250,21 +253,26 @@ describe("SupplierSkuDialog 保存工作流", () => {
       saveMode: "inline-price",
       scope: tenantScope,
       productId: "product-1",
+      sku: { id: "sku-1", version: 3 },
       fields,
       purchaseUnitId: "unit-box",
       priceForm: callerForm,
-      priceContext: defaults,
+      priceContext: current,
     }, callerAttempt);
     expect(first).not.toBeNull();
     callerAttempt = first!.attempt;
 
     await expect(executeSupplierSkuDialogSave(first!, {
-      create: async () => {
-        const conflict = new Error("conflict") as Error & { status: number };
+      create: async () => undefined,
+      mutate: async () => {
+        const conflict = new Error("conflict") as Error & {
+          status: number;
+          code: string;
+        };
         conflict.status = 409;
+        conflict.code = "SUPPLIER_PRICE_LIST_VERSION_CONFLICT";
         throw conflict;
       },
-      mutate: async () => undefined,
       onSuccess: () => {
         closes += 1;
         resets += 1;
@@ -273,20 +281,93 @@ describe("SupplierSkuDialog 保存工作流", () => {
     expect(closes).toBe(0);
     expect(resets).toBe(0);
     expect(callerForm).toEqual(priceForm);
-    expect(callerAttempt).toBe(first!.attempt);
+    expect(classifySupplierSkuDialogSaveFailure({
+      status: 409,
+      code: "SUPPLIER_PRICE_LIST_VERSION_CONFLICT",
+    })).toBe("version-conflict");
+    callerAttempt = null;
+
+    const latestSku: SupplierSku = {
+      id: "sku-1",
+      supplier_id: "supplier-1",
+      supplier_product_id: "product-1",
+      sku_code: "TS-1",
+      name: "服务端名称",
+      specification: "服务端规格",
+      model: "SERVER",
+      spec_values: {},
+      purchase_unit_id: "unit-box",
+      base_unit_id: "unit-box",
+      base_unit_conversion: "1",
+      batch_managed: false,
+      color_managed: false,
+      serial_managed: false,
+      status: "active",
+      version: 4,
+      ownership_scope: "tenant",
+      owner_tenant_id: "tenant-1",
+      purchase_unit: {
+        id: "unit-box",
+        code: "BOX",
+        name: "箱",
+        symbol: "箱",
+        status: "active",
+      },
+      base_unit: {
+        id: "unit-box",
+        code: "BOX",
+        name: "箱",
+        symbol: "箱",
+        status: "active",
+      },
+      updated_at: "2026-09-02T00:00:00Z",
+    };
+    const latestPrice = priceContext({
+      current_price: {
+        ...current.current_price!,
+        supplier_price_list_id: "price-list-2",
+        supplier_price_list_version: 6,
+        supplier_price_list_row_version: 6,
+        unit_price: "399.00",
+      },
+    });
+    const refreshed = await refreshSupplierSkuDialogVersionConflict({
+      inlinePriceEnabled: true,
+      scope: tenantScope,
+      productId: "product-1",
+      sku: latestSku,
+      priceForm: callerForm,
+    }, {
+      loadCurrentSku: async () => latestSku,
+      loadCurrentPrice: async () => latestPrice,
+    });
+    expect(refreshed).toEqual({
+      sku: latestSku,
+      priceContext: latestPrice,
+      priceForm: callerForm,
+    });
+    expect(refreshed?.priceForm).toBe(callerForm);
 
     const retry = prepareSupplierSkuDialogSave({
       saveMode: "inline-price",
       scope: tenantScope,
       productId: "product-1",
+      sku: refreshed!.sku,
       fields,
       purchaseUnitId: "unit-box",
       priceForm: callerForm,
-      priceContext: defaults,
+      priceContext: refreshed!.priceContext,
     }, callerAttempt);
-    expect(retry?.attempt).toBe(first!.attempt);
+    expect(retry?.attempt.idempotencyKey).not.toBe(first!.attempt.idempotencyKey);
     expect(retry?.requestPath).toBe(first!.requestPath);
-    expect(retry?.payload).toEqual(first!.payload);
+    expect(retry?.payload).toMatchObject({
+      sku: { expected_version: 4 },
+      price: {
+        unit_price: "318.00",
+        expected_price_list_id: "price-list-2",
+        expected_price_list_version: 6,
+      },
+    });
 
     await executeSupplierSkuDialogSave(retry!, {
       create: async () => undefined,
@@ -298,6 +379,52 @@ describe("SupplierSkuDialog 保存工作流", () => {
     });
     expect(closes).toBe(1);
     expect(resets).toBe(1);
+  });
+
+  test("只有传输结果不确定时 retry 才复用 attempt", () => {
+    expect(classifySupplierSkuDialogSaveFailure(new TypeError("fetch failed")))
+      .toBe("transport-uncertain");
+    expect(classifySupplierSkuDialogSaveFailure({ status: 503 }))
+      .toBe("transport-uncertain");
+    expect(classifySupplierSkuDialogSaveFailure({ status: 422 }))
+      .toBe("definitive");
+    expect(classifySupplierSkuDialogSaveFailure({
+      status: 409,
+      code: "SUPPLIER_SKU_VERSION_CONFLICT",
+    })).toBe("version-conflict");
+  });
+
+  test("inactive、platform 或缺少组合权限时冲突刷新不读取价格", async () => {
+    let priceReads = 0;
+    const dependencies = {
+      loadCurrentSku: async () => ({ status: "inactive" }) as never,
+      loadCurrentPrice: async () => {
+        priceReads += 1;
+        return current;
+      },
+    };
+    const base = {
+      productId: "product-1",
+      sku: { id: "sku-1", sku_code: "TS-1", status: "active" as const },
+      priceForm,
+    };
+
+    expect(await refreshSupplierSkuDialogVersionConflict({
+      ...base,
+      inlinePriceEnabled: true,
+      scope: tenantScope,
+    }, dependencies)).toMatchObject({ priceContext: null });
+    expect(await refreshSupplierSkuDialogVersionConflict({
+      ...base,
+      inlinePriceEnabled: false,
+      scope: tenantScope,
+    }, dependencies)).toBeNull();
+    expect(await refreshSupplierSkuDialogVersionConflict({
+      ...base,
+      inlinePriceEnabled: true,
+      scope: platformScope,
+    }, dependencies)).toBeNull();
+    expect(priceReads).toBe(0);
   });
 });
 

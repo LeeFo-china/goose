@@ -153,7 +153,7 @@ describe("supplier purchasable SKU dev direct command", () => {
       normalizedUrl,
       (command, options) => {
         calls.push({ command, options });
-        return { exitCode: 0, stdout: "", stderr: "" };
+        return pipedProcess({ exitCode: 0, stdout: "", stderr: "" });
       },
     );
 
@@ -175,6 +175,40 @@ describe("supplier purchasable SKU dev direct command", () => {
         stderr: "pipe",
       },
     }]);
+  });
+
+  test("Supabase child is terminated at the deadline with bounded output", async () => {
+    const { runSupplierPurchasableSkuSupabaseCommand } = await import(
+      "./supplier-purchasable-sku-development-database-command"
+    );
+    const signals: string[] = [];
+    let resolveExit!: (code: number) => void;
+    const exited = new Promise<number>((resolve) => {
+      resolveExit = resolve;
+    });
+
+    const result = await runSupplierPurchasableSkuSupabaseCommand(
+      "migration-dry-run",
+      `${ROOT_DIRECT_URL}?sslmode=require`,
+      () => ({
+        exited,
+        stdout: new Response("partial stdout").body!,
+        stderr: new Response(`failed ${ROOT_DIRECT_URL}`).body!,
+        kill(signal?: number | NodeJS.Signals) {
+          signals.push(String(signal));
+          resolveExit(143);
+        },
+      }),
+      { timeoutMs: 5, terminationGraceMs: 5 },
+    );
+
+    expect(signals).toEqual(["SIGTERM"]);
+    expect(result).toEqual({
+      exitCode: 124,
+      stdout: "partial stdout",
+      stderr: `failed ${ROOT_DIRECT_URL}`,
+      timedOut: true,
+    });
   });
 
   test("type generation writes only pure types to stdout", async () => {
@@ -223,7 +257,7 @@ describe("supplier purchasable SKU dev direct command", () => {
       writeError: (message) => errors.push(message),
     });
 
-    expect(exitCode).toBe(23);
+    expect(exitCode).toBe(1);
     expect(output).toEqual([]);
     expect(errors).toEqual([
       "failed for [REDACTED_DATABASE_URL]",
@@ -312,3 +346,20 @@ describe("supplier purchasable SKU dev direct command", () => {
     );
   });
 });
+
+function pipedProcess({
+  exitCode,
+  stdout,
+  stderr,
+}: {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+}) {
+  return {
+    exited: Promise.resolve(exitCode),
+    stdout: new Response(stdout).body!,
+    stderr: new Response(stderr).body!,
+    kill() {},
+  };
+}

@@ -148,13 +148,20 @@ export function cannotPreserveFutureVersion(skuId) {
     nextVersionOccupied || sourceHasOtherSku;
 }
 
-export function advanceCurrentPriceRowVersion(skuId) {
+export function advanceCurrentVersionsForConflict(skuId) {
   const current = resolveCurrentPrice(skuId);
   const list = mockStore.state.priceLists.find(({ id }) =>
     id === current?.supplier_price_list_id);
-  if (!list) return false;
+  const item = mockStore.state.items.find(({ id }) =>
+    id === current?.supplier_price_list_item_id);
+  const sku = skuById(skuId);
+  if (!list || !item || !sku) return false;
   list.row_version += 1;
   list.updated_at = now;
+  item.unit_price = "129.00";
+  item.updated_at = now;
+  sku.version += 1;
+  sku.updated_at = now;
   return true;
 }
 
@@ -273,7 +280,6 @@ function canonicalDecimal(value) {
 
 function retirePriceList(list) {
   list.lifecycle_status = "retired";
-  list.effective_until = now;
   list.row_version += 1;
   list.updated_at = now;
 }

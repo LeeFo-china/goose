@@ -64,7 +64,8 @@ export function assertCreateSeriesVersion(
   expect(current).toHaveLength(1);
   expect(state.priceLists.find(({ id }) => id === seed.source?.id)).toMatchObject({
     lifecycle_status: "retired",
-    effective_until: "2026-08-19T00:00:00.000Z",
+    effective_from: seed.source?.effective_from,
+    effective_until: seed.source?.effective_until,
   });
   expect(current[0]).toMatchObject({
     version_number: 2,

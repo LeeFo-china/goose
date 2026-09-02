@@ -10,11 +10,118 @@ import {
   runSupplierPurchasableSkuSmokeCli,
   resolveSmokeConfig,
 } from "./supplier-purchasable-sku-smoke";
+import {
+  assertSupplierPriceListItemsCopied,
+  runSupplierPurchasableSkuConcurrentCommands,
+} from "./supplier-purchasable-sku-smoke-scenarios";
 
 const DATABASE_URL =
   "postgresql://fixture-user:fixture-password@api-dev.goodcms.cn:5432/postgres?sslmode=require";
 
 describe("supplier purchasable SKU smoke command", () => {
+  test("concurrency harness reserves two connections and synchronizes both commands", async () => {
+    const events: string[] = [];
+    const connections = ["left", "right"].map((name) => ({
+      name,
+      release: () => events.push(`release:${name}`),
+    }));
+    let reservation = 0;
+
+    const results = await runSupplierPurchasableSkuConcurrentCommands(
+      {
+        reserve: async () => connections[reservation++]!,
+      },
+      ["a", "b"] as const,
+      async (connection, input, atBarrier) => {
+        events.push(`start:${connection.name}`);
+        await atBarrier();
+        events.push(`command:${connection.name}`);
+        return input;
+      },
+      { barrierTimeoutMs: 20, completionTimeoutMs: 50 },
+    );
+
+    expect(results).toEqual(["a", "b"]);
+    expect(events.slice(0, 2)).toEqual(["start:left", "start:right"]);
+    expect(events.indexOf("command:left")).toBeGreaterThan(1);
+    expect(events.indexOf("command:right")).toBeGreaterThan(1);
+    expect(events.slice(-2)).toEqual(["release:left", "release:right"]);
+  });
+
+  test("concurrency barrier timeout is bounded and always releases reservations", async () => {
+    const releases: string[] = [];
+    const connections = ["left", "right"].map((name) => ({
+      name,
+      release: () => releases.push(name),
+    }));
+    let reservation = 0;
+
+    await expect(runSupplierPurchasableSkuConcurrentCommands(
+      {
+        reserve: async () => connections[reservation++]!,
+      },
+      ["a", "b"] as const,
+      async (_connection, input, atBarrier) => {
+        if (input === "a") await atBarrier();
+        return input;
+      },
+      { barrierTimeoutMs: 5, completionTimeoutMs: 20 },
+    )).rejects.toThrow("SMOKE_CONCURRENCY_BARRIER_TIMEOUT");
+    expect(releases).toEqual(["left", "right"]);
+  });
+
+  test("multi-item copy preserves every business field with new row identities", () => {
+    const source = [
+      {
+        id: "source-target",
+        supplier_price_list_id: "source-list",
+        supplier_sku_id: "target-sku",
+        supplier_product_id: "target-product",
+        unit_price: "110.00",
+        tax_rate: "0.13",
+        tax_inclusive: false,
+        created_at: "before",
+        updated_at: "before",
+      },
+      {
+        id: "source-other",
+        supplier_price_list_id: "source-list",
+        supplier_sku_id: "other-sku",
+        supplier_product_id: "other-product",
+        unit_price: "77.77",
+        tax_rate: "0.13",
+        tax_inclusive: false,
+        created_at: "before",
+        updated_at: "before",
+      },
+    ];
+    const copied = source.map((item) => ({
+      ...item,
+      id: `copy-${item.id}`,
+      supplier_price_list_id: "copied-list",
+      unit_price: item.supplier_sku_id === "target-sku"
+        ? "130.00"
+        : item.unit_price,
+      created_at: "after",
+      updated_at: "after",
+    }));
+
+    expect(() => assertSupplierPriceListItemsCopied(
+      source,
+      copied,
+      "target-sku",
+      "130.00",
+    )).not.toThrow();
+    expect(() => assertSupplierPriceListItemsCopied(
+      source,
+      copied.map((item) => item.supplier_sku_id === "other-sku"
+        ? { ...item, unit_price: "99.99" }
+        : item),
+      "target-sku",
+      "130.00",
+    )).toThrow("SMOKE_COPIED_PRICE_ITEMS_MISMATCH");
+  });
+
   test("requires its explicit database URL", () => {
     expect(() => resolveSmokeConfig({})).toThrowError(
       "缺少 SUPPLIER_PURCHASABLE_SKU_SMOKE_DB_URL",

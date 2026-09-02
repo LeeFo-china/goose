@@ -21,6 +21,7 @@ type SupplierPurchasableSkuSupabaseResult = {
   exitCode: number;
   stdout: string;
   stderr: string;
+  timedOut?: boolean;
 };
 
 type SupplierPurchasableSkuDevelopmentDatabaseCommandCliOptions = {
@@ -38,9 +39,15 @@ type SupplierPurchasableSkuSupabaseSpawn = (
   command: string[],
   options: { stdout: "pipe"; stderr: "pipe" },
 ) => {
-  exitCode: number;
-  stdout: { toString(): string };
-  stderr: { toString(): string };
+  exited: Promise<number>;
+  stdout: ReadableStream<Uint8Array>;
+  stderr: ReadableStream<Uint8Array>;
+  kill(signal?: number | NodeJS.Signals): void;
+};
+
+type SupplierPurchasableSkuCommandTimeouts = {
+  timeoutMs?: number;
+  terminationGraceMs?: number;
 };
 
 const DIRECT_DATABASE_URL = "SUPABASE_DB_DIRECT_URL";
@@ -51,6 +58,8 @@ const TARGET_FAILURE_CODE = "SUPPLIER_PURCHASABLE_SKU_DEV_TARGET_FAILED";
 const MIGRATION_FAILURE_CODE = "SUPPLIER_PURCHASABLE_SKU_DEV_MIGRATION_FAILED";
 const TYPE_GENERATION_FAILURE_CODE =
   "SUPPLIER_PURCHASABLE_SKU_DEV_TYPE_GENERATION_FAILED";
+const COMMAND_TIMEOUT_MS = 10 * 60 * 1_000;
+const TERMINATION_GRACE_MS = 5_000;
 
 function isMode(
   value: string | undefined,
@@ -152,7 +161,7 @@ export async function runSupplierPurchasableSkuDevelopmentDatabaseCommandCli(
     if (options.mode === "gen-types") {
       if (result.exitCode !== 0) {
         options.writeError(TYPE_GENERATION_FAILURE_CODE);
-        return result.exitCode;
+        return 1;
       }
       if (containsDatabaseSecret(result.stdout, target.connection.url)) {
         options.writeError(TYPE_GENERATION_FAILURE_CODE);
@@ -204,16 +213,85 @@ export function runSupplierPurchasableSkuSupabaseCommand(
   mode: SupplierPurchasableSkuSupabaseMode,
   databaseUrl: string,
   spawn: SupplierPurchasableSkuSupabaseSpawn,
-): SupplierPurchasableSkuSupabaseResult {
-  const result = spawn(supabaseCommand(mode, databaseUrl), {
+  timeouts: SupplierPurchasableSkuCommandTimeouts = {},
+): Promise<SupplierPurchasableSkuSupabaseResult> {
+  return runBoundedPipedCommand(
+    supabaseCommand(mode, databaseUrl),
+    spawn,
+    timeouts,
+  );
+}
+
+async function runBoundedPipedCommand(
+  command: string[],
+  spawn: SupplierPurchasableSkuSupabaseSpawn,
+  {
+    timeoutMs = COMMAND_TIMEOUT_MS,
+    terminationGraceMs = TERMINATION_GRACE_MS,
+  }: SupplierPurchasableSkuCommandTimeouts = {},
+): Promise<SupplierPurchasableSkuSupabaseResult> {
+  const child = spawn(command, {
     stdout: "pipe",
     stderr: "pipe",
   });
+  const output = Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  const lifecycle = await waitForChild(
+    child,
+    timeoutMs,
+    terminationGraceMs,
+  );
+  const captured = lifecycle.timedOut
+    ? await settleWithin(output, terminationGraceMs)
+    : { settled: true as const, value: await output };
+  const [stdout, stderr] = captured.settled ? captured.value : ["", ""];
+
   return {
-    exitCode: result.exitCode,
-    stdout: result.stdout.toString(),
-    stderr: result.stderr.toString(),
+    exitCode: lifecycle.timedOut ? 124 : lifecycle.exitCode,
+    stdout,
+    stderr,
+    ...(lifecycle.timedOut ? { timedOut: true } : {}),
   };
+}
+
+async function waitForChild(
+  child: Pick<ReturnType<typeof Bun.spawn>, "exited" | "kill">,
+  timeoutMs: number,
+  terminationGraceMs: number,
+) {
+  const initial = await settleWithin(child.exited, timeoutMs);
+  if (initial.settled) {
+    return { exitCode: initial.value, timedOut: false as const };
+  }
+
+  child.kill("SIGTERM");
+  const terminated = await settleWithin(child.exited, terminationGraceMs);
+  if (!terminated.settled) {
+    child.kill("SIGKILL");
+    await settleWithin(child.exited, terminationGraceMs);
+  }
+  return { exitCode: 124, timedOut: true as const };
+}
+
+function settleWithin<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+): Promise<{ settled: true; value: T } | { settled: false }> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(
+      () => resolve({ settled: false }),
+      Math.max(1, timeoutMs),
+    );
+    promise.then((value) => {
+      clearTimeout(timer);
+      resolve({ settled: true, value });
+    }, () => {
+      clearTimeout(timer);
+      resolve({ settled: false });
+    });
+  });
 }
 
 async function runSupabase(
@@ -223,20 +301,21 @@ async function runSupabase(
   return runSupplierPurchasableSkuSupabaseCommand(
     mode,
     databaseUrl,
-    (command, options) => Bun.spawnSync(command, {
+    (command, options) => Bun.spawn(command, {
       ...options,
       env: process.env,
     }),
   );
 }
 
-function rerunWithRootEnvironment(): number {
-  const gitCommonDirectoryResult = Bun.spawnSync(
+async function rerunWithRootEnvironment(): Promise<number> {
+  const gitCommonDirectoryResult = await runBoundedPipedCommand(
     ["git", "rev-parse", "--git-common-dir"],
-    { stdout: "pipe", stderr: "pipe" },
+    (command, options) => Bun.spawn(command, options),
+    { timeoutMs: 10_000, terminationGraceMs: 1_000 },
   );
-  if (!gitCommonDirectoryResult.success) return 1;
-  const gitCommonDirectory = gitCommonDirectoryResult.stdout.toString().trim();
+  if (gitCommonDirectoryResult.exitCode !== 0) return 1;
+  const gitCommonDirectory = gitCommonDirectoryResult.stdout.trim();
   const envPath = resolveSupplierPurchasableSkuRootEnvironmentPath(
     gitCommonDirectory,
     process.cwd(),
@@ -246,7 +325,7 @@ function rerunWithRootEnvironment(): number {
     [ROOT_ENVIRONMENT_LOADED]: "1",
   };
   delete childEnvironment[DIRECT_DATABASE_URL];
-  const result = Bun.spawnSync([
+  const child = Bun.spawn([
     process.execPath,
     `--env-file=${envPath}`,
     import.meta.path,
@@ -256,12 +335,19 @@ function rerunWithRootEnvironment(): number {
     stdout: "inherit",
     stderr: "inherit",
   });
-  return result.exitCode;
+  const result = await waitForChild(
+    child,
+    COMMAND_TIMEOUT_MS,
+    TERMINATION_GRACE_MS,
+  );
+  return result.timedOut ? 1 : result.exitCode;
 }
 
 if (import.meta.main) {
   if (process.env[ROOT_ENVIRONMENT_LOADED] !== "1") {
-    process.exitCode = rerunWithRootEnvironment();
+    void rerunWithRootEnvironment().then((exitCode) => {
+      process.exitCode = exitCode;
+    });
   } else {
     const mode = process.argv[2];
     void runSupplierPurchasableSkuDevelopmentDatabaseCommandCli({
