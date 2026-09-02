@@ -38,7 +38,7 @@ export function SupplierSearchSelect<T extends SupplierOption>({
 }) {
   const totalPages = Math.max(1, result.pagination.totalPages || 1);
   return (
-    <div className="grid gap-3 rounded-lg border bg-card p-3 xl:grid-cols-[minmax(28rem,0.9fr)_minmax(32rem,1.1fr)] xl:items-end">
+    <div className="grid gap-3 rounded-lg border bg-card p-3 2xl:grid-cols-[minmax(28rem,0.9fr)_minmax(32rem,1.1fr)] 2xl:items-end">
       <div className="flex min-w-0 gap-2">
         <Input
           aria-label={searchLabel}
