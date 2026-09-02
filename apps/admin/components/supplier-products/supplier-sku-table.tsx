@@ -62,6 +62,11 @@ export function SupplierSkuTable({
       header: "采购单位",
       cell: ({ row }) => `${row.original.purchase_unit.name}（${row.original.purchase_unit.symbol}）`,
     },
+    {
+      id: "price",
+      header: "价格",
+      cell: ({ row }) => formatSkuPrice(row.original),
+    },
     { accessorKey: "status", header: "状态", cell: ({ row }) => statusLabel(row.original.status) },
     {
       id: "actions",
@@ -107,7 +112,7 @@ export function SupplierSkuTable({
   const totalPages = Math.max(1, skus.pagination.totalPages || 1);
   return (
     <div className="flex flex-col gap-3">
-      <DataTable data={skus.list} columns={columns} emptyText="该商品还没有 SKU" minWidth="min-w-[820px]" />
+      <DataTable data={skus.list} columns={columns} emptyText="该商品还没有 SKU" minWidth="min-w-[940px]" />
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <span className="text-sm text-muted-foreground">
           SKU 第 {skus.pagination.page} / {totalPages} 页，共 {skus.pagination.total} 个
@@ -131,4 +136,19 @@ function statusLabel(status: string) {
   if (status === "active") return "已启用";
   if (status === "draft") return "草稿";
   return "已停用";
+}
+
+function formatSkuPrice(sku: SupplierSku) {
+  const price = sku.current_price;
+  if (!price) return <span className="text-muted-foreground">未定价</span>;
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="font-medium tabular-nums">
+        ¥{price.unit_price}
+      </span>
+      <span className="text-xs text-muted-foreground">
+        {price.tax_inclusive ? "含税" : "未含税"} / {sku.purchase_unit.symbol}
+      </span>
+    </div>
+  );
 }

@@ -9,10 +9,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-import { isSupplierResourceNotFound, loadSupplierProducts, loadSupplierRelationship, loadSupplierRelationships } from "./supplier-product-api";
+import { isSupplierResourceNotFound, loadSupplierProducts, loadSupplierRelationship, loadSupplierRelationships, type SupplierProductStatusFilter } from "./supplier-product-api";
 import { buildSupplierProductClearedScopeHref, buildSupplierProductScopeHref } from "./supplier-product-drilldown";
 import { SupplierProductDialog } from "./supplier-product-dialog";
 import { SupplierProductList } from "./supplier-product-list";
@@ -54,6 +55,8 @@ export function SupplierProductWorkspace({
   const [productPage, setProductPage] = useState(1);
   const [keyword, setKeyword] = useState("");
   const [appliedKeyword, setAppliedKeyword] = useState("");
+  const [productStatusFilter, setProductStatusFilter] =
+    useState<SupplierProductStatusFilter>("active");
   const [loadingRelationships, setLoadingRelationships] = useState(true);
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [skuWorkspaceVisible, setSkuWorkspaceVisible] = useState(false);
@@ -165,7 +168,12 @@ export function SupplierProductWorkspace({
     setLoadingProducts(true);
     setError(null);
     try {
-      const data = await loadSupplierProducts(scope, productPage, appliedKeyword);
+      const data = await loadSupplierProducts(
+        scope,
+        productPage,
+        appliedKeyword,
+        productStatusFilter,
+      );
       if (productRequests.current.isCurrent(request)) setProducts(data);
     } catch (caught) {
       if (productRequests.current.isCurrent(request)) {
@@ -174,7 +182,7 @@ export function SupplierProductWorkspace({
     } finally {
       if (productRequests.current.isCurrent(request)) setLoadingProducts(false);
     }
-  }, [appliedKeyword, productPage, scope]);
+  }, [appliedKeyword, productPage, productStatusFilter, scope]);
 
   useEffect(() => {
     if (scope) void loadProducts();
@@ -246,13 +254,30 @@ export function SupplierProductWorkspace({
             <Card className="overflow-hidden shadow-none">
               {!skuWorkspaceVisible ? (
                 <CardHeader className="border-b bg-muted/20 p-3">
-                  <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-                    <div className="flex flex-1 gap-2">
+                  <div className="flex flex-col justify-between gap-3 xl:flex-row xl:items-center">
+                    <div className="flex flex-1 flex-col gap-2 sm:flex-row">
                       <Input aria-label="搜索供应商商品" className="md:max-w-sm" value={keyword} placeholder="搜索商品名称或编码" onChange={(event) => setKeyword(event.target.value)} />
                       <Button type="button" variant="outline" disabled={loadingProducts} onClick={() => {
                         setProductPage(1);
                         setAppliedKeyword(keyword.trim());
                       }}><Search data-icon="inline-start" />搜索商品</Button>
+                      <Select
+                        value={productStatusFilter}
+                        onValueChange={(value) => {
+                          setProductPage(1);
+                          setProductStatusFilter(value as SupplierProductStatusFilter);
+                        }}
+                      >
+                        <SelectTrigger aria-label="商品状态筛选" className="w-full sm:w-36">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="active">已启用</SelectItem>
+                          <SelectItem value="draft">草稿</SelectItem>
+                          <SelectItem value="inactive">已停用</SelectItem>
+                          <SelectItem value="all">全部状态</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                     {writeState.writable ? <SupplierProductDialog scope={scope} disabled={loadingProducts} onSaved={loadProducts} /> : null}
                   </div>

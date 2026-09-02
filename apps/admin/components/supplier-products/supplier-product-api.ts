@@ -24,6 +24,7 @@ const MAX_CATALOG_PAGES = 5;
 
 type CatalogKind = "categories" | "brands" | "units";
 type WritableCatalogKind = "categories" | "brands";
+export type SupplierProductStatusFilter = "active" | "draft" | "inactive" | "all";
 
 export function isSupplierResourceNotFound(error: unknown) {
   return error instanceof Error
@@ -70,9 +71,11 @@ export function buildProductListPath(
   scope: ProductApiScope,
   page: number,
   keyword = "",
+  status: SupplierProductStatusFilter = "active",
 ) {
   const query = scopeQuery(scope, page);
   if (keyword.trim()) query.set("keyword", keyword.trim());
+  if (status !== "all") query.set("status", status);
   return `${productBase(scope)}?${query}`;
 }
 
@@ -80,9 +83,10 @@ export function loadSupplierProducts(
   scope: ProductApiScope,
   page: number,
   keyword = "",
+  status: SupplierProductStatusFilter = "active",
 ) {
   return requestBackendJson<SupplierProductPage>(
-    buildProductListPath(scope, page, keyword),
+    buildProductListPath(scope, page, keyword, status),
     { fallbackMessage: "供应商商品加载失败" },
   );
 }

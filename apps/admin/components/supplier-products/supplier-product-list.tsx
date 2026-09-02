@@ -260,6 +260,20 @@ export function SupplierProductList({
       ),
     },
     {
+      id: "cost-category",
+      header: "成本归类",
+      cell: ({ row }) => (
+        <div className="flex flex-col gap-1">
+          <span>{row.original.default_cost_category_name ?? "未设置"}</span>
+          {row.original.cost_category_source ? (
+            <span className="text-xs text-muted-foreground">
+              {costCategorySourceLabel(row.original.cost_category_source)}
+            </span>
+          ) : null}
+        </div>
+      ),
+    },
+    {
       id: "sku-count",
       header: "SKU",
       cell: ({ row }) => (
@@ -300,20 +314,6 @@ export function SupplierProductList({
             {writable ? (
               <>
                 <SupplierProductDialog scope={scope} product={row.original} onSaved={onRefresh} />
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setMutation({
-                    kind: "product",
-                    id: row.original.id,
-                    name: row.original.name,
-                    action: nextProductAction(row.original),
-                    version: row.original.version,
-                  })}
-                >
-                  {row.original.status === "active" ? "停用商品" : "启用商品"}
-                </Button>
               </>
             ) : null}
             {scope.kind === "tenant" && canManageCatalog ? (
@@ -323,6 +323,22 @@ export function SupplierProductList({
                 targetName={row.original.name}
                 onSaved={onRefresh}
               />
+            ) : null}
+            {writable ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => setMutation({
+                  kind: "product",
+                  id: row.original.id,
+                  name: row.original.name,
+                  action: nextProductAction(row.original),
+                  version: row.original.version,
+                })}
+              >
+                {row.original.status === "active" ? "停用商品" : "启用商品"}
+              </Button>
             ) : null}
           </div>
         );
@@ -427,7 +443,7 @@ export function SupplierProductList({
 
   return (
     <div className="flex flex-col gap-5">
-      <DataTable data={products.list} columns={columns} emptyText="当前供应商还没有商品" minWidth="min-w-[920px]" />
+      <DataTable data={products.list} columns={columns} emptyText="当前供应商还没有商品" minWidth="min-w-[1080px]" />
       <SupplierStatusDialog
         target={mutation}
         scope={scope}
@@ -458,4 +474,11 @@ function statusLabel(status: string) {
   if (status === "active") return "已启用";
   if (status === "draft") return "草稿";
   return "已停用";
+}
+
+function costCategorySourceLabel(source: SupplierProduct["cost_category_source"]) {
+  if (source === "product") return "商品指定";
+  if (source === "category") return "分类默认";
+  if (source === "ancestor") return "上级分类";
+  return null;
 }

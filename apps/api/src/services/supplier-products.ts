@@ -173,6 +173,7 @@ export class SupplierProductsService {
       ...query,
       supplier_id: scope.supplierId,
       tenant_id: scope.tenantId,
+      tenant_supplier_id: scope.tenantSupplierId,
       supplier_product_id: productId,
     });
   }
