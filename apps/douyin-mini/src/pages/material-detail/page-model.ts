@@ -259,6 +259,12 @@ export function serializeMaterialBlocks(blocks: readonly DouyinMaterialNoteBlock
         return `“${block.text}”${block.attribution ? `\n——${block.attribution}` : ""}`;
       case "callout":
         return `${block.title}\n${block.text}`;
+      case "image":
+        return [
+          `[图片] ${block.asset.alt}`,
+          block.caption ?? "",
+          block.asset.src,
+        ].filter(Boolean).join("\n");
     }
   }).join("\n\n");
 }

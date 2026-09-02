@@ -144,7 +144,18 @@ export type DouyinMaterialNoteBlock =
   | { type: "paragraph"; text: string }
   | { type: "list"; style: "ordered" | "unordered"; items: string[] }
   | { type: "quote"; text: string; attribution?: string }
-  | { type: "callout"; tone: "info" | "warning"; title: string; text: string };
+  | { type: "callout"; tone: "info" | "warning"; title: string; text: string }
+  | {
+    type: "image";
+    asset: {
+      fileId: string;
+      src: string;
+      alt: string;
+      width: number;
+      height: number;
+    };
+    caption?: string;
+  };
 
 export type DouyinMaterialNotePreview = {
   id: string;

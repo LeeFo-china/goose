@@ -4,6 +4,10 @@ import { describe, expect, test } from "bun:test";
 import { createEmptySiteContentBlock, resolveAllowedSiteContentBlockTypes } from
   "@/components/site-content/site-content-block-editor";
 import {
+  materialNoteBlocksToTiptapDoc,
+  tiptapDocToMaterialNoteBlocks,
+} from "@/components/douyin-miniapp/material-note-rich-editor-adapter";
+import {
   narrowMaterialNoteEditorBlocks,
   validateMaterialNoteEditorDraft,
 } from
@@ -22,7 +26,7 @@ function read(path: string) {
 }
 
 describe("抖音资料后台工作台 UI 合同", () => {
-  test("资料编辑器只开放五类文本块且官网编辑器默认能力不变", () => {
+  test("资料编辑器开放受控图文块且官网编辑器默认能力不变", () => {
     expect(resolveAllowedSiteContentBlockTypes()).toEqual([
       "paragraph",
       "heading",
@@ -39,12 +43,14 @@ describe("抖音资料后台工作台 UI 合同", () => {
       "list",
       "quote",
       "callout",
+      "image",
     ])).toEqual([
       "heading",
       "paragraph",
       "list",
       "quote",
       "callout",
+      "image",
     ]);
     expect(resolveAllowedSiteContentBlockTypes(["image", "paragraph", "image"]))
       .toEqual(["image", "paragraph"]);
@@ -54,11 +60,55 @@ describe("抖音资料后台工作台 UI 合同", () => {
       type: "image",
       fileId: "11111111-1111-4111-8111-111111111111",
       alt: "图片",
-    }])).toBeNull();
+    }])).toEqual([{
+      type: "image",
+      fileId: "11111111-1111-4111-8111-111111111111",
+      alt: "图片",
+    }]);
     expect(createEmptySiteContentBlock("quote")).toEqual({
       type: "quote",
       text: "",
     });
+  });
+
+  test("富文本适配器只输出受控资料块，图片草稿不持久化 src", () => {
+    const blocks = [{
+      type: "heading" as const,
+      level: 2 as const,
+      text: "开工资料",
+    }, {
+      type: "paragraph" as const,
+      text: "先核对施工图。",
+    }, {
+      type: "image" as const,
+      fileId: "11111111-1111-4111-8111-111111111111",
+      alt: "墙面检查图",
+      caption: "图片说明",
+    }];
+    const doc = materialNoteBlocksToTiptapDoc(blocks, {
+      "11111111-1111-4111-8111-111111111111": "https://cdn.goodcms.cn/wall.webp",
+    });
+
+    expect(JSON.stringify(doc)).toContain("materialImage");
+    expect(JSON.stringify(doc)).toContain("https://cdn.goodcms.cn/wall.webp");
+    expect(tiptapDocToMaterialNoteBlocks(doc)).toEqual(blocks);
+    expect(JSON.stringify(tiptapDocToMaterialNoteBlocks(doc))).not.toContain("cdn.goodcms.cn");
+  });
+
+  test("富文本适配器忽略 Tiptap 不支持的 HTML、链接和 base64 图片", () => {
+    expect(tiptapDocToMaterialNoteBlocks({
+      type: "doc",
+      content: [{
+        type: "paragraph",
+        content: [{ type: "text", text: "保留纯文本" }],
+      }, {
+        type: "image",
+        attrs: { src: "data:image/png;base64,xxx", alt: "非法图片" },
+      }, {
+        type: "html",
+        html: "<script />",
+      }],
+    })).toEqual([{ type: "paragraph", text: "保留纯文本" }]);
   });
 
   test("菜单和页面按 read/manage/publish 三层权限收口", () => {
@@ -100,7 +150,8 @@ describe("抖音资料后台工作台 UI 合同", () => {
     expect(editor).toContain("MATERIAL_NOTE_ALLOWED_BLOCK_TYPES");
     expect(editor).toContain("appendMaterialNoteVersion");
     expect(editor).toContain("createMaterialNote");
-    expect(editor).toContain("SiteContentBlockEditor");
+    expect(editor).toContain("MaterialNoteRichEditor");
+    expect(editor).toContain("onUploadStateChange");
     expect(editor).toContain("list-decimal");
     expect(editor).toContain("list-disc");
     expect(detail).toContain("getMaterialNoteVersion");

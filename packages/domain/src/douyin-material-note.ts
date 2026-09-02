@@ -1,7 +1,6 @@
 import { z } from 'zod';
 
 import {
-  SiteContentDraftBlocksSchema,
   SiteContentDraftCalloutBlockSchema,
   SiteContentDraftHeadingBlockSchema,
   SiteContentDraftListBlockSchema,
@@ -23,6 +22,7 @@ export const DOUYIN_MATERIAL_NOTE_BLOCK_TYPE_VALUES = [
   'list',
   'quote',
   'callout',
+  'image',
 ] as const;
 
 export const DOUYIN_MATERIAL_NOTE_ERROR_CODE_VALUES = [
@@ -38,34 +38,83 @@ export const DouyinMaterialNoteStatusSchema = z.enum(
   DOUYIN_MATERIAL_NOTE_STATUS_VALUES,
 );
 
+const MAX_BLOCK_COUNT = 100;
+const MAX_BLOCKS_UTF8_BYTES = 512 * 1024;
+const MAX_SHORT_TEXT_LENGTH = 300;
+const MAX_CAPTION_LENGTH = 1_000;
+
+const IdSchema = z.uuid();
+const NonEmptyShortTextSchema = z.string().trim().min(1).max(MAX_SHORT_TEXT_LENGTH);
+const CaptionSchema = z.string().trim().min(1).max(MAX_CAPTION_LENGTH);
+const utf8Encoder = new TextEncoder();
+const getSerializedUtf8ByteLength = (value: unknown): number =>
+  utf8Encoder.encode(JSON.stringify(value)).byteLength;
+
+export const DouyinMaterialNoteDraftImageBlockSchema = z.strictObject({
+  type: z.literal('image'),
+  fileId: IdSchema,
+  alt: NonEmptyShortTextSchema,
+  caption: CaptionSchema.optional(),
+});
+
 export const DouyinMaterialNoteBlockSchema = z.discriminatedUnion('type', [
   SiteContentDraftHeadingBlockSchema,
   SiteContentDraftParagraphBlockSchema,
   SiteContentDraftListBlockSchema,
   SiteContentDraftQuoteBlockSchema,
   SiteContentDraftCalloutBlockSchema,
+  DouyinMaterialNoteDraftImageBlockSchema,
 ]);
 
 export const DouyinMaterialNoteContentBlocksSchema = z
   .array(DouyinMaterialNoteBlockSchema)
+  .max(MAX_BLOCK_COUNT)
   .superRefine((blocks, context) => {
-    const siteContentResult = SiteContentDraftBlocksSchema.safeParse(blocks);
-    if (siteContentResult.success) return;
+    if (getSerializedUtf8ByteLength(blocks) <= MAX_BLOCKS_UTF8_BYTES) return;
+    context.addIssue({
+      code: 'custom',
+      message: '内容块总大小不能超过 512 KiB',
+    });
+  });
 
-    for (const issue of siteContentResult.error.issues) {
+export const DouyinMaterialNotePublicAssetSchema = z.strictObject({
+  fileId: IdSchema,
+  src: z.url({ protocol: /^https$/ }).max(2_048),
+  alt: NonEmptyShortTextSchema,
+  width: z.number().int().positive().max(16_384),
+  height: z.number().int().positive().max(16_384),
+});
+
+export const DouyinMaterialNotePublicImageBlockSchema = z.strictObject({
+  type: z.literal('image'),
+  asset: DouyinMaterialNotePublicAssetSchema,
+  caption: CaptionSchema.optional(),
+});
+
+export const DouyinMaterialNotePublicBlockSchema = z.discriminatedUnion('type', [
+  SiteContentDraftHeadingBlockSchema,
+  SiteContentDraftParagraphBlockSchema,
+  SiteContentDraftListBlockSchema,
+  SiteContentDraftQuoteBlockSchema,
+  SiteContentDraftCalloutBlockSchema,
+  DouyinMaterialNotePublicImageBlockSchema,
+]);
+
+export const DouyinMaterialNotePublicContentBlocksSchema = z
+  .array(DouyinMaterialNotePublicBlockSchema)
+  .max(MAX_BLOCK_COUNT)
+  .superRefine((blocks, context) => {
+    if (getSerializedUtf8ByteLength(blocks) <= MAX_BLOCKS_UTF8_BYTES) return;
       context.addIssue({
         code: 'custom',
-        path: issue.path,
-        message: issue.message,
+        message: '内容块总大小不能超过 512 KiB',
       });
-    }
   });
 
 const TitleSchema = z.string().trim().min(1).max(300);
 const SummarySchema = z.string().trim().min(1).max(1_000);
 const CategorySchema = z.string().trim().min(1).max(100);
 const ApplicableToSchema = z.string().trim().min(1).max(300).nullable();
-const IdSchema = z.uuid();
 const TimestampSchema = z.iso.datetime({ offset: true });
 
 const VersionContentShape = {
@@ -101,7 +150,11 @@ export const DouyinMaterialNoteUnclaimedDetailSchema = z.strictObject(
 const ClaimedMaterialShape = {
   id: IdSchema,
   version: z.number().int().positive(),
-  ...VersionContentShape,
+  title: TitleSchema,
+  summary: SummarySchema,
+  category: CategorySchema,
+  applicable_to: ApplicableToSchema,
+  content_blocks: DouyinMaterialNotePublicContentBlocksSchema,
 };
 
 export const DouyinMaterialNoteClaimedMaterialSchema = z.strictObject(
@@ -132,7 +185,7 @@ export const DouyinMaterialNoteOwnedSummarySchema = z.strictObject(
 
 export const DouyinMaterialNoteOwnedDetailSchema = z.strictObject({
   ...OwnedSummaryShape,
-  content_blocks: DouyinMaterialNoteContentBlocksSchema,
+  content_blocks: DouyinMaterialNotePublicContentBlocksSchema,
 });
 
 export const DouyinMaterialNoteTenantVersionSchema = z.strictObject({
@@ -270,8 +323,14 @@ export type DouyinMaterialNoteErrorCode =
 export type DouyinMaterialNoteBlock = z.infer<
   typeof DouyinMaterialNoteBlockSchema
 >;
+export type DouyinMaterialNotePublicBlock = z.infer<
+  typeof DouyinMaterialNotePublicBlockSchema
+>;
 export type DouyinMaterialNoteContentBlocks = z.infer<
   typeof DouyinMaterialNoteContentBlocksSchema
+>;
+export type DouyinMaterialNotePublicContentBlocks = z.infer<
+  typeof DouyinMaterialNotePublicContentBlocksSchema
 >;
 export type DouyinMaterialNoteVersionDraft = z.infer<
   typeof DouyinMaterialNoteVersionDraftSchema

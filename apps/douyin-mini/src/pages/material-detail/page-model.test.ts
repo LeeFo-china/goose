@@ -37,6 +37,17 @@ const blocks = [
   { type: "list" as const, style: "ordered" as const, items: ["合同", "图纸"] },
   { type: "quote" as const, text: "先确认，再施工。", attribution: "项目经理" },
   { type: "callout" as const, tone: "warning" as const, title: "注意", text: "不要跳过交底。" },
+  {
+    type: "image" as const,
+    asset: {
+      fileId: "33333333-3333-4333-8333-333333333333",
+      src: "https://cdn.goodcms.cn/material-notes/checklist.webp",
+      alt: "开工材料清单图片",
+      width: 1200,
+      height: 800,
+    },
+    caption: "保存到手机后按房间核对。",
+  },
 ];
 const claim: DouyinMaterialNoteClaimResponse = {
   claim_id: CLAIM_ID,
@@ -144,13 +155,14 @@ describe("material detail page model", () => {
     }, { kind: "claim", request: pendingClaim.request })).toBe(hidden);
   });
 
-  test("serializes exactly five supported text blocks deterministically", () => {
+  test("serializes supported text and image blocks deterministically", () => {
     expect(serializeMaterialBlocks(blocks)).toBe([
       "开工准备",
       "逐项核对。",
       "1. 合同\n2. 图纸",
       "“先确认，再施工。”\n——项目经理",
       "注意\n不要跳过交底。",
+      "[图片] 开工材料清单图片\n保存到手机后按房间核对。\nhttps://cdn.goodcms.cn/material-notes/checklist.webp",
     ].join("\n\n"));
   });
 });

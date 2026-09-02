@@ -7,7 +7,6 @@ import {
   type DouyinMaterialNoteTenantVersion,
   type DouyinMaterialNoteVersionDraft,
   DouyinMaterialNoteVersionDraftSchema,
-  type SiteContentDraftBlock,
 } from "@gooes/domain";
 import { ArrowLeft, Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
@@ -19,7 +18,7 @@ import {
   createMaterialNote,
   getMaterialNoteErrorMessage,
 } from "@/components/douyin-miniapp/material-note-api";
-import { SiteContentBlockEditor } from "@/components/site-content/site-content-block-editor";
+import { MaterialNoteRichEditor } from "@/components/douyin-miniapp/material-note-rich-editor";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,7 +34,8 @@ export const MATERIAL_NOTE_ALLOWED_BLOCK_TYPES = [
   "list",
   "quote",
   "callout",
-] as const satisfies readonly SiteContentDraftBlock["type"][];
+  "image",
+] as const satisfies readonly DouyinMaterialNoteBlock["type"][];
 
 const emptyDraft: DouyinMaterialNoteVersionDraft = {
   title: "",
@@ -78,7 +78,7 @@ export function validateMaterialNoteEditorDraft(value: unknown):
 }
 
 export function narrowMaterialNoteEditorBlocks(
-  blocks: SiteContentDraftBlock[],
+  blocks: DouyinMaterialNoteBlock[],
 ): DouyinMaterialNoteBlock[] | null {
   const result: DouyinMaterialNoteBlock[] = [];
   for (const block of blocks) {
@@ -88,6 +88,7 @@ export function narrowMaterialNoteEditorBlocks(
       && block.type !== "list"
       && block.type !== "quote"
       && block.type !== "callout"
+      && block.type !== "image"
     ) return null;
     result.push(block);
   }
@@ -121,6 +122,7 @@ export function MaterialNoteEditor({
   const router = useRouter();
   const [draft, setDraft] = useState(() => draftFromVersion(baseVersion));
   const [pending, setPending] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<MaterialNoteEditorFieldErrors>({});
   const isExisting = Boolean(noteId);
@@ -139,7 +141,7 @@ export function MaterialNoteEditor({
     setError("");
   }
 
-  function updateBlocks(blocks: SiteContentDraftBlock[]) {
+  function updateBlocks(blocks: DouyinMaterialNoteBlock[]) {
     const result = narrowMaterialNoteEditorBlocks(blocks);
     if (result) setField("content_blocks", result);
   }
@@ -223,20 +225,20 @@ export function MaterialNoteEditor({
               <Separator />
               <section className="flex flex-col gap-4" aria-labelledby="material-content-heading">
                 <div><h2 id="material-content-heading" className="text-base font-semibold">正文内容</h2>
-                  <p className="mt-1 text-sm text-muted-foreground">仅支持标题、段落、列表、引用和提示块，不接受图片、HTML 或外部链接。</p>
+                  <p className="mt-1 text-sm text-muted-foreground">支持标题、段落、列表、引用、提示块和图片；不会保存 HTML、外链图片或 base64。</p>
                 </div>
-                <Field data-invalid={Boolean(fieldErrors.content_blocks)} aria-describedby="material-blocks-error"><SiteContentBlockEditor
+                <Field data-invalid={Boolean(fieldErrors.content_blocks)} aria-describedby="material-blocks-error"><MaterialNoteRichEditor
                   blocks={draft.content_blocks}
-                  allowedTypes={MATERIAL_NOTE_ALLOWED_BLOCK_TYPES}
                   disabled={pending || !canManage}
+                  onUploadStateChange={setUploading}
                   onChange={updateBlocks}
                 /><FieldError id="material-blocks-error">{fieldErrors.content_blocks}</FieldError></Field>
               </section>
               <div className="flex flex-col gap-2 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-xs text-muted-foreground">服务端会再次按资料窄 Schema 校验全部字段。</p>
-                <Button type="submit" disabled={pending || !canManage}>
+                <p className="text-xs text-muted-foreground">服务端会再次按资料窄 Schema 校验全部字段；图片领取时解析为公开 CDN 地址。</p>
+                <Button type="submit" disabled={pending || uploading || !canManage}>
                   {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <Save data-icon="inline-start" />}
-                  {isExisting ? "保存新版本" : "创建资料和版本 1"}
+                  {uploading ? "图片上传中" : isExisting ? "保存新版本" : "创建资料和版本 1"}
                 </Button>
               </div>
             </form>
@@ -287,6 +289,14 @@ function MaterialBlock({ block }: { block: DouyinMaterialNoteVersionDraft["conte
       "list-inside text-sm leading-6",
       block.style === "ordered" ? "list-decimal" : "list-disc",
     )}>{block.items.map((item, index) => <li key={index}>{item}</li>)}</List>;
+  }
+  if (block.type === "image") {
+    return <figure className="rounded-md border bg-muted/30 p-3">
+      <div className="flex h-28 items-center justify-center rounded bg-background text-xs text-muted-foreground">
+        图片已绑定：{block.alt}
+      </div>
+      {block.caption ? <figcaption className="mt-2 text-xs text-muted-foreground">{block.caption}</figcaption> : null}
+    </figure>;
   }
   return <Alert><AlertTitle>{block.title}</AlertTitle><AlertDescription>{block.text}</AlertDescription></Alert>;
 }

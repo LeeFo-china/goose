@@ -1,6 +1,10 @@
 import {
+  DouyinMaterialNotePublicAssetSchema,
+  type DouyinMaterialNoteBlock,
+  type DouyinMaterialNoteClaimResponse,
   type DouyinMaterialNoteOwnedDetail,
   type DouyinMaterialNoteOwnedSummary,
+  type DouyinMaterialNotePublicBlock,
   type DouyinMaterialNotePublicPreview,
 } from '@gooes/domain';
 import type { z } from 'zod';
@@ -34,11 +38,12 @@ import {
 
 type RepositoryPort = Pick<DouyinMaterialNotesRepository,
   'listPublic' | 'findPublicPreview' | 'claim' | 'listOwned' |
-  'findOwnedAccess' | 'findOwnedDetail' | 'remove' | 'clear'>;
+  'findOwnedAccess' | 'findOwnedDetail' | 'findMaterialImageAssets' | 'remove' | 'clear'>;
 type ContextResolverPort = Pick<DouyinMaterialNoteContextResolver, 'resolve'>;
 type PublicRow = Awaited<ReturnType<RepositoryPort['listPublic']>>['rows'][number];
 type OwnedRow = Awaited<ReturnType<RepositoryPort['listOwned']>>['rows'][number];
 type OwnedDetailRow = NonNullable<Awaited<ReturnType<RepositoryPort['findOwnedDetail']>>>;
+type ImageAssetRow = Awaited<ReturnType<RepositoryPort['findMaterialImageAssets']>>[number];
 
 export class DouyinMiniappMaterialNotesService {
   private readonly repository: RepositoryPort;
@@ -83,7 +88,10 @@ export class DouyinMiniappMaterialNotesService {
       ...repositoryIdentity(context),
       noteId: id,
     });
-    return parseOutput(DouyinMaterialNoteClaimCommandResponseSchema, result);
+    return parseOutput(
+      DouyinMaterialNoteClaimCommandResponseSchema,
+      await this.mapClaimResponse(context.tenantId, result),
+    );
   }
 
   async listOwned(user: JwtPayload | undefined, input: PaginationQuery) {
@@ -124,7 +132,10 @@ export class DouyinMiniappMaterialNotesService {
       || (row.note.status !== 'published' && row.note.status !== 'archived')) {
       throwInvalidResponse();
     }
-    return parseOutput(DouyinMaterialNoteOwnedDetailResponseSchema, mapOwnedDetail(row));
+    return parseOutput(
+      DouyinMaterialNoteOwnedDetailResponseSchema,
+      await this.mapOwnedDetail(context.tenantId, row),
+    );
   }
 
   async remove(user: JwtPayload | undefined, claimId: string) {
@@ -141,6 +152,71 @@ export class DouyinMiniappMaterialNotesService {
     const context = await this.contextResolver.resolve(user);
     const result = await this.repository.clear(repositoryIdentity(context));
     return parseOutput(DouyinMaterialNoteClearResponseSchema, result);
+  }
+
+  private async mapClaimResponse(
+    tenantId: string,
+    result: Awaited<ReturnType<RepositoryPort['claim']>>,
+  ): Promise<DouyinMaterialNoteClaimResponse> {
+    return {
+      ...result,
+      material: {
+        ...result.material,
+        content_blocks: await this.toPublicBlocks(tenantId, result.material.content_blocks),
+      },
+    };
+  }
+
+  private async mapOwnedDetail(
+    tenantId: string,
+    row: OwnedDetailRow,
+  ): Promise<DouyinMaterialNoteOwnedDetail> {
+    return {
+      ...mapOwnedSummary(row),
+      content_blocks: await this.toPublicBlocks(tenantId, row.claimed_version.content_blocks),
+    };
+  }
+
+  private async toPublicBlocks(
+    tenantId: string,
+    blocks: readonly DouyinMaterialNoteBlock[],
+  ): Promise<DouyinMaterialNotePublicBlock[]> {
+    const fileIds = uniqueIds(blocks.flatMap((block) =>
+      block.type === 'image' ? [block.fileId] : []));
+    if (fileIds.length === 0) return [...blocks] as DouyinMaterialNotePublicBlock[];
+    const assets = await this.repository.findMaterialImageAssets({ tenantId, fileIds });
+    const assetMap = new Map<string, ImageAssetRow>();
+    for (const asset of assets) assetMap.set(asset.id, asset);
+    const missing = fileIds.filter((fileId) => !this.toTrustedAsset(assetMap.get(fileId), tenantId));
+    if (missing.length > 0) throwMaterialAssetUnavailable(missing);
+    return blocks.map((block) => {
+      if (block.type !== 'image') return block;
+      const asset = this.toTrustedAsset(assetMap.get(block.fileId), tenantId);
+      if (!asset) throwMaterialAssetUnavailable([block.fileId]);
+      return {
+        type: 'image',
+        asset: { ...asset, alt: block.alt },
+        ...(block.caption ? { caption: block.caption } : {}),
+      };
+    });
+  }
+
+  private toTrustedAsset(
+    asset: ImageAssetRow | undefined,
+    tenantId: string,
+  ) {
+    if (!asset || asset.tenant_id !== tenantId || asset.status !== 'active'
+      || asset.visibility !== 'public' || !asset.mime_type.toLowerCase().startsWith('image/')) {
+      return null;
+    }
+    const result = DouyinMaterialNotePublicAssetSchema.safeParse({
+      fileId: asset.id,
+      src: asset.public_url,
+      alt: '资料图片',
+      width: asset.width,
+      height: asset.height,
+    });
+    return result.success ? result.data : null;
   }
 }
 
@@ -171,13 +247,6 @@ function mapOwnedSummary(row: OwnedRow): DouyinMaterialNoteOwnedSummary {
     category: row.claimed_version.category,
     applicable_to: row.claimed_version.applicable_to,
     claimed_at: row.claimed_at,
-  };
-}
-
-function mapOwnedDetail(row: OwnedDetailRow): DouyinMaterialNoteOwnedDetail {
-  return {
-    ...mapOwnedSummary(row),
-    content_blocks: row.claimed_version.content_blocks,
   };
 }
 
@@ -237,6 +306,19 @@ function throwInvalidResponse(): never {
     '抖音资料响应格式无效',
     'MATERIAL_NOTE_RESPONSE_INVALID',
   );
+}
+
+function throwMaterialAssetUnavailable(fileIds: readonly string[]): never {
+  throw Errors.business(
+    500,
+    '抖音资料图片素材不可用',
+    'MATERIAL_NOTE_RESPONSE_INVALID',
+    { fileIds },
+  );
+}
+
+function uniqueIds(ids: readonly string[]): string[] {
+  return Array.from(new Set(ids));
 }
 
 let defaultService: DouyinMiniappMaterialNotesService | undefined;

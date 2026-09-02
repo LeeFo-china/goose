@@ -70,6 +70,17 @@ const contentBlocks: DouyinMaterialNoteBlock[] = [
   { type: "quote", text: "隐蔽工程要留存影像。", attribution: "项目经理" },
   { type: "callout", tone: "warning", title: "注意", text: "不要跳过现场交底。" },
 ];
+const publicImageBlock = {
+  type: "image" as const,
+  asset: {
+    fileId: NOTE_ID,
+    src: "https://assets.example.com/material-note/wall.webp",
+    alt: "客厅墙面基层处理示意图",
+    width: 1200,
+    height: 800,
+  },
+  caption: "施工前确认墙面平整度",
+} satisfies DouyinMaterialNoteBlock;
 
 const claimedMaterial = {
   id: NOTE_ID,
@@ -271,7 +282,10 @@ describe("Douyin material API client", () => {
       claim_id: CLAIM_ID,
       already_claimed: false,
       claimed_at: CLAIMED_AT,
-      material: claimedMaterial,
+      material: {
+        ...claimedMaterial,
+        content_blocks: [...contentBlocks, publicImageBlock],
+      },
     };
     await expect(claimMaterial(clientWith((input) => {
       calls.push(input);

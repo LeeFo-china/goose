@@ -12,6 +12,9 @@ import type {
 import { ApiClient, ApiRequestError } from "./request";
 import { normalizeMaterialUuid } from "./material-uuid";
 
+type DouyinMaterialNoteImageAsset =
+  Extract<DouyinMaterialNoteBlock, { type: "image" }>["asset"];
+
 // Kept equivalent to z.iso.datetime({ offset: true }) without adding a mini runtime dependency.
 const DATE_TIME_PATTERN = /^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/;
 const MAX_CONTENT_BYTES = 512 * 1024;
@@ -388,9 +391,39 @@ function parseBlock(value: unknown): DouyinMaterialNoteBlock | null {
       const text = boundedText(value.text, 1, 20_000);
       return title && text ? { type: "callout", tone: value.tone, title, text } : null;
     }
+    case "image": {
+      const keys = value.caption === undefined
+        ? ["type", "asset"]
+        : ["type", "asset", "caption"];
+      if (!isStrictRecord(value, keys)) return null;
+      const asset = parseImageAsset(value.asset);
+      const caption = value.caption === undefined
+        ? undefined
+        : boundedText(value.caption, 1, 1_000);
+      return asset && (value.caption === undefined || caption)
+        ? { type: "image", asset, ...(caption ? { caption } : {}) }
+        : null;
+    }
     default:
       return null;
   }
+}
+
+function parseImageAsset(value: unknown): DouyinMaterialNoteImageAsset | null {
+  if (!isStrictRecord(value, ["fileId", "src", "alt", "width", "height"])) {
+    return null;
+  }
+  const fileId = parseUuid(value.fileId);
+  const src = typeof value.src === "string" && /^https:\/\/[^\s]+$/i.test(value.src.trim())
+    ? value.src.trim()
+    : null;
+  const alt = boundedText(value.alt, 1, 300);
+  if (!fileId || !src || !alt
+    || !isIntegerInRange(value.width, 1, 16_384)
+    || !isIntegerInRange(value.height, 1, 16_384)) {
+    return null;
+  }
+  return { fileId, src, alt, width: value.width, height: value.height };
 }
 
 function validateId(id: string): string {

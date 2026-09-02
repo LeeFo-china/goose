@@ -1,7 +1,6 @@
-import {
-  DouyinMaterialNoteClaimResponseSchema,
-  type DouyinMaterialNoteStatus,
-  type DouyinMaterialNoteVersionDraft,
+import type {
+  DouyinMaterialNoteStatus,
+  DouyinMaterialNoteVersionDraft,
 } from '@gooes/domain';
 import { z } from 'zod';
 
@@ -14,6 +13,8 @@ import {
   DouyinMaterialNoteRepositoryPublicRowSchema,
   DouyinMaterialNoteClearResponseSchema,
   DouyinMaterialNoteErasureResultSchema,
+  DouyinMaterialNoteRepositoryClaimResponseSchema,
+  DouyinMaterialNoteRepositoryImageAssetRowSchema,
   DouyinMaterialNoteRemoveResponseSchema,
 } from '@/schema/douyin-material-notes';
 import {
@@ -284,7 +285,26 @@ export class DouyinMaterialNotesRepository {
   claim(input: PublicIdentityInput & { readonly noteId: string }) {
     return this.rpc('claim_douyin_material_note', publicRpcArgs(input, {
       p_note_id: input.noteId,
-    }), DouyinMaterialNoteClaimResponseSchema, '领取抖音资料失败');
+    }), DouyinMaterialNoteRepositoryClaimResponseSchema, '领取抖音资料失败');
+  }
+
+  async findMaterialImageAssets(input: {
+    readonly tenantId: string;
+    readonly fileIds: readonly string[];
+  }) {
+    if (input.fileIds.length === 0) return [];
+    return execute('查询抖音资料图片素材失败', async () => {
+      const result = await this.client.from('platform_file_objects')
+        .select('id,tenant_id,public_url,width,height,mime_type,status,visibility')
+        .eq('tenant_id', input.tenantId)
+        .in('id', input.fileIds)
+        .eq('status', 'active')
+        .eq('visibility', 'public')
+        .is('deleted_at', null);
+      assertSuccess(result, '查询抖音资料图片素材失败');
+      if (!Array.isArray(result.data)) throw invalidResponse();
+      return parse(z.array(DouyinMaterialNoteRepositoryImageAssetRowSchema).max(100), result.data);
+    });
   }
 
   remove(input: PublicIdentityInput & { readonly claimId: string }) {
