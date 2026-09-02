@@ -10,6 +10,31 @@
 
 ---
 
+## Final Review Hardening Status (2026-09-02)
+
+Implementation commit: `0fd2e4e102b9b00aa28f1ba76b7c72616ddb59c6`.
+
+- [x] Repository/service/API accept metadata-only no-op responses with a legal future gap and
+  parse first execution plus idempotent replay.
+- [x] Forward migration `20260902110000` rejects every current/future overlap before the first
+  mutation; original applied migration `20260901130000` remains unchanged.
+- [x] Admin distinguishes definitive version conflicts from transport-uncertain failures,
+  preserves visible input, refreshes permission-gated hidden versions, and allocates a new key.
+- [x] E2E mock matches production retirement and price-only SKU version semantics; the first
+  conflict save returns 409 and the second succeeds with refreshed versions and a new key.
+- [x] DEV smoke forces two reserved connections through a barrier with bounded timeouts and
+  verifies one success, one conflict, no deadlock, release, and zero residuals.
+- [x] DEV smoke verifies successful multi-item copy before a separate future conflict and checks
+  every copied business field and generated row/list identity.
+- [x] Supabase migration/typegen child execution uses bounded async `Bun.spawn`, SIGTERM grace,
+  SIGKILL fallback, sanitized output, and stable exit codes.
+- [x] Final gates: API 145 pass, Admin 80 pass, Playwright 18 pass, API/Admin checks and build,
+  permission/write audits, DEV target/list/dry-run, smoke, EXPLAIN, and cleanup all completed.
+
+Type generation was retried because the SQL function body changed; the Supabase postgres-meta
+container failed with DNS `EAI_AGAIN`. It emitted no partial types or credentials, did not change
+the checked-in type file, and TLS was not weakened. Both RPC signatures are unchanged.
+
 ## Delivery Rules
 
 - Execute every production-code step test-first: write the test, run it, verify the expected RED, then implement the minimum GREEN change.
