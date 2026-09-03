@@ -1,4 +1,4 @@
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Info } from "lucide-react";
 
 import type {
   FinanceCostCategoryRecord,
@@ -12,6 +12,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 import {
@@ -78,8 +83,9 @@ export function RequisitionBudgetSummary({
         <Fact label="申请金额" amount={facts.requisitionAmount} />
         <Fact label="已支出" amount={facts.expenseAmount} />
         <Fact
-          label="其他有效承诺"
+          label="其他采购占用"
           amount={facts.otherCommitmentAmount}
+          description="不含本单，来自同项目同成本分类下仍占用预算的采购申请或采购单。"
         />
         <Fact
           label="本申请承诺"
@@ -97,7 +103,13 @@ export function RequisitionBudgetSummary({
             <TableHead>成本分类</TableHead>
             <TableHead className="text-right">本申请</TableHead>
             <TableHead className="text-right">已支出</TableHead>
-            <TableHead className="text-right">其他承诺</TableHead>
+            <TableHead className="text-right">
+              <LabelWithHelp
+                align="end"
+                label="其他采购占用"
+                description="不含本单，来自同项目同成本分类下仍占用预算的采购申请或采购单。"
+              />
+            </TableHead>
             <TableHead className="text-right">批准后可用</TableHead>
           </TableRow>
         </TableHeader>
@@ -136,15 +148,17 @@ export function RequisitionBudgetSummary({
 function Fact({
   label,
   amount,
+  description,
   danger = false,
 }: {
   label: string;
   amount: string;
+  description?: string;
   danger?: boolean;
 }) {
   return (
     <div>
-      <div className="text-xs text-muted-foreground">{label}</div>
+      <LabelWithHelp label={label} description={description} />
       <div
         className={cn(
           "mt-1 font-mono text-sm font-medium tabular-nums",
@@ -153,6 +167,43 @@ function Fact({
       >
         {formatRequisitionMoney(amount)}
       </div>
+    </div>
+  );
+}
+
+function LabelWithHelp({
+  label,
+  description,
+  align = "start",
+}: {
+  label: string;
+  description?: string;
+  align?: "start" | "end";
+}) {
+  if (!description) {
+    return <div className="text-xs text-muted-foreground">{label}</div>;
+  }
+
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-1 text-xs text-muted-foreground",
+        align === "end" && "justify-end",
+      )}
+    >
+      <span>{label}</span>
+      <Tooltip>
+        <TooltipTrigger
+          type="button"
+          className="inline-flex size-3.5 items-center justify-center rounded-full text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={`${label}说明`}
+        >
+          <Info className="size-3.5" />
+        </TooltipTrigger>
+        <TooltipContent align={align} className="max-w-[300px] leading-5">
+          {description}
+        </TooltipContent>
+      </Tooltip>
     </div>
   );
 }
