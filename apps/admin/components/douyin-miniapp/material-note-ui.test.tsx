@@ -19,6 +19,7 @@ import {
   removePastedImageTags,
 } from "@/components/douyin-miniapp/material-note-rich-editor";
 import {
+  resolveMaterialNoteVersionRowActions,
   resolveSelectedMaterialVersionDetail,
   selectMaterialVersionAfterPageLoad,
 } from
@@ -377,6 +378,64 @@ describe("抖音资料后台工作台 UI 合同", () => {
     expect(actions).toContain("永久撤回资料");
     expect(actions).toContain("撤回后不能恢复");
     expect(actions).toContain("撤回原因不能为空");
+  });
+
+  test("详情页版本动作收口到版本列表操作列且每页最多展示 3 个版本", () => {
+    const detail = read("components/douyin-miniapp/material-note-detail.tsx");
+    const detailPage = read("app/(console)/douyin-miniapp/materials/[id]/page.tsx");
+
+    expect(detail).toContain("MATERIAL_NOTE_VERSION_PAGE_SIZE = 3");
+    expect(detail).toContain("pageSize: MATERIAL_NOTE_VERSION_PAGE_SIZE");
+    expect(detailPage).toContain("MATERIAL_NOTE_VERSION_PAGE_SIZE");
+    expect(detailPage).toContain("pageSize=${MATERIAL_NOTE_VERSION_PAGE_SIZE}");
+    expect(detail).toContain("<TableHead className=\"text-right\">操作</TableHead>");
+    expect(detail).toContain("renderVersionRowActions(version)");
+    expect(detail).toContain("MaterialNoteActionDialog");
+    expect(detail).toContain("versionId={version.id}");
+    expect(detail).toContain("versionNumber={version.version}");
+    expect(detail).toContain("selectedVersion.id === version.id && hasLoadedBody");
+    expect(detail).not.toContain("<MaterialNoteActions");
+  });
+
+  test("版本行操作按资料状态和目标版本收口，避免跨版本误操作", () => {
+    const latestVersionId = "11111111-1111-4111-8111-111111111111";
+    const publishedVersionId = "22222222-2222-4222-8222-222222222222";
+
+    expect(resolveMaterialNoteVersionRowActions({
+      status: "published",
+      versionId: publishedVersionId,
+      publishedVersionId,
+      latestVersionId,
+      canPublish: true,
+    })).toEqual(["archive", "withdraw"]);
+    expect(resolveMaterialNoteVersionRowActions({
+      status: "published",
+      versionId: latestVersionId,
+      publishedVersionId,
+      latestVersionId,
+      canPublish: true,
+    })).toEqual(["publish"]);
+    expect(resolveMaterialNoteVersionRowActions({
+      status: "draft",
+      versionId: latestVersionId,
+      publishedVersionId: null,
+      latestVersionId,
+      canPublish: true,
+    })).toEqual(["publish", "archive"]);
+    expect(resolveMaterialNoteVersionRowActions({
+      status: "withdrawn",
+      versionId: latestVersionId,
+      publishedVersionId,
+      latestVersionId,
+      canPublish: true,
+    })).toEqual([]);
+    expect(resolveMaterialNoteVersionRowActions({
+      status: "published",
+      versionId: publishedVersionId,
+      publishedVersionId,
+      latestVersionId,
+      canPublish: false,
+    })).toEqual([]);
   });
 
   test("后台不渲染领取人身份或领取人导出操作", () => {
