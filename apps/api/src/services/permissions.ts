@@ -62,7 +62,8 @@ class PermissionService {
       throw Errors.badRequest("角色不存在");
     }
 
-    const permissions = await permissionRepository.listRolePermissionRecords(id);
+    const permissions = (await permissionRepository
+      .listRolePermissionRecords(id)).filter(isTenantAssignablePermission);
 
     return {
       ...data,
@@ -87,8 +88,14 @@ class PermissionService {
     return permissionRepository.updateRole(id, input, tenantId);
   }
 
-  async listPermissions(params: PermissionListQueryType) {
-    return permissionRepository.listPermissions(params);
+  async listPermissions(
+    params: PermissionListQueryType,
+    authContext?: AuthContext,
+  ) {
+    return permissionRepository.listPermissions({
+      ...params,
+      includePlatformPermissions: authContext?.isPlatformAdmin === true,
+    });
   }
 
   async getPermissionById(id: string) {
@@ -184,6 +191,9 @@ class PermissionService {
       );
       if (!permission) {
         throw Errors.badRequest("存在无效的权限 ID");
+      }
+      if (!isTenantAssignablePermission(permission)) {
+        throw Errors.badRequest("租户角色不能配置平台运营权限");
       }
     }
 
@@ -295,3 +305,7 @@ class PermissionService {
 }
 
 export const permissionService = new PermissionService();
+
+function isTenantAssignablePermission(permission: { code: string }) {
+  return !permission.code.startsWith("platform.");
+}

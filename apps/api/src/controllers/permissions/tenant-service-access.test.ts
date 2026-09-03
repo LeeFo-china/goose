@@ -25,6 +25,9 @@ mock.module("@/services/access-policy", () => ({
     assertPermission: mock(() => "all"),
   },
 }));
+mock.module("@/services/tenant-service-route-access", () => ({
+  getTenantServiceAuthOptions: mock(() => ({ tenantServiceAccess: "read" })),
+}));
 mock.module("@/services/permissions", () => ({
   permissionService: { listPermissions },
 }));
@@ -50,5 +53,9 @@ describe("PermissionsController tenant service access", () => {
       tenantServiceAccess: "read",
     });
     expect(request.authContext).toBe(authContext);
+    expect(listPermissions).toHaveBeenCalledWith({
+      page: 1,
+      pageSize: 20,
+    }, authContext);
   });
 });

@@ -37,12 +37,15 @@ class PermissionsController extends PlatformBaseController<
   }
 
   override list = async (request: FastifyRequest, reply: FastifyReply) => {
-    await this.getRequiredPermissionReadContext(request);
+    const authContext = await this.getRequiredPermissionReadContext(request);
 
     const result = PermissionListQuerySchema.safeParse(request.query);
     if (!result.success) throw Errors.fromZod(result.error);
 
-    const data = await permissionService.listPermissions(result.data);
+    const data = await permissionService.listPermissions(
+      result.data,
+      authContext,
+    );
     return ResponseHandler.success(data);
   };
 

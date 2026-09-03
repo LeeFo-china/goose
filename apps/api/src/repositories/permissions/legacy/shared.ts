@@ -36,6 +36,10 @@ export type PermissionRecord = {
   updated_at: string;
 };
 
+export type PermissionListQueryWithVisibility = PermissionListQueryType & {
+  includePlatformPermissions?: boolean;
+};
+
 export type RolePermissionRecord = PermissionRecord & {
   access_scope: string;
 };

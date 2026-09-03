@@ -6,7 +6,7 @@ import {
   type EmployeePermissionContextRecord,
   type EmployeePermissionContextRpcRow,
   type EmployeePermissionOverrideInput,
-  type PermissionListQueryType,
+  type PermissionListQueryWithVisibility,
   type PermissionRecord,
   type RoleListQueryType,
   type RolePermissionAssignInput,
@@ -17,8 +17,18 @@ import {
   type UpdateRoleInput,
 } from "./shared";
 
-export async function listPermissions(this: any, params: PermissionListQueryType) {
-  const { page, pageSize, status, module, keyword } = params;
+export async function listPermissions(
+  this: any,
+  params: PermissionListQueryWithVisibility,
+) {
+  const {
+    page,
+    pageSize,
+    status,
+    module,
+    keyword,
+    includePlatformPermissions = true,
+  } = params;
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 
@@ -34,6 +44,10 @@ export async function listPermissions(this: any, params: PermissionListQueryType
 
   if (module) {
     query = query.eq("module", module);
+  }
+
+  if (!includePlatformPermissions) {
+    query = query.not("code", "ilike", "platform.%");
   }
 
   if (keyword) {
