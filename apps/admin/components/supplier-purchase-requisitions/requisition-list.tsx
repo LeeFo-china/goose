@@ -105,8 +105,8 @@ export function RequisitionList({
           <TableHead>申请号</TableHead>
           <TableHead>项目</TableHead>
           <TableHead>供应商</TableHead>
-          <TableHead>状态</TableHead>
-          <TableHead>预算状态</TableHead>
+          <TableHead className="whitespace-nowrap">状态</TableHead>
+          <TableHead className="whitespace-nowrap">预算状态</TableHead>
           <TableHead className="text-right">申请金额</TableHead>
           <TableHead>申请人</TableHead>
           <TableHead>提交时间</TableHead>
@@ -138,13 +138,17 @@ export function RequisitionList({
                 {supplierNames[record.tenant_supplier_id] ??
                   `供应商 ${shortBusinessId(record.tenant_supplier_id)}`}
               </TableCell>
-              <TableCell>
-                <Badge variant={requisitionStatusMeta[record.status].variant}>
+              <TableCell className="whitespace-nowrap">
+                <Badge
+                  className="whitespace-nowrap"
+                  variant={requisitionStatusMeta[record.status].variant}
+                >
                   {requisitionStatusMeta[record.status].label}
                 </Badge>
               </TableCell>
-              <TableCell>
+              <TableCell className="whitespace-nowrap">
                 <Badge
+                  className="whitespace-nowrap"
                   variant={requisitionBudgetStatusMeta[record.budget_status]
                     .variant}
                 >

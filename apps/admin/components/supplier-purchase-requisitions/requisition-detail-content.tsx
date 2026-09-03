@@ -47,7 +47,10 @@ export function RequisitionFacts({
         <Fact
           label="状态"
           value={
-            <Badge variant={requisitionStatusMeta[requisition.status].variant}>
+            <Badge
+              className="whitespace-nowrap"
+              variant={requisitionStatusMeta[requisition.status].variant}
+            >
               {requisitionStatusMeta[requisition.status].label}
             </Badge>
           }
@@ -56,6 +59,7 @@ export function RequisitionFacts({
           label="预算状态"
           value={
             <Badge
+              className="whitespace-nowrap"
               variant={requisitionBudgetStatusMeta[requisition.budget_status]
                 .variant}
             >

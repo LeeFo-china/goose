@@ -429,11 +429,12 @@ describe("采购申请页面边界", () => {
       "申请金额",
       "已支出",
       "其他采购占用",
-      "本申请承诺",
+      "本次采购占用",
       "批准后可用余额",
     ]) {
       expect(summary).toContain(label);
     }
+    expect(summary).not.toContain("本申请承诺");
     expect(summary).toContain("不含本单");
     expect(summary).toContain("提交后生成预算快照");
     expect(summary).toContain("text-destructive");
@@ -443,6 +444,17 @@ describe("采购申请页面边界", () => {
     );
     expect(summary).not.toContain("Math.abs");
     expect(summary).not.toContain("Number(");
+  });
+
+  test("状态和预算状态标签在列表与详情中保持单行", () => {
+    const list = readSource("./requisition-list.tsx");
+    const detail = readSource("./requisition-detail-content.tsx");
+
+    expect(list).toContain('<TableHead className="whitespace-nowrap">状态');
+    expect(list).toContain('<TableHead className="whitespace-nowrap">预算状态');
+    expect(list).toContain('<TableCell className="whitespace-nowrap">');
+    expect(list).toContain('className="whitespace-nowrap"');
+    expect(detail).toContain('className="whitespace-nowrap"');
   });
 
   test("导航位于采购单前并受申请查看权限控制", () => {
