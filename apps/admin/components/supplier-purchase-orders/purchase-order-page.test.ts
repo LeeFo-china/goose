@@ -92,6 +92,14 @@ describe("供应商采购单页面边界", () => {
     expect(list).not.toContain("或新建一张项目采购单");
   });
 
+  test("采购单列表卡片不重复展示列表标题和总数说明", () => {
+    const workspace = readSource("./purchase-order-workspace.tsx");
+
+    expect(workspace).not.toContain("<CardTitle");
+    expect(workspace).not.toContain("采购单列表");
+    expect(workspace).not.toContain("共 {orders.pagination.total} 张采购单");
+  });
+
   test("采购单编辑器只接受现有草稿且不恢复直接创建路径", () => {
     const editor = readSource("./purchase-order-editor.tsx");
     const types = readSource("./purchase-order-types.ts");

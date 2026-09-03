@@ -45,7 +45,6 @@ export function RequisitionFilters({
   onBudgetStatusChange,
   onProjectChange,
   onSupplierChange,
-  onPendingApproval,
   onLoadMoreProjects,
   onLoadMoreSuppliers,
 }: {
@@ -68,7 +67,6 @@ export function RequisitionFilters({
   ) => void;
   onProjectChange: (value: string) => void;
   onSupplierChange: (value: string) => void;
-  onPendingApproval: () => void;
   onLoadMoreProjects: () => void;
   onLoadMoreSuppliers: () => void;
 }) {
@@ -126,15 +124,6 @@ export function RequisitionFilters({
         </Button>
       </div>
       <div>
-        <Button
-          type="button"
-          size="sm"
-          variant={status === "pending_approval" ? "secondary" : "outline"}
-          disabled={loading}
-          onClick={onPendingApproval}
-        >
-          待审批
-        </Button>
         {canLoadMoreProjects ? (
           <Button type="button" size="sm" variant="ghost"
             disabled={loadingMore} onClick={onLoadMoreProjects}>

@@ -267,6 +267,15 @@ describe("抖音资料后台工作台 UI 合同", () => {
     expect(detailPage).toContain("assertMaterialNoteRequestedPage");
   });
 
+  test("新建资料页在后台固定视口内提供纵向滚动容器", () => {
+    const newPage = read("app/(console)/douyin-miniapp/materials/new/page.tsx");
+
+    expect(newPage).toContain("h-[calc(100vh-6.5625rem)]");
+    expect(newPage).toContain("min-h-0 flex-col overflow-y-auto");
+    expect(newPage).toContain("[scrollbar-gutter:stable]");
+    expect(newPage).toContain("<MaterialNoteEditor canManage />");
+  });
+
   test("列表提供 URL 筛选分页、聚合列和稳定状态", () => {
     const table = read("components/douyin-miniapp/material-note-table.tsx");
     const loading = read("app/(console)/douyin-miniapp/materials/loading.tsx");

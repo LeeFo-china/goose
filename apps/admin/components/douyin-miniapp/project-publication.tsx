@@ -18,8 +18,10 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
+  CardDescription,
   CardFooter,
   CardHeader,
+  CardTitle,
 } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -219,7 +221,13 @@ export function ProjectPublication({
       </header>
 
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
-        <CardHeader className="shrink-0 flex-row items-center justify-end gap-3 border-b bg-muted/20 p-3">
+        <CardHeader className="shrink-0 gap-3 border-b bg-muted/20 p-3 md:flex-row md:items-center md:justify-between">
+          <div className="min-w-0">
+            <CardTitle className="text-base">项目实景内容</CardTitle>
+            <CardDescription>
+              共 {data.pagination.total} 条
+            </CardDescription>
+          </div>
           <Field className="w-36">
             <FieldLabel className="sr-only" htmlFor="project-publication-status-filter">
               筛选发布状态

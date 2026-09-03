@@ -12,14 +12,11 @@ import type {
   ProjectOption,
   PurchaseOrderSupplierOption,
 } from "@/components/supplier-purchase-orders/purchase-order-types";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -284,15 +281,6 @@ export function RequisitionWorkspace({
       ) : null}
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
         <CardHeader className="shrink-0 border-b bg-muted/20 p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <CardTitle className="text-base">申请列表</CardTitle>
-              <CardDescription>
-                所有筛选均由服务端分页执行，每页 20 条。
-              </CardDescription>
-            </div>
-            <Badge variant="outline">共 {records.pagination.total} 条</Badge>
-          </div>
           <RequisitionFilters
             keyword={keyword}
             status={urlState.status}
@@ -313,8 +301,6 @@ export function RequisitionWorkspace({
             onProjectChange={(projectId) => navigate({ projectId })}
             onSupplierChange={(tenantSupplierId) =>
               navigate({ tenantSupplierId })}
-            onPendingApproval={() =>
-              navigate({ status: "pending_approval" })}
             onLoadMoreProjects={() => void loadMoreProjects()}
             onLoadMoreSuppliers={() => void loadMoreSuppliers()}
           />

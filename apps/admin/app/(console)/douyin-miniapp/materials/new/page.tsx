@@ -16,5 +16,9 @@ export default async function NewTenantMaterialNotePage() {
   if (session.tenant === null || !permissions.canRead || !permissions.canManage) {
     return <StatusAlert>新建资料需要 douyin_material_note.manage 权限</StatusAlert>;
   }
-  return <MaterialNoteEditor canManage />;
+  return (
+    <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col overflow-y-auto pb-6 pr-1 [scrollbar-gutter:stable]">
+      <MaterialNoteEditor canManage />
+    </div>
+  );
 }

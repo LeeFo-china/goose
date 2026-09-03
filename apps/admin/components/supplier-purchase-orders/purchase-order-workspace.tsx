@@ -11,9 +11,7 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
@@ -314,8 +312,6 @@ export function PurchaseOrderWorkspace({
       {error ? <StatusAlert>{error}</StatusAlert> : null}
       <Card className="overflow-hidden shadow-none">
         <CardHeader className="bg-muted/20 p-4">
-          <CardTitle className="text-base">采购单列表</CardTitle>
-          <CardDescription>共 {orders.pagination.total} 张采购单</CardDescription>
           <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
             <Input
               aria-label="搜索采购单"

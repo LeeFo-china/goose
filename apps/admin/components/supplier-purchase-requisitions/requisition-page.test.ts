@@ -338,7 +338,7 @@ describe("采购申请页面边界", () => {
     expect(listState).toContain("loadRequisitions(");
     expect(listState).toContain("budget_status");
     expect(listState).toContain("tenant_supplier_id");
-    expect(workspace).toContain("pending_approval");
+    expect(filters).toContain("pending_approval");
     expect(workspace).toContain("loadMoreProjects");
     expect(workspace).toContain("loadMoreSuppliers");
     expect(listState).toContain("listRequestVersion");
@@ -348,6 +348,9 @@ describe("采购申请页面边界", () => {
     expect(filters).toContain("加载更多项目筛选项");
     expect(filters).toContain("加载更多供应商筛选项");
     expect(filters).not.toContain("待我审批");
+    for (const text of ["<CardTitle", "申请列表", "所有筛选均由服务端分页执行，每页 20 条。", "共 {records.pagination.total} 条"]) expect(workspace).not.toContain(text);
+    expect(filters).not.toContain("onPendingApproval");
+    expect(filters).not.toContain("待审批\n        </Button>");
     expect(api).toContain("/supplier-purchase-requisition-project-options");
     expect(api).toContain("/supplier-purchase-requisition-supplier-options");
     expect(list).toContain("shortBusinessId");
