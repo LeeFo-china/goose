@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import {
   AiModelCapabilityPayloadSchema,
   AiModelPayloadSchema,
+  AiProviderPayloadSchema,
+  UpdateAiProviderPayloadSchema,
 } from "./ai-config";
 
 describe("AI config schemas", () => {
@@ -30,5 +32,28 @@ describe("AI config schemas", () => {
       },
       probe_status: "eligible",
     }).success).toBe(true);
+  });
+
+  test("keeps AI provider code as a system-owned field", () => {
+    expect(AiProviderPayloadSchema.safeParse({
+      name: "OpenRouter",
+      provider_type: "openrouter",
+      endpoint_url: "https://openrouter.ai/api/v1",
+      api_key_setting_key: "OPENROUTER_API_KEY",
+      status: "active",
+      sort_order: 10,
+    }).success).toBe(true);
+
+    expect(AiProviderPayloadSchema.safeParse({
+      code: "manual-openrouter",
+      name: "OpenRouter",
+      provider_type: "openrouter",
+    }).success).toBe(false);
+
+    expect(UpdateAiProviderPayloadSchema.safeParse({
+      expected_version: 1,
+      code: "manual-openrouter",
+      name: "OpenRouter",
+    }).success).toBe(false);
   });
 });

@@ -137,7 +137,6 @@ export function AiModelRoutingPanel({
 
   async function submitProvider() {
     const payload = {
-      code: providerForm.code,
       name: providerForm.name,
       provider_type: providerForm.provider_type,
       endpoint_url: providerForm.endpoint_url || null,

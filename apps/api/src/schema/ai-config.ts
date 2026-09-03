@@ -43,8 +43,7 @@ export const AiConfigIdParamsSchema = z.object({
   id: z.uuid("无效的配置 ID"),
 });
 
-export const AiProviderPayloadSchema = z.object({
-  code: z.string().trim().min(1, "供应商编码不能为空").max(80, "供应商编码过长"),
+export const AiProviderPayloadSchema = z.strictObject({
   name: z.string().trim().min(1, "供应商名称不能为空").max(120, "供应商名称过长"),
   provider_type: z.enum(["openai_compatible", "openrouter"], {
     message: "供应商类型无效",

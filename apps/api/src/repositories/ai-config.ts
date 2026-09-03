@@ -55,6 +55,9 @@ type AiConfigClient = {
   from: (table: string) => any;
 };
 
+const PROVIDER_CODE_MAX_LENGTH = 80;
+const PROVIDER_CODE_LOOKUP_LIMIT = 1000;
+
 function isNoRowsError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const envelope = error as { code?: unknown; details?: unknown; message?: unknown };
@@ -65,6 +68,31 @@ function isNoRowsError(error: unknown): boolean {
 
 function staleVersionError() {
   return Errors.business(409, "配置版本已变化，请重新加载后再保存", "AI_CONFIG_VERSION_STALE");
+}
+
+function normalizeProviderCodeSeed(value: string): string {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function truncateProviderCodeBase(base: string, suffix = ""): string {
+  return base.slice(0, PROVIDER_CODE_MAX_LENGTH - suffix.length);
+}
+
+function providerCodeCandidate(base: string, index: number): string {
+  if (index === 1) return truncateProviderCodeBase(base);
+  const suffix = `_${index}`;
+  return `${truncateProviderCodeBase(base, suffix)}${suffix}`;
+}
+
+function providerCodeBase(input: AiProviderPayload): string {
+  const nameSeed = normalizeProviderCodeSeed(input.name);
+  return truncateProviderCodeBase(nameSeed || input.provider_type || "ai_provider");
 }
 
 export class AiConfigRepository {
@@ -129,9 +157,35 @@ export class AiConfigRepository {
     return (data || []) as AiSceneRouteRecord[];
   }
 
-  async createProvider(input: AiProviderPayload) {
+  private async nextProviderCode(input: AiProviderPayload): Promise<string> {
+    const base = providerCodeBase(input);
     const { data, error } = await this.from("ai_providers")
-      .insert(input)
+      .select("code")
+      .ilike("code", `${base}%`)
+      .limit(PROVIDER_CODE_LOOKUP_LIMIT);
+
+    if (error) {
+      throw Errors.dbError("生成 AI 供应商编码失败", error);
+    }
+
+    const existingCodes = new Set(
+      ((data || []) as Array<{ code?: unknown }>)
+        .map((item) => item.code)
+        .filter((code): code is string => typeof code === "string"),
+    );
+
+    for (let index = 1; index <= PROVIDER_CODE_LOOKUP_LIMIT; index += 1) {
+      const candidate = providerCodeCandidate(base, index);
+      if (!existingCodes.has(candidate)) return candidate;
+    }
+
+    throw Errors.business(409, "供应商编码已用尽，请调整供应商名称", "AI_PROVIDER_CODE_EXHAUSTED");
+  }
+
+  async createProvider(input: AiProviderPayload) {
+    const code = await this.nextProviderCode(input);
+    const { data, error } = await this.from("ai_providers")
+      .insert({ ...input, code })
       .select("*")
       .single();
 
