@@ -1,9 +1,11 @@
+import { EMPTY_TENANT_OWNER_CUSTOMER_FOLLOW_UP } from "@/services/tenant-owner-daily-dashboard-types";
 import {
   tenantOwnerDailyDashboardRepository,
 } from "@/repositories/tenant-owner-daily-dashboard";
 import type {
   TenantOwnerActionItem,
   TenantOwnerConstructionActivity,
+  TenantOwnerCustomerFollowUpSnapshot,
   TenantOwnerFinanceSnapshot,
   TenantOwnerGanttProjectRow,
   TenantOwnerGanttRiskSummary,
@@ -74,6 +76,12 @@ type TenantOwnerDailyDashboardRepositoryPort = {
     endAt: string;
     limit: number;
   }): Promise<TenantOwnerConstructionActivity>;
+  getCustomerFollowUp(input: {
+    tenantId: string;
+    startAt: string;
+    endAt: string;
+    limit: number;
+  }): Promise<TenantOwnerCustomerFollowUpSnapshot>;
   listGanttProjects(input: {
     tenantId: string;
     page: number;
@@ -101,6 +109,7 @@ export type TenantOwnerDashboardPartialError = {
     | "projects"
     | "risk_projects"
     | "construction_activity"
+    | "customer_follow_up"
     | "workflow_progress";
   code: string;
   message: string;
@@ -142,6 +151,7 @@ export class TenantOwnerDailyDashboardService {
       projects,
       riskProjects,
       constructionActivity,
+      customerFollowUp,
     ] = await Promise.all([
       this.loadSection(
         "owner_actions",
@@ -204,6 +214,18 @@ export class TenantOwnerDailyDashboardService {
         }),
         emptyConstructionActivity(),
       ),
+      this.loadSection(
+        "customer_follow_up",
+        "客户跟进数据暂不可用",
+        partialErrors,
+        () => this.repository.getCustomerFollowUp({
+          tenantId,
+          startAt: businessDay.startAt,
+          endAt: businessDay.endAt,
+          limit: TOP_LIST_LIMIT,
+        }),
+        EMPTY_TENANT_OWNER_CUSTOMER_FOLLOW_UP,
+      ),
     ]);
 
     return {
@@ -224,6 +246,10 @@ export class TenantOwnerDailyDashboardService {
         ...constructionActivity,
         latest_logs: constructionActivity.latest_logs.slice(0, TOP_LIST_LIMIT),
         missing_logs: constructionActivity.missing_logs.slice(0, TOP_LIST_LIMIT),
+      },
+      customer_follow_up: {
+        ...customerFollowUp,
+        items: customerFollowUp.items.slice(0, TOP_LIST_LIMIT),
       },
       partial_errors: partialErrors,
     };

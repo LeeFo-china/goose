@@ -126,6 +126,18 @@ function createRepository(overrides: Record<string, unknown> = {}) {
         assignee_employee_name: null,
       })),
     })),
+    getCustomerFollowUp: mock(async () => ({
+      total: 9,
+      due_today_count: 4,
+      overdue_count: 3,
+      completed_today_count: 2,
+      new_customer_count: 1,
+      items: Array.from({ length: 6 }, (_, index) => ({
+        customer_id: `customer-${index + 1}`, customer_name: `客户 ${index + 1}`,
+        owner_employee_name: null, status_label: null, last_follow_up_at: null,
+        next_follow_up_at: null, reason: null, target: null,
+      })),
+    })),
     listGanttProjects: mock(async () => ({
       list: [{
         id: "project-1",
@@ -244,9 +256,10 @@ describe("TenantOwnerDailyDashboardService", () => {
     expect(result.risk_projects.total).toBe(7);
     expect(result.risk_projects.items).toHaveLength(5);
     expect(result.construction_activity.missing_logs).toHaveLength(5);
+    expect(result.customer_follow_up.total).toBe(9);
+    expect(result.customer_follow_up.items).toHaveLength(5);
     expect(result.partial_errors).toEqual([]);
   });
-
   test("rejects missing dashboard permission before repository calls", async () => {
     const { service, repository } = await createService();
 
