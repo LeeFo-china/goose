@@ -88,7 +88,7 @@ export function RequisitionBudgetSummary({
           description="不含本单，来自同项目同成本分类下仍占用预算的采购申请或采购单。"
         />
         <Fact
-          label="本申请承诺"
+          label="本次采购占用"
           amount={facts.currentCommitmentAmount}
         />
         <Fact
