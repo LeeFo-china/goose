@@ -43,7 +43,7 @@ class PermissionQuery {
 }
 
 describe("permission catalog visibility", () => {
-  test("tenant-facing permission catalog excludes platform permissions at query boundary", async () => {
+  test("tenant-facing permission catalog excludes platform-only permissions at query boundary", async () => {
     const query = new PermissionQuery();
 
     await listPermissions.call({
@@ -53,6 +53,7 @@ describe("permission catalog visibility", () => {
       pageSize: 20,
       status: "active",
       includePlatformPermissions: false,
+      includeTenantRestrictedPermissions: false,
     });
 
     expect(query.calls).toContainEqual([
@@ -61,9 +62,21 @@ describe("permission catalog visibility", () => {
       "ilike",
       "platform.%",
     ]);
+    expect(query.calls).toContainEqual([
+      "not",
+      "code",
+      "ilike",
+      "system.%",
+    ]);
+    expect(query.calls).toContainEqual([
+      "not",
+      "code",
+      "ilike",
+      "service_provider.%",
+    ]);
   });
 
-  test("platform-facing permission catalog keeps platform permissions", async () => {
+  test("platform-facing permission catalog keeps platform-only permissions", async () => {
     const query = new PermissionQuery();
 
     await listPermissions.call({
@@ -73,6 +86,7 @@ describe("permission catalog visibility", () => {
       pageSize: 20,
       status: "active",
       includePlatformPermissions: true,
+      includeTenantRestrictedPermissions: true,
     });
 
     expect(query.calls.some(([name]) => name === "not")).toBe(false);

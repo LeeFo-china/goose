@@ -95,6 +95,7 @@ class PermissionService {
     return permissionRepository.listPermissions({
       ...params,
       includePlatformPermissions: authContext?.isPlatformAdmin === true,
+      includeTenantRestrictedPermissions: authContext?.isPlatformAdmin === true,
     });
   }
 
@@ -307,5 +308,9 @@ class PermissionService {
 export const permissionService = new PermissionService();
 
 function isTenantAssignablePermission(permission: { code: string }) {
-  return !permission.code.startsWith("platform.");
+  return ![
+    "platform.",
+    "system.",
+    "service_provider.",
+  ].some((prefix) => permission.code.startsWith(prefix));
 }

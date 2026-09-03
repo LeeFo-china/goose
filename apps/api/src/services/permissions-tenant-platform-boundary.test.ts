@@ -9,6 +9,8 @@ const TENANT_ID = "10000000-0000-4000-8000-000000000001";
 const ROLE_ID = "10000000-0000-4000-8000-000000000002";
 const TENANT_PERMISSION_ID = "10000000-0000-4000-8000-000000000003";
 const PLATFORM_PERMISSION_ID = "10000000-0000-4000-8000-000000000004";
+const SYSTEM_PERMISSION_ID = "10000000-0000-4000-8000-000000000005";
+const SERVICE_PROVIDER_PERMISSION_ID = "10000000-0000-4000-8000-000000000006";
 
 const tenantPermission = permissionRecord({
   id: TENANT_PERMISSION_ID,
@@ -19,6 +21,16 @@ const platformPermission = permissionRecord({
   id: PLATFORM_PERMISSION_ID,
   code: "platform.operator.read",
   module: "platform_access",
+});
+const systemPermission = permissionRecord({
+  id: SYSTEM_PERMISSION_ID,
+  code: "system.ops.run",
+  module: "system",
+});
+const serviceProviderPermission = permissionRecord({
+  id: SERVICE_PROVIDER_PERMISSION_ID,
+  code: "service_provider.profile.manage",
+  module: "service_provider",
 });
 
 const repository = {
@@ -39,10 +51,16 @@ const repository = {
   listRolePermissionRecords: mock(async () => [
     { ...tenantPermission, access_scope: "all" },
     { ...platformPermission, access_scope: "all" },
+    { ...systemPermission, access_scope: "all" },
+    { ...serviceProviderPermission, access_scope: "all" },
   ]),
-  findPermissionById: mock(async (id: string) =>
-    id === PLATFORM_PERMISSION_ID ? platformPermission : tenantPermission
-  ),
+  findPermissionById: mock(async (id: string) => {
+    if (id === PLATFORM_PERMISSION_ID) return platformPermission;
+    if (id === SYSTEM_PERMISSION_ID) return systemPermission;
+    if (id === SERVICE_PROVIDER_PERMISSION_ID) return serviceProviderPermission;
+
+    return tenantPermission;
+  }),
   replaceRolePermissions: mock(async () => []),
   listEmployeesByRoleId: mock(async () => []),
 };
@@ -73,6 +91,7 @@ describe("tenant role permission platform boundary", () => {
       page: 1,
       pageSize: 20,
       includePlatformPermissions: false,
+      includeTenantRestrictedPermissions: false,
     });
   });
 
@@ -86,10 +105,11 @@ describe("tenant role permission platform boundary", () => {
       page: 1,
       pageSize: 20,
       includePlatformPermissions: true,
+      includeTenantRestrictedPermissions: true,
     });
   });
 
-  test("tenant role detail does not expose previously bound platform permissions", async () => {
+  test("tenant role detail does not expose previously bound platform-only permissions", async () => {
     const { permissionService } = await import("@/services/permissions");
 
     const result = await permissionService.getRoleById(ROLE_ID, tenantAuth());
@@ -100,7 +120,11 @@ describe("tenant role permission platform boundary", () => {
     expect(result.permission_count).toBe(1);
   });
 
-  test("tenant role assignment rejects platform permission ids", async () => {
+  test.each([
+    ["platform permission", PLATFORM_PERMISSION_ID],
+    ["system operations permission", SYSTEM_PERMISSION_ID],
+    ["service provider profile permission", SERVICE_PROVIDER_PERMISSION_ID],
+  ])("tenant role assignment rejects %s", async (_label, permissionId) => {
     const { permissionService } = await import("@/services/permissions");
 
     await expect(permissionService.replaceRolePermissions(
@@ -108,7 +132,7 @@ describe("tenant role permission platform boundary", () => {
       ROLE_ID,
       {
         permissions: [{
-          permission_id: PLATFORM_PERMISSION_ID,
+          permission_id: permissionId,
           access_scope: "all",
         }],
       },

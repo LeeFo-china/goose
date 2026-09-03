@@ -28,6 +28,7 @@ export async function listPermissions(
     module,
     keyword,
     includePlatformPermissions = true,
+    includeTenantRestrictedPermissions = true,
   } = params;
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
@@ -48,6 +49,12 @@ export async function listPermissions(
 
   if (!includePlatformPermissions) {
     query = query.not("code", "ilike", "platform.%");
+  }
+
+  if (!includeTenantRestrictedPermissions) {
+    query = query
+      .not("code", "ilike", "system.%")
+      .not("code", "ilike", "service_provider.%");
   }
 
   if (keyword) {

@@ -38,6 +38,7 @@ export type PermissionRecord = {
 
 export type PermissionListQueryWithVisibility = PermissionListQueryType & {
   includePlatformPermissions?: boolean;
+  includeTenantRestrictedPermissions?: boolean;
 };
 
 export type RolePermissionRecord = PermissionRecord & {
