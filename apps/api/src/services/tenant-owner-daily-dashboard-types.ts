@@ -104,6 +104,15 @@ export type TenantOwnerCustomerFollowUpSnapshot = {
   items: TenantOwnerCustomerFollowUpItem[];
 };
 
+export const EMPTY_TENANT_OWNER_CUSTOMER_FOLLOW_UP = {
+  total: 0,
+  due_today_count: 0,
+  overdue_count: 0,
+  completed_today_count: 0,
+  new_customer_count: 0,
+  items: [],
+} satisfies TenantOwnerCustomerFollowUpSnapshot;
+
 export type TenantOwnerGanttProjectRow = {
   id: string;
   name: string;

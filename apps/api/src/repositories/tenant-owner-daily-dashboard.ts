@@ -315,7 +315,6 @@ class TenantOwnerDailyDashboardRepository {
 
   async getCustomerFollowUp(input: {
     tenantId: string;
-    businessDate: string;
     startAt: string;
     endAt: string;
     limit: number;

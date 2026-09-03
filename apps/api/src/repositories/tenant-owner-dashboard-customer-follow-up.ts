@@ -67,7 +67,6 @@ const CUSTOMER_SELECT = `
 
 export async function getTenantOwnerCustomerFollowUp(input: {
   tenantId: string;
-  businessDate: string;
   startAt: string;
   endAt: string;
   limit: number;

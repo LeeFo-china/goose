@@ -1,3 +1,4 @@
+import { EMPTY_TENANT_OWNER_CUSTOMER_FOLLOW_UP } from "@/services/tenant-owner-daily-dashboard-types";
 import {
   tenantOwnerDailyDashboardRepository,
 } from "@/repositories/tenant-owner-daily-dashboard";
@@ -77,7 +78,6 @@ type TenantOwnerDailyDashboardRepositoryPort = {
   }): Promise<TenantOwnerConstructionActivity>;
   getCustomerFollowUp(input: {
     tenantId: string;
-    businessDate: string;
     startAt: string;
     endAt: string;
     limit: number;
@@ -220,12 +220,11 @@ export class TenantOwnerDailyDashboardService {
         partialErrors,
         () => this.repository.getCustomerFollowUp({
           tenantId,
-          businessDate: businessDay.businessDate,
           startAt: businessDay.startAt,
           endAt: businessDay.endAt,
           limit: TOP_LIST_LIMIT,
         }),
-        emptyCustomerFollowUp(),
+        EMPTY_TENANT_OWNER_CUSTOMER_FOLLOW_UP,
       ),
     ]);
 
@@ -493,17 +492,6 @@ function emptyConstructionActivity(): TenantOwnerConstructionActivity {
     photo_count: 0,
     latest_logs: [],
     missing_logs: [],
-  };
-}
-
-function emptyCustomerFollowUp(): TenantOwnerCustomerFollowUpSnapshot {
-  return {
-    total: 0,
-    due_today_count: 0,
-    overdue_count: 0,
-    completed_today_count: 0,
-    new_customer_count: 0,
-    items: [],
   };
 }
 
