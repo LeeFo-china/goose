@@ -13,6 +13,11 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { ModelFormState, ProviderFormState } from "@/components/platform-ai/ai-model-routing-shared";
+import {
+  normalizeProviderFormForType,
+  OPENROUTER_API_KEY_SETTING_KEY,
+  providerKeyDisplay,
+} from "@/components/platform-ai/ai-model-routing-shared";
 
 export function StatusBadge({ status }: { status: string }) {
   return (
@@ -163,10 +168,10 @@ export function ProviderFormCard({
             <FieldLabel>类型</FieldLabel>
             <Select
               value={form.provider_type}
-              onValueChange={(value) => onChange({
-                ...form,
-                provider_type: value === "openrouter" ? "openrouter" : "openai_compatible",
-              })}
+              onValueChange={(value) => onChange(normalizeProviderFormForType(
+                form,
+                value === "openrouter" ? "openrouter" : "openai_compatible",
+              ))}
             >
               <SelectTrigger>
                 <SelectValue />
@@ -185,8 +190,20 @@ export function ProviderFormCard({
           </Field>
           <Field>
             <FieldLabel htmlFor="ai-provider-key">密钥配置 Key</FieldLabel>
-            <Input id="ai-provider-key" value={form.api_key_setting_key} onChange={(event) => onChange({ ...form, api_key_setting_key: event.target.value })} />
-            <FieldDescription>例如 AI_API_KEY、DEEPSEEK_API_KEY。</FieldDescription>
+            <Input
+              id="ai-provider-key"
+              value={form.provider_type === "openrouter" && !form.api_key_setting_key
+                ? OPENROUTER_API_KEY_SETTING_KEY
+                : form.api_key_setting_key}
+              readOnly={form.provider_type === "openrouter"}
+              aria-readonly={form.provider_type === "openrouter" ? "true" : undefined}
+              onChange={(event) => onChange({ ...form, api_key_setting_key: event.target.value })}
+            />
+            <FieldDescription>
+              {form.provider_type === "openrouter"
+                ? "真实密钥请在系统配置中维护，这里固定引用 OPENROUTER_API_KEY。"
+                : "例如 AI_API_KEY、DEEPSEEK_API_KEY。不要填写真实密钥。"}
+            </FieldDescription>
           </Field>
           <RouteStatusSelect value={form.status} onChange={(status) => onChange({ ...form, status })} />
           <Field>
@@ -383,7 +400,7 @@ export function ProviderTable({
                   <div className="text-xs text-muted-foreground">{item.code}</div>
                 </TableCell>
                 <TableCell className="max-w-[280px] truncate">{item.endpoint_url || "-"}</TableCell>
-                <TableCell>{item.api_key_setting_key || "-"}</TableCell>
+                <TableCell>{providerKeyDisplay(item.api_key_setting_key)}</TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
                     <StatusBadge status={item.status} />

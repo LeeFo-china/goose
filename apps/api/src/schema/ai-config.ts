@@ -19,6 +19,12 @@ const nullableText = (max = 200) =>
     return normalized || null;
   }, z.string().trim().max(max).nullable().optional());
 
+const directSecretLikeSettingKeyPattern = /^(sk-|sk_|bearer\s+)/i;
+const ApiKeySettingKeySchema = nullableText(120).refine(
+  (value) => typeof value !== "string" || !directSecretLikeSettingKeyPattern.test(value.trim()),
+  "密钥配置 Key 不能填写真实密钥",
+);
+
 const StatusSchema = z.enum(["active", "inactive"], {
   message: "状态无效",
 });
@@ -49,7 +55,7 @@ export const AiProviderPayloadSchema = z.strictObject({
     message: "供应商类型无效",
   }).default("openai_compatible"),
   endpoint_url: nullableText(300),
-  api_key_setting_key: nullableText(120),
+  api_key_setting_key: ApiKeySettingKeySchema,
   status: StatusSchema.default("active"),
   sort_order: z.coerce.number().int().min(0).max(100000).default(0),
 });

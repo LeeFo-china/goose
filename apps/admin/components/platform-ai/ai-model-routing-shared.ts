@@ -1,4 +1,4 @@
-import type { AiModelRecord } from "@/components/platform-ai/ai-config-types";
+import type { AiModelRecord, AiProviderRecord } from "@/components/platform-ai/ai-config-types";
 import { requestBackendJson } from "@/lib/backend-client";
 
 export type ProviderFormState = {
@@ -40,6 +40,12 @@ export type RouteFormState = {
 };
 
 export const NONE_VALUE = "__none";
+export const OPENROUTER_API_KEY_SETTING_KEY = "OPENROUTER_API_KEY";
+
+export function isDirectSecretLikeSettingKey(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return normalized.startsWith("sk-") || normalized.startsWith("sk_") || normalized.startsWith("bearer ");
+}
 
 export function emptyProviderForm(): ProviderFormState {
   return {
@@ -51,6 +57,47 @@ export function emptyProviderForm(): ProviderFormState {
     status: "active",
     sort_order: "0",
   };
+}
+
+export function normalizeProviderFormForType(
+  form: ProviderFormState,
+  providerType: ProviderFormState["provider_type"],
+): ProviderFormState {
+  if (providerType !== "openrouter") {
+    return { ...form, provider_type: "openai_compatible" };
+  }
+
+  const currentKey = form.api_key_setting_key.trim();
+  return {
+    ...form,
+    provider_type: "openrouter",
+    api_key_setting_key: currentKey && !isDirectSecretLikeSettingKey(currentKey)
+      ? currentKey
+      : OPENROUTER_API_KEY_SETTING_KEY,
+  };
+}
+
+export function providerFormFromRecord(item: AiProviderRecord): ProviderFormState {
+  const providerType = item.provider_type === "openrouter" ? "openrouter" : "openai_compatible";
+  const apiKeySettingKey = item.api_key_setting_key || "";
+  const normalizedKey = isDirectSecretLikeSettingKey(apiKeySettingKey) ? "" : apiKeySettingKey;
+
+  return normalizeProviderFormForType({
+    id: item.id,
+    version: item.version ?? 1,
+    code: item.code,
+    name: item.name,
+    provider_type: providerType,
+    endpoint_url: item.endpoint_url || "",
+    api_key_setting_key: normalizedKey,
+    status: item.status,
+    sort_order: String(item.sort_order ?? 0),
+  }, providerType);
+}
+
+export function providerKeyDisplay(value: string | null | undefined): string {
+  if (!value) return "-";
+  return isDirectSecretLikeSettingKey(value) ? "已隐藏真实密钥" : value;
 }
 
 export function emptyModelForm(providerId = ""): ModelFormState {

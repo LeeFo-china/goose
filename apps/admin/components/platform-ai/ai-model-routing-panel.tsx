@@ -8,7 +8,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AiModelCatalogTab } from "@/components/platform-ai/ai-model-catalog-tab";
 import { AiModelRouteTab } from "@/components/platform-ai/ai-model-route-tab";
 import { ModelFormCard, ModelTable, ProviderFormCard, ProviderTable } from "@/components/platform-ai/ai-model-routing-sections";
-import { emptyModelForm, emptyProviderForm, emptyRouteForm, NONE_VALUE, requestBackend, type ModelFormState, type ProviderFormState, type RouteFormState } from "@/components/platform-ai/ai-model-routing-shared";
+import {
+  emptyModelForm,
+  emptyProviderForm,
+  emptyRouteForm,
+  NONE_VALUE,
+  providerFormFromRecord,
+  requestBackend,
+  type ModelFormState,
+  type ProviderFormState,
+  type RouteFormState,
+} from "@/components/platform-ai/ai-model-routing-shared";
 
 export function AiModelRoutingPanel({
   data,
@@ -214,17 +224,7 @@ export function AiModelRoutingPanel({
   }
 
   function editProvider(item: AiProviderRecord) {
-    setProviderForm({
-      id: item.id,
-      version: item.version ?? 1,
-      code: item.code,
-      name: item.name,
-      provider_type: item.provider_type === "openrouter" ? "openrouter" : "openai_compatible",
-      endpoint_url: item.endpoint_url || "",
-      api_key_setting_key: item.api_key_setting_key || "",
-      status: item.status,
-      sort_order: String(item.sort_order ?? 0),
-    });
+    setProviderForm(providerFormFromRecord(item));
   }
 
   function editModel(item: AiModelRecord) {

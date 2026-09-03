@@ -27,6 +27,15 @@ export const DEFINITIONS_AI_SOCIAL: SettingDefinition[] = [  {
     isSecret: true,
   },
   {
+    key: "OPENROUTER_API_KEY",
+    groupCode: "ai",
+    name: "OpenRouter 接口密钥",
+    description: "OpenRouter 模型目录同步和模型调用使用的接口密钥，加密存储。",
+    valueType: "string",
+    envNames: ["OPENROUTER_API_KEY"],
+    isSecret: true,
+  },
+  {
     key: "AI_MODEL",
     groupCode: "ai",
     name: "AI 模型名称",

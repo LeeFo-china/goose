@@ -56,4 +56,18 @@ describe("AI config schemas", () => {
       name: "OpenRouter",
     }).success).toBe(false);
   });
+
+  test("rejects raw API secrets in provider key setting references", () => {
+    expect(AiProviderPayloadSchema.safeParse({
+      name: "OpenRouter",
+      provider_type: "openrouter",
+      endpoint_url: "https://openrouter.ai/api/v1",
+      api_key_setting_key: "sk-or-v1-secret",
+    }).success).toBe(false);
+
+    expect(UpdateAiProviderPayloadSchema.safeParse({
+      expected_version: 1,
+      api_key_setting_key: "Bearer secret-token",
+    }).success).toBe(false);
+  });
 });
