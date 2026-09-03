@@ -2,10 +2,9 @@
 
 import { ChevronLeft, ChevronRight, CircleDollarSign, Clock3, ListFilter, Loader2, RotateCcw, Search, UserRound } from "lucide-react";
 import { FormSelect } from "@/components/admin/form-select";
-import { ListCardHeader } from "@/components/admin/list-card-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   emptyExpenseFilters,
@@ -112,71 +111,71 @@ export function ExpenseListHeader({
   onKeywordDraftChange: (value: string) => void;
   onReset: () => void;
 }) {
+  const statusSummary = (
+    <span className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
+      <span>本页金额 ¥{formatMoney(totalAmount)}</span>
+      <span>审批中 {pendingCount}</span>
+      <span>待打款 {paymentCount}</span>
+    </span>
+  );
+
   return (
-    <ListCardHeader
-      title="费用申请列表"
-      description={(
-        <span className="flex flex-wrap gap-x-3 gap-y-1">
-          <span>本页金额 ¥{formatMoney(totalAmount)}</span>
-          <span>审批中 {pendingCount}</span>
-          <span>待打款 {paymentCount}</span>
-        </span>
-      )}
-      action={loading ? (
-        <Badge variant="secondary">
-          <Loader2 className="animate-spin" data-icon="inline-start" />
-          正在更新
-        </Badge>
-      ) : null}
-      className="shrink-0 border-b bg-muted/20 p-3"
-      filters={
-        <div className="grid gap-3 xl:grid-cols-[140px_140px_1fr_150px_150px_auto]">
-          <FormSelect
-            id="expense-status-filter"
-            value={filters.status || "__all"}
-            options={statusOptions.map(([value, label]) => ({
-              value: value || "__all",
-              label,
-            }))}
-            onChange={(value) => onFilterChange({ status: value === "__all" ? "" : value })}
-          />
-          <FormSelect
-            id="expense-mode-filter"
-            value={filters.mode || "__all"}
-            options={modeOptions.map(([value, label]) => ({
-              value: value || "__all",
-              label,
-            }))}
-            onChange={(value) => onFilterChange({ mode: value === "__all" ? "" : value })}
-          />
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={keywordDraft}
-              placeholder="搜索单号或标题"
-              className="pl-9"
-              onChange={(event) => onKeywordDraftChange(event.target.value)}
-            />
-          </div>
+    <CardHeader className="shrink-0 flex flex-col gap-3 border-b bg-muted/20 p-3">
+      <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+        {statusSummary}
+        {loading ? (
+          <Badge variant="secondary" className="shrink-0">
+            <Loader2 className="animate-spin" data-icon="inline-start" />
+            正在更新
+          </Badge>
+        ) : null}
+      </div>
+      <div className="grid gap-3 xl:grid-cols-[140px_140px_1fr_150px_150px_auto]">
+        <FormSelect
+          id="expense-status-filter"
+          value={filters.status || "__all"}
+          options={statusOptions.map(([value, label]) => ({
+            value: value || "__all",
+            label,
+          }))}
+          onChange={(value) => onFilterChange({ status: value === "__all" ? "" : value })}
+        />
+        <FormSelect
+          id="expense-mode-filter"
+          value={filters.mode || "__all"}
+          options={modeOptions.map(([value, label]) => ({
+            value: value || "__all",
+            label,
+          }))}
+          onChange={(value) => onFilterChange({ mode: value === "__all" ? "" : value })}
+        />
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            type="date"
-            value={filters.createdFrom}
-            aria-label="创建开始日期"
-            onChange={(event) => onFilterChange({ createdFrom: event.target.value })}
+            value={keywordDraft}
+            placeholder="搜索单号或标题"
+            className="pl-9"
+            onChange={(event) => onKeywordDraftChange(event.target.value)}
           />
-          <Input
-            type="date"
-            value={filters.createdTo}
-            aria-label="创建结束日期"
-            onChange={(event) => onFilterChange({ createdTo: event.target.value })}
-          />
-          <Button type="button" variant="outline" onClick={onReset}>
-            <RotateCcw data-icon="inline-start" />
-            重置
-          </Button>
         </div>
-      }
-    />
+        <Input
+          type="date"
+          value={filters.createdFrom}
+          aria-label="创建开始日期"
+          onChange={(event) => onFilterChange({ createdFrom: event.target.value })}
+        />
+        <Input
+          type="date"
+          value={filters.createdTo}
+          aria-label="创建结束日期"
+          onChange={(event) => onFilterChange({ createdTo: event.target.value })}
+        />
+        <Button type="button" variant="outline" onClick={onReset}>
+          <RotateCcw data-icon="inline-start" />
+          重置
+        </Button>
+      </div>
+    </CardHeader>
   );
 }
 

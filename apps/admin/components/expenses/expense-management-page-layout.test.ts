@@ -34,6 +34,15 @@ describe("Expense management page layout", () => {
     expect(panel).toContain("Card className=\"flex min-h-0 flex-1 flex-col overflow-hidden shadow-none\"");
   });
 
+  test("does not repeat the expense request list title inside the table card", () => {
+    const sections = readFileSync(
+      new URL("./expenses-panel-sections.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(sections).not.toContain('title="费用申请列表"');
+  });
+
   test("keeps expense request table within the viewport without horizontal scrolling", () => {
     const { panel, table } = readExpenseManagementSources();
 

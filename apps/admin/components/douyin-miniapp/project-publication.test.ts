@@ -452,6 +452,7 @@ describe("tenant project publication source contract", () => {
     ).text();
 
     expect(componentSource).toContain("项目实景内容");
+    expect(componentSource).not.toContain("<CardTitle>项目公开资料</CardTitle>");
     expect(componentSource).toContain("publication_status");
     expect(componentSource).toContain("已选图片");
     expect(componentSource).toContain("DialogTitle");

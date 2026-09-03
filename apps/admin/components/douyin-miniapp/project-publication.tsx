@@ -18,10 +18,8 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardFooter,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -221,11 +219,7 @@ export function ProjectPublication({
       </header>
 
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
-        <CardHeader className="shrink-0 flex-row items-center justify-between gap-3 border-b bg-muted/20 p-3">
-          <div>
-            <CardTitle>项目公开资料</CardTitle>
-            <CardDescription>发布前需完善标题、说明，并选择至少 3 张项目图片。</CardDescription>
-          </div>
+        <CardHeader className="shrink-0 flex-row items-center justify-end gap-3 border-b bg-muted/20 p-3">
           <Field className="w-36">
             <FieldLabel className="sr-only" htmlFor="project-publication-status-filter">
               筛选发布状态
