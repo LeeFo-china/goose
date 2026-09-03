@@ -142,14 +142,19 @@ export function ProviderFormCard({
     <Card className="flex min-h-0 flex-col overflow-hidden">
       <CardHeader className="shrink-0">
         <CardTitle>{form.id ? "编辑供应商" : "新增供应商"}</CardTitle>
-        <CardDescription>供应商密钥只保存引用 Key，密钥值仍在系统配置维护。</CardDescription>
+        <CardDescription>
+          供应商密钥只保存引用 Key，系统会自动生成供应商编码。
+        </CardDescription>
       </CardHeader>
       <CardContent className="min-h-0 flex-1 overflow-auto">
         <FieldGroup>
-          <Field>
-            <FieldLabel htmlFor="ai-provider-code">编码</FieldLabel>
-            <Input id="ai-provider-code" value={form.code} onChange={(event) => onChange({ ...form, code: event.target.value })} />
-          </Field>
+          {form.id ? (
+            <Field>
+              <FieldLabel htmlFor="ai-provider-code-readonly">系统编码</FieldLabel>
+              <Input id="ai-provider-code-readonly" value={form.code} readOnly aria-readonly="true" />
+              <FieldDescription>编码由系统维护，创建后不可手动修改。</FieldDescription>
+            </Field>
+          ) : null}
           <Field>
             <FieldLabel htmlFor="ai-provider-name">名称</FieldLabel>
             <Input id="ai-provider-name" value={form.name} onChange={(event) => onChange({ ...form, name: event.target.value })} />
