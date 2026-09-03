@@ -31,6 +31,10 @@ supabase/.branches/
 # local migration backup artifacts
 docs/state_machine_migrate/audit/backups/
 
+# local/generated miniprogram application scene drafts
+docs/miniprogram/assets/2026-09-03-douyin-phone-number-application-scene*.png
+docs/miniprogram/assets/2026-09-03-douyin-phone-number-application-scene*.svg
+
 # code coverage
 coverage
 *.lcov
