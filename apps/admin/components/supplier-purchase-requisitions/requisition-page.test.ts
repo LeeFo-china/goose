@@ -428,12 +428,13 @@ describe("采购申请页面边界", () => {
     for (const label of [
       "申请金额",
       "已支出",
-      "其他有效承诺",
+      "其他采购占用",
       "本申请承诺",
       "批准后可用余额",
     ]) {
       expect(summary).toContain(label);
     }
+    expect(summary).toContain("不含本单");
     expect(summary).toContain("提交后生成预算快照");
     expect(summary).toContain("text-destructive");
     expect(summary).toContain("超出预算");
