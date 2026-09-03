@@ -16,7 +16,7 @@ import {
   type MaterialNoteAction,
 } from "@/components/douyin-miniapp/material-note-contract";
 import { StatusAlert } from "@/components/admin/status-alert";
-import { Button } from "@/components/ui/button";
+import { Button, type ButtonProps } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -94,13 +94,15 @@ export function MaterialNoteActions({
   ))}</div>;
 }
 
-function MaterialNoteActionDialog({
+export function MaterialNoteActionDialog({
   noteId,
   status,
   versionId,
   versionNumber,
   action,
   onCompleted,
+  size,
+  className,
 }: {
   noteId: string;
   status: DouyinMaterialNoteStatus;
@@ -108,6 +110,8 @@ function MaterialNoteActionDialog({
   versionNumber: number;
   action: MaterialNoteAction;
   onCompleted: () => void;
+  size?: ButtonProps["size"];
+  className?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
@@ -170,6 +174,8 @@ function MaterialNoteActionDialog({
         <Button
           type="button"
           variant={action === "publish" ? "default" : action === "withdraw" ? "destructive" : "outline"}
+          size={size}
+          className={className}
           onClick={() => reset()}
         ><Icon data-icon="inline-start" />{action === "publish" ? "发布此版本" : action === "archive" ? "归档" : "永久撤回"}</Button>
       </AlertDialogTrigger>

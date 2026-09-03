@@ -19,6 +19,7 @@ import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
 const MANAGE_PERMISSION = "douyin_material_note.manage";
 const PUBLISH_PERMISSION = "douyin_material_note.publish";
+const MATERIAL_NOTE_VERSION_PAGE_SIZE = 3;
 
 type LoadResult<T> = {
   data: T | null;
@@ -83,10 +84,10 @@ export default async function TenantMaterialNoteDetailPage({
     ),
     loadResource<DouyinMaterialNoteTenantVersionList>(
       token,
-      `/tenant/douyin-material-notes/${rawParams.id}/versions?page=1&pageSize=20`,
+      `/tenant/douyin-material-notes/${rawParams.id}/versions?page=1&pageSize=${MATERIAL_NOTE_VERSION_PAGE_SIZE}`,
       (value) => {
         const result = parseMaterialNoteVersionList(value);
-        assertMaterialNoteRequestedPage(result.pagination, { page: 1, pageSize: 20 });
+        assertMaterialNoteRequestedPage(result.pagination, { page: 1, pageSize: MATERIAL_NOTE_VERSION_PAGE_SIZE });
         return result;
       },
       "版本历史加载失败",
@@ -99,7 +100,7 @@ export default async function TenantMaterialNoteDetailPage({
 
   const fallbackVersions: DouyinMaterialNoteTenantVersionList = {
     list: [],
-    pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+    pagination: { page: 1, pageSize: MATERIAL_NOTE_VERSION_PAGE_SIZE, total: 0, totalPages: 0 },
   };
   return <MaterialNoteDetail
     detail={detailResult.data}

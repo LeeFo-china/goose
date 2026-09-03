@@ -12,13 +12,14 @@ import type {
 import { ArrowLeft, ChevronLeft, ChevronRight, Eye, Loader2 } from "lucide-react";
 
 import { StatusAlert } from "@/components/admin/status-alert";
-import { MaterialNoteActions } from "@/components/douyin-miniapp/material-note-actions";
+import { MaterialNoteActionDialog } from "@/components/douyin-miniapp/material-note-actions";
 import {
   getMaterialNoteErrorMessage,
   getMaterialNoteVersion,
   listMaterialNoteVersions,
 } from "@/components/douyin-miniapp/material-note-api";
 import {
+  type MaterialNoteAction,
   materialNoteStatusLabels,
 } from "@/components/douyin-miniapp/material-note-contract";
 import {
@@ -45,6 +46,8 @@ function statusVariant(status: DouyinMaterialNoteTenantDetail["status"]) {
   return "warning" as const;
 }
 
+export const MATERIAL_NOTE_VERSION_PAGE_SIZE = 3;
+
 export function selectMaterialVersionAfterPageLoad<Version extends { id: string }>(
   versions: readonly Version[],
   previous: Version,
@@ -62,6 +65,29 @@ export function resolveSelectedMaterialVersionDetail<Version extends { id: strin
   loadedVersion: Version | null,
 ): Version | null {
   return loadedVersion?.id === selectedVersionId ? loadedVersion : null;
+}
+
+export function resolveMaterialNoteVersionRowActions({
+  status,
+  versionId,
+  publishedVersionId,
+  latestVersionId,
+  canPublish,
+}: {
+  status: DouyinMaterialNoteTenantDetail["status"];
+  versionId: string;
+  publishedVersionId: string | null;
+  latestVersionId: string;
+  canPublish: boolean;
+}): MaterialNoteAction[] {
+  if (!canPublish || status === "withdrawn") return [];
+  const isPublishedVersion = publishedVersionId === versionId;
+  const anchorsNoteAction = isPublishedVersion || (!publishedVersionId && latestVersionId === versionId);
+  const actions: MaterialNoteAction[] = [];
+  if (status !== "published" || !isPublishedVersion) actions.push("publish");
+  if (anchorsNoteAction && (status === "draft" || status === "published")) actions.push("archive");
+  if (anchorsNoteAction && (status === "published" || status === "archived")) actions.push("withdraw");
+  return actions;
 }
 
 export function MaterialNoteDetail({
@@ -115,7 +141,7 @@ export function MaterialNoteDetail({
     setHistoryPending(true);
     setVersionError("");
     try {
-      const next = await listMaterialNoteVersions(detail.id, { page, pageSize: 20 });
+      const next = await listMaterialNoteVersions(detail.id, { page, pageSize: MATERIAL_NOTE_VERSION_PAGE_SIZE });
       setVersions(next);
       setSelectedVersion((current) => selectMaterialVersionAfterPageLoad(
         next.list,
@@ -140,6 +166,43 @@ export function MaterialNoteDetail({
     void loadVersionPage(1, versionId);
   }
 
+  function renderVersionRowActions(version: DouyinMaterialNoteTenantVersionSummary) {
+    const rowActions = selectedVersion.id === version.id && hasLoadedBody
+      ? resolveMaterialNoteVersionRowActions({
+        status: detail.status,
+        versionId: version.id,
+        publishedVersionId: detail.published_version_id,
+        latestVersionId: detail.latest_version.id,
+        canPublish,
+      })
+      : [];
+
+    return (
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button
+          type="button"
+          variant={selectedVersion.id === version.id ? "secondary" : "ghost"}
+          size="sm"
+          onClick={() => setSelectedVersion(version)}
+        >
+          <Eye data-icon="inline-start" />{selectedVersion.id === version.id ? "预览中" : "预览"}
+        </Button>
+        {rowActions.map((action) => (
+          <MaterialNoteActionDialog
+            key={action}
+            noteId={detail.id}
+            status={detail.status}
+            versionId={version.id}
+            versionNumber={version.version}
+            action={action}
+            size="sm"
+            onCompleted={refreshAfterCommand}
+          />
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-5 overflow-y-auto pb-6 pr-1 [scrollbar-gutter:stable]">
       <div className="flex flex-col justify-between gap-3 border-b pb-4 md:flex-row md:items-end">
@@ -155,35 +218,27 @@ export function MaterialNoteDetail({
             当前最新 v{detail.current_version} · 累计领取 {detail.claim_count} 次 · 更新于 {formatDate(detail.updated_at)}
           </p>
         </div>
-        {resolvedVersionDetail && hasLoadedBody ? <MaterialNoteActions
-          key={`${detail.status}:${selectedVersion.id}`}
-          noteId={detail.id}
-          status={detail.status}
-          versionId={selectedVersion.id}
-          versionNumber={selectedVersion.version}
-          canPublish={canPublish}
-          onCompleted={refreshAfterCommand}
-        /> : null}
       </div>
 
       <Card className="shadow-none">
         <CardHeader><CardTitle>不可变版本</CardTitle>
-          <CardDescription>历史列表不加载正文；选择版本后才通过独立详情接口读取正文并用于预览或发布确认。</CardDescription>
+          <CardDescription>每页最多展示 3 个版本；选择版本后可在该行预览、发布、归档或永久撤回。</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           {versionError ? <StatusAlert>{versionError}</StatusAlert> : null}
+          {!canPublish ? <p className="text-xs text-muted-foreground">
+            发布、归档和撤回需要 douyin_material_note.publish 权限。
+          </p> : null}
           {historyPending ? <div className="flex flex-col gap-3" aria-label="正在加载版本历史">
             <Skeleton className="h-10 w-full" /><Skeleton className="h-16 w-full" />
           </div> : versions.list.length > 0 ? <Table>
-            <TableHeader><TableRow><TableHead>版本</TableHead><TableHead>标题</TableHead><TableHead>分类</TableHead><TableHead>创建时间</TableHead><TableHead className="text-right">预览</TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow><TableHead>版本</TableHead><TableHead>标题</TableHead><TableHead>分类</TableHead><TableHead>创建时间</TableHead><TableHead className="text-right">操作</TableHead></TableRow></TableHeader>
             <TableBody>{versions.list.map((version) => <TableRow key={version.id}>
               <TableCell className="whitespace-nowrap tabular-nums">v{version.version} {version.id === detail.published_version_id ? <Badge variant="success">当前发布</Badge> : null}</TableCell>
               <TableCell><span className="block max-w-[36ch] truncate font-medium">{version.title}</span></TableCell>
               <TableCell><Badge variant="outline">{version.category}</Badge></TableCell>
               <TableCell className="whitespace-nowrap text-muted-foreground tabular-nums">{formatDate(version.created_at)}</TableCell>
-              <TableCell className="text-right"><Button type="button" variant={selectedVersion.id === version.id ? "secondary" : "ghost"} size="sm" onClick={() => setSelectedVersion(version)}>
-                <Eye data-icon="inline-start" />{selectedVersion.id === version.id ? "预览中" : "预览"}
-              </Button></TableCell>
+              <TableCell className="min-w-[260px] text-right">{renderVersionRowActions(version)}</TableCell>
             </TableRow>)}</TableBody>
           </Table> : <Empty className="border"><EmptyHeader><EmptyTitle>暂无版本记录</EmptyTitle>
             <EmptyDescription>资料创建成功后至少应有版本 1，请刷新或联系管理员核查。</EmptyDescription>
