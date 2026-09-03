@@ -18,10 +18,7 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardFooter,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -208,48 +205,42 @@ export function ProjectPublication({
 
   return (
     <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
-      <header className="flex min-w-0 items-start gap-3">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground">
-          <Images aria-hidden="true" />
-        </span>
-        <div className="min-w-0">
-          <h1 className="text-xl font-semibold tracking-normal">项目实景内容</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            选择项目已有实景图片，维护抖音小程序公开标题、说明与发布状态。当前筛选共 {data.pagination.total} 条。
-          </p>
+      <header className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground">
+            <Images aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold tracking-normal">项目实景内容</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              选择项目已有实景图片，维护抖音小程序公开标题、说明与发布状态。当前筛选共 {data.pagination.total} 条。
+            </p>
+          </div>
         </div>
+        <Field className="w-full sm:w-40">
+          <FieldLabel className="sr-only" htmlFor="project-publication-status-filter">
+            筛选发布状态
+          </FieldLabel>
+          <FormSelect
+            id="project-publication-status-filter"
+            value={status || "all"}
+            disabled={loading}
+            options={[
+              { value: "all", label: "全部状态" },
+              { value: "draft", label: "草稿" },
+              { value: "published", label: "已发布" },
+              { value: "hidden", label: "已隐藏" },
+            ]}
+            onChange={(value) => {
+              const nextStatus = value === "all" ? "" : value;
+              setStatus(nextStatus);
+              void loadPage(1, nextStatus, true);
+            }}
+          />
+        </Field>
       </header>
 
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
-        <CardHeader className="shrink-0 gap-3 border-b bg-muted/20 p-3 md:flex-row md:items-center md:justify-between">
-          <div className="min-w-0">
-            <CardTitle className="text-base">项目实景内容</CardTitle>
-            <CardDescription>
-              共 {data.pagination.total} 条
-            </CardDescription>
-          </div>
-          <Field className="w-36">
-            <FieldLabel className="sr-only" htmlFor="project-publication-status-filter">
-              筛选发布状态
-            </FieldLabel>
-            <FormSelect
-              id="project-publication-status-filter"
-              value={status || "all"}
-              disabled={loading}
-              options={[
-                { value: "all", label: "全部状态" },
-                { value: "draft", label: "草稿" },
-                { value: "published", label: "已发布" },
-                { value: "hidden", label: "已隐藏" },
-              ]}
-              onChange={(value) => {
-                const nextStatus = value === "all" ? "" : value;
-                setStatus(nextStatus);
-                void loadPage(1, nextStatus, true);
-              }}
-            />
-          </Field>
-        </CardHeader>
         <CardContent className="relative flex min-h-0 flex-1 flex-col p-0">
           <div className="min-h-0 flex-1 overflow-auto">
             {listView === "error" ? <div className="flex min-h-72 flex-col items-center justify-center gap-3 p-5"><StatusAlert>{error}</StatusAlert><Button variant="outline" onClick={() => { const target = listRequestTarget.current(); void loadPage(target.page, target.publicationStatus); }}>重新加载项目列表</Button></div> : null}

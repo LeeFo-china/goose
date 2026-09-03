@@ -452,10 +452,9 @@ describe("tenant project publication source contract", () => {
 
     expect(componentSource).toContain("项目实景内容");
     expect(componentSource).not.toContain("<CardTitle>项目公开资料</CardTitle>");
-    expect(componentSource).toContain("<CardTitle className=\"text-base\">项目实景内容</CardTitle>");
-    expect(componentSource).toContain("<CardDescription>");
-    expect(componentSource).toContain("共 {data.pagination.total} 条");
-    expect(componentSource).toContain("md:items-center md:justify-between");
+    expect(componentSource).toContain("当前筛选共 {data.pagination.total} 条");
+    expect(componentSource).toContain("lg:flex-row lg:items-center lg:justify-between");
+    for (const text of ["<CardHeader", "CardTitle", "CardDescription"]) expect(componentSource).not.toContain(text);
     expect(componentSource).toContain("筛选发布状态");
     expect(componentSource).toContain("publication_status");
     expect(componentSource).toContain("已选图片");
