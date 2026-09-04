@@ -1,45 +1,19 @@
 import { Errors } from "@/errors/error-factory";
 import { systemSettingsService } from "@/services/system-settings";
 import { SupabaseDB } from "@/utils/supabase";
+import type {
+  AiGatewayChatInput,
+  AiGatewayChatResult,
+  AiGatewayMessage,
+  AiGatewayResolvedChatConfig,
+} from "./ai-gateway-types";
 
-export type AiGatewayMessage = {
-  role: "system" | "user" | "assistant";
-  content: string;
-};
-
-export type AiGatewayChatInput = {
-  sceneCode: string;
-  tenantId?: string | null;
-  messages: AiGatewayMessage[];
-  temperature?: number;
-  responseFormat?: "json_object" | "text" | null;
-  timeoutMs?: number;
-  metadata?: Record<string, unknown>;
-  source?: string | null;
-  billable?: boolean;
-};
-
-export type AiGatewayChatResult = {
-  content: string;
-  raw: unknown;
-  provider: string;
-  model: string;
-  modelName: string;
-  promptTokens: number | null;
-  completionTokens: number | null;
-  totalTokens: number | null;
-};
-
-export type AiGatewayResolvedChatConfig = {
-  providerCode: string;
-  modelCode: string;
-  modelName: string;
-  endpoint: string;
-  apiKey: string;
-  timeoutMs: number;
-  temperature: number;
-  responseFormat: "json_object" | "text" | null;
-};
+export type {
+  AiGatewayChatInput,
+  AiGatewayChatResult,
+  AiGatewayMessage,
+  AiGatewayResolvedChatConfig,
+} from "./ai-gateway-types";
 
 type AiSceneRouteRow = {
   scene_code: string;
@@ -53,6 +27,7 @@ type AiSceneRouteRow = {
 type AiModelRow = {
   code: string;
   model_name: string;
+  status?: "active" | "inactive" | null;
   provider?: AiProviderRow | AiProviderRow[] | null;
 };
 
@@ -60,6 +35,7 @@ type AiProviderRow = {
   code: string;
   endpoint_url: string | null;
   api_key_setting_key: string | null;
+  status?: "active" | "inactive" | null;
 };
 
 type OpenAiCompatibleResponse = {
@@ -144,8 +120,10 @@ class AiGateway {
         primary_model:ai_models!ai_scene_routes_primary_model_id_fkey(
           code,
           model_name,
+          status,
           provider:ai_providers!ai_models_provider_id_fkey(
             code,
+            status,
             endpoint_url,
             api_key_setting_key
           )
@@ -153,8 +131,10 @@ class AiGateway {
         fallback_model:ai_models!ai_scene_routes_fallback_model_id_fkey(
           code,
           model_name,
+          status,
           provider:ai_providers!ai_models_provider_id_fkey(
             code,
+            status,
             endpoint_url,
             api_key_setting_key
           )
@@ -228,6 +208,12 @@ class AiGateway {
     const provider = firstRelation(model?.provider);
     if (!model || !provider?.endpoint_url || !provider.api_key_setting_key) {
       return this.resolveLegacyModel(input.sceneCode);
+    }
+    if (model.status !== "active") {
+      throw Errors.business(409, "AI 模型已停用，请调整场景路由", "AI_MODEL_INACTIVE");
+    }
+    if (provider.status !== "active") {
+      throw Errors.business(409, "AI 供应商已停用，请调整场景路由", "AI_PROVIDER_INACTIVE");
     }
 
     const apiKey = await systemSettingsService.getSecretString(provider.api_key_setting_key);
