@@ -96,7 +96,7 @@ describe("AiModelCatalogTab", () => {
     }));
 
     expect(html).toContain("同步 OpenRouter 模型");
-    expect(html).toContain("目录预览");
+    expect(html).toContain("OpenRouter 多模态目录");
     expect(html).toContain("应用选中（最多 100）");
     expect(html).toContain("目录记录第 1 / 3 页");
     expect(html).toContain("条目第 1 / 3 页");

@@ -95,6 +95,8 @@ export type AiCatalogEntryRecord = {
   current_model_id: string | null;
   current_model_version: number | null;
   raw_price_projection: Record<string, string | number | null> | null;
+  apply_status?: "eligible" | "blocked" | string;
+  apply_block_code?: "CAPABILITY_METADATA_INCOMPLETE" | string | null;
   catalog_hash: string;
 };
 

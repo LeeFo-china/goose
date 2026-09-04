@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
-import { RefreshCw, Save } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import type {
   AiCatalogEntryRecord,
@@ -11,11 +11,19 @@ import type {
   PageData,
 } from "@/components/platform-ai/ai-config-types";
 import { requestBackend } from "@/components/platform-ai/ai-model-routing-shared";
+import { AiModelCatalogPreview, changeTypeLabel } from "@/components/platform-ai/ai-model-catalog-preview";
+import {
+  buildCatalogEntriesPath,
+  defaultCatalogEntryFilters,
+  normalizeCatalogFilters,
+  type CatalogEntryFilters,
+} from "@/components/platform-ai/ai-model-catalog-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+
+export { changeTypeLabel };
 
 type CatalogTabProps = {
   providers: AiProviderRecord[];
@@ -31,17 +39,6 @@ type CatalogTabProps = {
   runs: PageData<AiCatalogRunRecord>;
   entries: PageData<AiCatalogEntryRecord>;
 };
-
-const CHANGE_LABEL: Record<string, string> = {
-  new: "新增",
-  changed: "能力或价格变化",
-  unchanged: "未变化",
-  removed: "已下架",
-};
-
-export function changeTypeLabel(value: string) {
-  return CHANGE_LABEL[value] ?? "未知变化";
-}
 
 function pageLabel(prefix: string, page: PageData<unknown>["pagination"]) {
   return `${prefix}第 ${page.page} / ${Math.max(page.totalPages, 1)} 页`;
@@ -89,17 +86,6 @@ function PageControls({
   );
 }
 
-function priceSummary(value: AiCatalogEntryRecord["raw_price_projection"]) {
-  if (!value) return "-";
-  const entries = Object.entries(value)
-    .filter((entry): entry is [string, string | number] =>
-      typeof entry[1] === "string" || typeof entry[1] === "number")
-    .slice(0, 3);
-  return entries.length
-    ? entries.map(([key, price]) => `${key}:${price}`).join(" / ")
-    : "-";
-}
-
 function emptyEntryPage(): PageData<AiCatalogEntryRecord> {
   return { list: [], pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 } };
 }
@@ -141,6 +127,8 @@ export function AiModelCatalogTab({
   const [isApplying, setIsApplying] = useState(false);
   const [isCreditsLoading, setIsCreditsLoading] = useState(false);
   const [selectedEntries, setSelectedEntries] = useState<string[]>([]);
+  const [entryFilters, setEntryFilters] = useState<CatalogEntryFilters>(() => defaultCatalogEntryFilters());
+  const [debouncedKeyword, setDebouncedKeyword] = useState(entryFilters.keyword);
   const [isPending, startTransition] = useTransition();
   const runRequestSeq = useRef(0);
   const entryRequestSeq = useRef(0);
@@ -158,6 +146,19 @@ export function AiModelCatalogTab({
   function refreshPage() {
     startTransition(() => window.location.reload());
   }
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedKeyword(entryFilters.keyword);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [entryFilters.keyword]);
+
+  useEffect(() => {
+    if (!activeRun) return;
+    const nextFilters = normalizeCatalogFilters({ ...entryFilters, keyword: debouncedKeyword });
+    void loadRunEntries(activeRun.id, 1, nextSequence(entryRequestSeq), nextFilters);
+  }, [activeRun?.id, debouncedKeyword, entryFilters.modality, entryFilters.changeType]);
 
   function toggleEntry(id: string, checked: boolean) {
     setSelectedEntries((current) => {
@@ -193,12 +194,17 @@ export function AiModelCatalogTab({
     return ref.current;
   }
 
-  async function loadRunEntries(runId: string, page = 1, requestSeq = nextSequence(entryRequestSeq)) {
+  async function loadRunEntries(
+    runId: string,
+    page = 1,
+    requestSeq = nextSequence(entryRequestSeq),
+    filters = normalizeCatalogFilters({ ...entryFilters, keyword: debouncedKeyword }),
+  ) {
     setEntryError(null);
     setIsEntryLoading(true);
     try {
       const response = await requestBackend<PageData<AiCatalogEntryRecord>>(
-        `/platform/ai-config/catalog-runs/${runId}/entries?page=${page}&pageSize=20`,
+        buildCatalogEntriesPath(runId, filters, page),
       );
       if (requestSeq !== entryRequestSeq.current) return;
       setSelectedRun(runId);
@@ -210,6 +216,22 @@ export function AiModelCatalogTab({
     } finally {
       if (requestSeq === entryRequestSeq.current) setIsEntryLoading(false);
     }
+  }
+
+  function changeEntryFilters(nextFilters: CatalogEntryFilters) {
+    entryRequestSeq.current += 1;
+    setSelectedEntries([]);
+    setEntryFilters(nextFilters);
+    setEntryPage(emptyEntryPage());
+    setIsEntryLoading(Boolean(activeRun));
+  }
+
+  function selectRun(runId: string) {
+    entryRequestSeq.current += 1;
+    setSelectedRun(runId);
+    setSelectedEntries([]);
+    setEntryPage(emptyEntryPage());
+    setIsEntryLoading(true);
   }
 
   async function loadRuns(page: number, nextProviderId = providerId, requestSeq = nextSequence(runRequestSeq)) {
@@ -225,7 +247,7 @@ export function AiModelCatalogTab({
       setRunPage(response);
       const firstRunId = response.list[0]?.id;
       if (firstRunId) {
-        await loadRunEntries(firstRunId, 1);
+        selectRun(firstRunId);
       } else {
         setSelectedRun("");
         setEntryPage(emptyEntryPage());
@@ -384,7 +406,7 @@ export function AiModelCatalogTab({
                     key={run.id}
                     type="button"
                     className="flex w-full items-center justify-between rounded-md border px-3 py-2 text-left"
-                    onClick={() => void loadRunEntries(run.id)}
+                    onClick={() => selectRun(run.id)}
                   >
                     <span>
                       <span className="block">{run.created_at}</span>
@@ -420,76 +442,20 @@ export function AiModelCatalogTab({
       </Card>
 
       <Card className="flex min-h-0 flex-col overflow-hidden">
-        <CardHeader className="shrink-0">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <CardTitle>目录预览</CardTitle>
-              <CardDescription>
-                勾选新增、能力或价格变化、下架条目后应用。下架和价格变化不会自动切换业务路由。
-              </CardDescription>
-              {entryError ? (
-                <p className="mt-2 text-sm text-destructive">{entryError}</p>
-              ) : null}
-            </div>
-            <Button
-              type="button"
-              onClick={applySelected}
-              disabled={isRunLoading || isEntryLoading || selectedEntries.length === 0 || isPending || isApplying}
-            >
-              <Save data-icon="inline-start" />
-              {isApplying ? "应用中" : "应用选中（最多 100）"}
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="min-h-0 flex-1 p-0">
-          <Table containerClassName="h-full" className="min-w-[980px]">
-            <TableHeader className="sticky top-0 bg-card">
-              <TableRow>
-                <TableHead className="w-12">选择</TableHead>
-                <TableHead>模型</TableHead>
-                <TableHead>模态</TableHead>
-                <TableHead>变化</TableHead>
-                <TableHead>价格快照</TableHead>
-                <TableHead>当前版本</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {entryPage.list.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">
-                    {isEntryLoading ? "目录条目加载中" : "暂无目录条目"}
-                  </TableCell>
-                </TableRow>
-              ) : entryPage.list.map((entry) => (
-                <TableRow key={entry.id}>
-                  <TableCell>
-                    <input
-                      aria-label={`选择 ${entry.model_name}`}
-                      type="checkbox"
-                      checked={selectedEntries.includes(entry.id)}
-                      onChange={(event) => toggleEntry(entry.id, event.target.checked)}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <div className="font-medium">{entry.model_name}</div>
-                    <div className="text-xs text-muted-foreground">{entry.external_model_id}</div>
-                  </TableCell>
-                  <TableCell>{entry.modality}</TableCell>
-                  <TableCell>{changeTypeLabel(entry.change_type)}</TableCell>
-                  <TableCell className="font-mono text-xs">{priceSummary(entry.raw_price_projection)}</TableCell>
-                  <TableCell>{entry.current_model_version ?? "-"}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+        <CardContent className="flex min-h-0 flex-1 flex-col p-0">
+          <AiModelCatalogPreview
+            entries={entryPage}
+            filters={entryFilters}
+            selectedEntries={selectedEntries}
+            pending={isRunLoading || isEntryLoading || isPending}
+            applying={isApplying}
+            error={entryError}
+            onApplySelected={applySelected}
+            onToggleEntry={toggleEntry}
+            onFiltersChange={changeEntryFilters}
+            onPageChange={(page) => activeRun ? void loadRunEntries(activeRun.id, page) : undefined}
+          />
         </CardContent>
-        <PageControls
-          label="条目"
-          pagination={entryPage.pagination}
-          visibleCount={entryPage.list.length}
-          pending={isEntryLoading}
-          onPageChange={(page) => activeRun ? void loadRunEntries(activeRun.id, page) : undefined}
-        />
       </Card>
     </div>
   );
