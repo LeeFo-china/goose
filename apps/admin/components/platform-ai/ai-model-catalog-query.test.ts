@@ -5,6 +5,7 @@ import {
   defaultCatalogEntryFilters,
   filterApplicableCatalogEntryIds,
   nextCatalogEntryPage,
+  nextCatalogRunSelection,
   shouldLoadCatalogEntriesOnMount,
   shouldResetCatalogEntryPage,
 } from "./ai-model-catalog-query";
@@ -64,5 +65,10 @@ describe("ai model catalog query helpers", () => {
         { id: "blocked-1", apply_status: "blocked" },
       ],
     )).toEqual(["eligible-1"]);
+  });
+
+  test("keeps current page when refreshing the selected run and resets page for another run", () => {
+    expect(nextCatalogRunSelection("run-1", "run-1", 3)).toEqual({ page: 3, sameRun: true });
+    expect(nextCatalogRunSelection("run-1", "run-2", 3)).toEqual({ page: 1, sameRun: false });
   });
 });

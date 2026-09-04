@@ -16,6 +16,7 @@ import {
   buildCatalogEntriesPath,
   defaultCatalogEntryFilters,
   filterApplicableCatalogEntryIds,
+  nextCatalogRunSelection,
   normalizeCatalogFilters,
   shouldLoadCatalogEntriesOnMount,
   type CatalogEntryFilters,
@@ -240,11 +241,19 @@ export function AiModelCatalogTab({
   }
 
   function selectRun(runId: string) {
+    const selection = nextCatalogRunSelection(selectedRun, runId, entryPage.pagination.page);
     entryRequestSeq.current += 1;
     setSelectedRun(runId);
     setSelectedEntries([]);
     setEntryPage(emptyEntryPage());
     setIsEntryLoading(true);
+    if (selection.sameRun) {
+      void loadRunEntries(
+        runId,
+        selection.page,
+        nextSequence(entryRequestSeq),
+      );
+    }
   }
 
   async function loadRuns(page: number, nextProviderId = providerId, requestSeq = nextSequence(runRequestSeq)) {

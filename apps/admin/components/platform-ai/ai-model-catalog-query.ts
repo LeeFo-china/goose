@@ -77,3 +77,12 @@ export function filterApplicableCatalogEntryIds(
   );
   return selectedIds.filter((id) => applicableIds.has(id)).slice(0, 100);
 }
+
+export function nextCatalogRunSelection(
+  currentRunId: string,
+  nextRunId: string,
+  currentPage: number,
+): { page: number; sameRun: boolean } {
+  const sameRun = currentRunId === nextRunId;
+  return { page: sameRun ? currentPage : 1, sameRun };
+}

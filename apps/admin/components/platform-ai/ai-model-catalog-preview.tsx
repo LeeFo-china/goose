@@ -93,6 +93,7 @@ export function AiModelCatalogPreview({
           <div className="relative min-w-[260px] flex-1">
             <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
+              aria-label="搜索模型名称或 OpenRouter ID"
               value={filters.keyword}
               onChange={(event) => updateFilters({ keyword: event.target.value })}
               placeholder="搜索模型名称或 OpenRouter ID"
