@@ -72,6 +72,7 @@ describe("SupplierPurchaseOrdersService", () => {
       page: 1,
       pageSize: 20,
       status: "draft",
+      fulfillmentStatus: "partially_received",
     });
 
     expect(deps.repository.listOrders).toHaveBeenCalledWith({
@@ -80,6 +81,7 @@ describe("SupplierPurchaseOrdersService", () => {
       page: 1,
       pageSize: 20,
       status: "draft",
+      fulfillment_status: "partially_received",
     });
   });
 

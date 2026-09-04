@@ -5,6 +5,7 @@ import type {
   ProjectOption,
   PurchaseOrderCatalogPage,
   PurchaseOrderCommandResult,
+  PurchaseOrderFulfillmentFilterStatus,
   PurchaseOrderItemPage,
   PurchaseOrderPage,
   PurchaseOrderSupplierOption,
@@ -15,6 +16,7 @@ import type {
 export type PurchaseOrderFilters = {
   keyword?: string;
   status?: string;
+  fulfillmentStatus?: PurchaseOrderFulfillmentFilterStatus;
   projectId?: string;
   tenantSupplierId?: string;
 };

@@ -23,8 +23,8 @@ import { ClipboardList } from "lucide-react";
 import {
   canEditPurchaseOrderDraft,
   formatPurchaseMoney,
-  purchaseOrderActions,
-  purchaseOrderStatusMeta,
+  purchaseOrderPrimaryStatusMeta,
+  purchaseOrderSecondaryStatusText,
 } from "./purchase-order-rules";
 import type {
   EditablePurchaseOrder,
@@ -85,12 +85,17 @@ export function PurchaseOrderList({
       </TableHeader>
       <TableBody>
         {orders.map((order) => {
-          const status = purchaseOrderStatusMeta[order.status];
+          const status = purchaseOrderPrimaryStatusMeta(order);
           const canEdit = canEditPurchaseOrderDraft(order, canManage);
           return (
             <TableRow key={order.id}>
-              <TableCell className="font-mono font-medium">
-                {order.order_no}
+              <TableCell>
+                <div className="font-mono font-medium">
+                  {order.order_no}
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  {purchaseOrderSecondaryStatusText(order.status)}
+                </div>
               </TableCell>
               <TableCell className="max-w-48 truncate">
                 {order.project.name}
@@ -99,7 +104,9 @@ export function PurchaseOrderList({
                 {order.supplier.name}
               </TableCell>
               <TableCell>
-                <Badge variant={status.variant}>{status.label}</Badge>
+                <Badge variant={status.variant} className="whitespace-nowrap">
+                  {status.label}
+                </Badge>
               </TableCell>
               <TableCell className="text-right font-mono tabular-nums">
                 {formatPurchaseMoney(order.total_amount, order.currency)}

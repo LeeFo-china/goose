@@ -10,6 +10,18 @@ import type {
 export type { PageData };
 
 export type PurchaseOrderStatus = "draft" | "submitted" | "cancelled";
+export type PurchaseOrderListFulfillmentStatus =
+  | "unconfirmed"
+  | "confirmed"
+  | "partially_shipped"
+  | "shipped"
+  | "partially_received"
+  | "received"
+  | "received_with_variance"
+  | "cancelled";
+export type PurchaseOrderFulfillmentFilterStatus =
+  | PurchaseOrderListFulfillmentStatus
+  | "awaiting_receipt";
 
 export type PurchaseOrder = {
   id: string;
@@ -40,6 +52,7 @@ export type PurchaseOrder = {
 };
 
 export type PurchaseOrderWithReferences = PurchaseOrder & {
+  fulfillment_status?: PurchaseOrderListFulfillmentStatus;
   project: {
     id: string;
     name: string;

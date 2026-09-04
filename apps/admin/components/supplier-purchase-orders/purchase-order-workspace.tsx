@@ -29,10 +29,13 @@ import {
 import { PurchaseOrderDetail } from "./purchase-order-detail";
 import { PurchaseOrderEditor } from "./purchase-order-editor";
 import { PurchaseOrderList } from "./purchase-order-list";
-import { requisitionCreationEntry } from "./purchase-order-rules";
+import {
+  requisitionCreationEntry,
+} from "./purchase-order-rules";
 import type {
   EditablePurchaseOrder,
   ProjectOption,
+  PurchaseOrderFulfillmentFilterStatus,
   PurchaseOrderPage,
   PurchaseOrderSupplierOption,
   PurchaseOrderWithReferences,
@@ -42,10 +45,17 @@ const emptyOrders: PurchaseOrderPage = {
   list: [],
   pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
 };
-const statusOptions = [
-  { value: "all", label: "全部状态" },
-  { value: "draft", label: "草稿" },
-  { value: "submitted", label: "已提交" },
+const fulfillmentStatusOptions: Array<{
+  value: "all" | PurchaseOrderFulfillmentFilterStatus;
+  label: string;
+}> = [
+  { value: "all", label: "全部" },
+  { value: "unconfirmed", label: "待确认" },
+  { value: "confirmed", label: "待发货" },
+  { value: "awaiting_receipt", label: "待收货" },
+  { value: "partially_received", label: "部分收货" },
+  { value: "received", label: "已收货" },
+  { value: "received_with_variance", label: "收货异常" },
   { value: "cancelled", label: "已取消" },
 ];
 
@@ -76,7 +86,9 @@ export function PurchaseOrderWorkspace({
   const [page, setPage] = useState(1);
   const [keyword, setKeyword] = useState("");
   const [appliedKeyword, setAppliedKeyword] = useState("");
-  const [status, setStatus] = useState("all");
+  const [fulfillmentStatus, setFulfillmentStatus] = useState<
+    "all" | PurchaseOrderFulfillmentFilterStatus
+  >("all");
   const [projectId, setProjectId] = useState("all");
   const [tenantSupplierId, setTenantSupplierId] = useState("all");
   const [loadingOptions, setLoadingOptions] = useState(true);
@@ -232,7 +244,7 @@ export function PurchaseOrderWorkspace({
     try {
       setOrders(await loadPurchaseOrders(page, {
         ...(appliedKeyword ? { keyword: appliedKeyword } : {}),
-        ...(status !== "all" ? { status } : {}),
+        ...(fulfillmentStatus !== "all" ? { fulfillmentStatus } : {}),
         ...(projectId !== "all" ? { projectId } : {}),
         ...(tenantSupplierId !== "all" ? { tenantSupplierId } : {}),
       }));
@@ -244,9 +256,9 @@ export function PurchaseOrderWorkspace({
   }, [
     appliedKeyword,
     canViewPurchaseOrders,
+    fulfillmentStatus,
     page,
     projectId,
-    status,
     tenantSupplierId,
   ]);
 
@@ -312,7 +324,7 @@ export function PurchaseOrderWorkspace({
       {error ? <StatusAlert>{error}</StatusAlert> : null}
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
         <CardHeader className="shrink-0 border-b bg-muted/20 p-4">
-          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-[minmax(14rem,1.2fr)_minmax(10rem,1fr)_minmax(10rem,1fr)_auto]">
             <Input
               aria-label="搜索采购单"
               value={keyword}
@@ -323,15 +335,6 @@ export function PurchaseOrderWorkspace({
                   setPage(1);
                   setAppliedKeyword(keyword.trim());
                 }
-              }}
-            />
-            <FormSelect
-              id="purchase-order-status-filter"
-              value={status}
-              options={statusOptions}
-              onChange={(value) => {
-                setStatus(value);
-                setPage(1);
               }}
             />
             <FormSelect
@@ -364,6 +367,26 @@ export function PurchaseOrderWorkspace({
               <Search data-icon="inline-start" />
               搜索
             </Button>
+          </div>
+          <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+            {fulfillmentStatusOptions.map((option) => {
+              const active = fulfillmentStatus === option.value;
+              return (
+                <Button
+                  key={option.value}
+                  type="button"
+                  size="sm"
+                  variant={active ? "default" : "outline"}
+                  className="shrink-0"
+                  onClick={() => {
+                    setFulfillmentStatus(option.value);
+                    setPage(1);
+                  }}
+                >
+                  {option.label}
+                </Button>
+              );
+            })}
           </div>
         </CardHeader>
         <CardContent className="flex min-h-0 flex-1 flex-col p-0">

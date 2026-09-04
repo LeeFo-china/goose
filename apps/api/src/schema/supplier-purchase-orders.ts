@@ -7,6 +7,20 @@ export const SUPPLIER_PURCHASE_ORDER_STATUS_VALUES = [
   "submitted",
   "cancelled",
 ] as const;
+export const SUPPLIER_PURCHASE_ORDER_LIST_FULFILLMENT_STATUS_VALUES = [
+  "unconfirmed",
+  "confirmed",
+  "partially_shipped",
+  "shipped",
+  "partially_received",
+  "received",
+  "received_with_variance",
+  "cancelled",
+] as const;
+export const SUPPLIER_PURCHASE_ORDER_FULFILLMENT_FILTER_VALUES = [
+  ...SUPPLIER_PURCHASE_ORDER_LIST_FULFILLMENT_STATUS_VALUES,
+  "awaiting_receipt",
+] as const;
 
 const uuid = (message: string) => z.uuid(message);
 const expectedVersion = z.coerce.number().int()
@@ -54,11 +68,17 @@ export const SupplierPurchaseOrderStatusSchema = z.enum(
   SUPPLIER_PURCHASE_ORDER_STATUS_VALUES,
   { message: "无效的采购单状态" },
 );
+export const SupplierPurchaseOrderListFulfillmentStatusSchema = z.enum(
+  SUPPLIER_PURCHASE_ORDER_FULFILLMENT_FILTER_VALUES,
+  { message: "无效的采购单履约状态" },
+);
 
 export const SupplierPurchaseOrderListQuerySchema =
   PaginationQuerySchema.extend({
     keyword: keyword.optional(),
     status: SupplierPurchaseOrderStatusSchema.optional(),
+    fulfillmentStatus: SupplierPurchaseOrderListFulfillmentStatusSchema
+      .optional(),
     projectId: uuid("无效的项目 ID").optional(),
     tenantSupplierId: uuid("无效的租户供应商关系 ID").optional(),
   }).strict();
@@ -227,6 +247,8 @@ function uniquePurchaseOrderItemIds(
 
 export type SupplierPurchaseOrderListQuery =
   z.infer<typeof SupplierPurchaseOrderListQuerySchema>;
+export type SupplierPurchaseOrderListFulfillmentStatus =
+  z.infer<typeof SupplierPurchaseOrderListFulfillmentStatusSchema>;
 export type SupplierPurchaseOrderCatalogQuery =
   z.infer<typeof SupplierPurchaseOrderCatalogQuerySchema>;
 export type SupplierPurchaseOrderOptionQuery =

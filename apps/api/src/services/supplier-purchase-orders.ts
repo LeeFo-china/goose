@@ -79,6 +79,9 @@ export class SupplierPurchaseOrdersService {
       pageSize: query.pageSize,
       ...(query.keyword ? { keyword: query.keyword } : {}),
       ...(query.status ? { status: query.status } : {}),
+      ...(query.fulfillmentStatus
+        ? { fulfillment_status: query.fulfillmentStatus }
+        : {}),
       ...(query.projectId ? { project_id: query.projectId } : {}),
       ...(query.tenantSupplierId
         ? { tenant_supplier_id: query.tenantSupplierId }

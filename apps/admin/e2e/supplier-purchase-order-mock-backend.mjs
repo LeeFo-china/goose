@@ -274,6 +274,7 @@ function orderWithReferences(order = state.order) {
   return order
     ? {
       ...structuredClone(order),
+      fulfillment_status: orderListFulfillmentStatus(order),
       project: {
         id: project.id,
         name: project.name,
@@ -283,6 +284,12 @@ function orderWithReferences(order = state.order) {
       purchase_requisition: null,
     }
     : null;
+}
+
+function orderListFulfillmentStatus(order = state.order) {
+  if (!order) return "unconfirmed";
+  if (order.status === "cancelled") return "cancelled";
+  return state.fulfillment?.status ?? "unconfirmed";
 }
 
 const QUANTITY_FACTOR = 10_000n;
@@ -1592,9 +1599,25 @@ const server = createServer(async (request, response) => {
     ) {
       let records = state.order ? [orderWithReferences()] : [];
       const status = url.searchParams.get("status");
+      const fulfillmentStatus = url.searchParams.get("fulfillmentStatus");
       const projectId = url.searchParams.get("projectId");
       const tenantSupplierId = url.searchParams.get("tenantSupplierId");
       if (status) records = records.filter((order) => order.status === status);
+      if (fulfillmentStatus) {
+        records = records.filter((order) =>
+          (
+            fulfillmentStatus === "awaiting_receipt"
+              ? ["partially_shipped", "shipped"].includes(
+                order.fulfillment_status,
+              )
+              : order.fulfillment_status === fulfillmentStatus
+          ) &&
+          (
+            fulfillmentStatus !== "unconfirmed" ||
+            order.status === "submitted"
+          )
+        );
+      }
       if (projectId) {
         records = records.filter((order) => order.project_id === projectId);
       }

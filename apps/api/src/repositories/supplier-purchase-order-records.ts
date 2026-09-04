@@ -81,6 +81,16 @@ const uuid = z.uuid();
 const dateTime = z.string();
 const decimal = z.string().regex(/^\d+(?:\.\d+)?$/);
 const orderStatus = z.enum(["draft", "submitted", "cancelled"]);
+const listFulfillmentStatus = z.enum([
+  "unconfirmed",
+  "confirmed",
+  "partially_shipped",
+  "shipped",
+  "partially_received",
+  "received",
+  "received_with_variance",
+  "cancelled",
+]);
 const commercialSnapshotSource = z.enum([
   "contract_snapshot",
   "relationship_default_snapshot",
@@ -146,6 +156,18 @@ export const SupplierPurchaseOrderWithReferencesSchema =
       budget_status: SupplierPurchaseRequisitionBudgetStatusSchema,
     }).strict().nullable(),
   }).strict();
+
+export const SupplierPurchaseOrderListOrderSchema =
+  SupplierPurchaseOrderWithReferencesSchema.extend({
+    fulfillment_status: listFulfillmentStatus,
+  }).strict();
+
+export const SupplierPurchaseOrderListResultSchema = z.object({
+  items: z.array(SupplierPurchaseOrderListOrderSchema),
+  total: z.union([z.number().int().nonnegative(), z.string()]),
+  page: z.number().int().positive(),
+  page_size: z.number().int().positive().max(100),
+}).strict();
 
 export const SupplierPurchaseOrderItemSchema = z.object({
   id: uuid,
@@ -275,6 +297,8 @@ export type SupplierPurchaseOrder =
   z.infer<typeof SupplierPurchaseOrderRecordSchema>;
 export type SupplierPurchaseOrderWithReferences =
   z.infer<typeof SupplierPurchaseOrderWithReferencesSchema>;
+export type SupplierPurchaseOrderListOrder =
+  z.infer<typeof SupplierPurchaseOrderListOrderSchema>;
 export type SupplierPurchaseOrderItem =
   z.infer<typeof SupplierPurchaseOrderItemSchema>;
 export type SupplierPurchaseOrderCatalogItem =

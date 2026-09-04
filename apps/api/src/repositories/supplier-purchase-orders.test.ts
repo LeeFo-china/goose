@@ -48,7 +48,12 @@ async function repositoryFor(responder: (
 describe("SupplierPurchaseOrdersRepository", () => {
   test("lists tenant orders in the visible project scope with bounded pagination", async () => {
     const { repository, requests } = await repositoryFor(() => ({
-      body: [order],
+      body: {
+        items: [{ ...order, fulfillment_status: "partially_received" }],
+        total: 21,
+        page: 2,
+        page_size: 20,
+      },
       count: 21,
     }));
 
@@ -58,6 +63,7 @@ describe("SupplierPurchaseOrdersRepository", () => {
       page: 2,
       pageSize: 20,
       status: "draft",
+      fulfillment_status: "partially_received",
       project_id: PROJECT_ID,
       tenant_supplier_id: RELATIONSHIP_ID,
       keyword: " PO-1,() ",
@@ -70,29 +76,23 @@ describe("SupplierPurchaseOrdersRepository", () => {
     });
     const request = requests[0]!;
     const url = new URL(request.url);
-    expect(url.searchParams.get("tenant_id")).toBe(`eq.${TENANT_ID}`);
-    expect(url.searchParams.get("project_id")).toContain(PROJECT_ID);
-    expect(url.searchParams.get("status")).toBe("eq.draft");
-    expect(url.searchParams.get("tenant_supplier_id")).toBe(
-      `eq.${RELATIONSHIP_ID}`,
+    expect(url.pathname).toEndWith(
+      "/rpc/list_supplier_purchase_orders",
     );
-    expect(url.searchParams.get("offset")).toBe("20");
-    expect(url.searchParams.get("limit")).toBe("20");
-    expect(url.searchParams.get("order")).toBe(
-      "updated_at.desc,id.desc",
+    expect(await request.clone().json()).toEqual({
+      p_tenant_id: TENANT_ID,
+      p_visible_project_ids: [PROJECT_ID],
+      p_page: 2,
+      p_page_size: 20,
+      p_status: "draft",
+      p_fulfillment_status: "partially_received",
+      p_project_id: PROJECT_ID,
+      p_tenant_supplier_id: RELATIONSHIP_ID,
+      p_keyword: "PO-1",
+    });
+    expect(result.list[0]?.fulfillment_status).toBe(
+      "partially_received",
     );
-    expect(url.searchParams.get("select")).toContain(
-      "project:projects!project_id",
-    );
-    expect(url.searchParams.get("select")).toContain(
-      "supplier:suppliers!supplier_id",
-    );
-    expect(url.searchParams.get("select")).toContain(
-      "purchase_requisition:supplier_purchase_requisitions!supplier_purchase_orders_requisition_tenant_fkey(id,request_no,status,budget_status)",
-    );
-    expect(url.searchParams.get("select")).not.toContain("*");
-    expect(url.searchParams.get("or")).not.toContain(",");
-    expect(request.headers.get("prefer")).toContain("count=exact");
   });
 
   test("does not query when project visibility is empty", async () => {

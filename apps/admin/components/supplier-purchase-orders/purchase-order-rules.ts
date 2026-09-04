@@ -3,6 +3,7 @@ import type {
   PurchaseOrder,
   PurchaseOrderDraftLine,
   PurchaseOrderDraftState,
+  PurchaseOrderListFulfillmentStatus,
   PurchaseOrderStatus,
   PurchaseOrderWithReferences,
 } from "./purchase-order-types";
@@ -26,6 +27,39 @@ export const purchaseOrderStatusMeta: Record<
   submitted: { label: "已提交", variant: "success" },
   cancelled: { label: "已取消", variant: "outline" },
 };
+
+export const purchaseOrderFulfillmentStatusMeta: Record<
+  PurchaseOrderListFulfillmentStatus,
+  {
+    label: string;
+    variant: "secondary" | "success" | "warning" | "danger" | "outline";
+  }
+> = {
+  unconfirmed: { label: "待供应商确认", variant: "warning" },
+  confirmed: { label: "待发货", variant: "warning" },
+  partially_shipped: { label: "待收货", variant: "warning" },
+  shipped: { label: "待收货", variant: "warning" },
+  partially_received: { label: "部分收货", variant: "secondary" },
+  received: { label: "已收货", variant: "success" },
+  received_with_variance: { label: "收货异常", variant: "danger" },
+  cancelled: { label: "已取消", variant: "outline" },
+};
+
+export function purchaseOrderPrimaryStatusMeta(
+  order: Pick<PurchaseOrderWithReferences, "status" | "fulfillment_status">,
+) {
+  if (order.status === "draft") return purchaseOrderStatusMeta.draft;
+  if (order.status === "cancelled") {
+    return purchaseOrderFulfillmentStatusMeta.cancelled;
+  }
+  return purchaseOrderFulfillmentStatusMeta[
+    order.fulfillment_status ?? "unconfirmed"
+  ];
+}
+
+export function purchaseOrderSecondaryStatusText(status: PurchaseOrderStatus) {
+  return `采购单${purchaseOrderStatusMeta[status].label}`;
+}
 
 export function purchaseOrderActions(
   status: PurchaseOrderStatus,

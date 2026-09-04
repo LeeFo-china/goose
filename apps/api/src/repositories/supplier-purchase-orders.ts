@@ -8,12 +8,14 @@ import {
   SupplierPurchaseOrderCatalogResultSchema,
   SupplierPurchaseOrderCommandEnvelopeSchema,
   SupplierPurchaseOrderItemSchema,
+  SupplierPurchaseOrderListResultSchema,
   SupplierPurchaseOrderProjectOptionSchema,
   SupplierPurchaseOrderSupplierOptionResultSchema,
   SupplierPurchaseOrderWithReferencesSchema,
   type SupplierPurchaseOrder,
   type SupplierPurchaseOrderCatalogItem,
   type SupplierPurchaseOrderItem,
+  type SupplierPurchaseOrderListOrder,
   type SupplierPurchaseOrderProjectOption,
   type SupplierPurchaseOrderSupplierOption,
   type SupplierPurchaseOrderWithReferences,
@@ -28,10 +30,11 @@ export type {
   SupplierPurchaseOrder,
   SupplierPurchaseOrderCatalogItem,
   SupplierPurchaseOrderItem,
+  SupplierPurchaseOrderListOrder,
   SupplierPurchaseOrderWithReferences,
 } from "@/repositories/supplier-purchase-order-records";
 
-export type SupplierPurchaseOrderPage = Page<SupplierPurchaseOrderWithReferences>;
+export type SupplierPurchaseOrderPage = Page<SupplierPurchaseOrderListOrder>;
 export type SupplierPurchaseOrderItemPage = Page<SupplierPurchaseOrderItem>;
 export type SupplierPurchaseOrderCatalogPage =
   Page<SupplierPurchaseOrderCatalogItem>;
@@ -55,6 +58,7 @@ export type SupplierPurchaseOrderListInput = PageInput & {
   visible_project_ids: string[] | null;
   keyword?: string;
   status?: string;
+  fulfillment_status?: string;
   project_id?: string;
   tenant_supplier_id?: string;
 };
@@ -140,33 +144,31 @@ export class SupplierPurchaseOrdersRepository {
       return toPage([], pagination, 0);
     }
 
-    let request = this.client.from("supplier_purchase_orders")
-      .select(SUPPLIER_PURCHASE_ORDER_SELECT, { count: "exact" })
-      .eq("tenant_id", input.tenant_id);
-    if (input.project_id) {
-      request = request.eq("project_id", input.project_id);
-    } else if (input.visible_project_ids) {
-      request = request.in("project_id", input.visible_project_ids);
-    }
-    if (input.status) request = request.eq("status", input.status);
-    if (input.tenant_supplier_id) {
-      request = request.eq("tenant_supplier_id", input.tenant_supplier_id);
-    }
-    request = applyKeyword(request, input.keyword);
-
-    const { data, error, count } = await request
-      .order("updated_at", { ascending: false })
-      .order("id", { ascending: false })
-      .range(...pageRange(pagination));
+    const { data, error } = await this.client.rpc(
+      "list_supplier_purchase_orders",
+      {
+        p_tenant_id: input.tenant_id,
+        p_visible_project_ids: input.visible_project_ids,
+        p_page: pagination.page,
+        p_page_size: pagination.pageSize,
+        p_status: input.status ?? null,
+        p_fulfillment_status: input.fulfillment_status ?? null,
+        p_project_id: input.project_id ?? null,
+        p_tenant_supplier_id: input.tenant_supplier_id ?? null,
+        p_keyword: normalizeKeyword(input.keyword),
+      },
+    );
     if (error) throw Errors.dbError("查询供应商采购单失败", error);
+    const result = parse(
+      SupplierPurchaseOrderListResultSchema,
+      data,
+      "查询供应商采购单失败",
+    );
+    const total = parseTotal(result.total, "查询供应商采购单失败");
     return toPage(
-      parseRows(
-        SupplierPurchaseOrderWithReferencesSchema,
-        data,
-        "查询供应商采购单失败",
-      ),
-      pagination,
-      count,
+      result.items,
+      { page: result.page, pageSize: result.page_size },
+      total,
     );
   }
 
@@ -389,8 +391,12 @@ function pageRange(input: PageInput): [number, number] {
 }
 
 function applyKeyword(request: Query, keyword?: string) {
-  const safe = keyword?.trim().replace(/[%_,().]/g, "");
+  const safe = normalizeKeyword(keyword);
   return safe ? request.or(`order_no.ilike.%${safe}%`) : request;
+}
+
+function normalizeKeyword(keyword?: string) {
+  return keyword?.trim().replace(/[%_,().]/g, "") || null;
 }
 
 function applyProjectKeyword(request: Query, keyword?: string) {
@@ -447,6 +453,17 @@ function toPage<T>(
       totalPages: total ? Math.ceil(total / pagination.pageSize) : 0,
     },
   };
+}
+
+function parseTotal(value: number | string, message: string) {
+  if (typeof value === "string" && !/^(0|[1-9]\d*)$/.test(value)) {
+    throw Errors.dbError(message);
+  }
+  const total = Number(value);
+  if (!Number.isSafeInteger(total) || total < 0) {
+    throw Errors.dbError(message);
+  }
+  return total;
 }
 
 function parseRows<T>(schema: z.ZodType<T>, data: unknown, message: string) {
