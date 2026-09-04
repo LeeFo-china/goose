@@ -27,6 +27,10 @@ FROM oven/bun:1.3 AS runner
 
 WORKDIR /app
 
+RUN apt-get update && \
+  apt-get install -y --no-install-recommends fonts-noto-cjk && \
+  rm -rf /var/lib/apt/lists/*
+
 ARG BUILD_SHA=unknown
 ARG BUILD_REF=unknown
 ARG BUILD_RUN_ID=unknown

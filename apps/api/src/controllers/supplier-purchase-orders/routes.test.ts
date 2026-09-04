@@ -26,6 +26,31 @@ const listReceipts = mock(async () => emptyPage);
 const confirmFulfillment = mock(async () => ({ status: "confirmed" }));
 const createShipment = mock(async () => ({ status: "shipment_created" }));
 const createReceipt = mock(async () => ({ status: "receipt_created" }));
+const getEmployeePrintPreview = mock(async () => ({ order: { id: ORDER_ID } }));
+const exportEmployeeOrderPdf = mock(async () => ({
+  filename: "order.pdf",
+  content_type: "application/pdf",
+  content: Buffer.from("%PDF"),
+}));
+const exportEmployeeOrderXlsx = mock(async () => ({
+  filename: "order.xlsx",
+  content_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  content: Buffer.from("PK"),
+}));
+const createShareLink = mock(async () => ({ token: PUBLIC_TOKEN }));
+const getPublicOrder = mock(async () => ({ order: { id: ORDER_ID } }));
+const confirmPublicView = mock(async () => ({ status: "confirmed" }));
+const getPublicPrintPreview = mock(async () => ({ order: { id: ORDER_ID } }));
+const exportPublicOrderPdf = mock(async () => ({
+  filename: "public.pdf",
+  content_type: "application/pdf",
+  content: Buffer.from("%PDF"),
+}));
+const exportPublicOrderXlsx = mock(async () => ({
+  filename: "public.xlsx",
+  content_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  content: Buffer.from("PK"),
+}));
 
 mock.module("@/services/supplier-purchase-orders", () => ({
   supplierPurchaseOrdersService: {
@@ -52,10 +77,25 @@ mock.module("@/services/supplier-purchase-fulfillments", () => ({
   },
 }));
 
+mock.module("@/services/supplier-purchase-order-sharing", () => ({
+  supplierPurchaseOrderSharingService: {
+    getEmployeePrintPreview,
+    exportEmployeeOrderPdf,
+    exportEmployeeOrderXlsx,
+    createShareLink,
+    getPublicOrder,
+    confirmPublicView,
+    getPublicPrintPreview,
+    exportPublicOrderPdf,
+    exportPublicOrderXlsx,
+  },
+}));
+
 const ORDER_ID = "62000000-0000-4000-8000-000000000001";
 const PROJECT_ID = "62000000-0000-4000-8000-000000000002";
 const RELATIONSHIP_ID = "62000000-0000-4000-8000-000000000003";
 const SKU_ID = "62000000-0000-4000-8000-000000000004";
+const PUBLIC_TOKEN = "pos_0123456789abcdefghijklmnopqrstuvwxyzABCDE";
 const auth = {
   authUserId: "62000000-0000-4000-8000-000000000005",
   employeeId: "62000000-0000-4000-8000-000000000006",
@@ -90,13 +130,21 @@ describe("SupplierPurchaseOrdersController", () => {
         confirmFulfillment,
         createShipment,
         createReceipt,
+        getEmployeePrintPreview,
+        exportEmployeeOrderPdf,
+        exportEmployeeOrderXlsx,
+        createShareLink,
+        getPublicOrder,
+        confirmPublicView,
+        getPublicPrintPreview,
+        exportPublicOrderPdf,
+        exportPublicOrderXlsx,
       ]
     ) {
       fn.mockClear();
     }
   });
-
-  test("registers all sixteen purchase order routes", async () => {
+  test("registers all twenty five purchase order routes", async () => {
     const value = await controller();
     const routes: Array<{ method: string; path: string }> = [];
 
@@ -113,6 +161,9 @@ describe("SupplierPurchaseOrdersController", () => {
         method: "GET",
         path: "/supplier-purchase-orders/:id/financial-summary",
       },
+      { method: "GET", path: "/supplier-purchase-orders/:id/print-preview" },
+      { method: "GET", path: "/supplier-purchase-orders/:id/export.pdf" },
+      { method: "GET", path: "/supplier-purchase-orders/:id/export.xlsx" },
       { method: "GET", path: "/supplier-purchase-orders/:id/fulfillment" },
       { method: "GET", path: "/supplier-purchase-orders/:id/shipments" },
       { method: "GET", path: "/supplier-purchase-orders/:id/receipts" },
@@ -120,6 +171,24 @@ describe("SupplierPurchaseOrdersController", () => {
       { method: "GET", path: "/supplier-purchase-order-project-options" },
       { method: "GET", path: "/supplier-purchase-order-supplier-options" },
       { method: "POST", path: "/supplier-purchase-orders/:id/save-draft" },
+      { method: "POST", path: "/supplier-purchase-orders/:id/share-link" },
+      { method: "GET", path: "/public/supplier-purchase-orders/:token" },
+      {
+        method: "POST",
+        path: "/public/supplier-purchase-orders/:token/confirm-view",
+      },
+      {
+        method: "GET",
+        path: "/public/supplier-purchase-orders/:token/print-preview",
+      },
+      {
+        method: "GET",
+        path: "/public/supplier-purchase-orders/:token/export.pdf",
+      },
+      {
+        method: "GET",
+        path: "/public/supplier-purchase-orders/:token/export.xlsx",
+      },
       { method: "POST", path: "/supplier-purchase-orders/:id/submit" },
       { method: "POST", path: "/supplier-purchase-orders/:id/cancel" },
       {
@@ -244,6 +313,11 @@ describe("SupplierPurchaseOrdersController", () => {
         items: [{ supplier_sku_id: SKU_ID, quantity: 2 }],
       },
     } as never);
+    await value.createShareLink({
+      params: { id: ORDER_ID },
+      headers,
+      body: { expires_at: "2026-10-04T12:00:00+08:00" },
+    } as never);
     await value.submit({
       params: { id: ORDER_ID },
       headers,
@@ -262,6 +336,12 @@ describe("SupplierPurchaseOrdersController", () => {
         project_id: PROJECT_ID,
         tenant_supplier_id: RELATIONSHIP_ID,
       }),
+      "purchase-order:command",
+    );
+    expect(createShareLink).toHaveBeenCalledWith(
+      auth,
+      ORDER_ID,
+      { expires_at: "2026-10-04T12:00:00+08:00" },
       "purchase-order:command",
     );
     expect(submit).toHaveBeenCalledWith(

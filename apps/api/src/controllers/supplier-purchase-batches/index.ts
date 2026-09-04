@@ -17,9 +17,11 @@ import {
   SupplierPurchaseBatchWithdrawSchema,
 } from "@/schema/supplier-purchase-batches";
 import { supplierPurchaseBatchesService } from "@/services/supplier-purchase-batches";
+import { supplierPurchaseOrderSharingService } from
+  "@/services/supplier-purchase-order-sharing";
 import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
-import type { FastifyRequest } from "fastify";
+import type { FastifyReply, FastifyRequest } from "fastify";
 import type { z } from "zod";
 
 class SupplierPurchaseBatchesController extends TenantBaseController {
@@ -103,6 +105,23 @@ class SupplierPurchaseBatchesController extends TenantBaseController {
   async listOrders(request: FastifyRequest) {
     return this.listChild(request, SupplierPurchaseBatchOrderListQuerySchema,
       "listOrders");
+  }
+
+  @Get("/supplier-purchase-batches/:id/export.xlsx")
+  async exportOrdersXlsx(request: FastifyRequest, reply: FastifyReply) {
+    const auth = await this.getRequiredTenantContext(request);
+    const { id } = this.parse(SupplierPurchaseBatchParamSchema, request.params);
+    const file = await supplierPurchaseOrderSharingService.exportBatchXlsx(
+      auth,
+      id,
+    );
+    return reply
+      .header("content-type", file.content_type)
+      .header(
+        "content-disposition",
+        `attachment; filename="${encodeURIComponent(file.filename)}"`,
+      )
+      .send(file.content);
   }
 
   @Post("/supplier-purchase-batches/:id/save-draft")

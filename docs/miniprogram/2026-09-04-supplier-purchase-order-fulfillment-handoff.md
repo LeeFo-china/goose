@@ -791,11 +791,151 @@ src/app.config.ts
 
 本次不包含：
 
-- Gooes API 代码改动。
-- Supabase migration。
 - Orange 小程序代码改动。
-- PDF/Excel 实现。
-- 供应商公开分享页实现。
 - 差异闭环实现。
 
-如果确认进入开发，建议下一步先做 Orange 第一阶段接入；Gooes 仅在联调发现接口字段不足时补充兼容字段。
+第一阶段已由 Orange 完成联调。2026-09-04 起，Gooes 进入第二阶段：
+供应商分享链接、采购单真实 PDF 导出、采购单真实 XLSX 导出和采购批次
+XLSX 导出。
+
+## 17. 第二阶段：供应商分享与真实导出接口
+
+接口契约保持后端生成正式单据，小程序只负责触发、打开、下载或转发。
+
+### 17.1 员工生成供应商查看链接
+
+```http
+POST /supplier-purchase-orders/:id/share-link
+Idempotency-Key: <stable-key>
+Content-Type: application/json
+```
+
+body 可为空，也可指定过期时间：
+
+```json
+{
+  "expires_at": "2026-10-04T12:00:00+08:00"
+}
+```
+
+响应：
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "share_link_id",
+    "supplier_purchase_order_id": "purchase_order_id",
+    "token": "pos_xxx",
+    "share_path": "/public/supplier-purchase-orders/pos_xxx",
+    "public_url": "https://api-dev.goodcms.cn/public/supplier-purchase-orders/pos_xxx",
+    "expires_at": "2026-10-04T04:00:00.000Z",
+    "status": "active",
+    "idempotent": false
+  }
+}
+```
+
+规则：
+
+- 只允许对 `submitted` 采购单生成分享链接。
+- `Idempotency-Key` 必填；同一员工、同一采购单、同一 key 重试返回同一链接。
+- `public_url` 可能为空；小程序可优先使用 `share_path` 自行拼接当前 API 域名。
+
+### 17.2 供应商公开查看
+
+```http
+GET /public/supplier-purchase-orders/:token
+```
+
+无需登录。只返回 token 对应的一张采购单，不接受小程序传
+`tenantId`、`supplierId` 或其它范围参数。
+
+返回结构和 `print-preview` 相同：
+
+- `order`：采购单、供应商、项目、金额、备注、分享确认信息。
+- `items`：采购明细。
+- `totals`：小计、税额、合计。
+
+### 17.3 供应商确认已查看
+
+```http
+POST /public/supplier-purchase-orders/:token/confirm-view
+Idempotency-Key: <stable-key>
+Content-Type: application/json
+```
+
+body：
+
+```json
+{
+  "confirmed_at": "2026-09-04T16:30:00+08:00",
+  "remark": "已收到"
+}
+```
+
+说明：
+
+- 这是“供应商确认看到了采购单”，不是员工侧的“确认履约”。
+- 已确认后重复提交按幂等结果返回，不改变第一次确认时间。
+
+### 17.4 员工侧采购单预览与导出
+
+```http
+GET /supplier-purchase-orders/:id/print-preview
+GET /supplier-purchase-orders/:id/export.pdf
+GET /supplier-purchase-orders/:id/export.xlsx
+```
+
+导出响应：
+
+- PDF：`content-type = application/pdf`，文件内容为真实 PDF。
+- XLSX：`content-type = application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`，文件内容为真实 Excel OpenXML。
+
+小程序端不要自行拼 PDF/XLSX，只调用后端接口打开或下载。
+
+### 17.5 供应商公开导出
+
+```http
+GET /public/supplier-purchase-orders/:token/print-preview
+GET /public/supplier-purchase-orders/:token/export.pdf
+GET /public/supplier-purchase-orders/:token/export.xlsx
+```
+
+用于供应商打开分享链接后的预览和下载。仍然只允许读取当前 token 对应采购单。
+
+### 17.6 批次维度导出
+
+```http
+GET /supplier-purchase-batches/:id/export.xlsx
+```
+
+返回一个真实 XLSX。一个采购批次下按供应商采购单拆 worksheet；每个
+worksheet 内包含采购单头部信息、商品明细和金额合计。
+
+### 17.7 错误码
+
+| code | 说明 |
+| --- | --- |
+| `SUPPLIER_PURCHASE_ORDER_NOT_FOUND` | 采购单不存在或无权访问 |
+| `SUPPLIER_PURCHASE_ORDER_SHARE_NOT_ALLOWED` | 采购单不是可分享状态 |
+| `SUPPLIER_PURCHASE_ORDER_SHARE_LINK_NOT_FOUND` | token 不存在、已停用或已过期 |
+| `SUPPLIER_PURCHASE_ORDER_SHARE_LINK_NOT_AVAILABLE` | token 与采购单事实不一致 |
+| `SUPPLIER_PURCHASE_ORDER_SHARE_EXPIRY_INVALID` | 过期时间无效 |
+| `VALIDATION_ERROR` | 参数格式错误 |
+
+### 17.8 Orange 对接建议
+
+第一版小程序只需要接：
+
+1. 采购单详情页加“发送给供应商”，调用 `share-link` 后复制或转发链接。
+2. 采购单详情页加“预览/下载 PDF”“下载 Excel”。
+3. 批次详情页可加“导出本批次 Excel”。
+4. 供应商公开页先按 token 展示只读采购单和“确认已收到”。
+
+暂不接：
+
+- 供应商登录。
+- 供应商改价、改数量。
+- 异常处理闭环。
+- 批次 ZIP。

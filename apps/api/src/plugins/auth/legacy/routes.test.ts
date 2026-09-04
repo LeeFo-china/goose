@@ -117,6 +117,19 @@ describe("isVisitorSessionRoute", () => {
 });
 
 describe("auth public route allowlist", () => {
+  test("allows public supplier purchase order share routes only for reads and confirm-view", () => {
+    const tokenRoute = "/public/supplier-purchase-orders/pos_0123456789abcdefghijklmnopqrstuvwxyzABCDE";
+    expect(isPublicRoute("GET", tokenRoute)).toBe(true);
+    expect(isPublicRoute("HEAD", tokenRoute)).toBe(true);
+    expect(isPublicRoute("GET", `${tokenRoute}/print-preview`)).toBe(true);
+    expect(isPublicRoute("GET", `${tokenRoute}/export.pdf`)).toBe(true);
+    expect(isPublicRoute("GET", `${tokenRoute}/export.xlsx`)).toBe(true);
+    expect(isPublicRoute("POST", `${tokenRoute}/confirm-view`)).toBe(true);
+    expect(isPublicRoute("POST", tokenRoute)).toBe(false);
+    expect(isPublicRoute("POST", `${tokenRoute}/export.pdf`)).toBe(false);
+    expect(isPublicRoute("DELETE", tokenRoute)).toBe(false);
+  });
+
   test("allows only exact WeChat virtual-payment GET and POST event routes", () => {
     const route = "/wechat/virtual-payment/events";
     expect(isPublicRoute("GET", route)).toBe(true);

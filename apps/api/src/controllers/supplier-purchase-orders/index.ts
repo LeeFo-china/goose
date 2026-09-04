@@ -15,11 +15,18 @@ import {
   SupplierPurchaseOrderShipmentCreateSchema,
   SupplierPurchaseOrderSubmitSchema,
 } from "@/schema/supplier-purchase-orders";
+import {
+  SupplierPurchaseOrderPublicConfirmViewSchema,
+  SupplierPurchaseOrderPublicTokenParamSchema,
+  SupplierPurchaseOrderShareLinkCreateSchema,
+} from "@/schema/supplier-purchase-order-sharing";
 import { supplierPurchaseFulfillmentsService } from "@/services/supplier-purchase-fulfillments";
+import { supplierPurchaseOrderSharingService } from
+  "@/services/supplier-purchase-order-sharing";
 import { supplierPurchaseOrdersService } from "@/services/supplier-purchase-orders";
 import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
-import type { FastifyRequest } from "fastify";
+import type { FastifyReply, FastifyRequest } from "fastify";
 import type { z } from "zod";
 
 class SupplierPurchaseOrdersController extends TenantBaseController {
@@ -77,6 +84,45 @@ class SupplierPurchaseOrdersController extends TenantBaseController {
     return ResponseHandler.success(
       await supplierPurchaseOrdersService.getFinancialSummary(auth, id),
     );
+  }
+
+  @Get("/supplier-purchase-orders/:id/print-preview")
+  async getPrintPreview(request: FastifyRequest) {
+    const auth = await this.getRequiredTenantContext(request);
+    const { id } = this.parse(
+      SupplierPurchaseOrderParamSchema,
+      request.params,
+    );
+    return ResponseHandler.success(
+      await supplierPurchaseOrderSharingService.getEmployeePrintPreview(
+        auth,
+        id,
+      ),
+    );
+  }
+
+  @Get("/supplier-purchase-orders/:id/export.pdf")
+  async exportPdf(request: FastifyRequest, reply: FastifyReply) {
+    const auth = await this.getRequiredTenantContext(request);
+    const { id } = this.parse(
+      SupplierPurchaseOrderParamSchema,
+      request.params,
+    );
+    const file = await supplierPurchaseOrderSharingService
+      .exportEmployeeOrderPdf(auth, id);
+    return sendAttachment(reply, file);
+  }
+
+  @Get("/supplier-purchase-orders/:id/export.xlsx")
+  async exportXlsx(request: FastifyRequest, reply: FastifyReply) {
+    const auth = await this.getRequiredTenantContext(request);
+    const { id } = this.parse(
+      SupplierPurchaseOrderParamSchema,
+      request.params,
+    );
+    const file = await supplierPurchaseOrderSharingService
+      .exportEmployeeOrderXlsx(auth, id);
+    return sendAttachment(reply, file);
   }
 
   @Get("/supplier-purchase-orders/:id/fulfillment")
@@ -189,6 +235,101 @@ class SupplierPurchaseOrdersController extends TenantBaseController {
     );
   }
 
+  @Post("/supplier-purchase-orders/:id/share-link")
+  async createShareLink(request: FastifyRequest) {
+    const auth = await this.getRequiredTenantContext(request);
+    const key = requireSupplierIdempotencyKey(request);
+    const { id } = this.parse(
+      SupplierPurchaseOrderParamSchema,
+      request.params,
+    );
+    const input = this.parse(
+      SupplierPurchaseOrderShareLinkCreateSchema,
+      request.body,
+    );
+    return ResponseHandler.success(
+      await supplierPurchaseOrderSharingService.createShareLink(
+        auth,
+        id,
+        input,
+        key,
+      ),
+    );
+  }
+
+  @Get("/public/supplier-purchase-orders/:token", {
+    tenantServiceAccess: "public_or_callback",
+  })
+  async getPublicOrder(request: FastifyRequest) {
+    const { token } = this.parse(
+      SupplierPurchaseOrderPublicTokenParamSchema,
+      request.params,
+    );
+    return ResponseHandler.success(
+      await supplierPurchaseOrderSharingService.getPublicOrder(token),
+    );
+  }
+
+  @Post("/public/supplier-purchase-orders/:token/confirm-view", {
+    tenantServiceAccess: "public_or_callback",
+  })
+  async confirmPublicView(request: FastifyRequest) {
+    requireSupplierIdempotencyKey(request);
+    const { token } = this.parse(
+      SupplierPurchaseOrderPublicTokenParamSchema,
+      request.params,
+    );
+    const input = this.parse(
+      SupplierPurchaseOrderPublicConfirmViewSchema,
+      request.body,
+    );
+    return ResponseHandler.success(
+      await supplierPurchaseOrderSharingService.confirmPublicView(
+        token,
+        input,
+      ),
+    );
+  }
+
+  @Get("/public/supplier-purchase-orders/:token/print-preview", {
+    tenantServiceAccess: "public_or_callback",
+  })
+  async getPublicPrintPreview(request: FastifyRequest) {
+    const { token } = this.parse(
+      SupplierPurchaseOrderPublicTokenParamSchema,
+      request.params,
+    );
+    return ResponseHandler.success(
+      await supplierPurchaseOrderSharingService.getPublicPrintPreview(token),
+    );
+  }
+
+  @Get("/public/supplier-purchase-orders/:token/export.pdf", {
+    tenantServiceAccess: "public_or_callback",
+  })
+  async exportPublicPdf(request: FastifyRequest, reply: FastifyReply) {
+    const { token } = this.parse(
+      SupplierPurchaseOrderPublicTokenParamSchema,
+      request.params,
+    );
+    const file = await supplierPurchaseOrderSharingService
+      .exportPublicOrderPdf(token);
+    return sendAttachment(reply, file);
+  }
+
+  @Get("/public/supplier-purchase-orders/:token/export.xlsx", {
+    tenantServiceAccess: "public_or_callback",
+  })
+  async exportPublicXlsx(request: FastifyRequest, reply: FastifyReply) {
+    const { token } = this.parse(
+      SupplierPurchaseOrderPublicTokenParamSchema,
+      request.params,
+    );
+    const file = await supplierPurchaseOrderSharingService
+      .exportPublicOrderXlsx(token);
+    return sendAttachment(reply, file);
+  }
+
   @Post("/supplier-purchase-orders/:id/submit")
   async submit(request: FastifyRequest) {
     const auth = await this.getRequiredTenantContext(request);
@@ -297,6 +438,19 @@ class SupplierPurchaseOrdersController extends TenantBaseController {
     if (!result.success) throw Errors.fromZod(result.error);
     return result.data;
   }
+}
+
+function sendAttachment(
+  reply: FastifyReply,
+  file: { content_type: string; filename: string; content: Buffer },
+) {
+  return reply
+    .header("content-type", file.content_type)
+    .header(
+      "content-disposition",
+      `attachment; filename="${encodeURIComponent(file.filename)}"`,
+    )
+    .send(file.content);
 }
 
 export default new SupplierPurchaseOrdersController();

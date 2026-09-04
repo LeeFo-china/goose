@@ -31,6 +31,11 @@ const submit = mock(async () => ({ status: "submitted" }));
 const review = mock(async () => ({ status: "ordered" }));
 const cancel = mock(async () => ({ status: "cancelled" }));
 const withdraw = mock(async () => ({ status: "withdrawn" }));
+const exportBatchXlsx = mock(async () => ({
+  filename: "batch.xlsx",
+  content_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  content: Buffer.from("PK"),
+}));
 
 mock.module("@/services/supplier-purchase-batches", () => ({
   supplierPurchaseBatchesService: {
@@ -47,6 +52,12 @@ mock.module("@/services/supplier-purchase-batches", () => ({
     review,
     cancel,
     withdraw,
+  },
+}));
+
+mock.module("@/services/supplier-purchase-order-sharing", () => ({
+  supplierPurchaseOrderSharingService: {
+    exportBatchXlsx,
   },
 }));
 
@@ -75,10 +86,11 @@ describe("SupplierPurchaseBatchesController", () => {
       review,
       cancel,
       withdraw,
+      exportBatchXlsx,
     ]) fn.mockClear();
   });
 
-  test("registers exactly thirteen supplier purchase batch routes", async () => {
+  test("registers exactly fourteen supplier purchase batch routes", async () => {
     const value = await controller();
     const routes: Array<{ method: string; path: string }> = [];
 
@@ -99,6 +111,7 @@ describe("SupplierPurchaseBatchesController", () => {
         path: "/supplier-purchase-batches/:id/requisitions",
       },
       { method: "GET", path: "/supplier-purchase-batches/:id/orders" },
+      { method: "GET", path: "/supplier-purchase-batches/:id/export.xlsx" },
       {
         method: "POST",
         path: "/supplier-purchase-batches/:id/save-draft",
@@ -108,6 +121,23 @@ describe("SupplierPurchaseBatchesController", () => {
       { method: "POST", path: "/supplier-purchase-batches/:id/cancel" },
       { method: "POST", path: "/supplier-purchase-batches/:id/withdraw" },
     ]);
+  });
+
+  test("exports purchase batch orders as xlsx", async () => {
+    const value = await controller();
+    const reply = replyStub();
+
+    await value.exportOrdersXlsx(
+      { params: { id: BATCH_ID } } as never,
+      reply as never,
+    );
+
+    expect(exportBatchXlsx).toHaveBeenCalledWith(auth, BATCH_ID);
+    expect(reply.header).toHaveBeenCalledWith(
+      "content-type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    expect(reply.send).toHaveBeenCalledWith(Buffer.from("PK"));
   });
 
   test("strictly parses and wraps batch list and child pages", async () => {
@@ -411,3 +441,11 @@ describe("SupplierPurchaseBatchesController", () => {
     )).toHaveLength(1);
   });
 });
+
+function replyStub() {
+  const reply = {
+    header: mock(() => reply),
+    send: mock((value: unknown) => value),
+  };
+  return reply;
+}

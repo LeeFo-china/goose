@@ -28,17 +28,11 @@ export function isPublicRoute(method: string, url: string) {
 
   if (isEffectiveBrandingRoute(method, url) || (url === "/wechat/virtual-payment/events" && (method === "GET" || method === "POST"))) return true;
 
-  if (
-    (method === "GET" || method === "HEAD")
-    && url === "/ai/decoration-qa/suggestions"
-  ) {
+  if ((method === "GET" || method === "HEAD") && url === "/ai/decoration-qa/suggestions") {
     return true;
   }
 
-  if (
-    (method === "GET" || method === "HEAD")
-    && url === "/public/administrative-areas"
-  ) {
+  if ((method === "GET" || method === "HEAD") && url === "/public/administrative-areas") {
     return true;
   }
 
@@ -82,10 +76,7 @@ export function isPublicRoute(method: string, url: string) {
     return true;
   }
 
-  if (
-    (method === "GET" || method === "HEAD")
-    && url.startsWith("/share-campaign-claim-vouchers/")
-  ) {
+  if ((method === "GET" || method === "HEAD") && url.startsWith("/share-campaign-claim-vouchers/")) {
     return true;
   }
 
@@ -114,6 +105,8 @@ export function isPublicRoute(method: string, url: string) {
   ) {
     return true;
   }
+
+  if (isPublicSupplierPurchaseOrderRoute(method, url)) return true;
 
   if (
     (method === "GET" || method === "HEAD")
@@ -151,17 +144,11 @@ export function isPublicRoute(method: string, url: string) {
     return true;
   }
 
-  if (
-    method === "POST"
-    && url === "/pay/wechat/callback"
-  ) {
+  if (method === "POST" && url === "/pay/wechat/callback") {
     return true;
   }
 
-  if (
-    method === "POST"
-    && url === "/customer/project-acceptances/open-ticket/verify"
-  ) {
+  if (method === "POST" && url === "/customer/project-acceptances/open-ticket/verify") {
     return true;
   }
 
@@ -207,6 +194,12 @@ function isPublicSiteContentRoute(method: string, url: string) {
     || url === "/public/site/cities"
   ) return true;
   return /^\/public\/site\/(?:articles|cases|cities)\/[^/]+$/.test(url);
+}
+
+function isPublicSupplierPurchaseOrderRoute(method: string, url: string) {
+  const read = method === "GET" || method === "HEAD";
+  return url.startsWith("/public/supplier-purchase-orders/") &&
+    (read || (method === "POST" && url.endsWith("/confirm-view")));
 }
 
 function isInternalSiteContentPreviewRoute(method: string, url: string) {

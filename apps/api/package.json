@@ -89,10 +89,12 @@
     "@gooes/domain": "workspace:*",
     "@supabase/supabase-js": "^2.100.0",
     "cos-nodejs-sdk-v5": "^2.15.4",
+    "exceljs": "4.4.0",
     "fastify": "^5.8.4",
     "fastify-cli": "^7.4.1",
     "fflate": "0.8.2",
     "openai": "^6.34.0",
+    "pdfkit": "0.20.2",
     "reflect-metadata": "^0.2.2",
     "sharp": "0.34.5",
     "tencentcloud-sdk-nodejs-common": "4.1.220",
@@ -102,6 +104,7 @@
   "devDependencies": {
     "@types/bun": "latest",
     "@types/node": "latest",
+    "@types/pdfkit": "^0.17.6",
     "typescript": "^5"
   }
 }
