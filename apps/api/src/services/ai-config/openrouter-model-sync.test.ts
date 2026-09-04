@@ -68,7 +68,7 @@ describe("OpenRouterModelSyncService", () => {
       ok: true,
       status: 200,
       json: async () => ({
-        data: [{ id: "openai/gpt-4o-mini", name: "GPT-4o mini", pricing: { prompt: "0.1", completion: "0.2", request: "-1" } }],
+        data: [{ id: "openai/gpt-4o-mini", name: "GPT-4o mini", context_length: 128000, pricing: { prompt: "0.1", completion: "0.2", request: "-1" } }],
         links: {},
         total_count: 1,
       }),
@@ -294,7 +294,7 @@ describe("OpenRouterModelSyncService", () => {
     }
   });
 
-  test("preserves current capability overrides and does not invent video or speech prices", async () => {
+  test("uses catalog capability candidates and does not invent video or speech prices", async () => {
     const { OpenRouterModelSyncService } = await import("./openrouter-model-sync");
     const currentCapability = {
       modality: "text" as const,
@@ -377,8 +377,8 @@ describe("OpenRouterModelSyncService", () => {
       }>;
     };
     expect(input.entries).toHaveLength(1);
-    expect(input.entries[0]?.change_type).toBe("unchanged");
-    expect(input.entries[0]?.capability_payload).toEqual(currentCapability);
+    expect(input.entries[0]?.change_type).toBe("changed");
+    expect(input.entries[0]?.capability_payload).toEqual({ modality: "text", max_context_tokens: 128000, supports_json_object: true, supports_streaming: true });
     expect(input.entries[0]?.raw_price_projection).toEqual({
       prompt: "0.1",
       completion: "0.2",
