@@ -76,6 +76,7 @@ const MaterialImage = Image.extend({
 });
 
 function MaterialImageNodeView({
+  deleteNode,
   node,
   selected,
 }: ReactNodeViewProps) {
@@ -105,6 +106,26 @@ function MaterialImageNodeView({
       >
         <GripVertical className="h-4 w-4" aria-hidden="true" />
       </span>
+      <button
+        type="button"
+        contentEditable={false}
+        aria-label="删除当前图片"
+        className={cn(
+          "absolute right-2 top-2 z-10 inline-flex h-8 w-8 items-center justify-center rounded-md border bg-background/95 text-destructive shadow-sm",
+          "opacity-0 transition hover:bg-destructive hover:text-destructive-foreground group-hover:opacity-100 group-focus-within:opacity-100",
+        )}
+        onMouseDown={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+        }}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          deleteNode();
+        }}
+      >
+        <Trash2 className="h-4 w-4" aria-hidden="true" />
+      </button>
       <img
         src={src}
         alt={alt}
@@ -309,7 +330,7 @@ export function MaterialNoteRichEditor({
   return (
     <div className="flex flex-col gap-4">
       {uploadError ? <StatusAlert>{uploadError}</StatusAlert> : null}
-      <div className="flex flex-wrap gap-2 rounded-md border bg-muted/30 p-2">
+      <div className="sticky top-0 z-20 flex flex-wrap gap-2 rounded-md border bg-muted/90 p-2 backdrop-blur supports-[backdrop-filter]:bg-muted/80">
         <ToolbarButton disabled={!editor || disabled} onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}><Heading2 data-icon="inline-start" />二级标题</ToolbarButton>
         <ToolbarButton disabled={!editor || disabled} onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()}><Heading3 data-icon="inline-start" />三级标题</ToolbarButton>
         <ToolbarButton disabled={!editor || disabled} onClick={() => editor?.chain().focus().toggleBulletList().run()}><List data-icon="inline-start" />无序列表</ToolbarButton>

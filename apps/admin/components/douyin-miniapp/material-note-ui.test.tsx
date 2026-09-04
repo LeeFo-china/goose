@@ -235,8 +235,11 @@ describe("抖音资料后台工作台 UI 合同", () => {
     expect(richEditor).toContain("ReactNodeViewRenderer(MaterialImageNodeView)");
     expect(richEditor).toContain("NodeViewWrapper");
     expect(richEditor).toContain("data-drag-handle");
+    expect(richEditor).toContain("deleteNode()");
+    expect(richEditor).toContain('aria-label="删除当前图片"');
     expect(richEditor).toContain("GripVertical");
     expect(richEditor).toContain('aria-label="拖动图片调整位置"');
+    expect(richEditor).toContain("sticky top-0 z-20");
     expect(richEditor).toContain('draggable: true');
     expect(JSON.stringify(materialNoteBlocksToTiptapDoc(blocks))).toContain(
       "11111111-1111-4111-8111-111111111111",
