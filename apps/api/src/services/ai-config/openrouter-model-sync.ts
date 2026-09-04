@@ -102,7 +102,11 @@ function buildPreviewEntry(entry: CatalogEntryProjection): Record<string, unknow
 }
 
 function catalogEndpointUrl(provider: AiProviderRecord, path: string): string {
-  return new URL(catalogEndpointRelativePath(path), catalogEndpointBaseUrl(provider)).toString();
+  try {
+    return new URL(catalogEndpointRelativePath(path), catalogEndpointBaseUrl(provider)).toString();
+  } catch {
+    throw catalogFetchError();
+  }
 }
 
 function catalogEndpointBaseUrl(provider: AiProviderRecord): string {
@@ -110,13 +114,13 @@ function catalogEndpointBaseUrl(provider: AiProviderRecord): string {
   if (!configuredUrl) return ensureTrailingSlash(OPENROUTER_DEFAULT_BASE_URL);
   try {
     const parsed = new URL(configuredUrl);
-    const markerIndex = parsed.pathname.indexOf("/api/v1");
+    const markerIndex = parsed.pathname.search(/\/api\/v1(?:\/|$)/);
     if (markerIndex >= 0) {
       const apiRoot = parsed.pathname.slice(0, markerIndex + "/api/v1".length);
       return ensureTrailingSlash(`${parsed.origin}${apiRoot}`);
     }
   } catch {
-    return ensureTrailingSlash(configuredUrl);
+    throw catalogFetchError();
   }
   return ensureTrailingSlash(configuredUrl);
 }
@@ -129,13 +133,17 @@ function ensureTrailingSlash(value: string): string {
   return value.endsWith("/") ? value : `${value}/`;
 }
 
+function catalogFetchError() {
+  return Errors.business(502, "OpenRouter 模型目录读取失败", "AI_OPENROUTER_CATALOG_FAILED");
+}
+
 async function parseCatalogResponse(
   response: Awaited<ReturnType<FetchPort>>,
   modality: CatalogModality,
 ) {
   const json = await response.json().catch(() => null);
   if (!response.ok) {
-    throw Errors.business(502, "OpenRouter 模型目录读取失败", "AI_OPENROUTER_CATALOG_FAILED");
+    throw catalogFetchError();
   }
   const parsed = parseCatalogJson(json, modality);
   if (!parsed.success) {
@@ -304,7 +312,10 @@ export class OpenRouterModelSyncService {
     const requests = CATALOG_MODALITY_ORDER.map(async (modality) => {
       const path = CATALOG_ENDPOINTS[modality];
       const url = catalogEndpointUrl(provider, path);
-      const response = await this.fetchImpl(url, { method: "GET", headers });
+      const response = await this.fetchImpl(url, { method: "GET", headers })
+        .catch(() => {
+          throw catalogFetchError();
+        });
       return [modality, url, await parseCatalogResponse(response, modality)] as const;
     });
     const results = await Promise.all(requests);

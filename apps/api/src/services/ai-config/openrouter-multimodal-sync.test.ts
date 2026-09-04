@@ -272,6 +272,33 @@ describe("OpenRouter multimodal catalog sync", () => {
     expect(invalidRepository.saveOpenRouterCatalogPreview).not.toHaveBeenCalled();
   });
 
+  test("wraps invalid provider endpoint and network failures as catalog business errors", async () => {
+    const { OpenRouterModelSyncService } = await import("./openrouter-model-sync");
+    const invalidEndpointRepository = createRepositoryWithEndpoint("not a url");
+    const invalidEndpointService = new OpenRouterModelSyncService({
+      repository: invalidEndpointRepository as never,
+      settings: createSettings() as never,
+      fetchImpl: createFetch(catalogPayloads()) as never,
+    });
+
+    await expect(invalidEndpointService.createPreview(auth(), { provider_id: PROVIDER_ID }))
+      .rejects.toMatchObject({ statusCode: 502, code: "AI_OPENROUTER_CATALOG_FAILED" });
+    expect(invalidEndpointRepository.saveOpenRouterCatalogPreview).not.toHaveBeenCalled();
+
+    const networkRepository = createRepository();
+    const networkService = new OpenRouterModelSyncService({
+      repository: networkRepository as never,
+      settings: createSettings() as never,
+      fetchImpl: mock(async () => {
+        throw new TypeError("fetch failed with secret host details");
+      }) as never,
+    });
+
+    await expect(networkService.createPreview(auth(), { provider_id: PROVIDER_ID }))
+      .rejects.toMatchObject({ statusCode: 502, code: "AI_OPENROUTER_CATALOG_FAILED" });
+    expect(networkRepository.saveOpenRouterCatalogPreview).not.toHaveBeenCalled();
+  });
+
   test("rejects combined catalogs over 10000 entries before repository write", async () => {
     const { OpenRouterModelSyncService } = await import("./openrouter-model-sync");
     const repository = createRepository();
