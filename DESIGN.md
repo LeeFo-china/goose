@@ -331,7 +331,51 @@ is the reference implementation.
 
 Dialogs use fixed viewport-aware height when they contain tabs or workflow panels. Tabs sit at the top, content scrolls within the active panel, and action controls remain discoverable. Avoid putting a full page of nested cards inside a modal; use sidebars, split panes, borders, and sticky summary areas when the workflow is dense.
 
-## 6. Do's and Don'ts
+## 6. External Pattern References
+
+Open Dashboard may be used as an external SaaS admin pattern reference when
+designing or substantially changing `apps/admin` pages. It is a shape catalogue
+and checklist source, not an implementation source of truth for this repository.
+
+Use the installed open-dashboard skills in this order:
+- `add-component`: consult for admin page shapes such as CRUD tables,
+  master-detail pages, settings pages, charts, kanban, timeline, empty states,
+  feedback states, bulk actions, saved views, and column controls.
+- `add-backend`: consult only for conceptual CRUD/data-flow completeness. Do
+  not use it to scaffold Gooes backend code.
+- `scaffold-dashboard`: consult only when starting an unrelated new dashboard
+  prototype. Do not scaffold it inside this repository.
+- `rebrand`: consult only for checklist ideas. Gooes brand, navigation, tokens,
+  and theme are governed by this `DESIGN.md`, `PRODUCT.md`, `app/globals.css`,
+  and existing admin components.
+
+For each new or substantially redesigned admin page:
+- First inspect the nearest Gooes page in the same area, then this document,
+  then `admin-design`.
+- Use Open Dashboard only to choose or verify the page archetype: table,
+  compact list, master-detail, detail page, record tabs, settings page,
+  dashboard, wizard, timeline, kanban, or calendar.
+- Translate useful shape ideas into the local stack: Next.js App Router,
+  shadcn/Radix, Tailwind v3 semantic tokens, lucide-react icons, and existing
+  Gooes business components.
+- Verify the ordinary admin contract: permission state, loading state, empty
+  state, error state, pagination or bounded loading, filters, row actions,
+  responsive behavior, keyboard/focus behavior, and text fit.
+
+Do not copy Open Dashboard templates directly into Gooes. Its foundation assumes
+TanStack Start, Tailwind v4, shadcn-on-base-ui, Drizzle, better-auth, and its own
+repository/data seams. Those assumptions conflict with Gooes unless a future
+task explicitly creates a separate prototype outside this app.
+
+Open Dashboard never overrides these Gooes rules:
+- `apps/admin` keeps the current Next.js + shadcn/Radix + Tailwind stack.
+- API work keeps the existing Fastify controller/service/repository boundaries.
+- Database changes still require Supabase migrations.
+- List interfaces still require bounded pagination.
+- Gooes visual tokens, brand colors, Chinese operational copy, and admin density
+  stay authoritative.
+
+## 7. Do's and Don'ts
 
 ### Do:
 - **Do** use existing shadcn/Radix primitives and local semantic tokens before adding custom component vocabulary.
