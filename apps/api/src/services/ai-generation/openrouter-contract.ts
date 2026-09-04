@@ -24,6 +24,21 @@ const parameterSpecSchema = z.strictObject({
   type: z.string().trim().min(1).max(64),
   values: z.array(scalarParameterValue).max(1_000).optional(),
 });
+const numericRangeSchema = z.strictObject({
+  max: z.number().finite().optional(),
+  min: z.number().finite().optional(),
+});
+const flexibleVideoOptionSchema = z.union([
+  z.string().max(512),
+  z.number().finite(),
+  z.boolean(),
+  parameterSpecSchema,
+  numericRangeSchema,
+]);
+const flexibleVideoOptionsSchema = z.union([
+  flexibleVideoOptionSchema,
+  z.array(flexibleVideoOptionSchema).max(128),
+]).nullable();
 const modelArchitectureSchema = z.strictObject({
   input_modalities: stringArray.optional(),
   instruct_type: z.string().max(128).nullable().optional(),
@@ -59,7 +74,7 @@ const videoModelEntrySchema = z.strictObject({
   allowed_passthrough_parameters: stringArray.optional(),
   canonical_slug: z.string().max(512).nullable().optional(),
   created: z.number().int().nonnegative().nullable().optional(),
-  creativity: z.number().finite().nullable().optional(),
+  creativity: flexibleVideoOptionsSchema.optional(),
   description: safeText.nullable().optional(),
   generate_audio: z.boolean().nullable().optional(),
   hugging_face_id: z.string().max(512).nullable().optional(),
@@ -67,12 +82,12 @@ const videoModelEntrySchema = z.strictObject({
   name: z.string().trim().min(1).max(512).optional(),
   pricing_skus: z.record(z.string().max(128), numberOrDecimalString).optional(),
   seed: z.union([z.boolean(), z.number().int(), z.string().max(128)]).nullable().optional(),
-  supported_aspect_ratios: z.array(z.string().max(64)).max(128).optional(),
-  supported_durations: z.array(z.number().finite().positive()).max(128).optional(),
+  supported_aspect_ratios: z.array(z.string().max(64)).max(128).nullable().optional(),
+  supported_durations: z.array(z.number().finite().positive()).max(128).nullable().optional(),
   supported_frame_images: z.array(z.string().max(64)).max(128).nullable().optional(),
-  supported_resolutions: z.array(z.string().max(64)).max(128).optional(),
+  supported_resolutions: z.array(z.string().max(64)).max(128).nullable().optional(),
   supported_sizes: z.array(z.string().max(64)).max(128).nullable().optional(),
-  upscale_factor: z.number().finite().positive().nullable().optional(),
+  upscale_factor: flexibleVideoOptionsSchema.optional(),
 });
 
 export const OpenRouterImageModelListSchema = z.strictObject({ data: z.array(imageModelEntrySchema).max(10_000) });

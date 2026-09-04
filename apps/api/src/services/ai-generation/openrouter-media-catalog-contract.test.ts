@@ -36,4 +36,20 @@ describe("OpenRouter media catalog contract", () => {
       }],
     }).success).toBe(true);
   });
+
+  test("parses nullable and structured optional video metadata", () => {
+    expect(OpenRouterVideoModelListSchema.safeParse({
+      data: [{
+        id: "openrouter/video-model",
+        name: "Video Model",
+        creativity: ["low", "high"],
+        upscale_factor: { min: 1, max: 2 },
+        generate_audio: true,
+        supported_aspect_ratios: null,
+        supported_durations: null,
+        supported_resolutions: null,
+        pricing_skus: { "per-video-second": "0.05" },
+      }],
+    }).success).toBe(true);
+  });
 });
