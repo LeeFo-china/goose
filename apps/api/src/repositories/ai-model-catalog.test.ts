@@ -237,7 +237,7 @@ describe("AiModelCatalogRepository", () => {
     const result = await new AiModelCatalogRepository(client).listCatalogEntries(RUN_ID, {
       page: 2,
       pageSize: 20,
-      keyword: " claude\\%_,() ",
+      keyword: " claude\\%_,().: ",
       modality: "image",
       changeType: "new",
     });
@@ -266,7 +266,7 @@ describe("AiModelCatalogRepository", () => {
     expect(calls).toContainEqual({ method: "eq", args: ["change_type", "new"] });
     expect(calls).toContainEqual({
       method: "or",
-      args: ["model_name.ilike.%claude\\\\\\%\\_\\,\\(\\)%,external_model_id.ilike.%claude\\\\\\%\\_\\,\\(\\)%"],
+      args: ["model_name.ilike.\"%claude\\\\\\%\\_\\,\\(\\)\\.\\:%\",external_model_id.ilike.\"%claude\\\\\\%\\_\\,\\(\\)\\.\\:%\""],
     });
     expect(calls.at(-1)).toEqual({ method: "range", args: [20, 39] });
   });

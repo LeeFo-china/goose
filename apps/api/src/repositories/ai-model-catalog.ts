@@ -233,7 +233,11 @@ function totalPages(total: number, pageSize: number) {
 }
 
 function escapeCatalogKeyword(keyword: string) {
-  return keyword.trim().replace(/[\\%_,()]/g, "\\$&");
+  return keyword.trim().replace(/[\\%_,().:"]/g, "\\$&");
+}
+
+function catalogIlikePattern(keyword: string) {
+  return `"%${escapeCatalogKeyword(keyword)}%"`;
 }
 
 function assertRpcDataObject(data: unknown, operation: string) {
@@ -354,8 +358,8 @@ export class AiModelCatalogRepository {
     if (query.modality) request = request.eq("modality", query.modality);
     if (query.changeType) request = request.eq("change_type", query.changeType);
     if (query.keyword) {
-      const keyword = escapeCatalogKeyword(query.keyword);
-      request = request.or(`model_name.ilike.%${keyword}%,external_model_id.ilike.%${keyword}%`);
+      const keyword = catalogIlikePattern(query.keyword);
+      request = request.or(`model_name.ilike.${keyword},external_model_id.ilike.${keyword}`);
     }
     const { data, error, count } = await request
       .order("entry_position", { ascending: true })
