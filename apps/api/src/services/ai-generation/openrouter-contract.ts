@@ -34,6 +34,7 @@ const modelArchitectureSchema = z.strictObject({
 const imageSupportedParametersSchema = z.strictObject({
   aspect_ratio: parameterSpecSchema.optional(),
   background: parameterSpecSchema.optional(),
+  input_references: parameterSpecSchema.optional(),
   n: parameterSpecSchema.optional(),
   output_compression: parameterSpecSchema.optional(),
   output_format: parameterSpecSchema.optional(),
@@ -58,8 +59,10 @@ const videoModelEntrySchema = z.strictObject({
   allowed_passthrough_parameters: stringArray.optional(),
   canonical_slug: z.string().max(512).nullable().optional(),
   created: z.number().int().nonnegative().nullable().optional(),
+  creativity: z.number().finite().nullable().optional(),
   description: safeText.nullable().optional(),
   generate_audio: z.boolean().nullable().optional(),
+  hugging_face_id: z.string().max(512).nullable().optional(),
   id: safeId,
   name: z.string().trim().min(1).max(512).optional(),
   pricing_skus: z.record(z.string().max(128), numberOrDecimalString).optional(),
@@ -69,6 +72,7 @@ const videoModelEntrySchema = z.strictObject({
   supported_frame_images: z.array(z.string().max(64)).max(128).nullable().optional(),
   supported_resolutions: z.array(z.string().max(64)).max(128).optional(),
   supported_sizes: z.array(z.string().max(64)).max(128).nullable().optional(),
+  upscale_factor: z.number().finite().positive().nullable().optional(),
 });
 
 export const OpenRouterImageModelListSchema = z.strictObject({ data: z.array(imageModelEntrySchema).max(10_000) });
