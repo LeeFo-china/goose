@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 
 import {
+  currentServiceAccessSummary,
   ids,
   initialCatalog,
   now,
@@ -1528,6 +1529,12 @@ const server = createServer(async (request, response) => {
     }
     if (request.method === "GET" && url.pathname === "/admin/auth/me") {
       return sendData(response, session);
+    }
+    if (
+      request.method === "GET" &&
+      url.pathname === "/employee/service-access"
+    ) {
+      return sendData(response, currentServiceAccessSummary());
     }
     if (
       request.method === "GET" &&

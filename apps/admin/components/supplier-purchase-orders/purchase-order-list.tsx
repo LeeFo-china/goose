@@ -71,8 +71,8 @@ export function PurchaseOrderList({
   }
 
   return (
-    <Table>
-      <TableHeader>
+    <Table containerClassName="min-w-[1120px] overflow-x-auto">
+      <TableHeader className="sticky top-0 bg-card">
         <TableRow>
           <TableHead>采购单号</TableHead>
           <TableHead>项目</TableHead>

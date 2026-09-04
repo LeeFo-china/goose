@@ -52,6 +52,25 @@ export const session = {
   expires_at: "2099-12-31T23:59:59+08:00",
 };
 
+export function currentServiceAccessSummary() {
+  return {
+    accessStatus: "workspace_available",
+    accessMode: "paid",
+    accessLevel: "read_write",
+    canEnterWorkspace: true,
+    readonly: false,
+    trialId: null,
+    trialStatus: null,
+    startsAt: null,
+    endsAt: null,
+    evaluatedAt: now,
+    title: "平台技术服务可用",
+    message: "当前企业可正常使用工作台。",
+    primaryAction: { key: "enter_workspace", label: "进入工作台" },
+    secondaryAction: null,
+  };
+}
+
 export const project = {
   id: ids.project,
   tenant_id: ids.tenant,

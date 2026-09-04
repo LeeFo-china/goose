@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -13,6 +14,12 @@ import {
 } from "./purchase-order-rules";
 
 const SKU_ID = "70000000-0000-4000-8000-000000000001";
+
+function readSource(path: string) {
+  const url = new URL(path, import.meta.url);
+  expect(existsSync(url), path).toBe(true);
+  return existsSync(url) ? readFileSync(url, "utf8") : "";
+}
 
 describe("采购单工作台规则", () => {
   test("严格映射草稿、已提交和已取消状态的动作", () => {
@@ -141,5 +148,33 @@ describe("采购单工作台规则", () => {
       "SUPPLIER_PURCHASE_ORDER_PRICE_CHANGED",
       "提交失败",
     )).toBe("采购价格已变化，请重新保存草稿刷新价格");
+  });
+
+  test("列表内容区在固定工作区内独立滚动", () => {
+    const workspace = readSource("./purchase-order-workspace.tsx");
+    const list = readSource("./purchase-order-list.tsx");
+
+    expect(workspace).toContain(
+      'className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden"',
+    );
+    expect(workspace).toContain(
+      '<Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">',
+    );
+    expect(workspace).toContain(
+      '<CardHeader className="shrink-0 border-b bg-muted/20 p-4">',
+    );
+    expect(workspace).toContain(
+      '<CardContent className="flex min-h-0 flex-1 flex-col p-0">',
+    );
+    expect(workspace).toContain(
+      '<div className="min-h-0 flex-1 overflow-auto">',
+    );
+    expect(workspace).toContain(
+      '<div className="shrink-0 flex flex-col gap-3 bg-card px-4 py-3 md:flex-row md:items-center md:justify-between">',
+    );
+    expect(list).toContain(
+      'containerClassName="min-w-[1120px] overflow-x-auto"',
+    );
+    expect(list).toContain('<TableHeader className="sticky top-0 bg-card">');
   });
 });

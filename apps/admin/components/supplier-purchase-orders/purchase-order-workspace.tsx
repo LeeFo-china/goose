@@ -291,8 +291,8 @@ export function PurchaseOrderWorkspace({
 
   const totalPages = Math.max(1, orders.pagination.totalPages || 1);
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-5">
-      <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
+    <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
+      <div className="shrink-0 flex flex-col justify-between gap-3 md:flex-row md:items-end">
         <div>
           <h1 className="text-xl font-semibold tracking-normal">采购单</h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -310,8 +310,8 @@ export function PurchaseOrderWorkspace({
         ) : null}
       </div>
       {error ? <StatusAlert>{error}</StatusAlert> : null}
-      <Card className="overflow-hidden shadow-none">
-        <CardHeader className="bg-muted/20 p-4">
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
+        <CardHeader className="shrink-0 border-b bg-muted/20 p-4">
           <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
             <Input
               aria-label="搜索采购单"
@@ -366,18 +366,19 @@ export function PurchaseOrderWorkspace({
             </Button>
           </div>
         </CardHeader>
-        <Separator />
-        <CardContent className="p-0">
-          <PurchaseOrderList
-            orders={orders.list}
-            loading={loadingOrders}
-            canManage={canManagePurchaseOrders}
-            onOpen={openOrderDetail}
-            onEdit={openOrderEditor}
-          />
+        <CardContent className="flex min-h-0 flex-1 flex-col p-0">
+          <div className="min-h-0 flex-1 overflow-auto">
+            <PurchaseOrderList
+              orders={orders.list}
+              loading={loadingOrders}
+              canManage={canManagePurchaseOrders}
+              onOpen={openOrderDetail}
+              onEdit={openOrderEditor}
+            />
+          </div>
           <Separator />
-          <div className="flex flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between">
-            <span className="text-sm text-muted-foreground">
+          <div className="shrink-0 flex flex-col gap-3 bg-card px-4 py-3 md:flex-row md:items-center md:justify-between">
+            <span className="text-sm tabular-nums text-muted-foreground">
               第 {orders.pagination.page} / {totalPages} 页，共{" "}
               {orders.pagination.total} 张采购单
             </span>
