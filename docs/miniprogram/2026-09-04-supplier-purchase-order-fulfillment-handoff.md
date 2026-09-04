@@ -603,23 +603,189 @@ src/app.config.ts
 当前 dev 环境已准备以下脱敏样例。小程序端可使用租户员工账号
 `18800003002 / 欧阳克 / 固始晴天装饰工程有限公司` 进行联调。
 
-| 场景 | 采购单号 | 采购单 ID | 履约状态 | 说明 |
-| --- | --- | --- | --- | --- |
-| 未确认履约 | `PO-20260904-00000075` | `2b988a41-90ce-4d63-8806-c7adea6d13bd` | `fulfillment = null` | 用于验证“确认供应商已收到 / 确认履约”按钮 |
-| 已确认待发货 | `PO-20260901-00000074` | `b89d1c6a-3e3c-4bf6-9c35-1e344eb8d81c` | `confirmed` | 已确认，未发货 |
-| 已发货待收货 | `PO-20260901-00000073` | `ca81853e-37dd-4d02-b497-917af7e60ed5` | `shipped` | 已发 1 箱，未收货 |
-| 部分收货 | `PO-20260901-00000072` | `30956dba-7a76-4a09-8973-083a9aa6a990` | `partially_received` | 已发 1 箱，已合格收货 0.5 箱 |
-| 异常收货 | `PO-20260901-00000071` | `d0e93613-6f31-40eb-a2d1-be095b30eac7` | `received_with_variance` | 已发 1 箱，合格 0.5 箱，拒收 0.5 箱，原因：破损 |
-| 已完成收货 | `PO-20260730-00000025` | `d15bccb6-9dd0-4117-8bfa-46b22cac4df7` | `received` | 已发 2 箱，已合格收货 2 箱 |
+| 场景 | 采购批次号 | 采购批次 ID | 采购单号 | 采购单 ID | 履约状态 | 说明 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 未确认履约 | `PB-20260903-00000015` | `e4e5d97c-96b6-4934-b86c-fc680399ee6f` | `PO-20260904-00000075` | `2b988a41-90ce-4d63-8806-c7adea6d13bd` | `fulfillment = null` | 用于验证“确认供应商已收到 / 确认履约”按钮 |
+| 已确认待发货 | `PB-20260901-00000011` | `6a76fd79-bf8c-4f89-8e5d-1cee4fe6c87d` | `PO-20260901-00000074` | `b89d1c6a-3e3c-4bf6-9c35-1e344eb8d81c` | `confirmed` | 已确认，未发货 |
+| 已发货待收货 | `PB-20260901-00000010` | `b33528c9-24a1-4989-8117-97b009d6381a` | `PO-20260901-00000073` | `ca81853e-37dd-4d02-b497-917af7e60ed5` | `shipped` | 已发 1 箱，未收货 |
+| 部分收货 | `PB-20260901-00000009` | `fe2814f2-1152-4ddf-98a4-174301388430` | `PO-20260901-00000072` | `30956dba-7a76-4a09-8973-083a9aa6a990` | `partially_received` | 已发 1 箱，已合格收货 0.5 箱 |
+| 异常收货 | `PB-20260901-00000008` | `e5104fc7-02d7-4187-bd28-6691a398256c` | `PO-20260901-00000071` | `d0e93613-6f31-40eb-a2d1-be095b30eac7` | `received_with_variance` | 已发 1 箱，合格 0.5 箱，拒收 0.5 箱，原因：破损 |
+| 已完成收货 | `PB-20260901-00000007` | `a5ab42f4-44db-4720-964c-2e482c9a1781` | `PO-20260901-00000070` | `ded92eb4-9472-41f3-b2d6-faa8f4140736` | `received` | 已发 1 箱，已合格收货 1 箱 |
 
 联调注意：
 
 - 这些样例是 dev 环境数据，仅用于 Orange 第一阶段页面和状态验收。
+- 以上 6 条采购单均已通过 `GET /supplier-purchase-batches/:batchId/orders?page=1&pageSize=20` 反查确认，可从「采购管理 → 批次详情 → 采购单 tab」进入验收。
 - `PO-20260904-00000075` 建议保留为未确认履约样例，不要用于破坏性测试。
 - 写操作必须使用新的 `Idempotency-Key`；网络结果不确定时优先刷新详情，不要盲目生成新 key 重提。
 - 本轮修复了履约写接口响应解析问题，dev API revision 为 `9d0aec82` 后不再因采购单商业快照字段返回 `DB_ERROR`。
 
-## 15. 本次交接的范围边界
+## 15. Dev 可消耗写入样例
+
+以下样例专门用于 Orange 验证第一阶段写入链路。它们会被测试操作消耗，执行后履约状态会变化，不应再作为只读状态矩阵使用。
+
+联调账号仍使用：
+
+```text
+18800003002 / 欧阳克 / 固始晴天装饰工程有限公司
+```
+
+### 15.1 样例 A：正常闭环 + 幂等重试
+
+用途：验证确认履约、登记发货、登记收货和成功请求幂等 replay。
+
+| 字段 | 值 |
+| --- | --- |
+| 采购批次号 | `PB-20260901-00000005` |
+| 采购批次 ID | `bc479d34-733a-46f2-a201-6c6d92d0a5d0` |
+| 采购单号 | `PO-20260901-00000068` |
+| 采购单 ID | `46da71eb-bd0c-4fe2-9ea7-0fd9b3459b4b` |
+| 初始订单版本 | `2` |
+| 初始履约状态 | `fulfillment = null` |
+| 明细 ID | `12d6e974-569e-4de0-9c2e-6cfe97555d37` |
+| 可发/可收数量 | `1` |
+
+推荐调用顺序：
+
+1. `POST /supplier-purchase-orders/46da71eb-bd0c-4fe2-9ea7-0fd9b3459b4b/confirm-fulfillment`
+   - `Idempotency-Key`：客户端生成，例如 `orange-dev-confirm-po68-<uuid>`。
+   - body：
+
+   ```json
+   {
+     "expected_version": 2,
+     "confirmed_at": "2026-09-04T15:00:00+08:00",
+     "remark": "Orange dev 写入联调：确认供应商已收到"
+   }
+   ```
+
+   - 预期：`data.status = "confirmed"`，`data.idempotent = false`，`data.version = 1`，`data.fulfillment.status = "confirmed"`。
+   - 使用完全相同的 body 和 `Idempotency-Key` 重试一次，预期：`data.idempotent = true`。
+
+2. `POST /supplier-purchase-orders/46da71eb-bd0c-4fe2-9ea7-0fd9b3459b4b/shipments`
+   - `id`：客户端生成 shipment UUID；幂等重试时必须保持同一个 `id`。
+   - `Idempotency-Key`：客户端生成，例如 `orange-dev-ship-po68-<uuid>`；幂等重试时必须保持同一个 key。
+   - body：
+
+   ```json
+   {
+     "id": "<shipment_uuid>",
+     "expected_fulfillment_version": 1,
+     "shipment_no": "ORANGE-DEV-FH-PO68",
+     "carrier_name": "供应商自送",
+     "tracking_no": null,
+     "shipped_at": "2026-09-04T15:05:00+08:00",
+     "remark": "Orange dev 写入联调：全部发货",
+     "items": [
+       {
+         "purchase_order_item_id": "12d6e974-569e-4de0-9c2e-6cfe97555d37",
+         "quantity": 1
+       }
+     ]
+   }
+   ```
+
+   - 预期：`data.status = "shipment_created"`，`data.idempotent = false`，`data.version = 2`，`data.fulfillment.status = "shipped"`。
+   - 使用完全相同的 body 和 `Idempotency-Key` 重试一次，预期：`data.idempotent = true`。
+
+3. `POST /supplier-purchase-orders/46da71eb-bd0c-4fe2-9ea7-0fd9b3459b4b/receipts`
+   - `id`：客户端生成 receipt UUID；幂等重试时必须保持同一个 `id`。
+   - `Idempotency-Key`：客户端生成，例如 `orange-dev-receive-po68-<uuid>`；幂等重试时必须保持同一个 key。
+   - body：
+
+   ```json
+   {
+     "id": "<receipt_uuid>",
+     "expected_fulfillment_version": 2,
+     "receipt_no": "ORANGE-DEV-SH-PO68",
+     "received_at": "2026-09-04T15:10:00+08:00",
+     "remark": "Orange dev 写入联调：全部收货",
+     "items": [
+       {
+         "purchase_order_item_id": "12d6e974-569e-4de0-9c2e-6cfe97555d37",
+         "accepted_quantity": 1,
+         "rejected_quantity": 0,
+         "variance_reason": null
+       }
+     ]
+   }
+   ```
+
+   - 预期：`data.status = "receipt_created"`，`data.idempotent = false`，`data.version = 3`，`data.fulfillment.status = "received"`。
+   - 使用完全相同的 body 和 `Idempotency-Key` 重试一次，预期：`data.idempotent = true`。
+
+### 15.2 样例 B：超发/超收/拒收原因校验 + 异常收货
+
+用途：验证失败提示和异常收货成功链路。失败请求不会消耗数量；最终异常收货成功后，该样例会变成 `received_with_variance`。
+
+| 字段 | 值 |
+| --- | --- |
+| 采购批次号 | `PB-20260831-00000004` |
+| 采购批次 ID | `53298aa5-a3f6-45c3-8820-4cbfa15abfdb` |
+| 采购单号 | `PO-20260831-00000067` |
+| 采购单 ID | `34285e7f-8efd-4883-b6e1-ff4f052a990b` |
+| 初始订单版本 | `2` |
+| 初始履约状态 | `fulfillment = null` |
+| 明细 ID | `62609809-8009-4803-9f03-d5adc31d71b7` |
+| 可发/可收数量 | `1` |
+
+推荐调用顺序：
+
+1. 先确认履约：
+
+   ```json
+   {
+     "expected_version": 2,
+     "confirmed_at": "2026-09-04T15:20:00+08:00",
+     "remark": "Orange dev 写入联调：异常场景确认"
+   }
+   ```
+
+   预期履约版本变为 `1`。
+
+2. 超发校验：调用发货接口，`expected_fulfillment_version = 1`，同一明细 `quantity = 2`。
+   - 预期：HTTP `409`，`code = "SUPPLIER_PURCHASE_ORDER_OVER_SHIPPED"`，message 为“本次发货数量超过采购数量”。
+   - 该失败不会改变履约版本。
+
+3. 正常发货：同一明细 `quantity = 1`。
+   - 预期：`data.status = "shipment_created"`，`data.version = 2`，`data.fulfillment.status = "shipped"`。
+
+4. 超收校验：调用收货接口，`expected_fulfillment_version = 2`，同一明细 `accepted_quantity = 2`、`rejected_quantity = 0`。
+   - 预期：HTTP `409`，`code = "SUPPLIER_PURCHASE_ORDER_OVER_RECEIVED"`，message 为“本次收货数量超过累计发货数量”。
+   - 该失败不会改变履约版本。
+
+5. 拒收原因校验：调用收货接口，`expected_fulfillment_version = 2`，同一明细 `accepted_quantity = 0`、`rejected_quantity = 1`、`variance_reason = null`。
+   - 预期：HTTP `400`，`code = "VALIDATION_ERROR"`，`details[0].path = ["items", 0, "variance_reason"]`。
+   - 该失败不会改变履约版本。
+
+6. 异常收货成功：调用收货接口，`expected_fulfillment_version = 2`。
+
+   ```json
+   {
+     "id": "<receipt_uuid>",
+     "expected_fulfillment_version": 2,
+     "receipt_no": "ORANGE-DEV-SH-PO67-VARIANCE",
+     "received_at": "2026-09-04T15:30:00+08:00",
+     "remark": "Orange dev 写入联调：部分合格、部分拒收",
+     "items": [
+       {
+         "purchase_order_item_id": "62609809-8009-4803-9f03-d5adc31d71b7",
+         "accepted_quantity": 0.5,
+         "rejected_quantity": 0.5,
+         "variance_reason": "运输破损"
+       }
+     ]
+   }
+   ```
+
+   - 预期：`data.status = "receipt_created"`，`data.version = 3`，`data.fulfillment.status = "received_with_variance"`。
+
+幂等注意：
+
+- 同一个写操作网络重试时，必须复用同一个 `Idempotency-Key` 和完全相同的请求体，包括客户端生成的 `id`。
+- 如果复用同一个 `Idempotency-Key` 但更换 `id` 或更换 body，后端会返回 HTTP `409`，`code = "SUPPLIER_IDEMPOTENCY_CONFLICT"`。
+
+## 16. 本次交接的范围边界
 
 本交接文档只定义小程序第一阶段可对接的现有接口，以及后续后端能力的建议拆分。
 
