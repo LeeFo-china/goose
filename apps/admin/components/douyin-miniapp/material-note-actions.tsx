@@ -38,10 +38,10 @@ const actionCopy: Record<MaterialNoteAction, {
   success: string;
 }> = {
   publish: {
-    title: "发布目标版本",
-    description: "发布后，新访客将看到并领取明确选择的这个不可变版本。",
+    title: "发布当前内容",
+    description: "发布后，新访客将看到并领取当前已保存内容；已领取资料仍保留领取时内容。",
     submit: "确认发布",
-    success: "目标版本已发布",
+    success: "当前内容已发布",
   },
   archive: {
     title: "归档资料",
@@ -61,14 +61,12 @@ export function MaterialNoteActions({
   noteId,
   status,
   versionId,
-  versionNumber,
   canPublish,
   onCompleted,
 }: {
   noteId: string;
   status: DouyinMaterialNoteStatus;
   versionId: string;
-  versionNumber: number;
   canPublish: boolean;
   onCompleted: () => void;
 }) {
@@ -87,7 +85,6 @@ export function MaterialNoteActions({
       noteId={noteId}
       status={status}
       versionId={versionId}
-      versionNumber={versionNumber}
       action={action}
       onCompleted={onCompleted}
     />
@@ -98,7 +95,6 @@ export function MaterialNoteActionDialog({
   noteId,
   status,
   versionId,
-  versionNumber,
   action,
   onCompleted,
   size,
@@ -107,7 +103,6 @@ export function MaterialNoteActionDialog({
   noteId: string;
   status: DouyinMaterialNoteStatus;
   versionId: string;
-  versionNumber: number;
   action: MaterialNoteAction;
   onCompleted: () => void;
   size?: ButtonProps["size"];
@@ -177,14 +172,14 @@ export function MaterialNoteActionDialog({
           size={size}
           className={className}
           onClick={() => reset()}
-        ><Icon data-icon="inline-start" />{action === "publish" ? "发布此版本" : action === "archive" ? "归档" : "永久撤回"}</Button>
+        ><Icon data-icon="inline-start" />{action === "publish" ? "发布当前内容" : action === "archive" ? "归档" : "永久撤回"}</Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader><AlertDialogTitle>{copy.title}</AlertDialogTitle>
           <AlertDialogDescription>{copy.description}</AlertDialogDescription>
         </AlertDialogHeader>
         {action === "publish" ? <p className="rounded-md bg-muted px-3 py-2 text-sm">
-          发布目标版本：v{versionNumber}
+          本次发布会使用当前已保存内容。若刚修改过正文，请先保存修改再发布。
         </p> : null}
         {requiresReason ? <Field data-invalid={Boolean(error && !reason.trim())}>
           <FieldLabel htmlFor={`material-${action}-reason`}>{action === "withdraw" ? "撤回原因" : "归档原因"}</FieldLabel>
@@ -201,7 +196,7 @@ export function MaterialNoteActionDialog({
             placeholder={action === "withdraw" ? "必填，请记录不可恢复撤回的合规原因" : "必填，请记录本次归档原因"}
             onChange={(event) => { setReason(event.target.value); setError(""); setRetryRequest(null); }}
           />
-          <FieldDescription>{action === "withdraw" ? "撤回后不能恢复；需要重新提供时只能创建新资料。" : "归档可在后续明确选择版本后重新发布。"}</FieldDescription>
+          <FieldDescription>{action === "withdraw" ? "撤回后不能恢复；需要重新提供时只能创建新资料。" : "归档后可在后续重新发布当前内容。"}</FieldDescription>
           {!reason.trim() && error ? <FieldError id={`material-${action}-reason-error`}>
             {action === "withdraw" ? "撤回原因不能为空" : "归档原因不能为空"}
           </FieldError> : null}

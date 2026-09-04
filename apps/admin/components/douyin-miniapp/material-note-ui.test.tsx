@@ -18,13 +18,8 @@ import {
   hasRetainedPasteContent,
   removePastedImageTags,
 } from "@/components/douyin-miniapp/material-note-rich-editor";
-import {
-  resolveMaterialNoteVersionRowActions,
-  resolveSelectedMaterialVersionDetail,
-  selectMaterialVersionAfterPageLoad,
-} from
+import { resolveCurrentMaterialNoteActions } from
   "@/components/douyin-miniapp/material-note-detail";
-
 const adminRoot = new URL("../../", import.meta.url);
 
 function read(path: string) {
@@ -267,7 +262,7 @@ describe("抖音资料后台工作台 UI 合同", () => {
     expect(newPage).toContain("douyin_material_note.manage");
     expect(detailPage).toContain("douyin_material_note.manage");
     expect(detailPage).toContain("douyin_material_note.publish");
-    expect(detailPage).toContain("assertMaterialNoteRequestedPage");
+    expect(detailPage).not.toContain("assertMaterialNoteRequestedPage");
   });
 
   test("新建资料页在后台固定视口内提供纵向滚动容器", () => {
@@ -297,7 +292,7 @@ describe("抖音资料后台工作台 UI 合同", () => {
     expect(loading).toContain("正在加载资料列表");
   });
 
-  test("版本预览先单独取正文，保存只创建新版本", () => {
+  test("编辑页默认读取最新正文，保存修改仍创建内部新版本", () => {
     const editor = read("components/douyin-miniapp/material-note-editor.tsx");
     const richEditor = read("components/douyin-miniapp/material-note-rich-editor.tsx");
     const detail = read("components/douyin-miniapp/material-note-detail.tsx");
@@ -306,24 +301,20 @@ describe("抖音资料后台工作台 UI 合同", () => {
     expect(editor).toContain("createMaterialNote");
     expect(editor).toContain("MaterialNoteRichEditor");
     expect(editor).toContain("onUploadStateChange");
+    expect(editor).toContain("保存修改");
+    expect(editor).toContain("创建资料");
+    expect(editor).not.toContain("保存新版本");
+    expect(editor).not.toContain("创建资料和版本 1");
+    expect(editor).not.toContain("新版本 v");
     expect(richEditor).toContain("buildMaterialNoteImagePreviewUrl");
     expect(richEditor).toContain("removeMaterialNoteImageBlock");
     expect(richEditor).toContain("删除图片");
     expect(editor).toContain("list-decimal");
     expect(editor).toContain("list-disc");
     expect(detail).toContain("getMaterialNoteVersion");
-    expect(detail).toContain("selectedVersion");
+    expect(detail).toContain("currentVersionId");
     expect(detail).toContain("content_blocks");
-
-    const first = { id: "11111111-1111-4111-8111-111111111111" };
-    const second = { id: "22222222-2222-4222-8222-222222222222" };
-    const previous = { id: "33333333-3333-4333-8333-333333333333" };
-    expect(selectMaterialVersionAfterPageLoad([first, second], previous)).toBe(first);
-    expect(selectMaterialVersionAfterPageLoad([first, second], previous, second.id)).toBe(second);
-    expect(selectMaterialVersionAfterPageLoad([], previous)).toBe(previous);
-    expect(resolveSelectedMaterialVersionDetail(first.id, first)).toBe(first);
-    expect(resolveSelectedMaterialVersionDetail(second.id, first)).toBeNull();
-    expect(detail).toContain("resolvedVersionDetail");
+    expect(detail).toContain("currentVersionDetail");
   });
 
   test("详情页在后台固定视口内提供唯一纵向滚动区域", () => {
@@ -379,73 +370,54 @@ describe("抖音资料后台工作台 UI 合同", () => {
     expect(api).toContain("/tenant/douyin-material-note-categories");
   });
 
-  test("发布指定版本；归档与不可恢复撤回使用不同确认和原因", () => {
+  test("发布当前内容；归档与不可恢复撤回使用不同确认和原因", () => {
     const actions = read("components/douyin-miniapp/material-note-actions.tsx");
     expect(actions).toContain("createMaterialNoteCommandRequest");
     expect(actions).toContain("executeMaterialNoteCommand");
     expect(actions).toContain("retryRequest");
     expect(actions).toContain("versionId");
-    expect(actions).toContain("发布目标版本");
+    expect(actions).toContain("发布当前内容");
     expect(actions).toContain("归档资料");
     expect(actions).toContain("永久撤回资料");
     expect(actions).toContain("撤回后不能恢复");
     expect(actions).toContain("撤回原因不能为空");
   });
 
-  test("详情页版本动作收口到版本列表操作列且每页最多展示 3 个版本", () => {
+  test("详情页隐藏版本列表，只围绕当前内容编辑和发布", () => {
     const detail = read("components/douyin-miniapp/material-note-detail.tsx");
     const detailPage = read("app/(console)/douyin-miniapp/materials/[id]/page.tsx");
 
-    expect(detail).toContain("MATERIAL_NOTE_VERSION_PAGE_SIZE = 3");
-    expect(detail).toContain("pageSize: MATERIAL_NOTE_VERSION_PAGE_SIZE");
-    expect(detailPage).toContain("MATERIAL_NOTE_VERSION_PAGE_SIZE");
-    expect(detailPage).toContain("pageSize=${MATERIAL_NOTE_VERSION_PAGE_SIZE}");
-    expect(detail).toContain("<TableHead className=\"text-right\">操作</TableHead>");
-    expect(detail).toContain("renderVersionRowActions(version)");
+    for (const text of ["不可变版本", "版本历史", "TableHeader", "TableRow", "selectedVersion"]) {
+      expect(detail).not.toContain(text);
+    }
+    expect(detailPage).not.toContain("/versions?page=1");
+    expect(detailPage).not.toContain("parseMaterialNoteVersionList");
+    expect(detail).toContain("当前内容");
     expect(detail).toContain("MaterialNoteActionDialog");
-    expect(detail).toContain("versionId={version.id}");
-    expect(detail).toContain("versionNumber={version.version}");
-    expect(detail).toContain("selectedVersion.id === version.id && hasLoadedBody");
-    expect(detail).not.toContain("<MaterialNoteActions");
+    expect(detail).toContain("versionId={currentVersionDetail.id}");
+    expect(detail).not.toContain("versionNumber=");
   });
 
-  test("版本行操作按资料状态和目标版本收口，避免跨版本误操作", () => {
-    const latestVersionId = "11111111-1111-4111-8111-111111111111";
-    const publishedVersionId = "22222222-2222-4222-8222-222222222222";
+  test("当前内容已发布时隐藏重复发布动作，最新内容未发布时保留发布动作", () => {
+    const publishedVersionId = "11111111-1111-4111-8111-111111111111";
+    const latestVersionId = "22222222-2222-4222-8222-222222222222";
 
-    expect(resolveMaterialNoteVersionRowActions({
+    expect(resolveCurrentMaterialNoteActions({
       status: "published",
-      versionId: publishedVersionId,
+      currentVersionId: publishedVersionId,
       publishedVersionId,
-      latestVersionId,
       canPublish: true,
     })).toEqual(["archive", "withdraw"]);
-    expect(resolveMaterialNoteVersionRowActions({
+    expect(resolveCurrentMaterialNoteActions({
       status: "published",
-      versionId: latestVersionId,
+      currentVersionId: latestVersionId,
       publishedVersionId,
-      latestVersionId,
       canPublish: true,
-    })).toEqual(["publish"]);
-    expect(resolveMaterialNoteVersionRowActions({
-      status: "draft",
-      versionId: latestVersionId,
-      publishedVersionId: null,
-      latestVersionId,
-      canPublish: true,
-    })).toEqual(["publish", "archive"]);
-    expect(resolveMaterialNoteVersionRowActions({
-      status: "withdrawn",
-      versionId: latestVersionId,
-      publishedVersionId,
-      latestVersionId,
-      canPublish: true,
-    })).toEqual([]);
-    expect(resolveMaterialNoteVersionRowActions({
+    })).toEqual(["publish", "archive", "withdraw"]);
+    expect(resolveCurrentMaterialNoteActions({
       status: "published",
-      versionId: publishedVersionId,
+      currentVersionId: latestVersionId,
       publishedVersionId,
-      latestVersionId,
       canPublish: false,
     })).toEqual([]);
   });

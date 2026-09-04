@@ -184,12 +184,12 @@ export function MaterialNoteEditor({
     try {
       if (noteId) {
         const result = await appendMaterialNoteVersion(noteId, validation.data);
-        toast.success(`新版本 v${result.version_no} 已保存`);
+        toast.success("修改已保存");
         onSaved?.(result.version_id);
         router.refresh();
       } else {
         const result = await createMaterialNote(validation.data);
-        toast.success("资料和版本 1 已创建");
+        toast.success("资料已创建");
         router.replace(`/douyin-miniapp/materials/${result.note_id}`);
         router.refresh();
       }
@@ -198,7 +198,7 @@ export function MaterialNoteEditor({
         ? submitError.issues[0]?.message || "资料内容未通过校验"
         : getMaterialNoteErrorMessage(
           submitError,
-          isExisting ? "保存新版本失败" : "创建资料失败",
+          isExisting ? "保存修改失败" : "创建资料失败",
         ));
     } finally {
       setPending(false);
@@ -208,17 +208,17 @@ export function MaterialNoteEditor({
   return (
     <div className="flex flex-col gap-4">
       {!canManage ? <StatusAlert tone="warning" title="只读模式">
-        当前账号缺少 douyin_material_note.manage 权限，不能创建新版本。
+        当前账号缺少 douyin_material_note.manage 权限，不能编辑资料。
       </StatusAlert> : null}
       {error ? <StatusAlert>{error}</StatusAlert> : null}
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card className="shadow-none">
           <CardHeader>
-            <CardTitle>{isExisting ? "创建新版本" : "新建资料"}</CardTitle>
+            <CardTitle>{isExisting ? "编辑资料" : "新建资料"}</CardTitle>
             <CardDescription>
               {isExisting
-                ? "保存会追加不可变版本，不会修改历史版本或自动替换已发布内容。"
-                : "一次提交会同时创建资料和不可变版本 1，创建后即可选择发布。"}
+                ? "保存后会更新当前编辑内容；发布前请先保存修改。"
+                : "一次提交会创建资料，创建后即可发布。"}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -267,7 +267,7 @@ export function MaterialNoteEditor({
                 <p className="text-xs text-muted-foreground">服务端会再次按资料窄 Schema 校验全部字段；图片领取时解析为公开 CDN 地址。</p>
                 <Button type="submit" disabled={pending || uploading || !canManage}>
                   {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <Save data-icon="inline-start" />}
-                  {uploading ? "图片上传中" : isExisting ? "保存新版本" : "创建资料和版本 1"}
+                  {uploading ? "图片上传中" : isExisting ? "保存修改" : "创建资料"}
                 </Button>
               </div>
             </form>
