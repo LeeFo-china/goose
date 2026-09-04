@@ -99,8 +99,14 @@ export async function exportPurchaseOrderPdf(
     doc.on("error", reject);
   });
 
-  const fontPath = resolveChineseFontPath();
-  if (fontPath) doc.font(fontPath);
+  const font = resolveChineseFont();
+  if (font) {
+    if (font.family) {
+      doc.font(font.path, font.family);
+    } else {
+      doc.font(font.path);
+    }
+  }
 
   doc.fontSize(18).text("供应商采购单", { align: "center" });
   doc.moveDown();
@@ -264,16 +270,63 @@ function safeFilename(value: string) {
   return value.replace(/[\\/:*?"<>|]/g, "-");
 }
 
-function resolveChineseFontPath() {
+type ChineseFont = {
+  path: string;
+  family?: string;
+};
+
+function resolveChineseFont(): ChineseFont | null {
   const configured = process.env.SUPPLIER_PURCHASE_ORDER_PDF_FONT_PATH;
-  if (configured && existsSync(configured)) return configured;
-  const candidates = [
-    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-    "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
-    "/usr/share/fonts/opentype/noto/NotoSansCJKsc-Regular.otf",
-    "/Library/Fonts/Arial Unicode.ttf",
-    "/System/Library/Fonts/STHeiti Medium.ttc",
-    "/System/Library/Fonts/PingFang.ttc",
+  const configuredFamily =
+    process.env.SUPPLIER_PURCHASE_ORDER_PDF_FONT_FAMILY;
+
+  if (configured && existsSync(configured)) {
+    const configuredFont = fontCandidate(configured, configuredFamily);
+    if (configuredFont) return configuredFont;
+  }
+
+  const candidates: ChineseFont[] = [
+    { path: "/usr/share/fonts/opentype/noto/NotoSansCJKsc-Regular.otf" },
+    { path: "/usr/share/fonts/truetype/noto/NotoSansCJKsc-Regular.ttf" },
+    {
+      path: "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+      family: "NotoSansCJKsc-Regular",
+    },
+    {
+      path: "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+      family: "NotoSansCJKsc-Regular",
+    },
+    {
+      path: "/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc",
+      family: "NotoSerifCJKsc-Regular",
+    },
+    {
+      path: "/System/Library/Fonts/Supplemental/Songti.ttc",
+      family: "STSongti-SC-Regular",
+    },
+    { path: "/Library/Fonts/Arial Unicode.ttf" },
   ];
-  return candidates.find((candidate) => existsSync(candidate)) ?? null;
+  return candidates.find((candidate) => existsSync(candidate.path)) ?? null;
+}
+
+function fontCandidate(path: string, family?: string): ChineseFont | null {
+  if (family) return { path, family };
+  if (!path.toLowerCase().endsWith(".ttc")) return { path };
+
+  const inferredFamily = inferChineseFontFamily(path);
+  if (!inferredFamily) return null;
+  return { path, family: inferredFamily };
+}
+
+function inferChineseFontFamily(path: string): string | null {
+  if (path.endsWith("NotoSansCJK-Regular.ttc")) {
+    return "NotoSansCJKsc-Regular";
+  }
+  if (path.endsWith("NotoSerifCJK-Regular.ttc")) {
+    return "NotoSerifCJKsc-Regular";
+  }
+  if (path.endsWith("Songti.ttc")) {
+    return "STSongti-SC-Regular";
+  }
+  return null;
 }
