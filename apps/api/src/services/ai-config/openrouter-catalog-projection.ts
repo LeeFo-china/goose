@@ -183,7 +183,7 @@ export function projectCandidates(
   } = {},
 ): CatalogEntryProjection[] {
   const catalogHash = options.catalogHash ?? hashJson(candidates);
-  const uniqueCandidates = uniqueCandidatesByIdentity(candidates);
+  const uniqueCandidates = uniqueCatalogCandidates(candidates);
   const currentModels = options.currentModels ?? [];
   const currentByIdentity = new Map(
     currentModels.map((model) => [
@@ -363,7 +363,7 @@ function boundedValue(value: unknown): unknown {
   return undefined;
 }
 
-function uniqueCandidatesByIdentity(candidates: CatalogCandidate[]): CatalogCandidate[] {
+export function uniqueCatalogCandidates(candidates: CatalogCandidate[]): CatalogCandidate[] {
   const byIdentity = new Map<string, CatalogCandidate>();
   for (const candidate of candidates) {
     const identity = catalogIdentity(candidate.externalModelId, candidate.modality);

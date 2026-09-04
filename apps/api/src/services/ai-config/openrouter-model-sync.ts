@@ -23,6 +23,7 @@ import {
   summarizeEntries,
   speechCandidates,
   textCandidates,
+  uniqueCatalogCandidates,
   videoCandidates,
   type CatalogCandidate,
   type CatalogEntryProjection,
@@ -101,8 +102,23 @@ function buildPreviewEntry(entry: CatalogEntryProjection): Record<string, unknow
 }
 
 function catalogEndpointUrl(provider: AiProviderRecord, path: string): string {
-  const baseUrl = provider.endpoint_url?.trim() || OPENROUTER_DEFAULT_BASE_URL;
-  return new URL(catalogEndpointRelativePath(path), ensureTrailingSlash(baseUrl)).toString();
+  return new URL(catalogEndpointRelativePath(path), catalogEndpointBaseUrl(provider)).toString();
+}
+
+function catalogEndpointBaseUrl(provider: AiProviderRecord): string {
+  const configuredUrl = provider.endpoint_url?.trim();
+  if (!configuredUrl) return ensureTrailingSlash(OPENROUTER_DEFAULT_BASE_URL);
+  try {
+    const parsed = new URL(configuredUrl);
+    const markerIndex = parsed.pathname.indexOf("/api/v1");
+    if (markerIndex >= 0) {
+      const apiRoot = parsed.pathname.slice(0, markerIndex + "/api/v1".length);
+      return ensureTrailingSlash(`${parsed.origin}${apiRoot}`);
+    }
+  } catch {
+    return ensureTrailingSlash(configuredUrl);
+  }
+  return ensureTrailingSlash(configuredUrl);
 }
 
 function catalogEndpointRelativePath(path: string): string {
@@ -186,12 +202,12 @@ export class OpenRouterModelSyncService {
       this.fetchModelCatalogs(provider),
       this.repository.listCatalogManagedModels(provider.id),
     ]);
-    const candidates = sortCatalogCandidates([
+    const candidates = uniqueCatalogCandidates(sortCatalogCandidates([
       ...textCandidates(catalog.text.data),
       ...imageCandidates(catalog.image.data),
       ...videoCandidates(catalog.video.data),
       ...speechCandidates(catalog.speech.data),
-    ]);
+    ]));
     if (candidates.length > MAX_CATALOG_ENTRIES) {
       throw Errors.business(400, "OpenRouter 目录条目超过上限", "AI_OPENROUTER_CATALOG_TOO_LARGE");
     }

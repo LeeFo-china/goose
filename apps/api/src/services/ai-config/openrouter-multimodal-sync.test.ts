@@ -53,6 +53,18 @@ function createRepository(currentModels: unknown[] = []) {
   };
 }
 
+function createRepositoryWithEndpoint(endpointUrl: string, currentModels: unknown[] = []) {
+  const repository = createRepository(currentModels);
+  repository.getProvider = mock(async () => ({
+    id: PROVIDER_ID,
+    provider_type: "openrouter",
+    status: "active",
+    endpoint_url: endpointUrl,
+    api_key_setting_key: "OPENROUTER_API_KEY",
+  }));
+  return repository;
+}
+
 function createSettings() {
   return {
     getSecretString: mock(async () => "secret-openrouter-key"),
@@ -125,6 +137,26 @@ function catalogPayloads() {
 }
 
 describe("OpenRouter multimodal catalog sync", () => {
+  test("derives catalog endpoints from chat completions provider URL", async () => {
+    const { OpenRouterModelSyncService } = await import("./openrouter-model-sync");
+    const repository = createRepositoryWithEndpoint("https://openrouter.ai/api/v1/chat/completions");
+    const fetchImpl = createFetch(catalogPayloads());
+    const service = new OpenRouterModelSyncService({
+      repository: repository as never,
+      settings: createSettings() as never,
+      fetchImpl: fetchImpl as never,
+    });
+
+    await service.createPreview(auth(), { provider_id: PROVIDER_ID });
+
+    expect(fetchImpl.mock.calls.map((call) => String(call[0]))).toEqual([
+      "https://openrouter.ai/api/v1/models",
+      "https://openrouter.ai/api/v1/images/models",
+      "https://openrouter.ai/api/v1/videos/models",
+      "https://openrouter.ai/api/v1/models?output_modalities=speech",
+    ]);
+  });
+
   test("fetches four endpoints atomically and saves modality-scoped entries in deterministic order", async () => {
     const { OpenRouterModelSyncService } = await import("./openrouter-model-sync");
     const currentTextCapability = {
@@ -269,5 +301,42 @@ describe("OpenRouter multimodal catalog sync", () => {
     await expect(service.createPreview(auth(), { provider_id: PROVIDER_ID }))
       .rejects.toMatchObject({ statusCode: 400, code: "AI_OPENROUTER_CATALOG_TOO_LARGE" });
     expect(repository.saveOpenRouterCatalogPreview).not.toHaveBeenCalled();
+  });
+
+  test("deduplicates exact catalog identities before hashing and size checks", async () => {
+    const { OpenRouterModelSyncService } = await import("./openrouter-model-sync");
+    const repository = createRepository();
+    const textModels = Array.from({ length: 9999 }, (_, index) => ({
+      id: `openrouter/text-${index}`,
+      name: `Text ${index}`,
+      context_length: 4096,
+      architecture: { output_modalities: ["text"] },
+      supported_parameters: ["stream"],
+    }));
+    const firstTextModel = textModels[0];
+    if (!firstTextModel) throw new Error("test fixture must include a text model");
+    textModels.push(firstTextModel);
+    const payloads = {
+      "/api/v1/models": textPayload(textModels),
+      "/api/v1/images/models": { data: [imageModel("openrouter/image-final")] },
+      "/api/v1/videos/models": { data: [] },
+      "/api/v1/models?output_modalities=speech": textPayload([]),
+    };
+    const service = new OpenRouterModelSyncService({
+      repository: repository as never,
+      settings: createSettings() as never,
+      fetchImpl: createFetch(payloads) as never,
+    });
+
+    await service.createPreview(auth(), { provider_id: PROVIDER_ID });
+
+    const saved = repository.saveOpenRouterCatalogPreview.mock.calls[0]?.[0] as {
+      catalogHash: string;
+      entries: Array<{ catalog_hash: string }>;
+      summaryPayload: Record<string, unknown>;
+    };
+    expect(saved.entries).toHaveLength(10000);
+    expect(saved.entries.every((entry) => entry.catalog_hash === saved.catalogHash)).toBe(true);
+    expect(saved.summaryPayload).toMatchObject({ total: 10000 });
   });
 });
