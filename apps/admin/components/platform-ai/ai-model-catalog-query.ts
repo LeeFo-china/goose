@@ -52,3 +52,28 @@ export function normalizeCatalogFilters(filters: CatalogEntryFilters): CatalogEn
     changeType: filters.changeType,
   };
 }
+
+export function shouldLoadCatalogEntriesOnMount(input: {
+  selectedRunId: string;
+  firstEntryRunId?: string;
+  filters: CatalogEntryFilters;
+}): boolean {
+  if (!input.selectedRunId) return false;
+  const filters = normalizeCatalogFilters(input.filters);
+  return input.firstEntryRunId !== input.selectedRunId
+    || filters.keyword !== ""
+    || filters.modality !== "all"
+    || filters.changeType !== "all";
+}
+
+export function filterApplicableCatalogEntryIds(
+  selectedIds: string[],
+  entries: Array<{ id: string; apply_status?: string | null }>,
+): string[] {
+  const applicableIds = new Set(
+    entries
+      .filter((entry) => entry.apply_status !== "blocked")
+      .map((entry) => entry.id),
+  );
+  return selectedIds.filter((id) => applicableIds.has(id)).slice(0, 100);
+}

@@ -15,7 +15,9 @@ import { AiModelCatalogPreview, changeTypeLabel } from "@/components/platform-ai
 import {
   buildCatalogEntriesPath,
   defaultCatalogEntryFilters,
+  filterApplicableCatalogEntryIds,
   normalizeCatalogFilters,
+  shouldLoadCatalogEntriesOnMount,
   type CatalogEntryFilters,
 } from "@/components/platform-ai/ai-model-catalog-query";
 import { Badge } from "@/components/ui/badge";
@@ -129,6 +131,7 @@ export function AiModelCatalogTab({
   const [selectedEntries, setSelectedEntries] = useState<string[]>([]);
   const [entryFilters, setEntryFilters] = useState<CatalogEntryFilters>(() => defaultCatalogEntryFilters());
   const [debouncedKeyword, setDebouncedKeyword] = useState(entryFilters.keyword);
+  const shouldSkipInitialEntryLoad = useRef(true);
   const [isPending, startTransition] = useTransition();
   const runRequestSeq = useRef(0);
   const entryRequestSeq = useRef(0);
@@ -157,6 +160,16 @@ export function AiModelCatalogTab({
   useEffect(() => {
     if (!activeRun) return;
     const nextFilters = normalizeCatalogFilters({ ...entryFilters, keyword: debouncedKeyword });
+    if (shouldSkipInitialEntryLoad.current) {
+      shouldSkipInitialEntryLoad.current = false;
+      if (!shouldLoadCatalogEntriesOnMount({
+        selectedRunId: activeRun.id,
+        firstEntryRunId: entryPage.list[0]?.run_id,
+        filters: nextFilters,
+      })) {
+        return;
+      }
+    }
     void loadRunEntries(activeRun.id, 1, nextSequence(entryRequestSeq), nextFilters);
   }, [activeRun?.id, debouncedKeyword, entryFilters.modality, entryFilters.changeType]);
 
@@ -276,11 +289,12 @@ export function AiModelCatalogTab({
   }
 
   async function applySelected() {
-    if (!activeRun || selectedEntries.length === 0) {
+    const applicableEntryIds = filterApplicableCatalogEntryIds(selectedEntries, entryPage.list);
+    if (!activeRun || applicableEntryIds.length === 0) {
       toast.error("请选择要应用的目录条目");
       return;
     }
-    if (selectedEntries.length > 100) {
+    if (applicableEntryIds.length > 100) {
       toast.error("单次最多应用 100 个目录条目");
       return;
     }
@@ -290,7 +304,7 @@ export function AiModelCatalogTab({
         method: "POST",
         body: JSON.stringify({
           run_id: activeRun.id,
-          entry_ids: selectedEntries,
+          entry_ids: applicableEntryIds,
           expected_catalog_hash: activeRun.catalog_hash,
         }),
       });
@@ -408,9 +422,9 @@ export function AiModelCatalogTab({
                     className="flex w-full items-center justify-between rounded-md border px-3 py-2 text-left"
                     onClick={() => selectRun(run.id)}
                   >
-                    <span>
-                      <span className="block">{run.created_at}</span>
-                      <span className="block text-xs text-muted-foreground">
+                    <span className="min-w-0">
+                      <span className="block truncate">{run.created_at}</span>
+                      <span className="block break-all text-xs text-muted-foreground">
                         来源端点：{run.source_endpoint}
                       </span>
                       <span className="block text-xs text-muted-foreground">
@@ -420,7 +434,7 @@ export function AiModelCatalogTab({
                         未变化 {summaryValue(run.summary_payload, "unchanged")}
                       </span>
                     </span>
-                    <span className="flex flex-col items-end gap-1">
+                    <span className="ml-2 flex shrink-0 flex-col items-end gap-1">
                       <Badge variant={run.id === activeRun?.id ? "default" : "outline"}>
                         {run.model_count} 条
                       </Badge>

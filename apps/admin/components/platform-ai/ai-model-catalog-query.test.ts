@@ -3,7 +3,9 @@ import {
   buildCatalogEntriesPath,
   catalogFiltersEqual,
   defaultCatalogEntryFilters,
+  filterApplicableCatalogEntryIds,
   nextCatalogEntryPage,
+  shouldLoadCatalogEntriesOnMount,
   shouldResetCatalogEntryPage,
 } from "./ai-model-catalog-query";
 
@@ -32,5 +34,35 @@ describe("ai model catalog query helpers", () => {
     expect(nextCatalogEntryPage(4, current, next)).toBe(1);
     expect(catalogFiltersEqual(current, defaultCatalogEntryFilters())).toBe(true);
     expect(nextCatalogEntryPage(4, current, defaultCatalogEntryFilters())).toBe(4);
+  });
+
+  test("skips initial client reload when server entries already match the selected run", () => {
+    const filters = defaultCatalogEntryFilters();
+
+    expect(shouldLoadCatalogEntriesOnMount({
+      selectedRunId: "run-1",
+      firstEntryRunId: "run-1",
+      filters,
+    })).toBe(false);
+    expect(shouldLoadCatalogEntriesOnMount({
+      selectedRunId: "run-1",
+      firstEntryRunId: "run-2",
+      filters,
+    })).toBe(true);
+    expect(shouldLoadCatalogEntriesOnMount({
+      selectedRunId: "run-1",
+      firstEntryRunId: "run-1",
+      filters: { ...filters, modality: "video" },
+    })).toBe(true);
+  });
+
+  test("keeps only selected entries that are applicable in the current page", () => {
+    expect(filterApplicableCatalogEntryIds(
+      ["eligible-1", "blocked-1", "missing-1"],
+      [
+        { id: "eligible-1", apply_status: "eligible" },
+        { id: "blocked-1", apply_status: "blocked" },
+      ],
+    )).toEqual(["eligible-1"]);
   });
 });
