@@ -11,6 +11,25 @@ const RUN_ID = "33333333-3333-4333-8333-333333333333";
 const ENTRY_ID = "44444444-4444-4444-8444-444444444444";
 const MODEL_ID = "55555555-5555-4555-8555-555555555555";
 
+function textPayload(data: unknown[]) {
+  return { data, links: {}, total_count: data.length };
+}
+
+function multimodalFetch(textCatalog: unknown, mediaCatalogs: Record<string, unknown> = {}) {
+  return mock(async (url: string) => {
+    const parsedUrl = new URL(url);
+    const pathAndSearch = `${parsedUrl.pathname}${parsedUrl.search}`;
+    const payloads: Record<string, unknown> = {
+      "/api/v1/models": textCatalog,
+      "/api/v1/images/models": { data: [] },
+      "/api/v1/videos/models": { data: [] },
+      "/api/v1/models?output_modalities=speech": textPayload([]),
+      ...mediaCatalogs,
+    };
+    return { ok: true, status: 200, json: async () => payloads[pathAndSearch] };
+  });
+}
+
 function auth(permissions: string[] = ["platform.ai_config.manage"]): AuthContext {
   return {
     authUserId: "66666666-6666-4666-8666-666666666666",
@@ -64,17 +83,9 @@ describe("OpenRouterModelSyncService", () => {
       getSecretString: mock(async () => "secret-openrouter-key"),
       getString: mock(async (_key: string, fallback: string) => fallback),
     };
-    const fetchImpl = mock(async (url: string, init?: RequestInit) => ({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        data: [{ id: "openai/gpt-4o-mini", name: "GPT-4o mini", context_length: 128000, pricing: { prompt: "0.1", completion: "0.2", request: "-1" } }],
-        links: {},
-        total_count: 1,
-      }),
-      url,
-      init,
-    }));
+    const fetchImpl = multimodalFetch(textPayload([
+      { id: "openai/gpt-4o-mini", name: "GPT-4o mini", context_length: 128000, pricing: { prompt: "0.1", completion: "0.2", request: "-1" } },
+    ]));
     const service = new OpenRouterModelSyncService({
       repository: repository as never,
       settings: settings as never,
@@ -94,7 +105,7 @@ describe("OpenRouterModelSyncService", () => {
     expect(repository.saveOpenRouterCatalogPreview).toHaveBeenCalledWith(expect.objectContaining({
       providerId: PROVIDER_ID,
       requestedByEmployeeId: EMPLOYEE_ID,
-      sourceEndpoint: "https://openrouter.ai/api/v1/models",
+      sourceEndpoint: expect.stringContaining("https://openrouter.ai/api/v1/models"),
       entries: [expect.objectContaining({
         external_model_id: "openai/gpt-4o-mini",
         model_code: "openrouter.openai_gpt_4o_mini",
@@ -110,7 +121,7 @@ describe("OpenRouterModelSyncService", () => {
         },
         raw_price_projection: { prompt: "0.1", completion: "0.2" },
       })],
-      summaryPayload: { total: 1, new: 1, changed: 0, unchanged: 0, removed: 0 },
+      summaryPayload: expect.objectContaining({ total: 1, new: 1, changed: 0, unchanged: 0, removed: 0 }),
     }));
     expect(JSON.stringify(repository.saveOpenRouterCatalogPreview.mock.calls[0]?.[0])).not.toContain("total_count");
   });
@@ -256,18 +267,10 @@ describe("OpenRouterModelSyncService", () => {
         getSecretString: mock(async () => "secret-openrouter-key"),
         getString: mock(async (_key: string, fallback: string) => fallback),
       } as never,
-      fetchImpl: mock(async () => ({
-        ok: true,
-        status: 200,
-        json: async () => ({
-          data: [
-            { id: "openai/gpt-4o-mini", name: "GPT-4o mini", context_length: 128000, pricing: { prompt: "0.1", completion: "0.2" }, supported_parameters: ["response_format", "stream"] },
-            { id: "openai/gpt-4o", name: "GPT-4o", context_length: 128000, pricing: { prompt: "0.2", completion: "0.4" }, supported_parameters: ["stream"] },
-          ],
-          links: {},
-          total_count: 2,
-        }),
-      })) as never,
+      fetchImpl: multimodalFetch(textPayload([
+        { id: "openai/gpt-4o-mini", name: "GPT-4o mini", context_length: 128000, pricing: { prompt: "0.1", completion: "0.2" }, supported_parameters: ["response_format", "stream"] },
+        { id: "openai/gpt-4o", name: "GPT-4o", context_length: 128000, pricing: { prompt: "0.2", completion: "0.4" }, supported_parameters: ["stream"] },
+      ])) as never,
     });
 
     await service.createPreview(auth(), { provider_id: PROVIDER_ID });
@@ -276,7 +279,7 @@ describe("OpenRouterModelSyncService", () => {
       entries: Array<Record<string, unknown>>;
       summaryPayload: Record<string, unknown>;
     };
-    expect(input.summaryPayload).toEqual({ total: 3, new: 1, changed: 0, unchanged: 1, removed: 1 });
+    expect(input.summaryPayload).toMatchObject({ total: 3, new: 1, changed: 0, unchanged: 1, removed: 1 });
     expect(input.entries.map((entry) => entry.change_type).sort()).toEqual(["new", "removed", "unchanged"]);
     for (const entry of input.entries) {
       expect(Object.keys(entry).sort()).toEqual([
@@ -343,28 +346,20 @@ describe("OpenRouterModelSyncService", () => {
         getSecretString: mock(async () => "secret-openrouter-key"),
         getString: mock(async (_key: string, fallback: string) => fallback),
       } as never,
-      fetchImpl: mock(async () => ({
-        ok: true,
-        status: 200,
-        json: async () => ({
-          data: [{
-            id: "openai/gpt-4o-mini",
-            name: "GPT-4o mini",
-            context_length: 128000,
-            architecture: { input_modalities: ["text", "image"], output_modalities: ["text"] },
-            pricing: {
-              prompt: "0.1",
-              completion: "0.2",
-              image: "0.3",
-              input_audio: "0.4",
-              output_audio: "0.5",
-            },
-            supported_parameters: ["response_format", "stream"],
-          }],
-          links: {},
-          total_count: 1,
-        }),
-      })) as never,
+      fetchImpl: multimodalFetch(textPayload([{
+        id: "openai/gpt-4o-mini",
+        name: "GPT-4o mini",
+        context_length: 128000,
+        architecture: { input_modalities: ["text", "image"], output_modalities: ["text"] },
+        pricing: {
+          prompt: "0.1",
+          completion: "0.2",
+          image: "0.3",
+          input_audio: "0.4",
+          output_audio: "0.5",
+        },
+        supported_parameters: ["response_format", "stream"],
+      }])) as never,
     });
 
     await service.createPreview(auth(), { provider_id: PROVIDER_ID });
@@ -386,7 +381,7 @@ describe("OpenRouterModelSyncService", () => {
     });
   });
 
-  test("ignores existing non-text catalog models while building text catalog preview", async () => {
+  test("does not mark existing non-text catalog models removed when their modality endpoint returns them", async () => {
     const { OpenRouterModelSyncService } = await import("./openrouter-model-sync");
     const imageCapability = {
       modality: "image" as const,
@@ -447,34 +442,38 @@ describe("OpenRouterModelSyncService", () => {
         getSecretString: mock(async () => "secret-openrouter-key"),
         getString: mock(async (_key: string, fallback: string) => fallback),
       } as never,
-      fetchImpl: mock(async () => ({
-        ok: true,
-        status: 200,
-        json: async () => ({
+      fetchImpl: multimodalFetch(textPayload([{
+        id: "openrouter/text-model",
+        name: "Text Model",
+        context_length: 4096,
+        architecture: { input_modalities: ["text"], output_modalities: ["text"] },
+        pricing: { prompt: "0.1", completion: "0.2" },
+      }]), {
+        "/api/v1/images/models": {
           data: [
             {
               id: "openrouter/image-model",
               name: "Image Model",
               architecture: { input_modalities: ["text", "image"], output_modalities: ["image"] },
-              pricing: { image: "0.5" },
+              supported_parameters: {
+                input_references: { type: "integer", min: 0, max: 1 },
+                n: { type: "integer", min: 1, max: 1 },
+                resolution: { type: "enum", values: ["1024x1024"] },
+              },
             },
             {
               id: "openrouter/hybrid-model",
               name: "Hybrid Model",
-              architecture: { input_modalities: ["text", "image"], output_modalities: ["text", "image"] },
-              pricing: { image: "0.5" },
-            },
-            {
-              id: "openrouter/text-model",
-              name: "Text Model",
-              architecture: { input_modalities: ["text"], output_modalities: ["text"] },
-              pricing: { prompt: "0.1", completion: "0.2" },
+              architecture: { input_modalities: ["text", "image"], output_modalities: ["image"] },
+              supported_parameters: {
+                input_references: { type: "integer", min: 0, max: 1 },
+                n: { type: "integer", min: 1, max: 1 },
+                resolution: { type: "enum", values: ["1024x1024"] },
+              },
             },
           ],
-          links: {},
-          total_count: 3,
-        }),
-      })) as never,
+        },
+      }) as never,
     });
 
     await service.createPreview(auth(), { provider_id: PROVIDER_ID });
@@ -489,11 +488,9 @@ describe("OpenRouterModelSyncService", () => {
     };
     expect(input.entries.map((entry) => entry.external_model_id)).toEqual([
       "openrouter/text-model",
+      "openrouter/hybrid-model",
+      "openrouter/image-model",
     ]);
-    expect(input.entries[0]).toMatchObject({
-      modality: "text",
-      capability_payload: { modality: "text" },
-      change_type: "new",
-    });
+    expect(input.entries.map((entry) => entry.change_type)).not.toContain("removed");
   });
 });

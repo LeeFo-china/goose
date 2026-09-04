@@ -58,10 +58,9 @@ describe("OpenRouterModelSyncService catalog eligibility guard", () => {
         getSecretString: mock(async () => "secret-openrouter-key"),
         getString: mock(async (_key: string, fallback: string) => fallback),
       } as never,
-      fetchImpl: mock(async () => ({
-        ok: true,
-        status: 200,
-        json: async () => ({
+      fetchImpl: mock(async (url: string) => {
+        const parsedUrl = new URL(url);
+        const textCatalog = {
           data: [{
             id: "openrouter/text-no-context",
             name: "Text No Context",
@@ -71,8 +70,19 @@ describe("OpenRouterModelSyncService catalog eligibility guard", () => {
           }],
           links: {},
           total_count: 1,
-        }),
-      })) as never,
+        };
+        const payloads: Record<string, unknown> = {
+          "/api/v1/models": textCatalog,
+          "/api/v1/images/models": { data: [] },
+          "/api/v1/videos/models": { data: [] },
+          "/api/v1/models?output_modalities=speech": { data: [], links: {}, total_count: 0 },
+        };
+        return {
+          ok: true,
+          status: 200,
+          json: async () => payloads[`${parsedUrl.pathname}${parsedUrl.search}`],
+        };
+      }) as never,
     });
 
     await service.createPreview(auth(), { provider_id: PROVIDER_ID });
