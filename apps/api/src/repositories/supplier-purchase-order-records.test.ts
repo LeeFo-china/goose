@@ -32,6 +32,22 @@ describe("supplier purchase order source projection", () => {
       });
   });
 
+  test("accepts an order with commercial snapshot fields", async () => {
+    const repository = await repositoryFor({
+      ...legacyOrder,
+      commercial_snapshot_source: "relationship_default_snapshot",
+      settlement_term_days_snapshot: 30,
+      invoice_required_before_payment_snapshot: true,
+    });
+
+    await expect(repository.findOrder(TENANT_ID, ORDER_ID)).resolves
+      .toMatchObject({
+        commercial_snapshot_source: "relationship_default_snapshot",
+        settlement_term_days_snapshot: 30,
+        invoice_required_before_payment_snapshot: true,
+      });
+  });
+
   test.each([
     "purchase_requisition_id",
     "purchase_requisition",

@@ -81,6 +81,11 @@ const uuid = z.uuid();
 const dateTime = z.string();
 const decimal = z.string().regex(/^\d+(?:\.\d+)?$/);
 const orderStatus = z.enum(["draft", "submitted", "cancelled"]);
+const commercialSnapshotSource = z.enum([
+  "contract_snapshot",
+  "relationship_default_snapshot",
+  "legacy_default_snapshot",
+]);
 
 export const SupplierPurchaseOrderRecordSchema = z.object({
   id: uuid,
@@ -99,6 +104,9 @@ export const SupplierPurchaseOrderRecordSchema = z.object({
   total_amount: decimal,
   purchase_requisition_id: uuid.nullable(),
   purchase_batch_id: uuid.nullable(),
+  commercial_snapshot_source: commercialSnapshotSource.optional(),
+  settlement_term_days_snapshot: z.number().int().nonnegative().optional(),
+  invoice_required_before_payment_snapshot: z.boolean().optional(),
   version: z.number().int().positive(),
   created_by_employee_id: uuid,
   updated_by_employee_id: uuid,
