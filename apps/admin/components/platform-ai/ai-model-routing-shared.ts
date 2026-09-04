@@ -1,4 +1,8 @@
-import type { AiModelRecord, AiProviderRecord } from "@/components/platform-ai/ai-config-types";
+import type {
+  AiModelRecord,
+  AiProviderRecord,
+  AiRouteModelOptionRecord,
+} from "@/components/platform-ai/ai-config-types";
 import { requestBackendJson } from "@/lib/backend-client";
 
 export type ProviderFormState = {
@@ -30,7 +34,13 @@ export type RouteFormState = {
   scene_code: string;
   name: string;
   primary_model_id: string;
+  primary_provider_id: string;
+  primary_keyword: string;
+  primary_option_value: string;
   fallback_model_id: string;
+  fallback_provider_id: string;
+  fallback_keyword: string;
+  fallback_option_value: string;
   quality_tier: "fast" | "balanced" | "quality";
   modality: "text" | "image" | "video" | "speech";
   temperature: string;
@@ -111,12 +121,18 @@ export function emptyModelForm(providerId = ""): ModelFormState {
   };
 }
 
-export function emptyRouteForm(modelId = ""): RouteFormState {
+export function emptyRouteForm(providerId = ""): RouteFormState {
   return {
     scene_code: "",
     name: "",
-    primary_model_id: modelId,
+    primary_model_id: "",
+    primary_provider_id: providerId,
+    primary_keyword: "",
+    primary_option_value: "",
     fallback_model_id: NONE_VALUE,
+    fallback_provider_id: providerId,
+    fallback_keyword: "",
+    fallback_option_value: NONE_VALUE,
     quality_tier: "balanced",
     modality: "text",
     temperature: "0.7",
@@ -137,4 +153,17 @@ export function modelLabel(model?: AiModelRecord | null) {
 
 export function modelOptionLabel(model: AiModelRecord) {
   return `${model.name} / ${model.model_name}`;
+}
+
+export function routeModelOptionFromModel(model: AiModelRecord): AiRouteModelOptionRecord {
+  return {
+    source: "internal",
+    value: model.id,
+    model_id: model.id,
+    provider_id: model.provider_id,
+    label: model.name,
+    description: model.model_name,
+    modality: model.modality || "text",
+    status: model.status,
+  };
 }

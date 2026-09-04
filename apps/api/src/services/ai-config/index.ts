@@ -208,7 +208,7 @@ export class AiConfigService {
       };
     }
 
-    if (!query.keyword) return internalOptions;
+    if (!query.keyword && internalOptions.list.length > 0) return internalOptions;
 
     const catalogOptions = await this.requireCatalogRepository("listLatestEligibleCatalogRouteOptions")
       .call(this.catalogRepository, provider.id, query);

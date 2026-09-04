@@ -30,6 +30,18 @@ export type AiModelRecord = {
   provider?: AiProviderRecord | null;
 };
 
+export type AiRouteModelOptionRecord = {
+  source: "internal" | "catalog" | "manual";
+  value: string;
+  model_id?: string | null;
+  provider_id: string;
+  label: string;
+  description: string | null;
+  modality: "text" | "image" | "video" | "speech";
+  status?: "active" | "inactive" | string;
+  apply_status?: string | null;
+};
+
 export type AiSceneRouteRecord = {
   id: string;
   scene_code: string;

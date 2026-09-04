@@ -151,8 +151,8 @@ const ROUTE_SELECT = [
   "version",
   "created_at",
   "updated_at",
-  "primary_model:ai_models!ai_scene_routes_primary_model_id_fkey(id,code,name,model_name,modality,status)",
-  "fallback_model:ai_models!ai_scene_routes_fallback_model_id_fkey(id,code,name,model_name,modality,status)",
+  "primary_model:ai_models!ai_scene_routes_primary_model_id_fkey(id,provider_id,code,name,model_name,modality,status)",
+  "fallback_model:ai_models!ai_scene_routes_fallback_model_id_fkey(id,provider_id,code,name,model_name,modality,status)",
 ].join(",");
 
 const RUN_SELECT = [

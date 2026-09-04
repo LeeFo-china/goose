@@ -149,6 +149,42 @@ describe("AiConfigService route model options", () => {
     });
   });
 
+  test("lists OpenRouter catalog options when no internal models exist", async () => {
+    const { AiConfigService } = await import("./index");
+    const service = new AiConfigService({
+      configRepository: {
+        getProviderById: async () => provider({ provider_type: "openrouter", code: "openrouter" }),
+        listRouteModels: async () => ({
+          list: [],
+          pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+        }),
+      },
+      catalogRepository: {
+        listLatestEligibleCatalogRouteOptions: async () => ({
+          list: [{
+            source: "catalog" as const,
+            value: "66666666-6666-4666-8666-666666666666",
+            model_id: null,
+            provider_id: PROVIDER_ID,
+            label: "GPT-4o",
+            description: "openai/gpt-4o",
+            modality: "text" as const,
+            apply_status: "eligible",
+          }],
+          pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+        }),
+      },
+    });
+
+    await expect(service.listRouteModelOptions(authContext(), PROVIDER_ID, {
+      page: 1,
+      pageSize: 20,
+      modality: "text",
+    })).resolves.toMatchObject({
+      list: [{ source: "catalog", label: "GPT-4o" }],
+    });
+  });
+
   test("rejects route save when primary and fallback are the same model", async () => {
     const { AiConfigService } = await import("./index");
     const service = new AiConfigService({
