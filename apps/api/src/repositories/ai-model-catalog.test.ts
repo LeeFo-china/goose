@@ -271,6 +271,80 @@ describe("AiModelCatalogRepository", () => {
     expect(calls.at(-1)).toEqual({ method: "range", args: [20, 39] });
   });
 
+  test("lists latest eligible OpenRouter catalog options before pagination", async () => {
+    const { AiModelCatalogRepository } = await import("./ai-model-catalog");
+    const builders: Record<string, ReturnType<typeof tableResponse>> = {};
+    const client = {
+      from(table: string) {
+        const rows = table === "ai_model_catalog_sync_runs"
+          ? [{
+            id: RUN_ID,
+            provider_id: PROVIDER_ID,
+            catalog_hash: "a".repeat(64),
+            run_status: "applied",
+            created_at: "2026-09-01T00:00:00.000Z",
+          }]
+          : [{
+            id: ENTRY_ID,
+            provider_id: PROVIDER_ID,
+            run_id: RUN_ID,
+            catalog_hash: "a".repeat(64),
+            external_model_id: "openai/gpt-4o",
+            model_code: "openrouter.openai_gpt_4o",
+            model_name: "GPT-4o",
+            modality: "text",
+            current_model_id: MODEL_ID,
+            apply_status: "eligible",
+          }];
+        builders[table] = tableResponse(rows);
+        return builders[table];
+      },
+      rpc: async () => ({ data: null, error: null }),
+    };
+
+    const result = await new AiModelCatalogRepository(client as never)
+      .listLatestEligibleCatalogRouteOptions(PROVIDER_ID, {
+        page: 1,
+        pageSize: 20,
+        keyword: "gpt",
+        modality: "text",
+      });
+
+    expect(result.list[0]).toMatchObject({
+      source: "catalog",
+      value: ENTRY_ID,
+      model_id: MODEL_ID,
+      provider_id: PROVIDER_ID,
+      label: "GPT-4o",
+      description: "openai/gpt-4o",
+      modality: "text",
+    });
+    expect(builders.ai_model_catalog_sync_runs!.calls).toContainEqual({
+      method: "eq",
+      args: ["provider_id", PROVIDER_ID],
+    });
+    expect(builders.ai_model_catalog_sync_runs!.calls).toContainEqual({
+      method: "eq",
+      args: ["run_status", "applied"],
+    });
+    expect(builders.ai_model_catalog_entries!.calls).toContainEqual({
+      method: "eq",
+      args: ["run_id", RUN_ID],
+    });
+    expect(builders.ai_model_catalog_entries!.calls).toContainEqual({
+      method: "eq",
+      args: ["provider_id", PROVIDER_ID],
+    });
+    expect(builders.ai_model_catalog_entries!.calls).toContainEqual({
+      method: "eq",
+      args: ["apply_status", "eligible"],
+    });
+    expect(builders.ai_model_catalog_entries!.calls).toContainEqual({
+      method: "range",
+      args: [0, 19],
+    });
+  });
+
   test("maps RPC business error envelopes without leaking raw database details", async () => {
     const { AiModelCatalogRepository } = await import("./ai-model-catalog");
     const client = {

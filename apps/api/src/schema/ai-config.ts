@@ -106,6 +106,23 @@ export const AiModelListQuerySchema = PaginationQuerySchema.extend({
   status: StatusSchema.optional(),
   keyword: optionalText(120),
 });
+export const AiRouteModelOptionListQuerySchema = PaginationQuerySchema.extend({
+  keyword: optionalText(120),
+  modality: ModalitySchema.optional(),
+  status: StatusSchema.optional(),
+});
+export const AiRouteModelOptionResolvePayloadSchema = z.discriminatedUnion("source", [
+  z.strictObject({
+    source: z.literal("catalog"),
+    value: z.uuid("无效的目录模型 ID"),
+  }),
+  z.strictObject({
+    source: z.literal("manual"),
+    model_name: z.string().trim().min(1, "模型调用名称不能为空").max(200, "模型调用名称过长"),
+    name: optionalText(120),
+    modality: z.literal("text").default("text"),
+  }),
+]);
 export const AiSceneRouteListQuerySchema = PaginationQuerySchema.extend({
   sceneCode: optionalText(120),
   qualityTier: QualityTierSchema.optional(),
@@ -145,6 +162,8 @@ export type AiSceneRoutePayload = z.infer<typeof AiSceneRoutePayloadSchema>;
 export type UpdateAiSceneRoutePayload = z.infer<typeof UpdateAiSceneRoutePayloadSchema>;
 export type AiConfigListQuery = z.infer<typeof AiConfigListQuerySchema>;
 export type AiModelListQuery = z.infer<typeof AiModelListQuerySchema>;
+export type AiRouteModelOptionListQuery = z.infer<typeof AiRouteModelOptionListQuerySchema>;
+export type AiRouteModelOptionResolvePayload = z.infer<typeof AiRouteModelOptionResolvePayloadSchema>;
 export type AiSceneRouteListQuery = z.infer<typeof AiSceneRouteListQuerySchema>;
 export type AiCatalogRunListQuery = z.infer<typeof AiCatalogRunListQuerySchema>;
 export type AiCatalogEntryListQuery = z.infer<typeof AiCatalogEntryListQuerySchema>;

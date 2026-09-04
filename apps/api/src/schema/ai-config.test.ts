@@ -4,6 +4,8 @@ import {
   AiModelCapabilityPayloadSchema,
   AiModelPayloadSchema,
   AiProviderPayloadSchema,
+  AiRouteModelOptionListQuerySchema,
+  AiRouteModelOptionResolvePayloadSchema,
   UpdateAiProviderPayloadSchema,
 } from "./ai-config";
 
@@ -89,6 +91,43 @@ describe("AI config schemas", () => {
 
     expect(AiCatalogEntryListQuerySchema.safeParse({
       modality: "multimodal",
+    }).success).toBe(false);
+  });
+
+  test("accepts provider-scoped route model option filters", () => {
+    expect(AiRouteModelOptionListQuerySchema.parse({
+      page: "2",
+      pageSize: "20",
+      keyword: " gpt-4o ",
+      modality: "text",
+    })).toMatchObject({
+      page: 2,
+      pageSize: 20,
+      keyword: "gpt-4o",
+      modality: "text",
+    });
+
+    expect(AiRouteModelOptionListQuerySchema.safeParse({
+      pageSize: "101",
+    }).success).toBe(false);
+  });
+
+  test("resolves route model options from catalog entries or manual text models", () => {
+    expect(AiRouteModelOptionResolvePayloadSchema.safeParse({
+      source: "catalog",
+      value: "33333333-3333-4333-8333-333333333333",
+    }).success).toBe(true);
+
+    expect(AiRouteModelOptionResolvePayloadSchema.safeParse({
+      source: "manual",
+      model_name: "deepseek-chat",
+      modality: "text",
+    }).success).toBe(true);
+
+    expect(AiRouteModelOptionResolvePayloadSchema.safeParse({
+      source: "manual",
+      model_name: "video-model",
+      modality: "video",
     }).success).toBe(false);
   });
 });

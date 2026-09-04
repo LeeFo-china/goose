@@ -9,6 +9,8 @@ import {
   AiModelListQuerySchema,
   AiModelPayloadSchema,
   AiProviderPayloadSchema,
+  AiRouteModelOptionListQuerySchema,
+  AiRouteModelOptionResolvePayloadSchema,
   AiSceneRouteListQuerySchema,
   AiSceneRoutePayloadSchema,
   OpenRouterCatalogApplyPayloadSchema,
@@ -59,6 +61,36 @@ class AiConfigController extends PlatformBaseController {
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
     const authContext = await this.getAiConfigReadContext(request);
     const data = await aiConfigService.listSceneRoutes(authContext, queryResult.data);
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/platform/ai-config/providers/:id/route-model-options")
+  async listRouteModelOptions(request: FastifyRequest, reply: FastifyReply) {
+    const paramsResult = AiConfigIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+    const queryResult = AiRouteModelOptionListQuerySchema.safeParse(request.query || {});
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+    const authContext = await this.getAiConfigReadContext(request);
+    const data = await aiConfigService.listRouteModelOptions(
+      authContext,
+      paramsResult.data.id,
+      queryResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/platform/ai-config/providers/:id/route-model-options:resolve")
+  async resolveRouteModelOption(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getAiConfigManageContext(request);
+    const paramsResult = AiConfigIdParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+    const bodyResult = AiRouteModelOptionResolvePayloadSchema.safeParse(request.body || {});
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+    const data = await aiConfigService.resolveRouteModelOption(
+      authContext,
+      paramsResult.data.id,
+      bodyResult.data,
+    );
     return ResponseHandler.success(data);
   }
 

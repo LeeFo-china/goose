@@ -5,9 +5,26 @@ import type {
   AiConfigListQuery,
   AiModelCapabilityPayload,
   AiModelListQuery,
+  AiRouteModelOptionListQuery,
   AiSceneRouteListQuery,
 } from "@/schema/ai-config";
 import { SupabaseDB } from "@/utils/supabase";
+import {
+  CATALOG_ROUTE_ENTRY_SELECT,
+  catalogRouteModelOptionFromEntry,
+  type AiCatalogRouteModelEntryRecord,
+  type AiCatalogRouteModelOptionRecord,
+} from "./ai-model-catalog-route-options";
+import type {
+  AiModelRecord,
+  AiProviderRecord,
+  AiSceneRouteRecord,
+} from "./ai-model-catalog-records";
+export type {
+  AiModelRecord,
+  AiProviderRecord,
+  AiSceneRouteRecord,
+} from "./ai-model-catalog-records";
 
 type QueryResult = {
   data: unknown;
@@ -45,62 +62,6 @@ type AiCatalogClient = {
 type Page<T> = {
   list: T[];
   pagination: { page: number; pageSize: number; total: number; totalPages: number };
-};
-
-export type AiProviderRecord = {
-  id: string;
-  code: string;
-  name: string;
-  provider_type: string;
-  endpoint_url: string | null;
-  api_key_setting_key: string | null;
-  status: "active" | "inactive";
-  sort_order: number;
-  version?: number | null;
-  created_at: string;
-  updated_at: string;
-};
-
-export type AiModelRecord = {
-  id: string;
-  provider_id: string;
-  code: string;
-  name: string;
-  model_name: string;
-  modality?: "text" | "image" | "video" | "speech";
-  input_modalities?: string[] | null;
-  capability_payload?: Record<string, unknown> | null;
-  probe_status?: "unverified" | "eligible" | "ineligible" | "stale";
-  version?: number | null;
-  current_price_snapshot_id?: string | null;
-  catalog_managed?: boolean | null;
-  status: "active" | "inactive";
-  sort_order: number;
-  created_at: string;
-  updated_at: string;
-  provider?: Pick<AiProviderRecord, "id" | "code" | "name" | "provider_type"> | null;
-  price_snapshot?: Record<string, unknown> | null;
-};
-
-export type AiSceneRouteRecord = {
-  id: string;
-  scene_code: string;
-  name: string;
-  primary_model_id: string | null;
-  fallback_model_id: string | null;
-  quality_tier?: "fast" | "balanced" | "quality";
-  modality?: "text" | "image" | "video" | "speech";
-  max_cost_usd?: string | number | null;
-  confirmation_threshold_usd?: string | number | null;
-  temperature: number | null;
-  response_format: "json_object" | "text" | null;
-  timeout_ms: number | null;
-  status: "active" | "inactive";
-  version?: number | null;
-  created_at: string;
-  updated_at: string;
-  primary_model?: AiModelRecord | null;
-  fallback_model?: AiModelRecord | null;
 };
 
 export type CatalogPreviewInput = {
@@ -370,6 +331,74 @@ export class AiModelCatalogRepository {
       list: (data || []) as Record<string, unknown>[],
       pagination: { page: query.page, pageSize: query.pageSize, total, totalPages: totalPages(total, query.pageSize) },
     };
+  }
+
+  async listLatestEligibleCatalogRouteOptions(
+    providerId: string,
+    query: AiRouteModelOptionListQuery,
+  ): Promise<Page<AiCatalogRouteModelOptionRecord>> {
+    const latestRunResult = await this.from("ai_model_catalog_sync_runs")
+      .select("id,provider_id,catalog_hash,run_status,created_at")
+      .eq("provider_id", providerId)
+      .eq("run_status", "applied")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (latestRunResult.error) {
+      throw Errors.dbError("查询 OpenRouter 最新目录同步记录失败");
+    }
+
+    const latestRun = latestRunResult.data as { id?: string } | null;
+    if (!latestRun?.id) {
+      return {
+        list: [],
+        pagination: { page: query.page, pageSize: query.pageSize, total: 0, totalPages: 0 },
+      };
+    }
+
+    const { from, to } = pageRange(query);
+    let request = this.from("ai_model_catalog_entries")
+      .select(CATALOG_ROUTE_ENTRY_SELECT, { count: "exact" })
+      .eq("run_id", latestRun.id)
+      .eq("provider_id", providerId)
+      .eq("apply_status", "eligible");
+    if (query.modality) request = request.eq("modality", query.modality);
+    if (query.keyword) {
+      const keyword = catalogIlikePattern(query.keyword);
+      request = request.or(`model_name.ilike.${keyword},external_model_id.ilike.${keyword}`);
+    }
+
+    const { data, error, count } = await request
+      .order("model_name", { ascending: true })
+      .range(from, to);
+    if (error) throw Errors.dbError("查询 OpenRouter 可用目录模型失败");
+
+    const total = count ?? 0;
+    return {
+      list: ((data || []) as AiCatalogRouteModelEntryRecord[])
+        .map(catalogRouteModelOptionFromEntry),
+      pagination: {
+        page: query.page,
+        pageSize: query.pageSize,
+        total,
+        totalPages: totalPages(total, query.pageSize),
+      },
+    };
+  }
+
+  async getCatalogRouteModelEntry(
+    providerId: string,
+    entryId: string,
+  ): Promise<AiCatalogRouteModelEntryRecord | null> {
+    const { data, error } = await this.from("ai_model_catalog_entries")
+      .select(CATALOG_ROUTE_ENTRY_SELECT)
+      .eq("id", entryId)
+      .eq("provider_id", providerId)
+      .eq("apply_status", "eligible")
+      .maybeSingle();
+    if (error) throw Errors.dbError("查询 OpenRouter 目录模型失败");
+    return data as AiCatalogRouteModelEntryRecord | null;
   }
 
   async listCatalogManagedModels(providerId: string): Promise<AiModelRecord[]> {
