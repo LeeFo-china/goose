@@ -392,7 +392,8 @@ describe("抖音资料后台工作台 UI 合同", () => {
     }
     expect(detailPage).not.toContain("/versions?page=1");
     expect(detailPage).not.toContain("parseMaterialNoteVersionList");
-    expect(detail).toContain("当前内容");
+    expect(detail).not.toContain("material-current-content-heading");
+    expect(detail).not.toContain("编辑后先保存修改，再发布当前内容；系统会在后台保留修改记录。");
     expect(detail).toContain("MaterialNoteActionDialog");
     expect(detail).toContain("versionId={currentVersionDetail.id}");
     expect(detail).not.toContain("versionNumber=");

@@ -143,37 +143,28 @@ export function MaterialNoteDetail({
         已撤回资料为终态，不能继续编辑或重新发布。
       </StatusAlert> : null}
 
-      <section className="flex min-h-0 flex-col gap-3" aria-labelledby="material-current-content-heading">
-        <div>
-          <h2 id="material-current-content-heading" className="text-base font-semibold">当前内容</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            编辑后先保存修改，再发布当前内容；系统会在后台保留修改记录。
-          </p>
-        </div>
+      {previewError ? <StatusAlert>{previewError}<Button
+        type="button"
+        variant="link"
+        onClick={() => setPreviewReloadKey((current) => current + 1)}
+      >
+        重新加载
+      </Button></StatusAlert> : null}
 
-        {previewError ? <StatusAlert>{previewError}<Button
-          type="button"
-          variant="link"
-          onClick={() => setPreviewReloadKey((current) => current + 1)}
-        >
-          重新加载
-        </Button></StatusAlert> : null}
+      {!currentContentLoaded && !previewError ? <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="animate-spin" data-icon="inline-start" />正在读取当前内容
+      </div> : null}
 
-        {!currentContentLoaded && !previewError ? <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="animate-spin" data-icon="inline-start" />正在读取当前内容
-        </div> : null}
-
-        {currentVersionDetail ? canManage && detail.status !== "withdrawn"
-          ? <MaterialNoteEditor
-            key={currentVersionDetail.id}
-            noteId={detail.id}
-            baseVersion={currentVersionDetail}
-            canManage
-            onSaved={handleVersionSaved}
-          />
-          : <MaterialNoteDraftPreview draft={currentVersionDetail} />
-        : null}
-      </section>
+      {currentVersionDetail ? canManage && detail.status !== "withdrawn"
+        ? <MaterialNoteEditor
+          key={currentVersionDetail.id}
+          noteId={detail.id}
+          baseVersion={currentVersionDetail}
+          canManage
+          onSaved={handleVersionSaved}
+        />
+        : <MaterialNoteDraftPreview draft={currentVersionDetail} />
+      : null}
     </div>
   );
 }
