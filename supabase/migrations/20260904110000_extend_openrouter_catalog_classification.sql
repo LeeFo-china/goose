@@ -419,6 +419,38 @@ BEGIN
     RETURN public.ai_catalog_error(409, 'AI_MODEL_CATALOG_CODE_CONFLICT', '模型编码已被占用');
   END IF;
 
+  IF EXISTS (
+    WITH requested AS (
+      SELECT value::uuid AS id
+      FROM jsonb_array_elements_text(p_entry_ids)
+    )
+    SELECT 1
+    FROM public.ai_model_catalog_entries AS entry
+    JOIN requested ON requested.id = entry.id
+    WHERE entry.run_id = p_run_id
+      AND entry.provider_id = v_provider.id
+      AND entry.catalog_hash = p_expected_catalog_hash
+      AND entry.apply_status <> 'eligible'
+  ) THEN
+    RETURN public.ai_catalog_error(409, 'AI_MODEL_CATALOG_ENTRY_BLOCKED', '所选模型能力信息不完整，暂不可应用');
+  END IF;
+
+  IF EXISTS (
+    WITH requested AS (
+      SELECT value::uuid AS id
+      FROM jsonb_array_elements_text(p_entry_ids)
+    )
+    SELECT 1
+    FROM public.ai_model_catalog_entries AS entry
+    JOIN requested ON requested.id = entry.id
+    WHERE entry.run_id = p_run_id
+      AND entry.provider_id = v_provider.id
+      AND entry.catalog_hash = p_expected_catalog_hash
+      AND entry.change_type = 'removed' AND entry.current_model_id IS NULL
+  ) THEN
+    RETURN public.ai_catalog_error(409, 'AI_MODEL_CATALOG_MODEL_STALE', '模型配置已变化');
+  END IF;
+
   FOR v_entry IN
     WITH requested AS (
       SELECT value::uuid AS id
@@ -433,10 +465,6 @@ BEGIN
     ORDER BY entry.entry_position
     FOR UPDATE OF entry
   LOOP
-    IF v_entry.apply_status <> 'eligible' THEN
-      RETURN public.ai_catalog_error(409, 'AI_MODEL_CATALOG_ENTRY_BLOCKED', '所选模型能力信息不完整，暂不可应用');
-    END IF;
-
     IF v_entry.change_type = 'removed' THEN
       UPDATE public.ai_models
       SET status = 'inactive',

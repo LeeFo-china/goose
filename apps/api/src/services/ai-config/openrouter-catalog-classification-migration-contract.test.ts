@@ -77,8 +77,12 @@ describe("OpenRouter catalog classification migration", () => {
     const source = await Bun.file(classificationMigration).text();
     const apply = functionDefinition(source, "apply_openrouter_model_catalog");
 
-    expect(apply).toContain("v_entry.apply_status <> 'eligible'");
+    expect(apply).toContain("entry.apply_status <> 'eligible'");
     expect(apply).toContain("ai_model_catalog_entry_blocked");
+    expect(apply.indexOf("entry.apply_status <> 'eligible'")).toBeLessThan(
+      apply.indexOf("for v_entry in"),
+    );
+    expect(apply).toContain("change_type = 'removed' and entry.current_model_id is null");
     expect(apply).toContain("identity_model.modality = entry.modality");
     expect(apply).toContain("current_model.modality <> entry.modality");
     expect(apply).toContain(
