@@ -29,6 +29,7 @@ export function AiModelRoutingPanel({
   modelOptions: initialModelOptions,
   catalogRuns,
   catalogEntries,
+  loadedEntryRunId,
 }: {
   data: AiConfigData;
   providerPage: PageData<AiProviderRecord>;
@@ -38,6 +39,7 @@ export function AiModelRoutingPanel({
   modelOptions: AiModelRecord[];
   catalogRuns: PageData<AiCatalogRunRecord>;
   catalogEntries: PageData<AiCatalogEntryRecord>;
+  loadedEntryRunId?: string | null;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -288,6 +290,7 @@ export function AiModelRoutingPanel({
           usageSummary={data.usage_summary}
           runs={catalogRuns}
           entries={catalogEntries}
+          loadedEntryRunId={loadedEntryRunId}
         />
       </TabsContent>
 

@@ -55,12 +55,14 @@ export function normalizeCatalogFilters(filters: CatalogEntryFilters): CatalogEn
 
 export function shouldLoadCatalogEntriesOnMount(input: {
   selectedRunId: string;
+  loadedRunId?: string;
   firstEntryRunId?: string;
   filters: CatalogEntryFilters;
 }): boolean {
   if (!input.selectedRunId) return false;
   const filters = normalizeCatalogFilters(input.filters);
-  return input.firstEntryRunId !== input.selectedRunId
+  const loadedRunId = input.loadedRunId ?? input.firstEntryRunId;
+  return loadedRunId !== input.selectedRunId
     || filters.keyword !== ""
     || filters.modality !== "all"
     || filters.changeType !== "all";

@@ -92,6 +92,7 @@ async function getAiConfig() {
       modelOptions: modelOptions?.list || models?.list || [],
       catalogRuns: catalogRuns || emptyPage<AiCatalogRunRecord>(),
       catalogEntries: catalogEntries || emptyPage<AiCatalogEntryRecord>(),
+      loadedEntryRunId: firstRunId ?? null,
       error: null,
     };
   } catch (error) {
@@ -104,6 +105,7 @@ async function getAiConfig() {
       modelOptions: [],
       catalogRuns: emptyPage<AiCatalogRunRecord>(),
       catalogEntries: emptyPage<AiCatalogEntryRecord>(),
+      loadedEntryRunId: null,
       error: error instanceof Error ? error.message : "AI 模型路由配置加载失败",
     };
   }
@@ -127,6 +129,7 @@ export default async function PlatformAiModelsPage() {
       modelOptions: [],
       catalogRuns: emptyPage<AiCatalogRunRecord>(),
       catalogEntries: emptyPage<AiCatalogEntryRecord>(),
+      loadedEntryRunId: null,
       error: "当前账号不是平台超管，无法维护 AI 模型路由",
     };
 
@@ -195,6 +198,7 @@ export default async function PlatformAiModelsPage() {
           modelOptions={result.modelOptions}
           catalogRuns={result.catalogRuns}
           catalogEntries={result.catalogEntries}
+          loadedEntryRunId={result.loadedEntryRunId}
         />
       ) : null}
     </div>

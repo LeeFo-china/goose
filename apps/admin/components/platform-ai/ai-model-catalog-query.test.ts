@@ -42,6 +42,12 @@ describe("ai model catalog query helpers", () => {
 
     expect(shouldLoadCatalogEntriesOnMount({
       selectedRunId: "run-1",
+      loadedRunId: "run-1",
+      firstEntryRunId: undefined,
+      filters,
+    })).toBe(false);
+    expect(shouldLoadCatalogEntriesOnMount({
+      selectedRunId: "run-1",
       firstEntryRunId: "run-1",
       filters,
     })).toBe(false);

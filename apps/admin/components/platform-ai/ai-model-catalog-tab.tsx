@@ -41,6 +41,7 @@ type CatalogTabProps = {
   };
   runs: PageData<AiCatalogRunRecord>;
   entries: PageData<AiCatalogEntryRecord>;
+  loadedEntryRunId?: string | null;
 };
 
 function pageLabel(prefix: string, page: PageData<unknown>["pagination"]) {
@@ -115,6 +116,7 @@ export function AiModelCatalogTab({
   usageSummary,
   runs,
   entries,
+  loadedEntryRunId,
 }: CatalogTabProps) {
   const routerProviderId = providers.find((provider) => provider.provider_type === "openrouter")?.id ?? "";
   const [providerId, setProviderId] = useState(routerProviderId);
@@ -165,6 +167,7 @@ export function AiModelCatalogTab({
       shouldSkipInitialEntryLoad.current = false;
       if (!shouldLoadCatalogEntriesOnMount({
         selectedRunId: activeRun.id,
+        loadedRunId: loadedEntryRunId ?? undefined,
         firstEntryRunId: entryPage.list[0]?.run_id,
         filters: nextFilters,
       })) {
