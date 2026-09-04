@@ -1,20 +1,8 @@
 import { Errors } from "@/errors/error-factory";
 import { supplierPurchaseBatchWorkflowRepository } from "@/repositories/supplier-purchase-batch-workflow";
 import { supplierPurchaseBatchesRepository } from "@/repositories/supplier-purchase-batches";
-import type {
-  SupplierPurchaseBatchCancelInput,
-  SupplierPurchaseBatchCatalogQuery,
-  SupplierPurchaseBatchCostCategoryQuery,
-  SupplierPurchaseBatchDraftInput,
-  SupplierPurchaseBatchItemListQuery,
-  SupplierPurchaseBatchListQuery,
-  SupplierPurchaseBatchOrderListQuery,
-  SupplierPurchaseBatchProjectOptionQuery,
-  SupplierPurchaseBatchRequisitionListQuery,
-  SupplierPurchaseBatchReviewInput,
-  SupplierPurchaseBatchSubmitInput,
-  SupplierPurchaseBatchWithdrawInput,
-} from "@/schema/supplier-purchase-batches";
+import { workflowTaskRepository } from "@/repositories/workflow-tasks";
+import type { SupplierPurchaseBatchCancelInput, SupplierPurchaseBatchCatalogQuery, SupplierPurchaseBatchCostCategoryQuery, SupplierPurchaseBatchDraftInput, SupplierPurchaseBatchItemListQuery, SupplierPurchaseBatchListQuery, SupplierPurchaseBatchOrderListQuery, SupplierPurchaseBatchProjectOptionQuery, SupplierPurchaseBatchRequisitionListQuery, SupplierPurchaseBatchReviewInput, SupplierPurchaseBatchSubmitInput, SupplierPurchaseBatchWithdrawInput } from "@/schema/supplier-purchase-batches";
 import type { AuthContext } from "@/services/authorization";
 import {
   deriveSupplierPurchaseBatchActions,
@@ -22,49 +10,21 @@ import {
 } from "@/services/supplier-purchase-batch-access";
 import { resolveSupplierPurchaseBatchDraftCostCategories } from "@/services/supplier-purchase-batch-cost-category-resolution";
 import { resolveSupplierPurchaseBatchProjectOptionWindow } from "@/services/supplier-purchase-batch-project-option-window";
-import {
-  assertLegacySupplierPurchaseBatchReviewSelf,
-  assertSupplierPurchaseBatchReviewVersion,
-  adaptWorkflowReviewResult,
-  executeSupplierPurchaseBatchReview,
-} from
+import { assertLegacySupplierPurchaseBatchReviewSelf, assertSupplierPurchaseBatchReviewVersion, adaptWorkflowReviewResult, executeSupplierPurchaseBatchReview } from
   "@/services/supplier-purchase-batch-review";
 import { supplierPurchaseBatchWorkflowRuntime } from "@/services/supplier-purchase-batch-workflow-runtime";
 import { workflowTaskSupplierPurchaseBatchBridge } from "@/services/workflow-task-supplier-purchase-batch-bridge";
-import {
-  SupplierPurchaseBatchWorkflowProjectionService,
-  supplierPurchaseBatchWorkflowProjectionService,
-  type SupplierPurchaseBatchWorkflowProjectionDependencies,
-} from "@/services/supplier-purchase-batch-workflow-projection";
+import { SupplierPurchaseBatchWorkflowProjectionService, supplierPurchaseBatchWorkflowProjectionService, type SupplierPurchaseBatchWorkflowProjectionDependencies } from "@/services/supplier-purchase-batch-workflow-projection";
+import { attachSupplierPurchaseBatchPagePersonnel, attachSupplierPurchaseBatchPersonnel, attachSupplierPurchaseOrderPagePersonnel, loadSupplierPurchaseBatchCurrentApprovers } from "@/services/supplier-purchase-personnel-projection";
 
-type BatchAccessPort = Pick<
-  typeof supplierPurchaseBatchAccessService,
-  | "requireActorScope"
-  | "requireView"
-  | "requireManage"
-  | "requireApprove"
-  | "requireFinanceBudgetManage"
-  | "getVisibleProjectIds"
-  | "getVisibleProjectUpdateIds"
-  | "assertProjectRead"
-  | "assertProjectUpdate"
->;
-type BatchRepositoryPort = Pick<
-  typeof supplierPurchaseBatchesRepository,
-  | "listBatches"
-  | "findBatch"
-  | "listItems"
-  | "listRequisitions"
-  | "listOrders"
-  | "listProjectOptions"
-  | "listCostCategories"
-  | "listCatalog"
-  | "resolveCostCategoryDefaults"
-  | "saveDraft"
-  | "submit"
-  | "review"
-  | "cancel"
->;
+type BatchAccessPort = Pick<typeof supplierPurchaseBatchAccessService,
+  "requireActorScope" | "requireView" | "requireManage" | "requireApprove" |
+  "requireFinanceBudgetManage" | "getVisibleProjectIds" |
+  "getVisibleProjectUpdateIds" | "assertProjectRead" | "assertProjectUpdate">;
+type BatchRepositoryPort = Pick<typeof supplierPurchaseBatchesRepository,
+  "listBatches" | "findBatch" | "listItems" | "listRequisitions" |
+  "listOrders" | "listProjectOptions" | "listCostCategories" | "listCatalog" |
+  "resolveCostCategoryDefaults" | "saveDraft" | "submit" | "review" | "cancel">;
 type BatchWorkflowRuntimePort = Pick<typeof supplierPurchaseBatchWorkflowRuntime,
   "isEnabled" | "submit">;
 type BatchWorkflowRepositoryPort = Pick<
@@ -72,6 +32,10 @@ type BatchWorkflowRepositoryPort = Pick<
 type BatchWorkflowReviewBridgePort = Pick<
   typeof workflowTaskSupplierPurchaseBatchBridge,
   "completeLegacyReview" | "replayExactLegacyReview"
+>;
+type BatchWorkflowTaskReadPort = Pick<
+  typeof workflowTaskRepository,
+  "listPendingBySubjectIds"
 >;
 
 export type SupplierPurchaseBatchesServiceDependencies = {
@@ -84,6 +48,7 @@ export type SupplierPurchaseBatchesServiceDependencies = {
     SupplierPurchaseBatchWorkflowProjectionService,
     "enrichPage" | "enrichDetail"
   >;
+  workflowTasks?: BatchWorkflowTaskReadPort;
   workflowRead?: SupplierPurchaseBatchWorkflowProjectionDependencies["workflowRead"];
   nowFactory?: () => Date;
 };
@@ -104,6 +69,7 @@ export class SupplierPurchaseBatchesService {
     SupplierPurchaseBatchWorkflowProjectionService,
     "enrichPage" | "enrichDetail"
   >;
+  private readonly workflowTasks: BatchWorkflowTaskReadPort;
   private readonly nowFactory: () => Date;
 
   constructor(dependencies: SupplierPurchaseBatchesServiceDependencies = {}) {
@@ -122,6 +88,7 @@ export class SupplierPurchaseBatchesService {
           workflowRead: dependencies.workflowRead,
         })
         : supplierPurchaseBatchWorkflowProjectionService);
+    this.workflowTasks = dependencies.workflowTasks ?? workflowTaskRepository;
     this.nowFactory = dependencies.nowFactory ?? (() => new Date());
   }
 
@@ -140,18 +107,27 @@ export class SupplierPurchaseBatchesService {
       ...(query.status ? { status: query.status } : {}),
       ...(query.projectId ? { project_id: query.projectId } : {}),
     });
-    if (!await this.workflowRuntime.isEnabled(scope.tenantId)) return page;
+    const workflowEnabled = await this.workflowRuntime.isEnabled(scope.tenantId);
+    if (!workflowEnabled) return attachSupplierPurchaseBatchPagePersonnel(page);
     const updateProjectIds = auth.permissions.some(({ code }) =>
         code === "project.update"
       )
       ? await this.access.getVisibleProjectUpdateIds(auth)
       : [];
-    return this.workflowProjection.enrichPage({
+    const projected = await this.workflowProjection.enrichPage({
       auth,
       scope,
       page,
       updateProjectIds,
     });
+    return attachSupplierPurchaseBatchPagePersonnel(
+      projected,
+      await loadSupplierPurchaseBatchCurrentApprovers({
+        tenantId: scope.tenantId,
+        batchIds: projected.list.map(({ id }) => id),
+        workflowTasks: this.workflowTasks,
+      }),
+    );
   }
 
   async getBatch(auth: AuthContext, batchId: string) {
@@ -170,15 +146,24 @@ export class SupplierPurchaseBatchesService {
       scope.tenantId,
     );
     if (workflowEnabled) {
-      return this.workflowProjection.enrichDetail({
+      const projected = await this.workflowProjection.enrichDetail({
         auth,
         scope,
         batch,
         updateProjectIds,
       });
+      return attachSupplierPurchaseBatchPersonnel(
+        projected,
+        (await loadSupplierPurchaseBatchCurrentApprovers({
+          tenantId: scope.tenantId,
+          batchIds: [projected.id],
+          workflowTasks: this.workflowTasks,
+        }))
+          .get(projected.id) ?? [],
+      );
     }
     return {
-      ...batch,
+      ...attachSupplierPurchaseBatchPersonnel(batch),
       actions: deriveSupplierPurchaseBatchActions({
         status: batch.status,
         createdByEmployeeId: batch.created_by_employee_id,
@@ -419,17 +404,22 @@ export class SupplierPurchaseBatchesService {
   ) {
     const scope = await this.access.requireView(auth);
     const visibleProjectIds = await this.access.getVisibleProjectIds(auth);
-    await this.requireBatchInScope(
+    const batch = await this.requireBatchInScope(
       scope.tenantId,
       batchId,
       visibleProjectIds,
     );
-    return this.repository[method]({
+    const page = await this.repository[method]({
       tenant_id: scope.tenantId,
       batch_id: batchId,
       visible_project_ids: visibleProjectIds,
       page: query.page,
       pageSize: query.pageSize,
+    });
+    if (method !== "listOrders") return page;
+    return attachSupplierPurchaseOrderPagePersonnel({
+      ...page,
+      list: page.list.map((order) => ({ ...order, purchase_batch: batch })),
     });
   }
 

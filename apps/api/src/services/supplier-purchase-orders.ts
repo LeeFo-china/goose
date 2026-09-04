@@ -16,6 +16,10 @@ import type { AuthContext } from "@/services/authorization";
 import {
   supplierPurchaseOrderAccessService,
 } from "@/services/supplier-purchase-order-access";
+import {
+  attachSupplierPurchaseOrderPagePersonnel,
+  attachSupplierPurchaseOrderPersonnel,
+} from "@/services/supplier-purchase-personnel-projection";
 import { tenantSuppliersService } from "@/services/tenant-suppliers";
 
 type PurchaseOrderAccessPort = Pick<
@@ -72,7 +76,7 @@ export class SupplierPurchaseOrdersService {
   ) {
     const scope = await this.access.requireRead(auth);
     const visibleProjectIds = await this.access.getVisibleProjectIds(auth);
-    return this.repository.listOrders({
+    const page = await this.repository.listOrders({
       tenant_id: scope.tenantId,
       visible_project_ids: visibleProjectIds,
       page: query.page,
@@ -87,13 +91,14 @@ export class SupplierPurchaseOrdersService {
         ? { tenant_supplier_id: query.tenantSupplierId }
         : {}),
     });
+    return attachSupplierPurchaseOrderPagePersonnel(page);
   }
 
   async getOrder(auth: AuthContext, orderId: string) {
     const scope = await this.access.requireRead(auth);
     const order = await this.requireOrder(scope.tenantId, orderId);
     await this.access.assertProjectRead(auth, order.project_id);
-    return order;
+    return attachSupplierPurchaseOrderPersonnel(order);
   }
 
   async listItems(

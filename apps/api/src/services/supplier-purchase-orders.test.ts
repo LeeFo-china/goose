@@ -13,6 +13,10 @@ const RELATIONSHIP_ID = "61000000-0000-4000-8000-000000000004";
 const OTHER_RELATIONSHIP_ID = "61000000-0000-4000-8000-000000000005";
 const USER_ID = "61000000-0000-4000-8000-000000000006";
 const EMPLOYEE_ID = "61000000-0000-4000-8000-000000000007";
+const BATCH_ID = "61000000-0000-4000-8000-000000000008";
+const SYSTEM_EMPLOYEE_ID = "61000000-0000-4000-8000-000000000009";
+const APPLICANT_ID = "61000000-0000-4000-8000-000000000010";
+const REVIEWER_ID = "61000000-0000-4000-8000-000000000011";
 
 const auth = {
   authUserId: USER_ID,
@@ -20,6 +24,13 @@ const auth = {
   tenantId: TENANT_ID,
   permissions: [],
 } as unknown as AuthContext;
+
+function emptyPage() {
+  return {
+    list: [] as unknown[],
+    pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+  };
+}
 
 function dependencies(orderOverrides: Record<string, unknown> = {}) {
   const scope = {
@@ -43,7 +54,7 @@ function dependencies(orderOverrides: Record<string, unknown> = {}) {
       assertProjectUpdate: mock(async () => undefined),
     },
     repository: {
-      listOrders: mock(async (input: unknown) => ({ input })),
+      listOrders: mock(async (_input: unknown) => emptyPage()),
       findOrder: mock(async () => purchaseOrder),
       listItems: mock(async (input: unknown) => ({ input })),
       listCatalog: mock(async (input: unknown) => ({ input })),
@@ -61,6 +72,91 @@ function dependencies(orderOverrides: Record<string, unknown> = {}) {
 }
 
 describe("SupplierPurchaseOrdersService", () => {
+  test("inherits applicant and approval summary from the source batch on order lists", async () => {
+    const deps = dependencies({
+      purchase_batch_id: BATCH_ID,
+      created_by_employee_id: SYSTEM_EMPLOYEE_ID,
+    });
+    deps.repository.listOrders.mockImplementation(async () => ({
+      list: [{
+        id: ORDER_ID,
+        tenant_id: TENANT_ID,
+        project_id: PROJECT_ID,
+        tenant_supplier_id: RELATIONSHIP_ID,
+        purchase_batch_id: BATCH_ID,
+        status: "submitted",
+        fulfillment_status: "confirmed",
+        created_by_employee_id: SYSTEM_EMPLOYEE_ID,
+        creator_snapshot: {
+          employee_id: SYSTEM_EMPLOYEE_ID,
+          name: "系统生成",
+          phone_masked: null,
+          role_name: null,
+        },
+        purchase_batch: {
+          id: BATCH_ID,
+          status: "ordered",
+          submitted_by_employee_id: APPLICANT_ID,
+          submitted_at: "2026-08-27T02:00:00.000Z",
+          reviewed_by_employee_id: REVIEWER_ID,
+          reviewed_at: "2026-08-27T03:00:00.000Z",
+          review_remark: "同意生成采购单",
+          applicant_snapshot: {
+            employee_id: APPLICANT_ID,
+            name: "批次申请人",
+            phone_masked: "188****3002",
+            role_name: "项目经理",
+          },
+          last_reviewer_snapshot: {
+            employee_id: REVIEWER_ID,
+            name: "最终审批人",
+            phone_masked: "188****3003",
+            role_name: "采购审批",
+          },
+        },
+      }],
+      pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+    }));
+    const { SupplierPurchaseOrdersService } = await import(
+      "./supplier-purchase-orders"
+    );
+    const service = new SupplierPurchaseOrdersService(deps as never);
+
+    const result = await service.listOrders(auth, {
+      page: 1,
+      pageSize: 20,
+    });
+
+    expect(result.list[0]).toMatchObject({
+      creator: {
+        employee_id: SYSTEM_EMPLOYEE_ID,
+        name: "系统生成",
+        phone_masked: null,
+        role_name: null,
+      },
+      applicant: {
+        employee_id: APPLICANT_ID,
+        name: "批次申请人",
+        phone_masked: "188****3002",
+        role_name: "项目经理",
+      },
+      submitted_at: "2026-08-27T02:00:00.000Z",
+      approval_summary: {
+        status: "approved",
+        current_approvers: [],
+        last_reviewer: {
+          employee_id: REVIEWER_ID,
+          name: "最终审批人",
+          phone_masked: "188****3003",
+          role_name: "采购审批",
+        },
+        reviewed_at: "2026-08-27T03:00:00.000Z",
+        rejected_at: null,
+        review_remark: "同意生成采购单",
+      },
+    });
+  });
+
   test("lists only the tenant and project scope resolved by access policy", async () => {
     const deps = dependencies();
     const { SupplierPurchaseOrdersService } = await import(

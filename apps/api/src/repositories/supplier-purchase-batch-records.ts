@@ -5,6 +5,9 @@ import {
   SupplierPurchaseOrderCatalogItemSchema,
   SupplierPurchaseOrderWithReferencesSchema,
 } from "./supplier-purchase-order-records";
+import {
+  NullableSupplierPurchaseEmployeeSnapshotSchema,
+} from "./supplier-purchase-personnel-records";
 import { SupplierPurchaseRequisitionRecordSchema } from "./supplier-purchase-requisition-records";
 
 export const SUPPLIER_PURCHASE_BATCH_SELECT = [
@@ -30,11 +33,14 @@ export const SUPPLIER_PURCHASE_BATCH_SELECT = [
   "approval_round",
   "version",
   "created_by_employee_id",
+  "creator_snapshot",
   "updated_by_employee_id",
   "submitted_by_employee_id",
   "submitted_at",
+  "applicant_snapshot",
   "reviewed_by_employee_id",
   "reviewed_at",
+  "last_reviewer_snapshot",
   "review_remark",
   "cancelled_by_employee_id",
   "cancelled_at",
@@ -171,11 +177,15 @@ export const SupplierPurchaseBatchRecordSchema = z.object({
   approval_round: z.number().int().nonnegative().optional(),
   version: z.number().int().positive(),
   created_by_employee_id: uuid,
+  creator_snapshot: NullableSupplierPurchaseEmployeeSnapshotSchema.optional(),
   updated_by_employee_id: uuid,
   submitted_by_employee_id: nullableEmployeeId,
   submitted_at: nullableDateTime,
+  applicant_snapshot: NullableSupplierPurchaseEmployeeSnapshotSchema.optional(),
   reviewed_by_employee_id: nullableEmployeeId,
   reviewed_at: nullableDateTime,
+  last_reviewer_snapshot:
+    NullableSupplierPurchaseEmployeeSnapshotSchema.optional(),
   review_remark: z.string().trim().min(1).max(500).nullable(),
   cancelled_by_employee_id: nullableEmployeeId,
   cancelled_at: nullableDateTime,

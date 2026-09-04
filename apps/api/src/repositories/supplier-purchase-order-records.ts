@@ -1,9 +1,15 @@
 import { z } from "zod";
 
 import {
+  SupplierPurchaseBatchStatusSchema,
+} from "@/schema/supplier-purchase-batches";
+import {
   SupplierPurchaseRequisitionBudgetStatusSchema,
   SupplierPurchaseRequisitionStatusSchema,
 } from "@/schema/supplier-purchase-requisitions";
+import {
+  NullableSupplierPurchaseEmployeeSnapshotSchema,
+} from "@/repositories/supplier-purchase-personnel-records";
 
 export const SUPPLIER_PURCHASE_ORDER_SELECT = [
   "id",
@@ -24,9 +30,11 @@ export const SUPPLIER_PURCHASE_ORDER_SELECT = [
   "purchase_batch_id",
   "version",
   "created_by_employee_id",
+  "creator_snapshot",
   "updated_by_employee_id",
   "submitted_by_employee_id",
   "submitted_at",
+  "applicant_snapshot",
   "cancelled_by_employee_id",
   "cancelled_at",
   "cancel_reason",
@@ -35,6 +43,21 @@ export const SUPPLIER_PURCHASE_ORDER_SELECT = [
   "project:projects!project_id(id,name,status)",
   "supplier:suppliers!supplier_id(id,code,name,legal_name,onboarding_status,operational_status)",
   "purchase_requisition:supplier_purchase_requisitions!supplier_purchase_orders_requisition_tenant_fkey(id,request_no,status,budget_status)",
+  [
+    "purchase_batch:supplier_purchase_batches!supplier_purchase_orders_batch_tenant_fkey(",
+    [
+      "id",
+      "status",
+      "submitted_by_employee_id",
+      "submitted_at",
+      "reviewed_by_employee_id",
+      "reviewed_at",
+      "review_remark",
+      "applicant_snapshot",
+      "last_reviewer_snapshot",
+    ].join(","),
+    ")",
+  ].join(""),
 ].join(",");
 
 export const SUPPLIER_PURCHASE_ORDER_ITEM_SELECT = [
@@ -119,14 +142,29 @@ export const SupplierPurchaseOrderRecordSchema = z.object({
   invoice_required_before_payment_snapshot: z.boolean().optional(),
   version: z.number().int().positive(),
   created_by_employee_id: uuid,
+  creator_snapshot: NullableSupplierPurchaseEmployeeSnapshotSchema.optional(),
   updated_by_employee_id: uuid,
   submitted_by_employee_id: uuid.nullable(),
   submitted_at: dateTime.nullable(),
+  applicant_snapshot: NullableSupplierPurchaseEmployeeSnapshotSchema.optional(),
   cancelled_by_employee_id: uuid.nullable(),
   cancelled_at: dateTime.nullable(),
   cancel_reason: z.string().nullable(),
   created_at: dateTime,
   updated_at: dateTime,
+  purchase_batch: z.object({
+    id: uuid,
+    status: SupplierPurchaseBatchStatusSchema,
+    submitted_by_employee_id: uuid.nullable(),
+    submitted_at: dateTime.nullable(),
+    reviewed_by_employee_id: uuid.nullable(),
+    reviewed_at: dateTime.nullable(),
+    review_remark: z.string().nullable(),
+    applicant_snapshot: NullableSupplierPurchaseEmployeeSnapshotSchema
+      .optional(),
+    last_reviewer_snapshot: NullableSupplierPurchaseEmployeeSnapshotSchema
+      .optional(),
+  }).strict().nullable().optional(),
 }).strict();
 
 export const SupplierPurchaseOrderWithReferencesSchema =

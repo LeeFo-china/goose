@@ -36,6 +36,12 @@ function auth(permissions: string[] = []): AuthContext {
     permissions: permissions.map((code) => ({ code, scope: "all" })),
   };
 }
+function emptyPage() {
+  return {
+    list: [] as unknown[],
+    pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+  };
+}
 function dependencies(overrides: Record<string, unknown> = {}) {
   const events: string[] = [];
   const scope = {
@@ -70,11 +76,11 @@ function dependencies(overrides: Record<string, unknown> = {}) {
         events.push("project-update")),
     },
     repository: {
-      listBatches: mock(async (input: unknown) => ({ input })),
+      listBatches: mock(async (_input: unknown) => emptyPage()),
       findBatch: mock(async () => batch),
-      listItems: mock(async (input: unknown) => ({ input })),
-      listRequisitions: mock(async (input: unknown) => ({ input })),
-      listOrders: mock(async (input: unknown) => ({ input })),
+      listItems: mock(async (_input: unknown) => emptyPage()),
+      listRequisitions: mock(async (_input: unknown) => emptyPage()),
+      listOrders: mock(async (_input: unknown) => emptyPage()),
       listProjectOptions: mock(async (input: unknown) => ({ input })),
       listCatalog: mock(async (input: unknown) => ({ input })),
       listCostCategories: mock(async (input: unknown) => ({ input })),
@@ -154,7 +160,6 @@ describe("SupplierPurchaseBatchesService reads", () => {
       keyword: "补料",
     });
   });
-
   test("scopes detail and child reads and derives detail actions", async () => {
     const { deps, service } = await serviceFor({ status: "draft" });
     deps.access.getVisibleProjectUpdateIds.mockImplementation(
@@ -168,7 +173,6 @@ describe("SupplierPurchaseBatchesService reads", () => {
       "supplier.product.manage",
       "supplier.cost-price.manage",
     ]);
-
     const detail = await service.getBatch(context, BATCH_ID);
     await service.listItems(context, BATCH_ID, { page: 1, pageSize: 20 });
     await service.listRequisitions(context, BATCH_ID, {
@@ -176,7 +180,6 @@ describe("SupplierPurchaseBatchesService reads", () => {
       pageSize: 20,
     });
     await service.listOrders(context, BATCH_ID, { page: 3, pageSize: 20 });
-
     expect(detail).toMatchObject({
       id: BATCH_ID,
       actions: {
