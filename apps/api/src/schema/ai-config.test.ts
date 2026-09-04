@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  AiCatalogEntryListQuerySchema,
   AiModelCapabilityPayloadSchema,
   AiModelPayloadSchema,
   AiProviderPayloadSchema,
@@ -68,6 +69,26 @@ describe("AI config schemas", () => {
     expect(UpdateAiProviderPayloadSchema.safeParse({
       expected_version: 1,
       api_key_setting_key: "Bearer secret-token",
+    }).success).toBe(false);
+  });
+
+  test("accepts catalog entry search filters and rejects unknown modalities", () => {
+    expect(AiCatalogEntryListQuerySchema.parse({
+      page: "2",
+      pageSize: "20",
+      keyword: " claude ",
+      modality: "image",
+      changeType: "new",
+    })).toMatchObject({
+      page: 2,
+      pageSize: 20,
+      keyword: "claude",
+      modality: "image",
+      changeType: "new",
+    });
+
+    expect(AiCatalogEntryListQuerySchema.safeParse({
+      modality: "multimodal",
     }).success).toBe(false);
   });
 });

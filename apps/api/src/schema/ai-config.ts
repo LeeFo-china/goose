@@ -115,6 +115,8 @@ export const AiCatalogRunListQuerySchema = PaginationQuerySchema.extend({
 });
 export const AiCatalogEntryListQuerySchema = PaginationQuerySchema.extend({
   changeType: CatalogChangeTypeSchema.optional(),
+  keyword: optionalText(120),
+  modality: ModalitySchema.optional(),
 });
 
 export const OpenRouterCatalogPreviewPayloadSchema = z.strictObject({

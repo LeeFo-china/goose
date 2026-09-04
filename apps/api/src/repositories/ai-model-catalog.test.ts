@@ -11,6 +11,7 @@ const MODEL_ID = "44444444-4444-4444-8444-444444444444";
 
 function tableResponse(data: unknown, count = 1) {
   const calls: Array<{ method: string; args: unknown[] }> = [];
+  const response = { data, error: null, count };
   const builder = {
     select: (...args: unknown[]) => { calls.push({ method: "select", args }); return builder; },
     eq: (...args: unknown[]) => { calls.push({ method: "eq", args }); return builder; },
@@ -20,7 +21,7 @@ function tableResponse(data: unknown, count = 1) {
     range: (...args: unknown[]) => { calls.push({ method: "range", args }); return builder; },
     limit: (...args: unknown[]) => { calls.push({ method: "limit", args }); return builder; },
     maybeSingle: async () => ({ data: Array.isArray(data) ? data[0] ?? null : data, error: null }),
-    then: (resolve: (value: unknown) => unknown) => resolve({ data, error: null, count }),
+    then: Promise.resolve(response).then.bind(Promise.resolve(response)),
     calls,
   };
   return builder;
@@ -208,6 +209,66 @@ describe("AiModelCatalogRepository", () => {
       method: "eq",
       args: ["provider_id", PROVIDER_ID],
     });
+  });
+
+  test("filters catalog entries before pagination with bounded selected fields", async () => {
+    const { AiModelCatalogRepository } = await import("./ai-model-catalog");
+    const builders: Record<string, ReturnType<typeof tableResponse>> = {};
+    const client = {
+      from(table: string) {
+        builders[table] = tableResponse([
+          {
+            id: ENTRY_ID,
+            run_id: RUN_ID,
+            entry_position: 21,
+            external_model_id: "anthropic/claude-3.5-sonnet",
+            model_name: "Claude 3.5 Sonnet",
+            modality: "image",
+            change_type: "new",
+            apply_status: "blocked",
+            apply_block_code: "MODEL_CODE_CONFLICT",
+          },
+        ]);
+        return builders[table];
+      },
+      rpc: async () => ({ data: null, error: null }),
+    };
+
+    const result = await new AiModelCatalogRepository(client).listCatalogEntries(RUN_ID, {
+      page: 2,
+      pageSize: 20,
+      keyword: " claude\\%_,() ",
+      modality: "image",
+      changeType: "new",
+    });
+
+    expect(result.pagination).toEqual({ page: 2, pageSize: 20, total: 1, totalPages: 1 });
+    expect(result.list[0]?.external_model_id).toBe("anthropic/claude-3.5-sonnet");
+    const catalogEntriesBuilder = builders.ai_model_catalog_entries;
+    expect(catalogEntriesBuilder).toBeDefined();
+    if (!catalogEntriesBuilder) throw new Error("missing catalog entries query builder");
+    const calls = catalogEntriesBuilder.calls;
+    const select = calls.find((call) => call.method === "select")?.args[0];
+    expect(select).toEqual(expect.stringContaining("apply_status"));
+    expect(select).toEqual(expect.stringContaining("apply_block_code"));
+    expect(select).not.toEqual(expect.stringContaining("capability_payload"));
+    expect(calls.map((call) => call.method)).toEqual([
+      "select",
+      "eq",
+      "eq",
+      "eq",
+      "or",
+      "order",
+      "range",
+    ]);
+    expect(calls).toContainEqual({ method: "eq", args: ["run_id", RUN_ID] });
+    expect(calls).toContainEqual({ method: "eq", args: ["modality", "image"] });
+    expect(calls).toContainEqual({ method: "eq", args: ["change_type", "new"] });
+    expect(calls).toContainEqual({
+      method: "or",
+      args: ["model_name.ilike.%claude\\\\\\%\\_\\,\\(\\)%,external_model_id.ilike.%claude\\\\\\%\\_\\,\\(\\)%"],
+    });
+    expect(calls.at(-1)).toEqual({ method: "range", args: [20, 39] });
   });
 
   test("maps RPC business error envelopes without leaking raw database details", async () => {

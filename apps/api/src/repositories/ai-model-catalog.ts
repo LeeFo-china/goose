@@ -218,6 +218,8 @@ const ENTRY_SELECT = [
   "current_model_version",
   "raw_price_projection",
   "catalog_hash",
+  "apply_status",
+  "apply_block_code",
   "created_at",
 ].join(",");
 
@@ -228,6 +230,10 @@ function pageRange(query: { page: number; pageSize: number }) {
 
 function totalPages(total: number, pageSize: number) {
   return total ? Math.ceil(total / pageSize) : 0;
+}
+
+function escapeCatalogKeyword(keyword: string) {
+  return keyword.trim().replace(/[\\%_,()]/g, "\\$&");
 }
 
 function assertRpcDataObject(data: unknown, operation: string) {
@@ -344,11 +350,16 @@ export class AiModelCatalogRepository {
     const { from, to } = pageRange(query);
     let request = this.from("ai_model_catalog_entries")
       .select(ENTRY_SELECT, { count: "exact" })
-      .eq("run_id", runId)
+      .eq("run_id", runId);
+    if (query.modality) request = request.eq("modality", query.modality);
+    if (query.changeType) request = request.eq("change_type", query.changeType);
+    if (query.keyword) {
+      const keyword = escapeCatalogKeyword(query.keyword);
+      request = request.or(`model_name.ilike.%${keyword}%,external_model_id.ilike.%${keyword}%`);
+    }
+    const { data, error, count } = await request
       .order("entry_position", { ascending: true })
       .range(from, to);
-    if (query.changeType) request = request.eq("change_type", query.changeType);
-    const { data, error, count } = await request;
     if (error) throw Errors.dbError("查询 OpenRouter 目录条目失败");
     const total = count ?? 0;
     return {
