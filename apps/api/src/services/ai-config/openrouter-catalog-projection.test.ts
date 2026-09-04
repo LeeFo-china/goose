@@ -5,6 +5,7 @@ import {
   modelCode,
   projectCandidate,
   projectCandidates,
+  speechCandidates,
   textCandidates,
   type CatalogCandidate,
 } from "./openrouter-catalog-projection";
@@ -91,6 +92,53 @@ describe("OpenRouter catalog projection", () => {
         modality: "text",
         supports_json_object: false,
         supports_streaming: true,
+      },
+    });
+  });
+
+  test("detects upstream input modality changes against current catalog models", () => {
+    const projection = projectCandidate({
+      ...completeVideoCandidate,
+      inputModalities: ["text", "image"],
+    }, {
+      code: "openrouter.video.openrouter_video_model",
+      name: "Video Model",
+      model_name: "openrouter/video-model",
+      modality: "video",
+      input_modalities: ["text"],
+      capability_payload: completeVideoCandidate.capabilityCandidate,
+      price_snapshot: { raw_price_projection: { video: "0.05" } },
+    });
+
+    expect(projection.input_modalities).toEqual(["text", "image"]);
+    expect(projection.change_type).toBe("changed");
+  });
+
+  test("builds speech candidates only from speech-capable catalog models", () => {
+    expect(speechCandidates([{
+      id: "openrouter/text-only",
+      name: "Text Only",
+      architecture: { output_modalities: ["text"] },
+      context_length: 128000,
+      pricing: { prompt: "0.1" },
+      supported_parameters: ["stream"],
+    }])).toEqual([]);
+
+    const candidates = speechCandidates([{
+      id: "openrouter/speech-model",
+      name: "Speech Model",
+      architecture: { output_modalities: ["speech"] },
+      pricing: { output_audio: "0.2" },
+      supported_voices: ["alloy"],
+    }]);
+
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]).toMatchObject({
+      externalModelId: "openrouter/speech-model",
+      modality: "speech",
+      capabilityCandidate: {
+        modality: "speech",
+        supported_voices: ["alloy"],
       },
     });
   });

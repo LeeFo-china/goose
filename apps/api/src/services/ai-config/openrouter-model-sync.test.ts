@@ -250,8 +250,7 @@ describe("OpenRouterModelSyncService", () => {
       applyOpenRouterCatalog: mock(async () => ({ run_id: RUN_ID, applied_count: 1 })),
       saveCapabilityOverride: mock(async () => ({ model_id: MODEL_ID, version: 4 })),
       getOpenRouterUsageSummary: mock(async () => ({ requests_24h: 0, estimated_cost_usd_24h: 0 })),
-    };
-    const service = new OpenRouterModelSyncService({
+    }; const service = new OpenRouterModelSyncService({
       repository: repository as never,
       settings: {
         getSecretString: mock(async () => "secret-openrouter-key"),
@@ -281,6 +280,7 @@ describe("OpenRouterModelSyncService", () => {
     expect(input.entries.map((entry) => entry.change_type).sort()).toEqual(["new", "removed", "unchanged"]);
     for (const entry of input.entries) {
       expect(Object.keys(entry).sort()).toEqual([
+        "apply_block_code", "apply_status",
         "capability_payload",
         "catalog_hash",
         "change_type",

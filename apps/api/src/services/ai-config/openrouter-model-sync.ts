@@ -69,6 +69,8 @@ function buildPreviewEntry(entry: CatalogEntryProjection): Record<string, unknow
     input_modalities: entry.input_modalities,
     capability_payload: entry.capability_payload,
     raw_price_projection: entry.raw_price_projection,
+    apply_status: entry.apply_status,
+    apply_block_code: entry.apply_block_code,
     catalog_hash: entry.catalog_hash,
     change_type: entry.change_type,
   };

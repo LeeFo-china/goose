@@ -159,9 +159,7 @@ export function projectCandidate(
     model_code: modelCode(externalModelId, candidate.modality),
     model_name: (candidate.modelName || externalModelId).trim().slice(0, 512),
     modality: candidate.modality,
-    input_modalities: current
-      ? normalizeInputModalities(current.input_modalities, ["text"])
-      : normalizeInputModalities(candidate.inputModalities, ["text"]),
+    input_modalities: normalizeInputModalities(candidate.inputModalities, ["text"]),
     capability_payload: capabilityPayload,
     raw_price_projection: normalizeRawPriceProjection(candidate.rawPriceProjection),
     apply_status: isEligible ? "eligible" : "blocked",
@@ -275,7 +273,7 @@ export function videoCandidates(models: OpenRouterVideoModel[]): CatalogCandidat
 }
 
 export function speechCandidates(models: OpenRouterTextModel[]): CatalogCandidate[] {
-  return models.map((model) => {
+  return models.filter(isSpeechOutputModel).map((model) => {
     const capabilityCandidate: Record<string, unknown> = { modality: "speech" };
     if (model.supported_voices?.length) capabilityCandidate.supported_voices = model.supported_voices;
     return {
@@ -303,6 +301,12 @@ function isTextOutputModel(model: OpenRouterTextModel): boolean {
   const outputs = model.architecture?.output_modalities;
   if (!outputs || outputs.length === 0) return true;
   return outputs.map((value) => value.trim().toLowerCase()).includes("text");
+}
+
+function isSpeechOutputModel(model: OpenRouterTextModel): boolean {
+  const outputs = model.architecture?.output_modalities ?? [];
+  return outputs.map((value) => value.trim().toLowerCase()).includes("speech")
+    || Boolean(model.supported_voices?.length);
 }
 
 function buildRemovedEntry(current: CurrentCatalogModel, catalogHash: string): CatalogEntryProjection {
