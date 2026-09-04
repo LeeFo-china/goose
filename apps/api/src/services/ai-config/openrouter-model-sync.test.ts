@@ -68,7 +68,7 @@ describe("OpenRouterModelSyncService", () => {
       ok: true,
       status: 200,
       json: async () => ({
-        data: [{ id: "openai/gpt-4o-mini", name: "GPT-4o mini", pricing: { prompt: "0.1", completion: "0.2" } }],
+        data: [{ id: "openai/gpt-4o-mini", name: "GPT-4o mini", pricing: { prompt: "0.1", completion: "0.2", request: "-1" } }],
         links: {},
         total_count: 1,
       }),

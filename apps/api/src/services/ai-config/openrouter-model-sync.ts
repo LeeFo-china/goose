@@ -98,7 +98,9 @@ function normalizeModelCode(externalModelId: string): string {
 function normalizePrice(value: string | number | undefined): string | undefined {
   if (value === undefined) return undefined;
   const normalized = String(value).trim();
-  return normalized || undefined;
+  if (!normalized) return undefined;
+  const numericValue = Number(normalized);
+  return Number.isFinite(numericValue) && numericValue >= 0 ? normalized : undefined;
 }
 
 function buildRawPriceProjection(pricing: OpenRouterModel["pricing"]): Record<string, string> {

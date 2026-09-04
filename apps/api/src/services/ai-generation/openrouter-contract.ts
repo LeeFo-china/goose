@@ -1,5 +1,8 @@
 import { Errors } from "@/errors/error-factory";
 import { z } from "zod";
+
+export { OpenRouterModelListSchema } from "./openrouter-model-catalog-contract";
+
 const decimalString = z.string().regex(/^\d+(?:\.\d+)?$/);
 const numberOrDecimalString = z.union([z.number().finite().nonnegative(), decimalString]);
 const safeId = z.string().trim().min(1).max(256);
@@ -28,84 +31,6 @@ const modelArchitectureSchema = z.strictObject({
   output_modalities: stringArray.optional(),
   tokenizer: z.string().max(128).nullable().optional(),
 });
-const designArenaBenchmarkSchema = z.strictObject({
-  arena: z.string().max(128),
-  category: z.string().max(128),
-  elo: z.number().finite().nullable().optional(),
-  rank: z.number().finite().nullable().optional(),
-  win_rate: z.number().finite().nullable().optional(),
-});
-const benchmarksSchema = z.strictObject({ design_arena: z.array(designArenaBenchmarkSchema).max(1_000).optional() });
-const defaultParametersSchema = z.strictObject({
-  frequency_penalty: nullableNumber.optional(),
-  max_tokens: nullableInteger.optional(),
-  presence_penalty: nullableNumber.optional(),
-  repetition_penalty: nullableNumber.optional(),
-  response_format: z.strictObject({ type: z.string().max(64) }).nullable().optional(),
-  temperature: nullableNumber.optional(),
-  top_k: nullableInteger.optional(),
-  top_p: nullableNumber.optional(),
-});
-const modelLinksSchema = z.strictObject({
-  details: z.string().max(2_048).optional(),
-  next: z.string().max(2_048).nullable().optional(),
-  prev: z.string().max(2_048).nullable().optional(),
-});
-const pricingSchema = z.strictObject({
-  completion: numberOrDecimalString.optional(),
-  image: numberOrDecimalString.optional(),
-  input_audio: numberOrDecimalString.optional(),
-  input_cache_read: numberOrDecimalString.optional(),
-  input_cache_write: numberOrDecimalString.optional(),
-  internal_reasoning: numberOrDecimalString.optional(),
-  output_audio: numberOrDecimalString.optional(),
-  prompt: numberOrDecimalString.optional(),
-  request: numberOrDecimalString.optional(),
-  overrides: z.array(z.strictObject({
-    completion: numberOrDecimalString.optional(),
-    max_prompt_tokens: nullableInteger.optional(),
-    min_prompt_tokens: nullableInteger.optional(),
-    prompt: numberOrDecimalString.optional(),
-  })).max(1_000).optional(),
-  web_search: numberOrDecimalString.optional(),
-});
-const requestLimitsSchema = z.strictObject({
-  completion_tokens: nullableInteger.optional(), images: nullableInteger.optional(),
-  prompt_tokens: nullableInteger.optional(), requests: nullableInteger.optional(),
-});
-const topProviderSchema = z.strictObject({
-  context_length: nullableInteger.optional(),
-  is_moderated: z.boolean().nullable().optional(),
-  max_completion_tokens: nullableInteger.optional(),
-});
-
-const modelEntrySchema = z.strictObject({
-  architecture: modelArchitectureSchema.optional(),
-  benchmarks: benchmarksSchema.optional(),
-  canonical_slug: z.string().max(512).nullable().optional(),
-  context_length: z.number().int().nonnegative().nullable().optional(),
-  created: z.number().int().nonnegative().nullable().optional(),
-  default_parameters: defaultParametersSchema.nullable().optional(),
-  description: safeText.nullable().optional(),
-  endpoints: z.string().max(2_048).optional(),
-  expiration_date: z.union([z.string().max(128), z.number().int()]).nullable().optional(),
-  id: safeId,
-  knowledge_cutoff: z.string().max(128).nullable().optional(),
-  links: modelLinksSchema.optional(),
-  name: z.string().trim().min(1).max(512).optional(),
-  per_request_limits: requestLimitsSchema.nullable().optional(),
-  pricing: pricingSchema.optional(),
-  supported_parameters: stringArray.optional(),
-  supported_voices: stringArray.nullable().optional(),
-  top_provider: topProviderSchema.nullable().optional(),
-});
-
-export const OpenRouterModelListSchema = z.strictObject({
-  data: z.array(modelEntrySchema).max(10_000),
-  links: modelLinksSchema,
-  total_count: z.number().int().nonnegative(),
-});
-
 const imageSupportedParametersSchema = z.strictObject({
   aspect_ratio: parameterSpecSchema.optional(),
   background: parameterSpecSchema.optional(),
