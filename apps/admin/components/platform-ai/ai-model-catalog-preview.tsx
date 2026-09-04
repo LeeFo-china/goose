@@ -142,16 +142,16 @@ export function AiModelCatalogPreview({
       </div>
 
       <div className="min-h-0 flex-1">
-        <Table containerClassName="h-full" className="min-w-[1040px]">
+        <Table containerClassName="h-full" className="min-w-[1360px]">
           <TableHeader className="sticky top-0 bg-card">
             <TableRow>
-              <TableHead className="w-12">选择</TableHead>
-              <TableHead>模型</TableHead>
-              <TableHead>功能</TableHead>
-              <TableHead>变化</TableHead>
-              <TableHead>应用状态</TableHead>
-              <TableHead>价格快照</TableHead>
-              <TableHead>当前版本</TableHead>
+              <TableHead className="w-[64px] whitespace-nowrap">选择</TableHead>
+              <TableHead className="min-w-[300px]">模型</TableHead>
+              <TableHead className="w-[120px] whitespace-nowrap">功能</TableHead>
+              <TableHead className="w-[120px] whitespace-nowrap">变化</TableHead>
+              <TableHead className="w-[240px] whitespace-nowrap">应用状态</TableHead>
+              <TableHead className="min-w-[420px]">价格快照</TableHead>
+              <TableHead className="w-[96px] whitespace-nowrap">当前版本</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -165,7 +165,7 @@ export function AiModelCatalogPreview({
               const isBlocked = entry.apply_status === "blocked";
               return (
                 <TableRow key={entry.id} data-state={selectedEntries.includes(entry.id) ? "selected" : undefined}>
-                  <TableCell>
+                  <TableCell className="w-[64px] whitespace-nowrap">
                     <Checkbox
                       aria-label={`选择 ${entry.model_name}`}
                       checked={selectedEntries.includes(entry.id)}
@@ -173,27 +173,29 @@ export function AiModelCatalogPreview({
                       onCheckedChange={(checked) => onToggleEntry(entry.id, checked === true)}
                     />
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="min-w-[300px]">
                     <div className="font-medium">{entry.model_name}</div>
                     <div className="text-xs text-muted-foreground">{entry.external_model_id}</div>
                   </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">
+                  <TableCell className="w-[120px] whitespace-nowrap">
+                    <Badge variant="secondary" className="inline-flex whitespace-nowrap">
                       {MODALITY_LABELS[entry.modality as keyof typeof MODALITY_LABELS] ?? "未知功能"}
                     </Badge>
                   </TableCell>
-                  <TableCell>{changeTypeLabel(entry.change_type)}</TableCell>
-                  <TableCell>
+                  <TableCell className="w-[120px] whitespace-nowrap">{changeTypeLabel(entry.change_type)}</TableCell>
+                  <TableCell className="w-[240px] whitespace-nowrap">
                     {isBlocked ? (
-                      <Badge variant="outline">
+                      <Badge variant="outline" className="inline-flex whitespace-nowrap">
                         {BLOCK_LABELS[entry.apply_block_code as keyof typeof BLOCK_LABELS] ?? "暂不可应用"}
                       </Badge>
                     ) : (
-                      <Badge variant="secondary">可应用</Badge>
+                      <Badge variant="secondary" className="inline-flex whitespace-nowrap">可应用</Badge>
                     )}
                   </TableCell>
-                  <TableCell className="font-mono text-xs">{priceSummary(entry.raw_price_projection)}</TableCell>
-                  <TableCell>{entry.current_model_version ?? "-"}</TableCell>
+                  <TableCell className="max-w-[360px] whitespace-normal break-words font-mono text-xs leading-6">
+                    {priceSummary(entry.raw_price_projection)}
+                  </TableCell>
+                  <TableCell className="w-[96px] whitespace-nowrap">{entry.current_model_version ?? "-"}</TableCell>
                 </TableRow>
               );
             })}

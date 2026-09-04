@@ -64,6 +64,25 @@ describe("AiModelCatalogPreview", () => {
     expect(html).not.toContain(">image<");
   });
 
+  test("keeps modality, change and apply status columns scannable", () => {
+    const html = renderToStaticMarkup(createElement(AiModelCatalogPreview, {
+      entries,
+      filters: { keyword: "", modality: "all", changeType: "all" },
+      selectedEntries: [],
+      pending: false,
+      applying: false,
+      onApplySelected: () => undefined,
+      onToggleEntry: () => undefined,
+      onFiltersChange: () => undefined,
+      onPageChange: () => undefined,
+    }));
+
+    expect(html).toContain("w-[120px] whitespace-nowrap");
+    expect(html).toContain("w-[240px] whitespace-nowrap");
+    expect(html).toContain("inline-flex whitespace-nowrap");
+    expect(html).toContain("max-w-[360px] whitespace-normal break-words");
+  });
+
   test("uses a distinct empty state when filters produce no rows", () => {
     const html = renderToStaticMarkup(createElement(AiModelCatalogPreview, {
       entries: { list: [], pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 } },
