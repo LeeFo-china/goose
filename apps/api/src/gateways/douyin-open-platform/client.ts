@@ -30,6 +30,12 @@ import {
   type UploadTemplateVersionInput,
   type UploadTemplateVersionResult,
 } from "./release-client";
+import {
+  GET_PHONE_NUMBER_INFO_URL,
+  parseGetPhoneNumberInfoResult,
+  type GetPhoneNumberInfoInput,
+  type GetPhoneNumberInfoResult,
+} from "./phone-number";
 export type { GenerateAuthorizationLinkInput, GenerateAuthorizationLinkResult } from "./authorization-link";
 export type {
   AuthorizerRequestInput,
@@ -52,7 +58,6 @@ const AUTHORIZER_TOKEN_URL = "https://open.douyin.com/api/tpapp/v2/auth/get_auth
 const RETRIEVE_AUTH_CODE_URL = "https://open.douyin.com/api/tpapp/v2/auth/retrieve_auth_code/";
 const MERCHANT_CODE2SESSION_URL = "https://open.douyin.com/api/apps/v1/microapp/code2session/";
 const TEMPLATE_CODE2SESSION_URL = "https://developer.toutiao.com/api/apps/v2/jscode2session";
-const GET_PHONE_NUMBER_INFO_URL = "https://open.douyin.com/api/apps/v1/get_phonenumber_info/";
 const JsonObjectSchema = z.looseObject({});
 const ComponentSuccessSchema = z.looseObject({
   component_access_token: z.string().min(1),
@@ -112,12 +117,6 @@ const TemplateCode2SessionSuccessSchema = z.looseObject({
   log_id: z.string().min(1),
   data: TemplateSessionIdentitySchema,
 });
-const PhoneNumberSchema = z.string().trim().regex(/^1[3-9][0-9]{9}$/);
-const GetPhoneNumberInfoSuccessSchema = z.looseObject({
-  err_no: z.literal(0),
-  log_id: z.string().min(1),
-  data: PhoneNumberSchema,
-});
 
 export type ComponentTokenInput = {
   readonly componentAppId: string;
@@ -172,14 +171,6 @@ export type Code2SessionResult = {
   readonly openId?: string;
   readonly anonymousOpenId?: string;
   readonly unionId?: string;
-};
-
-export type GetPhoneNumberInfoInput = AuthorizerRequestInput & {
-  readonly code: string;
-};
-
-export type GetPhoneNumberInfoResult = {
-  readonly phone: string;
 };
 
 function serializeCode2SessionCredential(input: Code2SessionCredential) {
@@ -331,9 +322,7 @@ export class DouyinOpenPlatformClient
         body: JSON.stringify({ code: input.code }),
       });
       assertOpenApiSuccess(body);
-      const parsed = GetPhoneNumberInfoSuccessSchema.safeParse(body);
-      if (!parsed.success) throw invalidResponseError(safeLogId(body));
-      return { phone: parsed.data.data };
+      return parseGetPhoneNumberInfoResult(body, input.privateKeyPem);
     });
   }
 

@@ -3065,7 +3065,7 @@ export type Database = {
           preferred_visit_date: string
           preferred_visit_period: string
           recent_pending_appointment_exists: boolean
-          sms_verification_code_id: string
+          sms_verification_code_id: string | null
           source_snapshot: Json
           status: string
           tenant_id: string
@@ -3091,7 +3091,7 @@ export type Database = {
           preferred_visit_date: string
           preferred_visit_period: string
           recent_pending_appointment_exists: boolean
-          sms_verification_code_id: string
+          sms_verification_code_id?: string | null
           source_snapshot?: Json
           status?: string
           tenant_id: string
@@ -3117,7 +3117,7 @@ export type Database = {
           preferred_visit_date?: string
           preferred_visit_period?: string
           recent_pending_appointment_exists?: boolean
-          sms_verification_code_id?: string
+          sms_verification_code_id?: string | null
           source_snapshot?: Json
           status?: string
           tenant_id?: string

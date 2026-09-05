@@ -5,9 +5,16 @@ const migration = new URL(
   "../../../../../supabase/migrations/20260905212000_submit_douyin_measurement_with_verified_phone.sql",
   import.meta.url,
 );
+const repairMigration = new URL(
+  "../../../../../supabase/migrations/20260905213000_model_douyin_official_phone_verification.sql",
+  import.meta.url,
+);
 
 function sql(): string {
   return existsSync(migration) ? readFileSync(migration, "utf8") : "";
+}
+function repairSql(): string {
+  return existsSync(repairMigration) ? readFileSync(repairMigration, "utf8") : "";
 }
 
 describe("Douyin official phone appointment migration", () => {
@@ -55,5 +62,19 @@ describe("Douyin official phone appointment migration", () => {
     expect(source).toContain("IF v_result ? 'error' THEN");
     expect(source).toContain("sms.id = v_sms_id");
     expect(source).toContain("sms.status = 'pending'");
+  });
+
+  test("repairs official phone submissions to a distinct non-SMS verification fact", () => {
+    const source = repairSql();
+    expect(existsSync(repairMigration)).toBe(true);
+    expect(source).toContain("ALTER TABLE public.douyin_measurement_appointments");
+    expect(source).toContain("ALTER COLUMN sms_verification_code_id DROP NOT NULL");
+    expect(source).toContain("phone_verification_method");
+    expect(source).toContain("gooes.douyin_official_phone_cleanup");
+    expect(source).toContain("sms_verification_code_id = NULL");
+    expect(source).toContain("DELETE FROM public.sms_verification_codes AS sms");
+    expect(source).toContain("RAISE EXCEPTION USING");
+    expect(source).toContain("DOUYIN_MEASUREMENT_PHONE_CLEANUP_FAILED");
+    expect(source).toContain("GRANT EXECUTE ON FUNCTION public.submit_douyin_measurement_appointment_with_douyin_phone");
   });
 });

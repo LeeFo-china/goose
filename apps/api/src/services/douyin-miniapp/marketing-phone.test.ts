@@ -91,6 +91,7 @@ describe("DouyinMiniappMarketingService official phone", () => {
       smsService: { sendCode: mock(async () => ({ success: true, cooldown_seconds: 60 })) } as never,
       accessTokens: { getAuthorizerAccessToken },
       phoneGateway: { getPhoneNumberInfo },
+      douyinPhoneNumberPrivateKeyPem: "private-key",
       now: () => new Date("2026-07-19T10:00:00.000Z"),
     });
 
@@ -104,10 +105,60 @@ describe("DouyinMiniappMarketingService official phone", () => {
       appId: "tt-authorizer",
       authorizerAccessToken: "authorizer-token",
       code: "official-phone-code",
+      privateKeyPem: "private-key",
     });
     expect(submitMeasurementAppointment).toHaveBeenCalledWith(expect.objectContaining({
       phone: "13900000000",
       verification: { type: "douyin_phone" },
     }));
+  });
+
+  test("rejects official phone mode without a server private key before consuming the code", async () => {
+    const getAuthorizerAccessToken = mock(async () => "authorizer-token");
+    const getPhoneNumberInfo = mock(async () => ({ phone: "13900000000" }));
+    const service = new MarketingService({
+      contextRepository: { findActiveInstallation: mock(async () => ({
+        id: INSTALLATION_ID,
+        tenant_id: TENANT_ID,
+        authorizer_appid: "tt-authorizer",
+        deployment_key: "merchant-dev",
+        authorization_status: "active" as const,
+        template_version: "1.0.0",
+        installation_kind: "merchant" as const,
+        runtime_config: {
+          brand: { logo_url: null, qualifications: [] },
+          theme: { primary_color: "#C45A32", navigation_text_color: "black" },
+          features: {
+            cases: true,
+            sites: true,
+            sms_lead: true,
+            douyin_phone: true,
+            phone_capture_mode: "douyin_phone",
+            clue_component_id: "clue-123",
+          },
+          home_banners: [],
+          trust_metrics: [],
+          privacy_policy_version: "2026-07-19",
+        },
+        tenant: { id: TENANT_ID, status: "active" as const },
+      })) } as never,
+      marketingRepository: {
+        submitMeasurementAppointment: mock(async () => ({})),
+        insertEvents: mock(async () => undefined),
+        listPublishedMaterialNoteIds: mock(async () => []),
+        listActiveClaimedMaterialNoteIds: mock(async () => []),
+      } as never,
+      notificationService: { createTenantAdminNotifications: mock(async () => []) } as never,
+      smsService: { sendCode: mock(async () => ({ success: true, cooldown_seconds: 60 })) } as never,
+      accessTokens: { getAuthorizerAccessToken },
+      phoneGateway: { getPhoneNumberInfo },
+      douyinPhoneNumberPrivateKeyPem: null,
+      now: () => new Date("2026-07-19T10:00:00.000Z"),
+    });
+
+    await expect(service.submitLead(user, lead, { requestIp: null, userAgent: null }))
+      .rejects.toMatchObject({ code: "DOUYIN_PHONE_NUMBER_CONFIG_INVALID" });
+    expect(getAuthorizerAccessToken).not.toHaveBeenCalled();
+    expect(getPhoneNumberInfo).not.toHaveBeenCalled();
   });
 });

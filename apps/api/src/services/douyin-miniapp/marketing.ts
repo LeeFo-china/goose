@@ -59,6 +59,7 @@ type Dependencies = {
   smsService?: SmsService;
   accessTokens?: AccessTokenService;
   phoneGateway?: PhoneGateway;
+  douyinPhoneNumberPrivateKeyPem?: string | null;
   now?: () => Date;
 };
 type Context = {
@@ -92,6 +93,7 @@ export class DouyinMiniappMarketingService {
   private readonly smsService: SmsService;
   private accessTokens?: AccessTokenService;
   private phoneGateway?: PhoneGateway;
+  private readonly douyinPhoneNumberPrivateKeyPem: string | null;
   private readonly now: () => Date;
 
   constructor(dependencies: Dependencies = {}) {
@@ -102,6 +104,12 @@ export class DouyinMiniappMarketingService {
     this.smsService = dependencies.smsService ?? smsVerificationCodeService;
     this.accessTokens = dependencies.accessTokens;
     this.phoneGateway = dependencies.phoneGateway;
+    this.douyinPhoneNumberPrivateKeyPem =
+      dependencies.douyinPhoneNumberPrivateKeyPem === undefined
+        ? loadDouyinPhoneNumberPrivateKeyPem(process.env)
+        : normalizeDouyinPhoneNumberPrivateKeyPem(
+          dependencies.douyinPhoneNumberPrivateKeyPem,
+        );
     this.now = dependencies.now ?? (() => new Date());
   }
 
@@ -195,6 +203,14 @@ export class DouyinMiniappMarketingService {
     if (!context.deploymentKey) {
       throw Errors.business(409, "抖音小程序服务配置无效", "DOUYIN_INSTALLATION_DISABLED");
     }
+    const privateKeyPem = this.douyinPhoneNumberPrivateKeyPem;
+    if (!privateKeyPem) {
+      throw Errors.business(
+        503,
+        "抖音手机号授权暂不可用",
+        "DOUYIN_PHONE_NUMBER_CONFIG_INVALID",
+      );
+    }
     const { accessTokens, phoneGateway } = this.phoneDependencies();
     const accessToken = await accessTokens.getAuthorizerAccessToken({
       authorizerAppId: context.authorizerAppId,
@@ -205,6 +221,7 @@ export class DouyinMiniappMarketingService {
         appId: context.authorizerAppId,
         authorizerAccessToken: accessToken,
         code: input.douyin_phone_code,
+        privateKeyPem,
       });
       return result.phone;
     } catch (error) {
@@ -417,6 +434,19 @@ function createDefaultPhoneDependencies(): {
     }),
     phoneGateway: openPlatform,
   };
+}
+
+function loadDouyinPhoneNumberPrivateKeyPem(
+  env: NodeJS.ProcessEnv,
+): string | null {
+  return normalizeDouyinPhoneNumberPrivateKeyPem(
+    env.DOUYIN_PHONE_NUMBER_PRIVATE_KEY_PEM,
+  );
+}
+
+function normalizeDouyinPhoneNumberPrivateKeyPem(value: string | null | undefined) {
+  const normalized = value?.trim().replace(/\\n/g, "\n");
+  return normalized ? normalized : null;
 }
 
 let defaultService: DouyinMiniappMarketingService | undefined;

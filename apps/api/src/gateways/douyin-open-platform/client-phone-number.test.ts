@@ -1,7 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
+import { constants, generateKeyPairSync, publicEncrypt } from "node:crypto";
 import { DouyinOpenPlatformClient } from "./client";
 
 const AUTHORIZER_TOKEN = "authorizer-token-value";
+const { publicKey, privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+const privateKeyPem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -10,16 +13,29 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+function encryptedPhoneData(phone: string): string {
+  return publicEncrypt({
+    key: publicKey,
+    padding: constants.RSA_PKCS1_OAEP_PADDING,
+    oaepHash: "sha256",
+  }, Buffer.from(JSON.stringify({
+    phoneNumber: `+86 ${phone}`,
+    purePhoneNumber: phone,
+    countryCode: "86",
+  }), "utf8")).toString("base64");
+}
+
 describe("DouyinOpenPlatformClient phone number", () => {
-  test("exchanges a Douyin getPhoneNumber code with the official endpoint", async () => {
+  test("exchanges a Douyin getPhoneNumber code and decrypts the official response", async () => {
     const fetch = mock(async (_input: string | URL | Request, _init?: RequestInit) =>
-      jsonResponse({ err_no: 0, log_id: "phone-log", data: "13800000000" }));
+      jsonResponse({ err_no: 0, log_id: "phone-log", data: encryptedPhoneData("13800000000") }));
     const client = new DouyinOpenPlatformClient({ fetch });
 
     await expect(client.getPhoneNumberInfo({
       appId: "authorizer-appid",
       authorizerAccessToken: AUTHORIZER_TOKEN,
       code: "phone-code",
+      privateKeyPem,
     })).resolves.toEqual({ phone: "13800000000" });
     expect(fetch.mock.calls[0]?.[0]).toBe(
       "https://open.douyin.com/api/apps/v1/get_phonenumber_info/",
@@ -49,6 +65,7 @@ describe("DouyinOpenPlatformClient phone number", () => {
         appId: "authorizer-appid",
         authorizerAccessToken: AUTHORIZER_TOKEN,
         code: "phone-code",
+        privateKeyPem,
       });
     } catch (error) {
       caught = error;
