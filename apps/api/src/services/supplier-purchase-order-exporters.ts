@@ -288,7 +288,7 @@ function styleItemRow(row: ExcelJS.Row) {
     cell.font = { name: EXCEL_FONT, size: 11 };
     cell.border = thinBorder();
     cell.alignment = {
-      horizontal: columnNumber === 1 ? "center" : undefined,
+      horizontal: "center",
       vertical: "middle",
       wrapText: columnNumber === 2 || columnNumber === 3,
     };

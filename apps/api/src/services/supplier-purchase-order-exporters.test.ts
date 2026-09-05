@@ -61,6 +61,12 @@ describe("supplier purchase order exporters", () => {
       horizontal: "center",
       vertical: "middle",
     });
+    for (const address of ["A9", "B9", "C9", "D9", "E9", "F9", "G9"]) {
+      expect(worksheet.getCell(address).alignment).toMatchObject({
+        horizontal: "center",
+        vertical: "middle",
+      });
+    }
     expect(worksheet.getCell("B9").value).toBe("Product A");
     expect(worksheet.getCell("C9").value).toBe("Sku A");
     expect(worksheet.getCell("G9").formula).toBe("D9*F9");
