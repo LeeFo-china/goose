@@ -684,6 +684,8 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
+DECLARE
+  v_enabled_employee_id uuid;
 BEGIN
   IF NEW.module_enabled
     AND (TG_OP = 'INSERT' OR OLD.module_enabled IS DISTINCT FROM true)
@@ -693,6 +695,12 @@ BEGIN
       WHERE warehouse.tenant_id = NEW.tenant_id
     )
   THEN
+    SELECT employee.id
+    INTO v_enabled_employee_id
+    FROM public.employees AS employee
+    WHERE employee.id = NEW.enabled_by_employee_id
+      AND employee.tenant_id = NEW.tenant_id;
+
     INSERT INTO public.warehouses (
       tenant_id,
       name,
@@ -706,8 +714,8 @@ BEGIN
       '公司仓库',
       'active',
       true,
-      NEW.enabled_by_employee_id,
-      NEW.enabled_by_employee_id
+      v_enabled_employee_id,
+      v_enabled_employee_id
     );
   END IF;
 
@@ -728,9 +736,12 @@ SELECT
   '公司仓库',
   'active',
   true,
-  setting.enabled_by_employee_id,
-  setting.enabled_by_employee_id
+  enabled_employee.id,
+  enabled_employee.id
 FROM public.tenant_supplier_settings AS setting
+LEFT JOIN public.employees AS enabled_employee
+  ON enabled_employee.id = setting.enabled_by_employee_id
+  AND enabled_employee.tenant_id = setting.tenant_id
 WHERE setting.module_enabled
   AND NOT EXISTS (
     SELECT 1

@@ -181,6 +181,12 @@ describe('warehouse foundation migration', () => {
     expect(sql).not.toContain('GRANT SELECT, INSERT, UPDATE ON TABLE public.warehouses');
     expect(sql).not.toContain('GRANT SELECT, INSERT ON TABLE public.warehouse_command_events');
     expect(triggerBody).toContain('(TG_OP = \'INSERT\' OR OLD.module_enabled IS DISTINCT FROM true)');
+    expect(triggerBody).toContain('v_enabled_employee_id uuid');
+    expect(triggerBody).toContain('WHERE employee.id = NEW.enabled_by_employee_id');
+    expect(triggerBody).toContain('AND employee.tenant_id = NEW.tenant_id');
+    expect(triggerBody).toContain('v_enabled_employee_id');
+    expect(sql).toContain('LEFT JOIN public.employees AS enabled_employee');
+    expect(sql).toContain('enabled_employee.tenant_id = setting.tenant_id');
   });
 
   test('creates bounded commands and seeds permissions', async () => {
