@@ -1,5 +1,6 @@
-import { WAREHOUSE_STATUS_VALUES } from '@gooes/domain';
 import { z } from 'zod';
+
+import { WAREHOUSE_STATUS_VALUES } from '@gooes/domain';
 
 import { PaginationQuerySchema } from './request';
 
@@ -49,7 +50,9 @@ export const WarehouseUpdateSchema = z.object({
   message: '至少需要提交一个仓库更新字段',
 });
 
-export type WarehouseListQueryInput = z.input<typeof WarehouseListQuerySchema>;
-export type WarehouseParamInput = z.input<typeof WarehouseParamSchema>;
-export type WarehouseCreateInput = z.input<typeof WarehouseCreateSchema>;
-export type WarehouseUpdateInput = z.input<typeof WarehouseUpdateSchema>;
+export type WarehouseListQueryInput = z.infer<typeof WarehouseListQuerySchema>;
+export type WarehouseParamInput = z.infer<typeof WarehouseParamSchema>;
+export type WarehouseCreateInput = z.infer<typeof WarehouseCreateSchema>;
+export type WarehouseUpdateInput = z.infer<typeof WarehouseUpdateSchema>;
+export type WarehouseCreateRawInput = z.input<typeof WarehouseCreateSchema>;
+export type WarehouseUpdateRawInput = z.input<typeof WarehouseUpdateSchema>;
