@@ -25,6 +25,22 @@ function encryptedPhoneData(phone: string, appId = "authorizer-appid"): string {
   }), "utf8")).toString("base64");
 }
 
+function encryptedMalformedPkcs1Data(): string {
+  const block = Buffer.alloc(256);
+  block[0] = 0;
+  block[1] = 2;
+  block[2] = 1;
+  block[3] = 0;
+  block.write(JSON.stringify({
+    purePhoneNumber: "13800000000",
+    watermark: { appid: "authorizer-appid" },
+  }), 4, "utf8");
+  return publicEncrypt({
+    key: publicKey,
+    padding: constants.RSA_NO_PADDING,
+  }, block).toString("base64");
+}
+
 describe("DouyinOpenPlatformClient phone number", () => {
   test("exchanges a Douyin getPhoneNumber code and decrypts the official response", async () => {
     const fetch = mock(async (_input: string | URL | Request, _init?: RequestInit) =>
@@ -84,6 +100,26 @@ describe("DouyinOpenPlatformClient phone number", () => {
         err_no: 0,
         log_id: "phone-log",
         data: encryptedPhoneData("13800000000", "another-appid"),
+      }),
+    });
+
+    await expect(client.getPhoneNumberInfo({
+      appId: "authorizer-appid",
+      authorizerAccessToken: AUTHORIZER_TOKEN,
+      code: "phone-code",
+      privateKeyPem,
+    })).rejects.toMatchObject({
+      statusCode: 502,
+      code: "DOUYIN_OPEN_PLATFORM_RESPONSE_INVALID",
+    });
+  });
+
+  test("rejects PKCS1 phone data with malformed padding", async () => {
+    const client = new DouyinOpenPlatformClient({
+      fetch: async () => jsonResponse({
+        err_no: 0,
+        log_id: "phone-log",
+        data: encryptedMalformedPkcs1Data(),
       }),
     });
 

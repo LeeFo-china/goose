@@ -47,6 +47,25 @@ describe("douyin miniapp database types", () => {
       message: submissionInsert.message,
       updated_existing: false,
     }];
+    const officialPhoneArgs:
+      DouyinFunctions["submit_douyin_measurement_appointment_with_douyin_phone"]["Args"] = {
+        p_attribution: { entry_path: "pages/lead/index" },
+        p_budget_estimate_id: null,
+        p_community: "示例花园",
+        p_consented_at: "2026-09-05T10:00:00.000Z",
+        p_demand: null,
+        p_douyin_miniapp_installation_id: submissionInsert.douyin_miniapp_installation_id,
+        p_idempotency_key: submissionInsert.idempotency_key,
+        p_name: "李先生",
+        p_phone: "13800000000",
+        p_preferred_visit_date: "2026-09-06",
+        p_preferred_visit_period: "morning",
+        p_privacy_policy_version: "2026-09-05",
+        p_request_ip: null,
+        p_subject_hash: "b".repeat(64),
+        p_tenant_id: submissionInsert.tenant_id,
+        p_user_agent: null,
+      };
 
     expect([
       lead.douyin_miniapp_installation_id,
@@ -55,8 +74,9 @@ describe("douyin miniapp database types", () => {
       event.subject_hash,
       submission.sms_verification_code_id,
       args.p_idempotency_key,
+      officialPhoneArgs.p_douyin_miniapp_installation_id,
       returns[0]!.lead_id,
-    ]).toHaveLength(7);
+    ]).toHaveLength(8);
   });
 
   test("exposes component and installation table contracts", () => {

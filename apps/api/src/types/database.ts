@@ -29476,6 +29476,27 @@ export type Database = {
         }
         Returns: Json
       }
+      submit_douyin_measurement_appointment_with_douyin_phone: {
+        Args: {
+          p_attribution: Json
+          p_budget_estimate_id?: string | null
+          p_community: string
+          p_consented_at: string
+          p_demand?: string | null
+          p_douyin_miniapp_installation_id: string
+          p_idempotency_key: string
+          p_name: string
+          p_phone: string
+          p_preferred_visit_date: string
+          p_preferred_visit_period: string
+          p_privacy_policy_version: string
+          p_request_ip?: string | null
+          p_subject_hash: string
+          p_tenant_id: string
+          p_user_agent?: string | null
+        }
+        Returns: Json
+      }
       submit_douyin_miniapp_lead: {
         Args: {
           p_area: number
