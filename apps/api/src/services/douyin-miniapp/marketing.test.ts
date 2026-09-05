@@ -1,9 +1,6 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
 import { Errors } from "@/errors/error-factory";
-import {
-  DouyinAnalyticsRequestSchema,
-  type DouyinLeadRequest,
-} from "@/schema/douyin-miniapp";
+import { DouyinAnalyticsRequestSchema, type DouyinLeadRequest } from "@/schema/douyin-miniapp";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
@@ -65,22 +62,34 @@ type CapturedLeadInput = {
   installationId: string;
   subjectHash: string;
   phone: string;
-  smsCode: string;
+  verification: { type: "sms"; code: string } | { type: "douyin_phone" };
 };
 
-function harness(features = { sms_lead: true }) {
+function harness(features: Partial<{
+  sms_lead: boolean;
+  douyin_phone: boolean;
+  phone_capture_mode: "sms" | "douyin_phone";
+  clue_component_id: string;
+}> = {}) {
+  const normalizedFeatures = {
+    sms_lead: true,
+    douyin_phone: false,
+    phone_capture_mode: "sms" as const,
+    ...features,
+  };
   const findActiveInstallation = mock(async (_input: unknown) => ({
     id: INSTALLATION_ID,
     tenant_id: TENANT_ID,
     authorizer_appid: "tt-authorizer",
+    deployment_key: "merchant-dev",
     authorization_status: "active" as const,
     template_version: "1.0.0",
     runtime_config: {
       brand: { logo_url: null, qualifications: [] },
       theme: { primary_color: "#C45A32", navigation_text_color: "black" },
       features: {
-        cases: true, sites: true, sms_lead: features.sms_lead,
-        douyin_phone: false, phone_capture_mode: "sms",
+        cases: true, sites: true,
+        ...normalizedFeatures,
       },
       home_banners: [], trust_metrics: [], privacy_policy_version: "2026-07-19",
     },
@@ -199,7 +208,8 @@ describe("DouyinMiniappMarketingService", () => {
     const command = first.submitMeasurementAppointment.mock.calls[0]![0];
     expect(command).toMatchObject({
       tenantId: TENANT_ID, installationId: INSTALLATION_ID,
-      subjectHash: SUBJECT_HASH, phone: lead.phone, smsCode: "123456",
+      subjectHash: SUBJECT_HASH, phone: lead.phone,
+      verification: { type: "sms", code: "123456" },
       community: "示例花园",
       preferredVisitDate: "2026-07-20",
       preferredVisitPeriod: "afternoon",

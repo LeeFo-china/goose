@@ -88,7 +88,7 @@ const leadInput = {
   preferredVisitPeriod: "afternoon" as const,
   budgetEstimateId: "88888888-8888-4888-8888-888888888888",
   demand: "旧房改造",
-  smsCode: "123456",
+  verification: { type: "sms" as const, code: "123456" },
   idempotencyKey: "33333333-3333-4333-8333-333333333333",
   subjectHash: "b".repeat(64),
   requestIp: "192.0.2.10",
@@ -134,7 +134,7 @@ describe("DouyinMiniappMarketingRepository.submitMeasurementAppointment", () => 
         p_preferred_visit_period: leadInput.preferredVisitPeriod,
         p_budget_estimate_id: leadInput.budgetEstimateId,
         p_demand: leadInput.demand,
-        p_sms_code: leadInput.smsCode,
+        p_sms_code: leadInput.verification.code,
         p_idempotency_key: leadInput.idempotencyKey,
         p_subject_hash: leadInput.subjectHash,
         p_request_ip: leadInput.requestIp,
@@ -144,6 +144,39 @@ describe("DouyinMiniappMarketingRepository.submitMeasurementAppointment", () => 
         p_attribution: leadInput.attribution,
       }],
     }]);
+  });
+
+  test("uses the verified Douyin phone RPC without sending an SMS code", async () => {
+    const { client, calls } = createClient([{ data: { data: leadResult }, error: null }]);
+    const repository = new DouyinMiniappMarketingRepository(client);
+
+    await expect(repository.submitMeasurementAppointment({
+      ...leadInput,
+      verification: { type: "douyin_phone" },
+    })).resolves.toEqual(leadResult);
+
+    expect(calls).toEqual([{
+      method: "rpc",
+      args: ["submit_douyin_measurement_appointment_with_douyin_phone", {
+        p_douyin_miniapp_installation_id: leadInput.installationId,
+        p_tenant_id: leadInput.tenantId,
+        p_phone: leadInput.phone,
+        p_name: leadInput.name,
+        p_community: leadInput.community,
+        p_preferred_visit_date: leadInput.preferredVisitDate,
+        p_preferred_visit_period: leadInput.preferredVisitPeriod,
+        p_budget_estimate_id: leadInput.budgetEstimateId,
+        p_demand: leadInput.demand,
+        p_idempotency_key: leadInput.idempotencyKey,
+        p_subject_hash: leadInput.subjectHash,
+        p_request_ip: leadInput.requestIp,
+        p_user_agent: leadInput.userAgent,
+        p_privacy_policy_version: leadInput.privacyPolicyVersion,
+        p_consented_at: leadInput.consentedAt,
+        p_attribution: leadInput.attribution,
+      }],
+    }]);
+    expect(JSON.stringify(calls)).not.toContain("p_sms_code");
   });
 
   test("requires one strict appointment result envelope", async () => {

@@ -52,6 +52,18 @@ export const DouyinContentIdParamsSchema = z.strictObject({
 });
 
 const PhoneSchema = z.string().trim().regex(/^1[3-9][0-9]{9}$/, "手机号格式无效");
+const LeadBaseRequestSchema = z.strictObject({
+  name: z.string().trim().min(1).max(40),
+  community: z.string().trim().min(1).max(80),
+  preferred_visit_date: z.iso.date("期望量房日期格式无效"),
+  preferred_visit_period: z.enum(DOUYIN_VISIT_PERIOD_VALUES),
+  budget_estimate_id: z.uuid("预算编号格式无效").optional(),
+  demand: z.string().trim().min(1).max(1000).optional(),
+  privacy_policy_version: z.string().trim().min(1).max(40),
+  consented_at: z.iso.datetime({ offset: true }),
+  idempotency_key: z.uuid("幂等键格式无效"),
+  attribution: DouyinLaunchContextSchema,
+});
 
 export const DouyinLeadSmsRequestSchema = z.strictObject({
   phone: PhoneSchema,
@@ -63,20 +75,21 @@ export const DouyinMiniappQaRequestSchema = z.strictObject({
   attribution: DouyinLaunchContextSchema,
 });
 
-export const DouyinLeadRequestSchema = z.strictObject({
-  name: z.string().trim().min(1).max(40),
+export const DouyinLeadSmsSubmitRequestSchema = LeadBaseRequestSchema.extend({
+  verification_method: z.literal("sms").optional(),
   phone: PhoneSchema,
   sms_code: z.string().trim().regex(/^[0-9]{6}$/, "验证码格式无效"),
-  community: z.string().trim().min(1).max(80),
-  preferred_visit_date: z.iso.date("期望量房日期格式无效"),
-  preferred_visit_period: z.enum(DOUYIN_VISIT_PERIOD_VALUES),
-  budget_estimate_id: z.uuid("预算编号格式无效").optional(),
-  demand: z.string().trim().min(1).max(1000).optional(),
-  privacy_policy_version: z.string().trim().min(1).max(40),
-  consented_at: z.iso.datetime({ offset: true }),
-  idempotency_key: z.uuid("幂等键格式无效"),
-  attribution: DouyinLaunchContextSchema,
 });
+
+export const DouyinLeadPhoneSubmitRequestSchema = LeadBaseRequestSchema.extend({
+  verification_method: z.literal("douyin_phone"),
+  douyin_phone_code: z.string().trim().min(1).max(512),
+});
+
+export const DouyinLeadRequestSchema = z.union([
+  DouyinLeadSmsSubmitRequestSchema,
+  DouyinLeadPhoneSubmitRequestSchema,
+]);
 
 export const DOUYIN_CLIENT_MATERIAL_PREVIEW_EVENT_VALUES = [
   "material_preview",

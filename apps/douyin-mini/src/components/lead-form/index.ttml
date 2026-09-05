@@ -5,12 +5,17 @@
       <input class="field-input ui-control {{fieldErrors.name ? 'ui-control--error' : ''}}" aria-label="称呼" data-field="name" maxlength="40" value="{{value.name}}" placeholder="例如：李先生" focus="{{focusedField === 'name'}}" disabled="{{submitting}}" bindinput="onInput" />
       <view tt:if="{{fieldErrors.name}}" class="ui-field-error" role="alert">{{fieldErrors.name}}</view>
     </view>
-    <view class="field-group">
+    <view tt:if="{{douyinClueEnabled}}" class="field-group">
+      <view class="douyin-phone-note" role="note">
+        提交时将使用抖音官方手机号授权，不需要填写短信验证码。
+      </view>
+    </view>
+    <view tt:if="{{!douyinClueEnabled}}" class="field-group">
       <view class="field-label">联系电话 <text class="required" style="color: {{primaryColor}}">*</text></view>
       <input class="field-input ui-control {{fieldErrors.phone ? 'ui-control--error' : ''}}" aria-label="联系电话" data-field="phone" type="number" maxlength="11" value="{{value.phone}}" placeholder="请输入手机号" focus="{{focusedField === 'phone'}}" disabled="{{submitting}}" bindinput="onInput" />
       <view tt:if="{{fieldErrors.phone}}" class="ui-field-error" role="alert">{{fieldErrors.phone}}</view>
     </view>
-    <view class="field-group">
+    <view tt:if="{{!douyinClueEnabled}}" class="field-group">
       <view class="field-label">短信验证码 <text class="required" style="color: {{primaryColor}}">*</text></view>
       <sms-code-input value="{{value.sms_code}}" phone-ready="{{phoneReady && !submitting}}" sending="{{smsSending || submitting}}" cooldown="{{smsCooldown}}" focused="{{focusedField === 'sms_code'}}" error="{{fieldErrors.sms_code || ''}}" primary-color="{{primaryColor}}" bindchange="onSmsCodeChange" bindsend="onSendSms" />
       <view tt:if="{{fieldErrors.sms_code}}" class="ui-field-error" role="alert">{{fieldErrors.sms_code}}</view>
@@ -61,5 +66,6 @@
   </view>
 
   <view class="consent-block"><privacy-consent checked="{{consented}}" company-name="{{companyName}}" primary-color="{{primaryColor}}" primary-text-color="{{primaryTextColor}}" error="{{fieldErrors.consent || ''}}" disabled="{{submitting}}" bindchange="onConsentChange" bindopenpolicy="onOpenPolicy" /></view>
-  <button class="submit-button ui-pressable" hover-class="ui-pressable--pressed" style="background-color: {{primaryColor}}; color: {{primaryTextColor}}" form-type="submit" loading="{{submitting}}" disabled="{{submitting}}">{{submitting ? '正在提交' : '提交量房申请'}}</button>
+  <button tt:if="{{douyinClueEnabled}}" class="submit-button ui-pressable" hover-class="ui-pressable--pressed" style="background-color: {{primaryColor}}; color: {{primaryTextColor}}" open-type="getPhoneNumber" bindgetphonenumber="onDouyinPhoneNumber" loading="{{submitting}}" disabled="{{submitting}}">{{submitting ? '正在提交' : '授权手机号并提交'}}</button>
+  <button tt:else class="submit-button ui-pressable" hover-class="ui-pressable--pressed" style="background-color: {{primaryColor}}; color: {{primaryTextColor}}" form-type="submit" loading="{{submitting}}" disabled="{{submitting}}">{{submitting ? '正在提交' : '提交量房申请'}}</button>
 </form>

@@ -273,14 +273,16 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
       optionalDetailsExpanded: toggleOptionalDetails(this.data.optionalDetailsExpanded),
     });
   },
-  async onSubmit() {
+  async onSubmit(event?: { detail?: { douyin_phone_code?: string } }) {
     const linkedBudget = this.syncBudgetContext();
     const minimumVisitDate = getShanghaiNaturalDate();
+    const phoneCaptureMode = this.data.douyinClueEnabled ? "douyin_phone" : "sms";
     this.setData({ minVisitDate: minimumVisitDate });
     const validation = validateLeadForm(
       this.data.form,
       this.data.consented,
       minimumVisitDate,
+      phoneCaptureMode,
     );
     if (validation.summary) {
       this.setData({
@@ -321,10 +323,27 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
     try {
       const app = dependencies.getApp();
       const form = this.data.form;
+      if (phoneCaptureMode === "douyin_phone" && !event?.detail?.douyin_phone_code) {
+        if (!this.lifecycle.finishSubmit(authority)) return;
+        this.idempotency = failIdempotentSubmission(this.idempotency);
+        this.setData({
+          submitting: false,
+          formError: "请授权手机号后提交量房申请",
+        });
+        return;
+      }
+      const verification = phoneCaptureMode === "douyin_phone"
+        ? {
+          verification_method: "douyin_phone" as const,
+          douyin_phone_code: event?.detail?.douyin_phone_code ?? "",
+        }
+        : {
+          verification_method: "sms" as const,
+          phone: form.phone.trim(),
+          sms_code: form.sms_code.trim(),
+        };
       const result = await dependencies.submitLead(app.api, {
         name: form.name.trim(),
-        phone: form.phone.trim(),
-        sms_code: form.sms_code.trim(),
         community: form.community.trim(),
         preferred_visit_date: form.preferred_visit_date,
         preferred_visit_period: preferredVisitPeriod,
@@ -334,6 +353,7 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
         consented_at: form.consented_at,
         idempotency_key: decision.key,
         attribution: app.launchContext,
+        ...verification,
       });
       const succeeded = succeedIdempotentSubmission(this.idempotency, decision.key);
       const acceptedAttempt = succeeded.key === decision.key

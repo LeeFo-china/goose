@@ -223,6 +223,7 @@ function activeInstallation(): Promise<DouyinContentInstallation> {
     authorizer_appid: APP_ID,
     authorization_status: "active" as const,
     template_version: "0.1.5",
+    deployment_key: "merchant-dev",
     installation_kind: "merchant" as const,
     runtime_config: {
       brand: { logo_url: null, qualifications: [] },

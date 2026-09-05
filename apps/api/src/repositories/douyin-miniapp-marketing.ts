@@ -78,7 +78,12 @@ export type SubmitDouyinMeasurementAppointmentInput = {
   readonly preferredVisitPeriod: DouyinVisitPeriod;
   readonly budgetEstimateId: string | null;
   readonly demand: string | null;
-  readonly smsCode: string;
+  readonly verification: {
+    readonly type: "sms";
+    readonly code: string;
+  } | {
+    readonly type: "douyin_phone";
+  };
   readonly idempotencyKey: string;
   readonly subjectHash: string;
   readonly requestIp: string | null;
@@ -159,7 +164,6 @@ export class DouyinMiniappMarketingRepository {
         p_preferred_visit_period: input.preferredVisitPeriod,
         p_budget_estimate_id: input.budgetEstimateId,
         p_demand: input.demand,
-        p_sms_code: input.smsCode,
         p_idempotency_key: input.idempotencyKey,
         p_subject_hash: input.subjectHash,
         p_request_ip: input.requestIp,
@@ -167,9 +171,14 @@ export class DouyinMiniappMarketingRepository {
         p_privacy_policy_version: input.privacyPolicyVersion,
         p_consented_at: input.consentedAt,
         p_attribution: copyAttribution(input.attribution),
-      } satisfies AppointmentRpcArgs;
+        ...(input.verification.type === "sms"
+          ? { p_sms_code: input.verification.code }
+          : {}),
+      } satisfies AppointmentRpcArgs | Omit<AppointmentRpcArgs, "p_sms_code">;
       const result = await this.client.rpc(
-        "submit_douyin_measurement_appointment",
+        input.verification.type === "sms"
+          ? "submit_douyin_measurement_appointment"
+          : "submit_douyin_measurement_appointment_with_douyin_phone",
         args,
       );
       assertDatabaseSuccess(result, "提交抖音小程序预约失败");

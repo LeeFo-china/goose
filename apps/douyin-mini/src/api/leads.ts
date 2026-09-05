@@ -15,10 +15,8 @@ export type SendLeadSmsResult = {
   cooldown_seconds: number;
 };
 
-export type SubmitLeadInput = {
+type SubmitLeadBaseInput = {
   name: string;
-  phone: string;
-  sms_code: string;
   community: string;
   preferred_visit_date: string;
   preferred_visit_period: DouyinVisitPeriod;
@@ -29,6 +27,15 @@ export type SubmitLeadInput = {
   idempotency_key: string;
   attribution: LaunchContext;
 };
+
+export type SubmitLeadInput = SubmitLeadBaseInput & ({
+  verification_method?: "sms";
+  phone: string;
+  sms_code: string;
+} | {
+  verification_method: "douyin_phone";
+  douyin_phone_code: string;
+});
 
 export type SubmitLeadResult = DouyinMeasurementAppointmentResult;
 

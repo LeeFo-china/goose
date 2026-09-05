@@ -96,6 +96,7 @@ function gateway(overrides: Partial<DouyinOpenPlatformGateway> = {}): DouyinOpen
     })),
     code2Session: mock(async () => ({ sessionKey: "unused", openId: "unused" })),
     code2SessionForTemplate: mock(async () => ({ sessionKey: "unused", openId: "unused" })),
+    getPhoneNumberInfo: mock(async () => ({ phone: "13800000000" })),
     ...overrides,
   };
 }

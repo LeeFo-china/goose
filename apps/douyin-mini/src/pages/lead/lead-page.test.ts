@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 
 import type { DouyinAppContext } from "../../app";
-import type { SubmitLeadResult } from "../../api/leads";
+import type { SubmitLeadInput, SubmitLeadResult } from "../../api/leads";
 import { ApiRequestError } from "../../api/request";
 import type { BootstrapData } from "../../models";
 import {
@@ -127,6 +127,64 @@ describe("lead page definition", () => {
     expect(harness.page.data.phoneReady).toBe(false);
   });
 
+  test("submits with a Douyin phone code and no manual SMS fields", async () => {
+    const harness = createHarness({
+      ...BOOTSTRAP,
+      features: {
+        ...BOOTSTRAP.features,
+        douyin_phone: true,
+        phone_capture_mode: "douyin_phone",
+        clue_component_id: "clue_1234567890",
+      },
+    });
+    harness.page.onLoad();
+    await flushPromises();
+    setValidForm(harness.page);
+    harness.page.data.form = {
+      ...harness.page.data.form,
+      phone: "",
+      sms_code: "",
+    };
+    const submit = harness.deferredSubmit();
+    const operation = harness.page.onSubmit({
+      detail: { douyin_phone_code: "official-phone-code" },
+    });
+    submit.resolve(publicAppointment());
+    await operation;
+
+    expect(harness.submitLead).toHaveBeenCalledWith({}, expect.objectContaining({
+      verification_method: "douyin_phone",
+      douyin_phone_code: "official-phone-code",
+    }));
+    const payload = harness.submitLead.mock.calls[0]![1] as Record<string, unknown>;
+    expect(payload).not.toHaveProperty("phone");
+    expect(payload).not.toHaveProperty("sms_code");
+  });
+
+  test("asks for phone authorization when Douyin does not return a phone code", async () => {
+    const harness = createHarness({
+      ...BOOTSTRAP,
+      features: {
+        ...BOOTSTRAP.features,
+        douyin_phone: true,
+        phone_capture_mode: "douyin_phone",
+        clue_component_id: "clue_1234567890",
+      },
+    });
+    harness.page.onLoad();
+    await flushPromises();
+    setValidForm(harness.page);
+    harness.page.data.form = { ...harness.page.data.form, phone: "", sms_code: "" };
+
+    await harness.page.onSubmit({ detail: { douyin_phone_code: "" } });
+
+    expect(harness.submitLead).not.toHaveBeenCalled();
+    expect(harness.page.data).toMatchObject({
+      submitting: false,
+      formError: "请授权手机号后提交量房申请",
+    });
+  });
+
   test("a stale policy rejection cannot write or unlock current page navigation", async () => {
     const harness = createHarness();
     harness.page.onShow();
@@ -164,7 +222,8 @@ function createHarness(bootstrap: BootstrapData = BOOTSTRAP) {
   const submitFlights: Array<Deferred<SubmitLeadResult>> = [];
   const bootstrapLoads: Array<Deferred<BootstrapData | null>> = [];
   const navigationFlights: Array<Deferred<void>> = [];
-  const submitLead = mock(() => submitFlights.shift()?.promise
+  const submitLead = mock((_client: unknown, _input: SubmitLeadInput) =>
+    submitFlights.shift()?.promise
     ?? Promise.reject(new Error("missing submit flight")));
   const navigateToPage = mock(() => navigationFlights.shift()?.promise
     ?? Promise.reject(new Error("missing navigation flight")));
@@ -238,6 +297,17 @@ function privacyMismatch(): ApiRequestError {
     "DOUYIN_PRIVACY_POLICY_VERSION_MISMATCH",
     "隐私版本已更新",
   );
+}
+
+function publicAppointment(): SubmitLeadResult {
+  return {
+    lead_id: "44444444-4444-4444-8444-444444444444",
+    appointment_no: "DYLF-20260719-000001",
+    already_submitted: false,
+    existing_customer_linked: false,
+    status: "pending_confirmation",
+    message: "量房申请已提交，工作人员将与你确认具体时间",
+  };
 }
 
 async function flushPromises(): Promise<void> {

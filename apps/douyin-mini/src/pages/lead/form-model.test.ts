@@ -95,6 +95,19 @@ describe("lead form model", () => {
     });
   });
 
+  test("does not require manual phone or SMS when Douyin official phone capture is enabled", () => {
+    expect(validateLeadForm({
+      ...VALID_FORM,
+      phone: "",
+      sms_code: "",
+      preferred_visit_date: "2026-08-22",
+    }, true, "2026-08-22", "douyin_phone")).toEqual({
+      fieldErrors: {},
+      firstField: null,
+      summary: null,
+    });
+  });
+
   test("clears only the changed field error", () => {
     expect(clearLeadFieldError({
       phone: "请填写正确的手机号",
@@ -203,8 +216,10 @@ describe("lead form model", () => {
     expect(template).toContain('mode="date"');
     expect(template).toContain('conversion-target="{{douyinClueEnabled ? 1 : 0}}"');
     expect(template).toContain('clue-component-id="{{douyinClueComponentId}}"');
-    expect(template).not.toContain('open-type="getPhoneNumber"');
-    expect(template).not.toContain('bindgetphonenumber="onDouyinPhoneNumber"');
+    expect(template).toContain('tt:if="{{!douyinClueEnabled}}" class="field-group"');
+    expect(template).toContain('open-type="getPhoneNumber"');
+    expect(template).toContain('bindgetphonenumber="onDouyinPhoneNumber"');
+    expect(template).toContain("授权手机号并提交");
     expect(template).toContain("{{estimateNo}}");
     expect(template).toContain("{{estimateRange}}");
     expect(template).not.toContain('data-field="budget"');

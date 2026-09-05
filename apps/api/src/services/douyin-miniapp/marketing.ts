@@ -1,13 +1,19 @@
 import { AppError } from "@/errors/app-error";
 import { Errors } from "@/errors/error-factory";
 import {
+  DouyinOpenPlatformClient,
+  type DouyinOpenPlatformGateway,
+} from "@/gateways/douyin-open-platform/client";
+import {
   DouyinMiniappContentRepository,
   douyinMiniappContentRepository,
 } from "@/repositories/douyin-miniapp-content";
+import { DouyinMiniappInstallationsRepository } from "@/repositories/douyin-miniapp-installations";
 import {
   DouyinMiniappMarketingRepository,
   douyinMiniappMarketingRepository,
 } from "@/repositories/douyin-miniapp-marketing";
+import { DouyinThirdPartyComponentsRepository } from "@/repositories/douyin-third-party-components";
 import { notificationService } from "@/services/notifications";
 import type {
   DouyinAnalyticsRequest,
@@ -26,6 +32,8 @@ import {
   SmsVerificationCodeService,
   smsVerificationCodeService,
 } from "@/services/sms-verification-codes";
+import { DouyinMiniappAccessTokenService } from "./access-tokens";
+import { loadDouyinMiniappConfig } from "./config";
 import type { JwtPayload } from "@/utils/jwt";
 
 type ContextRepository = Pick<DouyinMiniappContentRepository, "findActiveInstallation">;
@@ -34,6 +42,8 @@ type MarketingRepository = Pick<DouyinMiniappMarketingRepository,
   "listPublishedMaterialNoteIds" | "listActiveClaimedMaterialNoteIds">;
 type SmsService = Pick<SmsVerificationCodeService, "sendCode">;
 type NotificationService = Pick<typeof notificationService, "createTenantAdminNotifications">;
+type AccessTokenService = Pick<DouyinMiniappAccessTokenService, "getAuthorizerAccessToken">;
+type PhoneGateway = Pick<DouyinOpenPlatformGateway, "getPhoneNumberInfo">;
 type MarketingLogger = {
   warn(payload: Record<string, unknown>, message: string): void;
 };
@@ -47,11 +57,15 @@ type Dependencies = {
   marketingRepository?: MarketingRepository;
   notificationService?: NotificationService;
   smsService?: SmsService;
+  accessTokens?: AccessTokenService;
+  phoneGateway?: PhoneGateway;
   now?: () => Date;
 };
 type Context = {
   tenantId: string;
   installationId: string;
+  authorizerAppId: string;
+  deploymentKey: string | null;
   subjectHash: string;
   runtime: DouyinRuntimeConfig;
 };
@@ -76,6 +90,8 @@ export class DouyinMiniappMarketingService {
   private readonly marketingRepository: MarketingRepository;
   private readonly notificationService: NotificationService;
   private readonly smsService: SmsService;
+  private accessTokens?: AccessTokenService;
+  private phoneGateway?: PhoneGateway;
   private readonly now: () => Date;
 
   constructor(dependencies: Dependencies = {}) {
@@ -84,6 +100,8 @@ export class DouyinMiniappMarketingService {
       ?? douyinMiniappMarketingRepository;
     this.notificationService = dependencies.notificationService ?? notificationService;
     this.smsService = dependencies.smsService ?? smsVerificationCodeService;
+    this.accessTokens = dependencies.accessTokens;
+    this.phoneGateway = dependencies.phoneGateway;
     this.now = dependencies.now ?? (() => new Date());
   }
 
@@ -131,18 +149,21 @@ export class DouyinMiniappMarketingService {
     const now = this.now();
     validateConsent(input, context.runtime.privacy_policy_version, now);
     const consentedAt = new Date(input.consented_at).toISOString();
+    const phone = await this.resolveVerifiedPhone(context, input);
     const appointment = await this.marketingRepository.submitMeasurementAppointment({
       tenantId: context.tenantId,
       installationId: context.installationId,
       subjectHash: context.subjectHash,
-      phone: input.phone,
+      phone,
       name: input.name,
       community: input.community,
       preferredVisitDate: input.preferred_visit_date,
       preferredVisitPeriod: input.preferred_visit_period,
       budgetEstimateId: input.budget_estimate_id ?? null,
       demand: input.demand ?? null,
-      smsCode: input.sms_code,
+      verification: input.verification_method === "douyin_phone"
+        ? { type: "douyin_phone" }
+        : { type: "sms", code: input.sms_code },
       idempotencyKey: input.idempotency_key,
       requestIp: metadata.requestIp,
       userAgent: boundedUserAgent(metadata.userAgent),
@@ -161,6 +182,47 @@ export class DouyinMiniappMarketingService {
       status: appointment.status,
       message: APPOINTMENT_SUBMITTED_MESSAGE,
     };
+  }
+
+  private async resolveVerifiedPhone(
+    context: Context,
+    input: DouyinLeadRequest,
+  ): Promise<string> {
+    if (input.verification_method !== "douyin_phone") return input.phone;
+    if (!context.runtime.features.douyin_phone) {
+      throw Errors.business(404, "抖音手机号授权暂未开放", "DOUYIN_PHONE_FEATURE_DISABLED");
+    }
+    if (!context.deploymentKey) {
+      throw Errors.business(409, "抖音小程序服务配置无效", "DOUYIN_INSTALLATION_DISABLED");
+    }
+    const { accessTokens, phoneGateway } = this.phoneDependencies();
+    const accessToken = await accessTokens.getAuthorizerAccessToken({
+      authorizerAppId: context.authorizerAppId,
+      deploymentKey: context.deploymentKey,
+    });
+    try {
+      const result = await phoneGateway.getPhoneNumberInfo({
+        appId: context.authorizerAppId,
+        authorizerAccessToken: accessToken,
+        code: input.douyin_phone_code,
+      });
+      return result.phone;
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      throw Errors.business(502, "抖音手机号授权失败", "DOUYIN_PHONE_AUTH_FAILED");
+    }
+  }
+
+  private phoneDependencies(): {
+    readonly accessTokens: AccessTokenService;
+    readonly phoneGateway: PhoneGateway;
+  } {
+    if (!this.accessTokens || !this.phoneGateway) {
+      const defaults = createDefaultPhoneDependencies();
+      this.accessTokens ??= defaults.accessTokens;
+      this.phoneGateway ??= defaults.phoneGateway;
+    }
+    return { accessTokens: this.accessTokens, phoneGateway: this.phoneGateway };
   }
 
   async recordEvents(
@@ -275,6 +337,8 @@ export class DouyinMiniappMarketingService {
     return {
       tenantId: user.tenant_id,
       installationId: user.douyin_installation_id,
+      authorizerAppId: installation.authorizer_appid,
+      deploymentKey: installation.deployment_key,
       subjectHash: user.subject_hash,
       runtime: runtime.data,
     } satisfies Context;
@@ -333,6 +397,26 @@ function throwMaterialEventEntityInvalid(): never {
     "资料事件实体无效",
     "DOUYIN_MATERIAL_EVENT_ENTITY_INVALID",
   );
+}
+
+function createDefaultPhoneDependencies(): {
+  readonly accessTokens: AccessTokenService;
+  readonly phoneGateway: PhoneGateway;
+} {
+  const config = loadDouyinMiniappConfig();
+  const installationRepository = new DouyinMiniappInstallationsRepository();
+  const openPlatform = new DouyinOpenPlatformClient();
+  return {
+    accessTokens: new DouyinMiniappAccessTokenService({
+      componentAppId: config.componentAppId,
+      componentAppSecret: config.componentAppSecret,
+      credentialKeyring: config.credentialKeyring,
+      componentRepository: new DouyinThirdPartyComponentsRepository(),
+      installationRepository,
+      openPlatform,
+    }),
+    phoneGateway: openPlatform,
+  };
 }
 
 let defaultService: DouyinMiniappMarketingService | undefined;

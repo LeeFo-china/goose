@@ -60,13 +60,14 @@ export function validateLeadForm(
   form: LeadFormValue,
   consented: boolean,
   minimumVisitDate = getShanghaiNaturalDate(),
+  phoneCaptureMode: "sms" | "douyin_phone" = "sms",
 ): LeadValidationResult {
   const fieldErrors: LeadFieldErrors = {};
   if (!form.name.trim()) fieldErrors.name = "请填写称呼";
-  if (!/^1[3-9][0-9]{9}$/.test(form.phone.trim())) {
+  if (phoneCaptureMode === "sms" && !/^1[3-9][0-9]{9}$/.test(form.phone.trim())) {
     fieldErrors.phone = "请填写正确的手机号";
   }
-  if (!/^[0-9]{6}$/.test(form.sms_code.trim())) {
+  if (phoneCaptureMode === "sms" && !/^[0-9]{6}$/.test(form.sms_code.trim())) {
     fieldErrors.sms_code = "请填写6位短信验证码";
   }
   if (!form.community.trim()) fieldErrors.community = "请填写小区名称";

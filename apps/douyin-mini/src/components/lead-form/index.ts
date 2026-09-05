@@ -60,5 +60,13 @@ Component({
     onSubmit() {
       if (!this.data.submitting) this.triggerEvent("submit");
     },
+    onDouyinPhoneNumber(event: { detail?: { code?: string } }) {
+      if (this.data.submitting) return;
+      this.triggerEvent("submit", {
+        douyin_phone_code: typeof event.detail?.code === "string"
+          ? event.detail.code
+          : "",
+      });
+    },
   },
 });

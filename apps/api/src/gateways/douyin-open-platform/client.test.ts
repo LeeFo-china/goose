@@ -181,6 +181,7 @@ describe("DouyinOpenPlatformClient requests", () => {
     });
   });
 
+
 });
 
 describe("DouyinOpenPlatformClient failures", () => {
@@ -487,8 +488,7 @@ function authorizerSuccess(): Record<string, unknown> {
     err_no: 0,
     err_msg: "",
     log_id: "authorizer-log",
-    data: {
-      authorizer_access_token: AUTHORIZER_TOKEN,
+    data: { authorizer_access_token: AUTHORIZER_TOKEN,
       authorizer_appid: "authorizer-appid",
       authorizer_refresh_token: "refresh-token",
       expires_in: 7200,

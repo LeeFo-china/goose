@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { AppError } from "@/errors/app-error";
-import { Errors } from "@/errors/error-factory";
 import {
   buildAuthorizationLinkRequest,
   GENERATE_AUTHORIZATION_LINK_URL,
@@ -10,8 +9,15 @@ import {
 } from "./authorization-link";
 import { assertAuthorizationCodeUsable } from "./authorization-token";
 import {
+  accessTokenRefreshError,
+  assertOpenApiSuccess,
+  assertRetrieveAuthorizationSuccess,
+  invalidResponseError,
+  openPlatformError,
+  safeLogId,
+} from "./client-errors";
+import {
   DouyinMiniappReleaseClient,
-  SafeDouyinLogIdSchema,
   type AuthorizerRequestInput,
   type AvailableAuditHostsResult,
   type DouyinMiniappReleaseGateway,
@@ -41,25 +47,19 @@ export type {
   UploadTemplateVersionResult,
 } from "./release-client";
 const REQUEST_TIMEOUT_MS = 10_000;
-const EXPIRED_ACCESS_TOKEN_ERROR = 28_001_008;
-const RETRIEVE_AUTHORIZATION_EXPIRED_ERRORS = new Set([40_004, 40_022]);
 const COMPONENT_TOKEN_URL = "https://open.douyin.com/openapi/v2/auth/tp/token/";
 const AUTHORIZER_TOKEN_URL = "https://open.douyin.com/api/tpapp/v2/auth/get_auth_token/";
 const RETRIEVE_AUTH_CODE_URL = "https://open.douyin.com/api/tpapp/v2/auth/retrieve_auth_code/";
 const MERCHANT_CODE2SESSION_URL = "https://open.douyin.com/api/apps/v1/microapp/code2session/";
 const TEMPLATE_CODE2SESSION_URL = "https://developer.toutiao.com/api/apps/v2/jscode2session";
+const GET_PHONE_NUMBER_INFO_URL = "https://open.douyin.com/api/apps/v1/get_phonenumber_info/";
 const JsonObjectSchema = z.looseObject({});
-const SafeLogSchema = z.looseObject({ log_id: SafeDouyinLogIdSchema.optional() });
 const ComponentSuccessSchema = z.looseObject({
   component_access_token: z.string().min(1),
   expires_in: z.number().int().positive(),
 });
 const ComponentFailureSchema = z.looseObject({
   errno: z.union([z.string(), z.number()]),
-});
-const OpenApiEnvelopeSchema = z.looseObject({
-  err_no: z.number().int(),
-  log_id: z.string().min(1).optional(),
 });
 const AuthorizerSuccessSchema = z.looseObject({
   err_no: z.literal(0),
@@ -111,6 +111,12 @@ const TemplateCode2SessionSuccessSchema = z.looseObject({
   err_no: z.literal(0),
   log_id: z.string().min(1),
   data: TemplateSessionIdentitySchema,
+});
+const PhoneNumberSchema = z.string().trim().regex(/^1[3-9][0-9]{9}$/);
+const GetPhoneNumberInfoSuccessSchema = z.looseObject({
+  err_no: z.literal(0),
+  log_id: z.string().min(1),
+  data: PhoneNumberSchema,
 });
 
 export type ComponentTokenInput = {
@@ -168,6 +174,14 @@ export type Code2SessionResult = {
   readonly unionId?: string;
 };
 
+export type GetPhoneNumberInfoInput = AuthorizerRequestInput & {
+  readonly code: string;
+};
+
+export type GetPhoneNumberInfoResult = {
+  readonly phone: string;
+};
+
 function serializeCode2SessionCredential(input: Code2SessionCredential) {
   return input.code ? { code: input.code } : { anonymous_code: input.anonymousCode };
 }
@@ -182,6 +196,7 @@ export interface DouyinOpenPlatformGateway {
   ): Promise<GenerateAuthorizationLinkResult>;
   code2Session(input: Code2SessionInput): Promise<Code2SessionResult>;
   code2SessionForTemplate(input: TemplateCode2SessionInput): Promise<Code2SessionResult>;
+  getPhoneNumberInfo(input: GetPhoneNumberInfoInput): Promise<GetPhoneNumberInfoResult>;
 }
 
 type TimeoutHandle = unknown;
@@ -306,6 +321,20 @@ export class DouyinOpenPlatformClient
       anonymousOpenId: parsed.data.data.anonymous_openid,
       unionId: parsed.data.data.unionid,
     };
+  }
+
+  async getPhoneNumberInfo(input: GetPhoneNumberInfoInput): Promise<GetPhoneNumberInfoResult> {
+    return this.withAuthorizerAccessToken(input, async (accessToken) => {
+      const body = await this.request(GET_PHONE_NUMBER_INFO_URL, {
+        method: "POST",
+        headers: { "access-token": accessToken, "content-type": "application/json" },
+        body: JSON.stringify({ code: input.code }),
+      });
+      assertOpenApiSuccess(body);
+      const parsed = GetPhoneNumberInfoSuccessSchema.safeParse(body);
+      if (!parsed.success) throw invalidResponseError(safeLogId(body));
+      return { phone: parsed.data.data };
+    });
   }
 
   async uploadTemplateVersion(input: UploadTemplateVersionInput): Promise<UploadTemplateVersionResult> {
@@ -445,53 +474,6 @@ async function parseJsonObject(response: Response): Promise<Record<string, unkno
   const parsed = JsonObjectSchema.safeParse(body);
   if (!parsed.success || Array.isArray(body)) throw invalidResponseError();
   return parsed.data;
-}
-
-function assertOpenApiSuccess(body: Record<string, unknown>): void {
-  const envelope = OpenApiEnvelopeSchema.safeParse(body);
-  if (!envelope.success) throw invalidResponseError(safeLogId(body));
-  if (envelope.data.err_no === 0) return;
-  const code = envelope.data.err_no === EXPIRED_ACCESS_TOKEN_ERROR
-    ? "DOUYIN_OPEN_PLATFORM_ACCESS_TOKEN_EXPIRED"
-    : "DOUYIN_OPEN_PLATFORM_API_ERROR";
-  throw openPlatformError(code, "抖音开放平台请求失败", safeLogId(body));
-}
-
-function assertRetrieveAuthorizationSuccess(body: Record<string, unknown>): void {
-  const envelope = OpenApiEnvelopeSchema.safeParse(body);
-  if (envelope.success && RETRIEVE_AUTHORIZATION_EXPIRED_ERRORS.has(envelope.data.err_no)) {
-    throw Errors.business(
-      401,
-      "抖音小程序需要重新授权",
-      "DOUYIN_AUTHORIZATION_EXPIRED",
-      safeLogId(body) ? { log_id: safeLogId(body) } : undefined,
-    );
-  }
-  assertOpenApiSuccess(body);
-}
-
-function safeLogId(body: unknown): string | undefined {
-  const parsed = SafeLogSchema.safeParse(body);
-  return parsed.success ? parsed.data.log_id : undefined;
-}
-
-function invalidResponseError(logId?: string): AppError {
-  return openPlatformError(
-    "DOUYIN_OPEN_PLATFORM_RESPONSE_INVALID",
-    "抖音开放平台响应格式无效",
-    logId,
-  );
-}
-
-function accessTokenRefreshError(): AppError {
-  return openPlatformError(
-    "DOUYIN_OPEN_PLATFORM_ACCESS_TOKEN_REFRESH_FAILED",
-    "抖音开放平台访问凭证刷新失败",
-  );
-}
-
-function openPlatformError(code: string, message: string, logId?: string): AppError {
-  return Errors.business(502, message, code, logId ? { log_id: logId } : undefined);
 }
 
 function isAbortError(error: unknown): boolean {

@@ -253,6 +253,22 @@ describe("DouyinMiniappController", () => {
       .resolves.toEqual({ data: publicAppointmentResult, message: "success" });
     expect(submitLead).toHaveBeenCalledWith(user, leadBody,
       { requestIp: "127.0.0.1", userAgent: "Douyin", log });
+    const officialPhoneLeadBody = {
+      name: "李先生",
+      community: "晴天花园",
+      preferred_visit_date: "2026-08-25",
+      preferred_visit_period: "afternoon",
+      privacy_policy_version: "2026-07-19",
+      consented_at: "2026-07-19T10:00:00.000Z",
+      idempotency_key: "44444444-4444-4444-8444-444444444444",
+      attribution,
+      verification_method: "douyin_phone" as const,
+      douyin_phone_code: "official-phone-code",
+    };
+    await expect(controller.submitLead({ ...request, body: officialPhoneLeadBody } as never))
+      .resolves.toEqual({ data: publicAppointmentResult, message: "success" });
+    expect(submitLead).toHaveBeenCalledWith(user, officialPhoneLeadBody,
+      { requestIp: "127.0.0.1", userAgent: "Douyin", log });
     const { budget_estimate_id: _budgetEstimateId, ...leadWithoutEstimate } = leadBody;
     await controller.submitLead({ ...request, body: leadWithoutEstimate } as never);
     expect(submitLead).toHaveBeenLastCalledWith(user, leadWithoutEstimate,
@@ -267,11 +283,14 @@ describe("DouyinMiniappController", () => {
       { ...leadBody, preferred_visit_date: "2026-02-30" },
       { ...leadBody, preferred_visit_period: "noon" },
       { ...leadBody, budget_estimate_id: "not-a-uuid" },
+      { ...officialPhoneLeadBody, phone: "13800000000" },
+      { ...officialPhoneLeadBody, sms_code: "123456" },
+      { ...officialPhoneLeadBody, douyin_phone_code: "" },
     ]) {
       await expect(controller.submitLead({ ...request, body: invalidBody } as never))
         .rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
     }
-    expect(submitLead).toHaveBeenCalledTimes(2);
+    expect(submitLead).toHaveBeenCalledTimes(3);
     await expect(controller.recordEvents({ ...request, body: { events: [{
       event_name: "lead_submit_success", occurred_at: "2026-07-19T10:00:00.000Z",
       attribution,

@@ -12,8 +12,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 let DouyinMiniappAccessTokenService: typeof import("./access-tokens").DouyinMiniappAccessTokenService;
 beforeAll(async () => ({ DouyinMiniappAccessTokenService } = await import("./access-tokens")));
 const NOW_MS = Date.parse("2026-07-20T00:00:00.000Z");
-const CLAIM_TOKEN = "11111111-1111-4111-8111-111111111111";
-const INSTALLATION_ID = "22222222-2222-4222-8222-222222222222";
+const CLAIM_TOKEN = "11111111-1111-4111-8111-111111111111", INSTALLATION_ID = "22222222-2222-4222-8222-222222222222";
 const keyring: DouyinCredentialKeyring = {
   activeKeyVersion: "v1", keys: { v1: createSecretKey(Buffer.alloc(32, 0x33)) },
 };
@@ -63,6 +62,7 @@ function gateway(overrides: Partial<DouyinOpenPlatformGateway> = {}): DouyinOpen
     generateAuthorizationLink: mock(async () => ({ link: "https://open.douyin.com/authorize/unused", logId: "unused-log" })),
     code2Session: mock(async () => ({ sessionKey: "unused", openId: "unused" })),
     code2SessionForTemplate: mock(async () => ({ sessionKey: "unused", openId: "unused" })),
+    getPhoneNumberInfo: mock(async () => ({ phone: "13800000000" })),
     ...overrides,
   };
 }
@@ -490,8 +490,8 @@ describe("DouyinMiniappAccessTokenService lease orchestration", () => {
 });
 function validComponentRepository(): ComponentTokenRepository {
   return {
-    findActive: mock(async () => componentRow({ accessToken: "stored-component-token",
-      expiresAt: new Date(NOW_MS + 301_000).toISOString() })),
+    findActive: mock(async () => componentRow({
+      accessToken: "stored-component-token", expiresAt: new Date(NOW_MS + 301_000).toISOString() })),
     claimAccessTokenRefresh: mock(async () => null),
     completeAccessTokenRefresh: mock(async () => false),
     failAccessTokenRefresh: mock(async () => false),
