@@ -279,6 +279,12 @@ export const tenantNavGroups: AdminMenuGroup[] = [
         icon: WalletCards,
         permission: "supplier.payment-request.view",
       },
+      {
+        href: "/warehouses",
+        label: "仓库设置",
+        icon: PackageOpen,
+        permission: "inventory.warehouse.view",
+      },
     ],
   },
   {
