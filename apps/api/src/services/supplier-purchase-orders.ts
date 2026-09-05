@@ -1,5 +1,9 @@
 import { Errors } from "@/errors/error-factory";
 import {
+  supplierPurchaseOrderSharingRepository,
+  type SupplierPurchaseOrderShareStatus,
+} from "@/repositories/supplier-purchase-order-sharing";
+import {
   supplierPurchaseOrdersRepository,
   type SupplierPurchaseOrderWithReferences,
 } from "@/repositories/supplier-purchase-orders";
@@ -43,6 +47,10 @@ type PurchaseOrderRepositoryPort = Pick<
   | "submit"
   | "cancel"
 >;
+type PurchaseOrderSharingRepositoryPort = Pick<
+  typeof supplierPurchaseOrderSharingRepository,
+  "getShareStatus"
+>;
 type TenantSupplierEligibilityPort = Pick<
   typeof tenantSuppliersService,
   "assertCanCreatePurchaseOrderForTenant"
@@ -51,6 +59,7 @@ type TenantSupplierEligibilityPort = Pick<
 export type SupplierPurchaseOrdersServiceDependencies = {
   access?: PurchaseOrderAccessPort;
   repository?: PurchaseOrderRepositoryPort;
+  shareLinks?: PurchaseOrderSharingRepositoryPort;
   tenantSuppliers?: TenantSupplierEligibilityPort;
   nowFactory?: () => Date;
 };
@@ -58,6 +67,7 @@ export type SupplierPurchaseOrdersServiceDependencies = {
 export class SupplierPurchaseOrdersService {
   private readonly access: PurchaseOrderAccessPort;
   private readonly repository: PurchaseOrderRepositoryPort;
+  private readonly shareLinks: PurchaseOrderSharingRepositoryPort;
   private readonly tenantSuppliers: TenantSupplierEligibilityPort;
   private readonly nowFactory: () => Date;
 
@@ -65,6 +75,8 @@ export class SupplierPurchaseOrdersService {
     this.access = dependencies.access ?? supplierPurchaseOrderAccessService;
     this.repository = dependencies.repository ??
       supplierPurchaseOrdersRepository;
+    this.shareLinks = dependencies.shareLinks ??
+      supplierPurchaseOrderSharingRepository;
     this.tenantSuppliers = dependencies.tenantSuppliers ??
       tenantSuppliersService;
     this.nowFactory = dependencies.nowFactory ?? (() => new Date());
@@ -98,7 +110,10 @@ export class SupplierPurchaseOrdersService {
     const scope = await this.access.requireRead(auth);
     const order = await this.requireOrder(scope.tenantId, orderId);
     await this.access.assertProjectRead(auth, order.project_id);
-    return attachSupplierPurchaseOrderPersonnel(order);
+    return {
+      ...attachSupplierPurchaseOrderPersonnel(order),
+      share_status: await this.getShareStatus(scope.tenantId, orderId),
+    };
   }
 
   async listItems(
@@ -252,6 +267,17 @@ export class SupplierPurchaseOrdersService {
       "供应商采购单不存在",
       "SUPPLIER_PURCHASE_ORDER_NOT_FOUND",
     );
+  }
+
+  private getShareStatus(
+    tenantId: string,
+    orderId: string,
+  ): Promise<SupplierPurchaseOrderShareStatus> {
+    return this.shareLinks.getShareStatus({
+      tenantId,
+      orderId,
+      checkedAt: this.nowFactory().toISOString(),
+    });
   }
 
   private assertDraftScopeUnchanged(

@@ -831,7 +831,13 @@ body 可为空，也可指定过期时间：
     "public_url": "https://api-dev.goodcms.cn/public/supplier-purchase-orders/pos_xxx",
     "expires_at": "2026-10-04T04:00:00.000Z",
     "status": "active",
-    "idempotent": false
+    "idempotent": false,
+    "share_status": {
+      "viewed_count": 0,
+      "last_viewed_at": null,
+      "confirmed_at": null,
+      "confirm_remark": null
+    }
   }
 }
 ```
@@ -841,6 +847,46 @@ body 可为空，也可指定过期时间：
 - 只允许对 `submitted` 采购单生成分享链接。
 - `Idempotency-Key` 必填；同一员工、同一采购单、同一 key 重试返回同一链接。
 - `public_url` 可能为空；小程序可优先使用 `share_path` 自行拼接当前 API 域名。
+- `share_status` 是采购单维度聚合状态，不只是本次返回的这一条链接状态。
+
+### 17.1.1 员工侧采购单分享状态
+
+员工侧采购单详情也会返回同一个聚合字段：
+
+```http
+GET /supplier-purchase-orders/:id
+```
+
+响应会在采购单对象顶层增加：
+
+```json
+{
+  "share_status": {
+    "viewed_count": 5,
+    "last_viewed_at": "2026-09-05T03:00:00.000Z",
+    "confirmed_at": "2026-09-05T04:00:00.000Z",
+    "confirm_remark": "最新确认"
+  }
+}
+```
+
+聚合规则：
+
+- 只统计有效链接：`status = active` 且 `expires_at > server_time`。
+- `viewed_count` 为有效链接查看次数总和。
+- `last_viewed_at` 取有效链接里最新查看时间。
+- `confirmed_at` 取有效链接里最新确认时间。
+- `confirm_remark` 跟随最新 `confirmed_at` 所属链接。
+- 没有有效分享链接时返回：
+
+```json
+{
+  "viewed_count": 0,
+  "last_viewed_at": null,
+  "confirmed_at": null,
+  "confirm_remark": null
+}
+```
 
 ### 17.2 供应商公开查看
 

@@ -24,6 +24,12 @@ const auth = {
   tenantId: TENANT_ID,
   permissions: [],
 } as unknown as AuthContext;
+type ShareStatus = {
+  viewed_count: number;
+  last_viewed_at: string | null;
+  confirmed_at: string | null;
+  confirm_remark: string | null;
+};
 
 function emptyPage() {
   return {
@@ -63,6 +69,14 @@ function dependencies(orderOverrides: Record<string, unknown> = {}) {
       saveDraft: mock(async (input: unknown) => ({ input })),
       submit: mock(async (input: unknown) => ({ input })),
       cancel: mock(async (input: unknown) => ({ input })),
+    },
+    shareLinks: {
+      getShareStatus: mock(async (): Promise<ShareStatus> => ({
+        viewed_count: 0,
+        last_viewed_at: null,
+        confirmed_at: null,
+        confirm_remark: null,
+      })),
     },
     tenantSuppliers: {
       assertCanCreatePurchaseOrderForTenant: mock(async () => undefined),
@@ -201,6 +215,37 @@ describe("SupplierPurchaseOrdersService", () => {
       order_id: ORDER_ID,
       page: 1,
       pageSize: 20,
+    });
+  });
+
+  test("returns purchase order share status on detail reads", async () => {
+    const deps = dependencies();
+    deps.shareLinks.getShareStatus.mockImplementation(async () => ({
+      viewed_count: 3,
+      last_viewed_at: "2026-09-05T02:00:00.000Z",
+      confirmed_at: "2026-09-05T01:00:00.000Z",
+      confirm_remark: "供应商已确认",
+    }));
+    const { SupplierPurchaseOrdersService } = await import(
+      "./supplier-purchase-orders"
+    );
+    const service = new SupplierPurchaseOrdersService(deps as never);
+
+    const result = await service.getOrder(auth, ORDER_ID);
+
+    expect(deps.shareLinks.getShareStatus).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      orderId: ORDER_ID,
+      checkedAt: "2026-07-29T08:00:00.000Z",
+    });
+    expect(result).toMatchObject({
+      id: ORDER_ID,
+      share_status: {
+        viewed_count: 3,
+        last_viewed_at: "2026-09-05T02:00:00.000Z",
+        confirmed_at: "2026-09-05T01:00:00.000Z",
+        confirm_remark: "供应商已确认",
+      },
     });
   });
 

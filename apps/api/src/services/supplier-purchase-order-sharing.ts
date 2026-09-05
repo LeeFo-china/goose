@@ -5,6 +5,7 @@ import {
   supplierPurchaseOrderSharingRepository,
   type SupplierPurchaseOrderExportSnapshot,
   type SupplierPurchaseOrderShareLink,
+  type SupplierPurchaseOrderShareStatus,
 } from "@/repositories/supplier-purchase-order-sharing";
 import { supplierPurchaseBatchesRepository } from
   "@/repositories/supplier-purchase-batches";
@@ -46,6 +47,7 @@ type SharingRepositoryPort = Pick<
   | "confirmViewed"
   | "getOrderSnapshot"
   | "getBatchOrderSnapshots"
+  | "getShareStatus"
 >;
 
 export type SupplierPurchaseOrderSharingServiceDependencies = {
@@ -294,7 +296,7 @@ export class SupplierPurchaseOrderSharingService {
     return snapshot;
   }
 
-  private serializeShareLink(
+  private async serializeShareLink(
     link: SupplierPurchaseOrderShareLink,
     idempotent: boolean,
   ) {
@@ -310,7 +312,22 @@ export class SupplierPurchaseOrderSharingService {
       expires_at: link.expires_at,
       status: link.status,
       idempotent,
+      share_status: await this.getShareStatus(
+        link.tenant_id,
+        link.supplier_purchase_order_id,
+      ),
     };
+  }
+
+  private getShareStatus(
+    tenantId: string,
+    orderId: string,
+  ): Promise<SupplierPurchaseOrderShareStatus> {
+    return this.repository.getShareStatus({
+      tenantId,
+      orderId,
+      checkedAt: this.nowFactory().toISOString(),
+    });
   }
 
   private resolveExpiresAt(input?: string | null) {
