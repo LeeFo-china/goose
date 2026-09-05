@@ -376,9 +376,13 @@ CREATE FUNCTION public.update_tenant_warehouse(
   p_expected_version integer,
   p_name text,
   p_address text,
+  p_address_set boolean,
   p_contact_name text,
+  p_contact_name_set boolean,
   p_contact_phone text,
+  p_contact_phone_set boolean,
   p_manager_employee_id uuid,
+  p_manager_employee_id_set boolean,
   p_is_default boolean,
   p_status text,
   p_actor_user_id uuid,
@@ -420,17 +424,21 @@ BEGIN
     OR p_tenant_id IS NULL
     OR p_expected_version IS NULL
     OR p_expected_version <= 0
+    OR p_address_set IS NULL
+    OR p_contact_name_set IS NULL
+    OR p_contact_phone_set IS NULL
+    OR p_manager_employee_id_set IS NULL
     OR (p_name IS NOT NULL AND (v_name IS NULL OR char_length(v_name) > 80))
-    OR (p_address IS NOT NULL AND v_address IS NOT NULL AND char_length(v_address) > 200)
-    OR (p_contact_name IS NOT NULL AND v_contact_name IS NOT NULL AND char_length(v_contact_name) > 50)
-    OR (p_contact_phone IS NOT NULL AND v_contact_phone IS NOT NULL AND char_length(v_contact_phone) > 30)
+    OR (p_address_set AND v_address IS NOT NULL AND char_length(v_address) > 200)
+    OR (p_contact_name_set AND v_contact_name IS NOT NULL AND char_length(v_contact_name) > 50)
+    OR (p_contact_phone_set AND v_contact_phone IS NOT NULL AND char_length(v_contact_phone) > 30)
     OR (p_status IS NOT NULL AND (v_status IS NULL OR v_status NOT IN ('active', 'inactive')))
     OR (
       p_name IS NULL
-      AND p_address IS NULL
-      AND p_contact_name IS NULL
-      AND p_contact_phone IS NULL
-      AND p_manager_employee_id IS NULL
+      AND NOT p_address_set
+      AND NOT p_contact_name_set
+      AND NOT p_contact_phone_set
+      AND NOT p_manager_employee_id_set
       AND p_is_default IS NULL
       AND p_status IS NULL
     )
@@ -451,9 +459,13 @@ BEGIN
     'expected_version', p_expected_version,
     'name', v_name,
     'address', v_address,
+    'address_set', p_address_set,
     'contact_name', v_contact_name,
+    'contact_name_set', p_contact_name_set,
     'contact_phone', v_contact_phone,
+    'contact_phone_set', p_contact_phone_set,
     'manager_employee_id', p_manager_employee_id,
+    'manager_employee_id_set', p_manager_employee_id_set,
     'is_default', p_is_default,
     'status', v_status,
     'actor_employee_id', p_actor_employee_id
@@ -517,7 +529,8 @@ BEGIN
       MESSAGE = 'WAREHOUSE_ACTOR_INVALID';
   END IF;
 
-  IF p_manager_employee_id IS NOT NULL
+  IF p_manager_employee_id_set
+    AND p_manager_employee_id IS NOT NULL
     AND NOT EXISTS (
       SELECT 1
       FROM public.employees AS employee
@@ -556,24 +569,15 @@ BEGIN
   END IF;
 
   v_name := COALESCE(v_name, v_warehouse.name);
-  v_address := CASE WHEN p_address IS NULL
-    THEN v_warehouse.address
-    ELSE v_address
-  END;
-  v_contact_name := CASE WHEN p_contact_name IS NULL
-    THEN v_warehouse.contact_name
-    ELSE v_contact_name
-  END;
-  v_contact_phone := CASE WHEN p_contact_phone IS NULL
-    THEN v_warehouse.contact_phone
-    ELSE v_contact_phone
-  END;
+  v_address := CASE WHEN p_address_set THEN v_address ELSE v_warehouse.address END;
+  v_contact_name := CASE WHEN p_contact_name_set THEN v_contact_name ELSE v_warehouse.contact_name END;
+  v_contact_phone := CASE WHEN p_contact_phone_set THEN v_contact_phone ELSE v_warehouse.contact_phone END;
   v_status := COALESCE(v_status, v_warehouse.status);
   v_is_default := COALESCE(p_is_default, v_warehouse.is_default);
-  v_manager_employee_id := COALESCE(
-    p_manager_employee_id,
-    v_warehouse.manager_employee_id
-  );
+  v_manager_employee_id := CASE
+    WHEN p_manager_employee_id_set THEN p_manager_employee_id
+    ELSE v_warehouse.manager_employee_id
+  END;
 
   IF v_is_default AND v_status <> 'active' THEN
     RAISE EXCEPTION USING
@@ -804,9 +808,13 @@ REVOKE ALL ON FUNCTION public.update_tenant_warehouse(
   integer,
   text,
   text,
+  boolean,
   text,
+  boolean,
   text,
+  boolean,
   uuid,
+  boolean,
   boolean,
   text,
   uuid,
@@ -819,9 +827,13 @@ REVOKE ALL ON FUNCTION public.update_tenant_warehouse(
   integer,
   text,
   text,
+  boolean,
   text,
+  boolean,
   text,
+  boolean,
   uuid,
+  boolean,
   boolean,
   text,
   uuid,
@@ -834,9 +846,13 @@ GRANT EXECUTE ON FUNCTION public.update_tenant_warehouse(
   integer,
   text,
   text,
+  boolean,
   text,
+  boolean,
   text,
+  boolean,
   uuid,
+  boolean,
   boolean,
   text,
   uuid,

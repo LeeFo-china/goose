@@ -77,8 +77,10 @@ describe('warehouse foundation migration', () => {
     );
     expect(functionSignature(sql, 'update_tenant_warehouse')).toBe(
       'p_warehouse_id uuid, p_tenant_id uuid, p_expected_version integer, ' +
-        'p_name text, p_address text, p_contact_name text, ' +
-        'p_contact_phone text, p_manager_employee_id uuid, ' +
+        'p_name text, p_address text, p_address_set boolean, ' +
+        'p_contact_name text, p_contact_name_set boolean, ' +
+        'p_contact_phone text, p_contact_phone_set boolean, ' +
+        'p_manager_employee_id uuid, p_manager_employee_id_set boolean, ' +
         'p_is_default boolean, p_status text, p_actor_user_id uuid, ' +
         'p_actor_employee_id uuid, p_idempotency_key text',
     );
@@ -124,8 +126,13 @@ describe('warehouse foundation migration', () => {
     expect(updateBody).toContain(
       "v_name := COALESCE(v_name, v_warehouse.name)",
     );
+    expect(updateBody).toContain('OR p_address_set IS NULL');
+    expect(updateBody).toContain('AND NOT p_address_set');
+    expect(updateBody).toContain('OR p_contact_name_set IS NULL');
+    expect(updateBody).toContain('OR p_contact_phone_set IS NULL');
+    expect(updateBody).toContain('OR p_manager_employee_id_set IS NULL');
     expect(updateBody).toContain(
-      'v_address := CASE WHEN p_address IS NULL',
+      'v_address := CASE WHEN p_address_set THEN v_address ELSE v_warehouse.address END',
     );
     expect(updateBody).toContain(
       "v_status := COALESCE(v_status, v_warehouse.status)",
@@ -134,9 +141,7 @@ describe('warehouse foundation migration', () => {
       'v_is_default := COALESCE(p_is_default, v_warehouse.is_default)',
     );
     expect(updateBody).toContain('v_manager_employee_id uuid');
-    expect(updateBody).toContain(
-      'v_manager_employee_id := COALESCE(',
-    );
+    expect(updateBody).toContain('WHEN p_manager_employee_id_set THEN p_manager_employee_id');
     expect(updateBody).toContain(
       'manager_employee_id = v_manager_employee_id',
     );
