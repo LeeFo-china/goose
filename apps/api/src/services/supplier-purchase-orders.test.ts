@@ -8,6 +8,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
 const TENANT_ID = "61000000-0000-4000-8000-000000000001";
 const ORDER_ID = "61000000-0000-4000-8000-000000000002";
+const OTHER_ORDER_ID = "61000000-0000-4000-8000-000000000012";
 const PROJECT_ID = "61000000-0000-4000-8000-000000000003";
 const RELATIONSHIP_ID = "61000000-0000-4000-8000-000000000004";
 const OTHER_RELATIONSHIP_ID = "61000000-0000-4000-8000-000000000005";
@@ -25,6 +26,8 @@ const auth = {
   permissions: [],
 } as unknown as AuthContext;
 type ShareStatus = {
+  status: "active" | null;
+  expires_at: string | null;
   viewed_count: number;
   last_viewed_at: string | null;
   confirmed_at: string | null;
@@ -71,7 +74,10 @@ function dependencies(orderOverrides: Record<string, unknown> = {}) {
       cancel: mock(async (input: unknown) => ({ input })),
     },
     shareLinks: {
+      getShareStatuses: mock(async (): Promise<Record<string, ShareStatus>> => ({})),
       getShareStatus: mock(async (): Promise<ShareStatus> => ({
+        status: null,
+        expires_at: null,
         viewed_count: 0,
         last_viewed_at: null,
         confirmed_at: null,
@@ -195,6 +201,74 @@ describe("SupplierPurchaseOrdersService", () => {
     });
   });
 
+  test("returns purchase order share status on list rows", async () => {
+    const deps = dependencies();
+    deps.repository.listOrders.mockImplementation(async () => ({
+      list: [
+        {
+          id: ORDER_ID,
+          tenant_id: TENANT_ID,
+          project_id: PROJECT_ID,
+          tenant_supplier_id: RELATIONSHIP_ID,
+        },
+        {
+          id: OTHER_ORDER_ID,
+          tenant_id: TENANT_ID,
+          project_id: PROJECT_ID,
+          tenant_supplier_id: OTHER_RELATIONSHIP_ID,
+        },
+      ],
+      pagination: { page: 1, pageSize: 20, total: 2, totalPages: 1 },
+    }));
+    deps.shareLinks.getShareStatuses.mockImplementation(async () => ({
+      [ORDER_ID]: {
+        status: "active",
+        expires_at: "2026-10-05T00:00:00.000Z",
+        viewed_count: 2,
+        last_viewed_at: "2026-09-05T04:50:00.000Z",
+        confirmed_at: "2026-09-05T04:51:00.000Z",
+        confirm_remark: "供应商已确认",
+      },
+    }));
+    const { SupplierPurchaseOrdersService } = await import(
+      "./supplier-purchase-orders"
+    );
+    const service = new SupplierPurchaseOrdersService(deps as never);
+
+    const result = await service.listOrders(auth, { page: 1, pageSize: 20 });
+
+    expect(deps.shareLinks.getShareStatuses).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      orderIds: [ORDER_ID, OTHER_ORDER_ID],
+      checkedAt: "2026-07-29T08:00:00.000Z",
+    });
+    expect(deps.shareLinks.getShareStatus).not.toHaveBeenCalled();
+    expect(result.list).toEqual([
+      expect.objectContaining({
+        id: ORDER_ID,
+        share_status: {
+          status: "active",
+          expires_at: "2026-10-05T00:00:00.000Z",
+          viewed_count: 2,
+          last_viewed_at: "2026-09-05T04:50:00.000Z",
+          confirmed_at: "2026-09-05T04:51:00.000Z",
+          confirm_remark: "供应商已确认",
+        },
+      }),
+      expect.objectContaining({
+        id: OTHER_ORDER_ID,
+        share_status: {
+          status: null,
+          expires_at: null,
+          viewed_count: 0,
+          last_viewed_at: null,
+          confirmed_at: null,
+          confirm_remark: null,
+        },
+      }),
+    ]);
+  });
+
   test("requires project.read for detail and item reads", async () => {
     const deps = dependencies();
     const { SupplierPurchaseOrdersService } = await import(
@@ -221,6 +295,8 @@ describe("SupplierPurchaseOrdersService", () => {
   test("returns purchase order share status on detail reads", async () => {
     const deps = dependencies();
     deps.shareLinks.getShareStatus.mockImplementation(async () => ({
+      status: "active",
+      expires_at: "2026-10-05T00:00:00.000Z",
       viewed_count: 3,
       last_viewed_at: "2026-09-05T02:00:00.000Z",
       confirmed_at: "2026-09-05T01:00:00.000Z",

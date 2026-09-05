@@ -45,6 +45,7 @@ type SharingRepositoryPort = Pick<
   | "findActiveShareLinkByToken"
   | "recordViewed"
   | "confirmViewed"
+  | "ensureFulfillmentFromShareConfirmation"
   | "getOrderSnapshot"
   | "getBatchOrderSnapshots"
   | "getShareStatus"
@@ -213,6 +214,11 @@ export class SupplierPurchaseOrderSharingService {
     const link = await this.requirePublicLink(token);
     const confirmed = await this.repository.confirmViewed({
       link,
+      confirmedAt: input.confirmed_at,
+      remark: input.remark ?? null,
+    });
+    await this.repository.ensureFulfillmentFromShareConfirmation({
+      link: confirmed,
       confirmedAt: input.confirmed_at,
       remark: input.remark ?? null,
     });

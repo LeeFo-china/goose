@@ -2,10 +2,12 @@ import { describe, expect, test } from "bun:test";
 
 import {
   SupplierPurchaseOrderSharingRepository,
+  type SupplierPurchaseOrderShareLink,
 } from "@/repositories/supplier-purchase-order-sharing";
 
 const TENANT_ID = "64000000-0000-4000-8000-000000000001";
 const ORDER_ID = "64000000-0000-4000-8000-000000000002";
+const OTHER_ORDER_ID = "64000000-0000-4000-8000-000000000007";
 const LINK_ID = "64000000-0000-4000-8000-000000000003";
 const TENANT_SUPPLIER_ID = "64000000-0000-4000-8000-000000000004";
 const SUPPLIER_ID = "64000000-0000-4000-8000-000000000005";
@@ -41,6 +43,8 @@ describe("SupplierPurchaseOrderSharingRepository", () => {
     });
 
     expect(status).toEqual({
+      status: "active",
+      expires_at: "2026-10-05T00:00:00.000Z",
       viewed_count: 5,
       last_viewed_at: "2026-09-05T03:00:00.000Z",
       confirmed_at: "2026-09-05T04:00:00.000Z",
@@ -88,10 +92,101 @@ describe("SupplierPurchaseOrderSharingRepository", () => {
     });
 
     expect(status).toEqual({
+      status: "active",
+      expires_at: "2026-10-05T00:00:00.000Z",
       viewed_count: 1,
       last_viewed_at: "2026-09-05T01:00:00.000Z",
       confirmed_at: null,
       confirm_remark: null,
+    });
+  });
+
+  test("aggregates share-link status for a paginated order list", async () => {
+    const fixture = createClient([
+      shareLink({
+        id: "64000000-0000-4000-8000-000000000011",
+        supplier_purchase_order_id: ORDER_ID,
+        viewed_count: 1,
+        last_viewed_at: "2026-09-05T01:00:00.000Z",
+        confirmed_at: "2026-09-05T02:00:00.000Z",
+        confirm_remark: "第一次确认",
+      }),
+      shareLink({
+        id: "64000000-0000-4000-8000-000000000012",
+        supplier_purchase_order_id: ORDER_ID,
+        viewed_count: 4,
+        last_viewed_at: "2026-09-05T03:00:00.000Z",
+        confirmed_at: "2026-09-05T04:00:00.000Z",
+        confirm_remark: "最新确认",
+        expires_at: "2026-11-05T00:00:00.000Z",
+      }),
+      shareLink({
+        id: "64000000-0000-4000-8000-000000000013",
+        supplier_purchase_order_id: OTHER_ORDER_ID,
+        viewed_count: 2,
+        last_viewed_at: "2026-09-05T05:00:00.000Z",
+      }),
+    ]);
+    const repository = new SupplierPurchaseOrderSharingRepository(
+      () => fixture.client,
+    );
+
+    const statuses = await repository.getShareStatuses({
+      tenantId: TENANT_ID,
+      orderIds: [ORDER_ID, OTHER_ORDER_ID],
+      checkedAt: CHECKED_AT,
+    });
+
+    expect(statuses).toEqual({
+      [ORDER_ID]: {
+        status: "active",
+        expires_at: "2026-11-05T00:00:00.000Z",
+        viewed_count: 5,
+        last_viewed_at: "2026-09-05T03:00:00.000Z",
+        confirmed_at: "2026-09-05T04:00:00.000Z",
+        confirm_remark: "最新确认",
+      },
+      [OTHER_ORDER_ID]: {
+        status: "active",
+        expires_at: "2026-10-05T00:00:00.000Z",
+        viewed_count: 2,
+        last_viewed_at: "2026-09-05T05:00:00.000Z",
+        confirmed_at: null,
+        confirm_remark: null,
+      },
+    });
+    expect(fixture.calls).toContainEqual({
+      method: "in",
+      args: ["supplier_purchase_order_id", [ORDER_ID, OTHER_ORDER_ID]],
+    });
+    expect(fixture.calls).toContainEqual({ method: "limit", args: [2000] });
+  });
+
+  test("delegates supplier share confirmation fulfillment to RPC", async () => {
+    const fixture = createClient([]);
+    const repository = new SupplierPurchaseOrderSharingRepository(
+      () => fixture.client,
+    );
+
+    await repository.ensureFulfillmentFromShareConfirmation({
+      link: shareLink({
+        confirmed_at: "2026-09-05T04:00:00.000Z",
+        confirm_remark: "供应商确认收到",
+      }),
+      confirmedAt: "2026-09-05T04:00:00.000Z",
+      remark: "供应商确认收到",
+    });
+
+    expect(fixture.calls).toContainEqual({
+      method: "rpc",
+      args: [
+        "ensure_supplier_purchase_order_fulfillment_from_share_link",
+        {
+          p_share_link_id: LINK_ID,
+          p_confirmed_at: "2026-09-05T04:00:00.000Z",
+          p_remark: "供应商确认收到",
+        },
+      ],
     });
   });
 });
@@ -199,11 +294,17 @@ function createClient(data: unknown[]) {
         calls.push({ method: "from", args: [table] });
         return new Query();
       },
+      rpc(name: string, params: Record<string, unknown>) {
+        calls.push({ method: "rpc", args: [name, params] });
+        return Promise.resolve({ data: { status: "confirmed" }, error: null });
+      },
     },
   };
 }
 
-function shareLink(overrides: Record<string, unknown> = {}) {
+function shareLink(
+  overrides: Partial<SupplierPurchaseOrderShareLink> = {},
+): SupplierPurchaseOrderShareLink {
   return {
     id: LINK_ID,
     tenant_id: TENANT_ID,

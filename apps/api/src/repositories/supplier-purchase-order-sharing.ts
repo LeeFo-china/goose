@@ -10,30 +10,10 @@ import {
 } from "@/repositories/supplier-purchase-order-records";
 import { SupabaseDB } from "@/utils/supabase";
 
-const SHARE_LINK_SELECT = [
-  "id",
-  "tenant_id",
-  "supplier_purchase_order_id",
-  "tenant_supplier_id",
-  "supplier_id",
-  "share_token",
-  "status",
-  "expires_at",
-  "created_by_employee_id",
-  "idempotency_key",
-  "last_viewed_at",
-  "viewed_count",
-  "confirmed_at",
-  "confirm_remark",
-  "created_at",
-  "updated_at",
-].join(",");
-const SHARE_STATUS_SELECT = [
-  "last_viewed_at",
-  "viewed_count",
-  "confirmed_at",
-  "confirm_remark",
-].join(",");
+const SHARE_LINK_SELECT =
+  "id,tenant_id,supplier_purchase_order_id,tenant_supplier_id,supplier_id,share_token,status,expires_at,created_by_employee_id,idempotency_key,last_viewed_at,viewed_count,confirmed_at,confirm_remark,created_at,updated_at";
+const SHARE_STATUS_SELECT =
+  "supplier_purchase_order_id,status,expires_at,last_viewed_at,viewed_count,confirmed_at,confirm_remark";
 const SHARE_STATUS_SCAN_LIMIT = 1000;
 
 const ORDER_EXPORT_SELECT = [
@@ -92,6 +72,9 @@ const ShareLinkRecordSchema = z.object({
   updated_at: dateTime,
 }).strict();
 const ShareStatusRecordSchema = z.object({
+  supplier_purchase_order_id: uuid,
+  status: z.enum(["active", "disabled"]),
+  expires_at: dateTime,
   last_viewed_at: dateTime.nullable(),
   viewed_count: z.number().int().nonnegative(),
   confirmed_at: dateTime.nullable(),
@@ -110,11 +93,15 @@ const ExportOrderSchema = SupplierPurchaseOrderWithReferencesSchema.extend({
 export type SupplierPurchaseOrderShareLink =
   z.infer<typeof ShareLinkRecordSchema>;
 export type SupplierPurchaseOrderShareStatus = {
+  status: "active" | null;
+  expires_at: string | null;
   viewed_count: number;
   last_viewed_at: string | null;
   confirmed_at: string | null;
   confirm_remark: string | null;
 };
+export type SupplierPurchaseOrderShareStatuses =
+  Record<string, SupplierPurchaseOrderShareStatus>;
 export type SupplierPurchaseOrderExportOrder =
   z.infer<typeof ExportOrderSchema>;
 export type SupplierPurchaseOrderExportSnapshot = {
@@ -145,6 +132,10 @@ type Query = {
 };
 type Client = {
   from: (table: string) => Query;
+  rpc: (
+    name: string,
+    params: Record<string, unknown>,
+  ) => PromiseLike<SingleResult>;
 };
 
 export class SupplierPurchaseOrderSharingRepository {
@@ -251,6 +242,32 @@ export class SupplierPurchaseOrderSharingRepository {
     );
   }
 
+  async getShareStatuses(input: {
+    tenantId: string;
+    orderIds: readonly string[];
+    checkedAt: string;
+  }): Promise<SupplierPurchaseOrderShareStatuses> {
+    if (input.orderIds.length === 0) return {};
+    const { data, error } = await this.client
+      .from("supplier_purchase_order_share_links")
+      .select(SHARE_STATUS_SELECT)
+      .eq("tenant_id", input.tenantId)
+      .in("supplier_purchase_order_id", input.orderIds)
+      .eq("status", "active")
+      .gt("expires_at", input.checkedAt)
+      .order("updated_at", { ascending: false })
+      .limit(input.orderIds.length * SHARE_STATUS_SCAN_LIMIT);
+    if (error) throw Errors.dbError("查询采购单分享状态失败", error);
+
+    return summarizeShareStatuses(
+      parseRows(
+        ShareStatusRecordSchema,
+        data,
+        "查询采购单分享状态失败",
+      ),
+    );
+  }
+
   async recordViewed(link: SupplierPurchaseOrderShareLink, viewedAt: string) {
     const { data, error } = await this.client
       .from("supplier_purchase_order_share_links")
@@ -281,6 +298,22 @@ export class SupplierPurchaseOrderSharingRepository {
       .single();
     if (error) throw Errors.dbError("确认采购单分享查看失败", error);
     return parseLink(data, "确认采购单分享查看失败");
+  }
+
+  async ensureFulfillmentFromShareConfirmation(input: {
+    link: SupplierPurchaseOrderShareLink;
+    confirmedAt: string;
+    remark: string | null;
+  }) {
+    const { error } = await this.client.rpc(
+      "ensure_supplier_purchase_order_fulfillment_from_share_link",
+      {
+        p_share_link_id: input.link.id,
+        p_confirmed_at: input.confirmedAt,
+        p_remark: input.remark,
+      },
+    );
+    if (error) throw Errors.dbError("同步采购单分享确认履约失败", error);
   }
 
   async getOrderSnapshot(tenantId: string, orderId: string) {
@@ -378,6 +411,8 @@ function summarizeShareStatus(
     (status, link) => {
       const confirmedAt = latestDate(status.confirmed_at, link.confirmed_at);
       return {
+        status: "active",
+        expires_at: latestDate(status.expires_at, link.expires_at),
         viewed_count: status.viewed_count + link.viewed_count,
         last_viewed_at: latestDate(status.last_viewed_at, link.last_viewed_at),
         confirmed_at: confirmedAt,
@@ -386,13 +421,43 @@ function summarizeShareStatus(
           : status.confirm_remark,
       };
     },
-    {
-      viewed_count: 0,
-      last_viewed_at: null,
-      confirmed_at: null,
-      confirm_remark: null,
-    },
+    emptyShareStatus(),
   );
+}
+
+function summarizeShareStatuses(
+  links: Array<z.infer<typeof ShareStatusRecordSchema>>,
+): SupplierPurchaseOrderShareStatuses {
+  return Object.fromEntries(
+    Array.from(groupByOrderId(links).entries())
+      .map(([orderId, orderLinks]) => [
+        orderId,
+        summarizeShareStatus(orderLinks),
+      ]),
+  );
+}
+
+function groupByOrderId(links: Array<z.infer<typeof ShareStatusRecordSchema>>) {
+  const groups =
+    new Map<string, Array<z.infer<typeof ShareStatusRecordSchema>>>();
+  for (const link of links) {
+    groups.set(link.supplier_purchase_order_id, [
+      ...(groups.get(link.supplier_purchase_order_id) ?? []),
+      link,
+    ]);
+  }
+  return groups;
+}
+
+export function emptyShareStatus(): SupplierPurchaseOrderShareStatus {
+  return {
+    status: null,
+    expires_at: null,
+    viewed_count: 0,
+    last_viewed_at: null,
+    confirmed_at: null,
+    confirm_remark: null,
+  };
 }
 
 function latestDate(current: string | null, candidate: string | null) {

@@ -40,8 +40,8 @@ Gooes API 当前已经支持采购单和基础履约：
 | --- | --- | --- |
 | 小程序采购单详情页 | 小程序未接 | 第一阶段 |
 | 小程序履约登记 | 小程序未接 | 第一阶段 |
-| 供应商免登录查看链接 | 后端未实现 | 第二阶段 |
-| 供应商确认收到采购单 | 后端未实现供应商端动作 | 第二阶段或第四阶段 |
+| 供应商免登录查看链接 | 已有 | 第二阶段 |
+| 供应商确认收到采购单 | 已有，确认后自动确保履约头存在 | 第二阶段 |
 | PDF 导出 | 后端未实现 | 第三阶段 |
 | Excel 导出 | 后端未实现 | 第三阶段 |
 | 批次维度 ZIP / 多 sheet 导出 | 后端未实现 | 第三阶段 |
@@ -58,7 +58,7 @@ Gooes API 当前已经支持采购单和基础履约：
 → 员工查看采购单详情
 → 员工发送/交付给供应商
 → 供应商查看或确认收到
-→ 发货登记
+→ 等待到货/可选发货登记
 → 收货核对
 → 差异记录
 → 差异处理闭环
@@ -319,9 +319,10 @@ draft | submitted | cancelled
 
 | 后端状态 | 小程序建议文案 | 可展示动作 |
 | --- | --- | --- |
-| `fulfillment = null` | 待供应商确认 | 确认供应商已收到 |
-| `confirmed` | 待发货 | 登记发货 |
-| `partially_shipped` | 部分发货 | 登记发货、登记收货 |
+| `fulfillment = null` 且无 `share_status.confirmed_at` | 待确认 | 发送给供应商/确认供应商已收到 |
+| `fulfillment = null` 且有 `share_status.confirmed_at` | 待收货 | 刷新详情后登记收货 |
+| `confirmed` | 待收货 | 登记收货；如业务需要仍可登记发货 |
+| `partially_shipped` | 待收货 | 登记发货、登记收货 |
 | `shipped` | 待收货 | 登记收货 |
 | `partially_received` | 部分收货 | 登记收货 |
 | `received` | 已收货 | 无 |
@@ -347,7 +348,7 @@ variance_reason = null
 第一阶段处理：
 
 - 只登记本次实际收到数量。
-- 未收到的剩余数量继续保留为待发货或待收货。
+- 未收到的剩余数量继续保留为待收货。
 - 不把少收数量填入 `rejected_quantity`。
 
 原因：
@@ -606,7 +607,7 @@ src/app.config.ts
 | 场景 | 采购批次号 | 采购批次 ID | 采购单号 | 采购单 ID | 履约状态 | 说明 |
 | --- | --- | --- | --- | --- | --- | --- |
 | 未确认履约 | `PB-20260903-00000015` | `e4e5d97c-96b6-4934-b86c-fc680399ee6f` | `PO-20260904-00000075` | `2b988a41-90ce-4d63-8806-c7adea6d13bd` | `fulfillment = null` | 用于验证“确认供应商已收到 / 确认履约”按钮 |
-| 已确认待发货 | `PB-20260901-00000011` | `6a76fd79-bf8c-4f89-8e5d-1cee4fe6c87d` | `PO-20260901-00000074` | `b89d1c6a-3e3c-4bf6-9c35-1e344eb8d81c` | `confirmed` | 已确认，未发货 |
+| 已确认待收货 | `PB-20260901-00000011` | `6a76fd79-bf8c-4f89-8e5d-1cee4fe6c87d` | `PO-20260901-00000074` | `b89d1c6a-3e3c-4bf6-9c35-1e344eb8d81c` | `confirmed` | 已确认，未收货 |
 | 已发货待收货 | `PB-20260901-00000010` | `b33528c9-24a1-4989-8117-97b009d6381a` | `PO-20260901-00000073` | `ca81853e-37dd-4d02-b497-917af7e60ed5` | `shipped` | 已发 1 箱，未收货 |
 | 部分收货 | `PB-20260901-00000009` | `fe2814f2-1152-4ddf-98a4-174301388430` | `PO-20260901-00000072` | `30956dba-7a76-4a09-8973-083a9aa6a990` | `partially_received` | 已发 1 箱，已合格收货 0.5 箱 |
 | 异常收货 | `PB-20260901-00000008` | `e5104fc7-02d7-4187-bd28-6691a398256c` | `PO-20260901-00000071` | `d0e93613-6f31-40eb-a2d1-be095b30eac7` | `received_with_variance` | 已发 1 箱，合格 0.5 箱，拒收 0.5 箱，原因：破损 |
@@ -877,6 +878,9 @@ GET /supplier-purchase-orders/:id
 - `last_viewed_at` 取有效链接里最新查看时间。
 - `confirmed_at` 取有效链接里最新确认时间。
 - `confirm_remark` 跟随最新 `confirmed_at` 所属链接。
+- 供应商公开确认后，后端会自动确保该采购单存在
+  `supplier_purchase_order_fulfillments` 记录；员工详情页刷新后即可基于
+  fulfillment `version` 登记收货。
 - 没有有效分享链接时返回：
 
 ```json
@@ -887,6 +891,39 @@ GET /supplier-purchase-orders/:id
   "confirm_remark": null
 }
 ```
+
+### 17.1.2 员工侧采购单列表筛选口径
+
+采购管理页建议移除“待发货”筛选入口，保留：
+
+```text
+全部 / 待确认 / 待收货 / 部分收货 / 已收货 / 收货异常 / 已取消
+```
+
+接口仍使用：
+
+```http
+GET /supplier-purchase-orders?page=1&pageSize=20&fulfillmentStatus=<status>
+```
+
+筛选口径：
+
+| 小程序筛选 | 请求参数 | 后端分页前匹配规则 |
+| --- | --- | --- |
+| 待确认 | `fulfillmentStatus=unconfirmed` | `submitted` 采购单，未建履约，且没有有效分享确认 |
+| 待收货 | `fulfillmentStatus=awaiting_receipt` | 有效分享已确认，或 fulfillment 为 `confirmed` / `partially_shipped` / `shipped` |
+| 部分收货 | `fulfillmentStatus=partially_received` | fulfillment 为 `partially_received` |
+| 已收货 | `fulfillmentStatus=received` | fulfillment 为 `received` |
+| 收货异常 | `fulfillmentStatus=received_with_variance` | fulfillment 为 `received_with_variance` |
+| 已取消 | `fulfillmentStatus=cancelled` | 采购单取消或 fulfillment 取消 |
+
+兼容说明：
+
+- 后端暂不移除 `fulfillmentStatus=confirmed`，用于兼容旧客户端和历史调试；
+  Orange 新入口不要再展示“待发货”。
+- `awaiting_receipt` 是服务端分页前过滤，不需要小程序本地二次过滤。
+- 列表项仍返回真实 `fulfillment_status` 和聚合 `share_status`。小程序显示文案
+  应把 `confirmed`、`partially_shipped`、`shipped` 统一归为“待收货”。
 
 ### 17.2 供应商公开查看
 
@@ -922,7 +959,10 @@ body：
 
 说明：
 
-- 这是“供应商确认看到了采购单”，不是员工侧的“确认履约”。
+- 这是“供应商确认看到了采购单”。
+- 后端会根据分享链接创建人自动确保采购单履约头存在；如果履约已存在，
+  确认接口保持幂等，不重复创建。
+- 员工侧不再需要把该状态展示成“待发货”，应进入“待收货”。
 - 已确认后重复提交按幂等结果返回，不改变第一次确认时间。
 
 ### 17.4 员工侧采购单预览与导出

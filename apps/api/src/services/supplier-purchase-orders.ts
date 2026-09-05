@@ -1,5 +1,6 @@
 import { Errors } from "@/errors/error-factory";
 import {
+  emptyShareStatus,
   supplierPurchaseOrderSharingRepository,
   type SupplierPurchaseOrderShareStatus,
 } from "@/repositories/supplier-purchase-order-sharing";
@@ -49,7 +50,7 @@ type PurchaseOrderRepositoryPort = Pick<
 >;
 type PurchaseOrderSharingRepositoryPort = Pick<
   typeof supplierPurchaseOrderSharingRepository,
-  "getShareStatus"
+  "getShareStatus" | "getShareStatuses"
 >;
 type TenantSupplierEligibilityPort = Pick<
   typeof tenantSuppliersService,
@@ -103,7 +104,18 @@ export class SupplierPurchaseOrdersService {
         ? { tenant_supplier_id: query.tenantSupplierId }
         : {}),
     });
-    return attachSupplierPurchaseOrderPagePersonnel(page);
+    const projectedPage = attachSupplierPurchaseOrderPagePersonnel(page);
+    const shareStatuses = await this.getShareStatuses(
+      scope.tenantId,
+      projectedPage.list.map((order) => order.id),
+    );
+    return {
+      ...projectedPage,
+      list: projectedPage.list.map((order) => ({
+        ...order,
+        share_status: shareStatuses[order.id] ?? emptyShareStatus(),
+      })),
+    };
   }
 
   async getOrder(auth: AuthContext, orderId: string) {
@@ -276,6 +288,18 @@ export class SupplierPurchaseOrdersService {
     return this.shareLinks.getShareStatus({
       tenantId,
       orderId,
+      checkedAt: this.nowFactory().toISOString(),
+    });
+  }
+
+  private getShareStatuses(
+    tenantId: string,
+    orderIds: readonly string[],
+  ): Promise<Record<string, SupplierPurchaseOrderShareStatus>> {
+    const uniqueOrderIds = Array.from(new Set(orderIds));
+    return this.shareLinks.getShareStatuses({
+      tenantId,
+      orderIds: uniqueOrderIds,
       checkedAt: this.nowFactory().toISOString(),
     });
   }

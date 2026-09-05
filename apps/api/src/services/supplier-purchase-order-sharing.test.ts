@@ -30,6 +30,8 @@ describe("SupplierPurchaseOrderSharingService", () => {
       findShareLinkByIdempotency: mock(async () => existing),
       createShareLink: mock(async () => shareLink()),
       getShareStatus: mock(async () => ({
+        status: "active",
+        expires_at: "2026-10-04T00:00:00.000Z",
         viewed_count: 4,
         last_viewed_at: "2026-09-05T02:00:00.000Z",
         confirmed_at: "2026-09-05T01:00:00.000Z",
@@ -90,6 +92,7 @@ describe("SupplierPurchaseOrderSharingService", () => {
       recordViewed: mock(async () => ({ ...link, viewed_count: 2 })),
       getOrderSnapshot: mock(async () => snapshot("submitted")),
       confirmViewed: mock(async () => confirmed),
+      ensureFulfillmentFromShareConfirmation: mock(async () => undefined),
     };
     const service = serviceWith({ repository });
 
@@ -109,6 +112,12 @@ describe("SupplierPurchaseOrderSharingService", () => {
       confirmed_at: "2026-09-04T01:00:00.000Z",
       idempotent: false,
     });
+    expect(repository.ensureFulfillmentFromShareConfirmation)
+      .toHaveBeenCalledWith({
+        link: confirmed,
+        confirmedAt: "2026-09-04T01:00:00+00:00",
+        remark: null,
+      });
   });
 
   test("exports a batch after asserting batch project access", async () => {
