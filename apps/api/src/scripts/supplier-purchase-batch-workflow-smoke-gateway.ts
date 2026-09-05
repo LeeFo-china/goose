@@ -168,11 +168,11 @@ class PostgresSupplierPurchaseBatchWorkflowSmokeGateway
   }): Promise<SupplierPurchaseBatchWorkflowSmokeExecutionFacts> {
     const batchId = crypto.randomUUID();
     const idempotencyPrefix = `${input.fixturePrefix}:${input.requestId}`;
-    const draftItems = JSON.stringify([{
+    const draftItems = [{
       supplier_sku_id: input.prerequisites.supplierSkuId,
       cost_category_id: input.prerequisites.costCategoryId,
       quantity: "1",
-    }]);
+    }];
     const saved = await this.database<Array<{ result: unknown }>>`
       SELECT public.save_supplier_purchase_batch_draft(
         ${batchId}::uuid, ${input.targets.tenantId}::uuid,
