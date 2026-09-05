@@ -16,6 +16,18 @@ export type SupplierPurchaseOrderExportFile = {
 const PDF_CONTENT_TYPE = "application/pdf";
 const XLSX_CONTENT_TYPE =
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const EXCEL_FONT = "Microsoft YaHei";
+const EXCEL_MONEY_FORMAT = '"¥"#,##0.00';
+const EXCEL_QUANTITY_FORMAT = "#,##0.####";
+const PURCHASE_ORDER_COLUMNS = [
+  { width: 8 },
+  { width: 28 },
+  { width: 24 },
+  { width: 12 },
+  { width: 10 },
+  { width: 14 },
+  { width: 14 },
+] as const;
 
 export function toPurchaseOrderPrintPreview(
   snapshot: SupplierPurchaseOrderExportSnapshot,
@@ -160,65 +172,139 @@ function appendOrderWorksheet(
   name: string,
 ) {
   const worksheet = workbook.addWorksheet(name.slice(0, 31));
-  worksheet.columns = [
-    { header: "字段", key: "field", width: 18 },
-    { header: "值", key: "value", width: 36 },
-  ];
-  worksheet.addRows([
-    { field: "采购单号", value: snapshot.order.order_no },
-    { field: "供应商", value: snapshot.order.supplier.name },
-    { field: "项目", value: snapshot.order.project.name },
-    { field: "项目地址", value: snapshot.order.project.address ?? "" },
-    {
-      field: "预计到货",
-      value: snapshot.order.expected_delivery_date ?? "",
+  workbook.calcProperties.fullCalcOnLoad = true;
+  worksheet.properties.defaultRowHeight = 22;
+  worksheet.pageSetup = {
+    orientation: "landscape",
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 0,
+    margins: {
+      left: 0.4,
+      right: 0.4,
+      top: 0.6,
+      bottom: 0.6,
+      header: 0.2,
+      footer: 0.2,
     },
-    { field: "备注", value: snapshot.order.remark ?? "" },
-  ]);
+  };
+  PURCHASE_ORDER_COLUMNS.forEach((column, index) => {
+    worksheet.getColumn(index + 1).width = column.width;
+  });
+
+  [
+    ["采购单号", snapshot.order.order_no],
+    ["供应商", snapshot.order.supplier.name],
+    ["项目", snapshot.order.project.name],
+    ["项目地址", snapshot.order.project.address ?? ""],
+    ["预计到货", snapshot.order.expected_delivery_date ?? ""],
+    ["备注", snapshot.order.remark ?? ""],
+  ].forEach(([label, value], index) => {
+    const rowNumber = index + 1;
+    worksheet.mergeCells(rowNumber, 1, rowNumber, 7);
+    const cell = worksheet.getCell(rowNumber, 1);
+    cell.value = `${label}：${value || "-"}`;
+    cell.font = { name: EXCEL_FONT, size: 11 };
+    cell.alignment = { vertical: "middle", wrapText: true };
+  });
+
   worksheet.addRow([]);
-  worksheet.addRow([
+  const headerRow = worksheet.addRow([
     "序号",
-    "商品",
-    "SKU",
-    "规格",
-    "型号",
+    "材料",
+    "规格/型号",
     "数量",
     "单位",
     "单价",
-    "小计",
-    "税额",
     "合计",
   ]);
+  headerRow.eachCell((cell) => {
+    cell.font = { name: EXCEL_FONT, size: 11, bold: true };
+    cell.alignment = { horizontal: "center", vertical: "middle" };
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFE5E7EB" },
+    };
+    cell.border = thinBorder();
+  });
+
+  const firstItemRow = headerRow.number + 1;
   for (const item of snapshot.items) {
-    worksheet.addRow([
+    const row = worksheet.addRow([
       item.line_no,
       item.product_name_snapshot,
-      item.sku_name_snapshot,
-      item.specification_snapshot ?? "",
-      item.model_snapshot ?? "",
+      specificationText(item),
       Number(item.quantity),
       item.purchase_unit_symbol_snapshot,
       Number(item.unit_price),
-      Number(item.subtotal_amount),
-      Number(item.tax_amount),
-      Number(item.total_amount),
+      {
+        formula: `D${worksheet.rowCount + 1}*F${worksheet.rowCount + 1}`,
+        result: Number(item.quantity) * Number(item.unit_price),
+      },
     ]);
+    styleItemRow(row);
   }
-  worksheet.addRow([]);
-  worksheet.addRow([
-    "合计",
+  const lastItemRow = worksheet.rowCount;
+  const summaryFormula = snapshot.items.length > 0
+    ? `SUM(G${firstItemRow}:G${lastItemRow})`
+    : "0";
+  const summaryRow = worksheet.addRow([
+    "汇总",
     "",
     "",
     "",
     "",
     "",
-    "",
-    "",
-    Number(snapshot.order.subtotal_amount),
-    Number(snapshot.order.tax_amount),
-    Number(snapshot.order.total_amount),
+    {
+      formula: summaryFormula,
+      result: snapshot.items.reduce(
+        (total, item) => total + Number(item.quantity) * Number(item.unit_price),
+        0,
+      ),
+    },
   ]);
-  worksheet.getRow(1).font = { bold: true };
+  worksheet.mergeCells(summaryRow.number, 1, summaryRow.number, 6);
+  summaryRow.eachCell((cell) => {
+    cell.font = { name: EXCEL_FONT, size: 11, bold: true };
+    cell.alignment = { horizontal: "center", vertical: "middle" };
+    cell.border = thinBorder();
+  });
+  summaryRow.getCell(7).numFmt = EXCEL_MONEY_FORMAT;
+}
+
+function specificationText(
+  item: SupplierPurchaseOrderExportSnapshot["items"][number],
+) {
+  return [
+    item.sku_name_snapshot,
+    item.specification_snapshot,
+    item.model_snapshot,
+  ].filter(Boolean).join(" / ") || "-";
+}
+
+function styleItemRow(row: ExcelJS.Row) {
+  row.eachCell((cell, columnNumber) => {
+    cell.font = { name: EXCEL_FONT, size: 11 };
+    cell.border = thinBorder();
+    cell.alignment = {
+      horizontal: columnNumber === 1 ? "center" : undefined,
+      vertical: "middle",
+      wrapText: columnNumber === 2 || columnNumber === 3,
+    };
+  });
+  row.getCell(4).numFmt = EXCEL_QUANTITY_FORMAT;
+  row.getCell(6).numFmt = EXCEL_MONEY_FORMAT;
+  row.getCell(7).numFmt = EXCEL_MONEY_FORMAT;
+}
+
+function thinBorder(): Partial<ExcelJS.Borders> {
+  return {
+    top: { style: "thin", color: { argb: "FFD1D5DB" } },
+    left: { style: "thin", color: { argb: "FFD1D5DB" } },
+    bottom: { style: "thin", color: { argb: "FFD1D5DB" } },
+    right: { style: "thin", color: { argb: "FFD1D5DB" } },
+  };
 }
 
 function serializeOrder(snapshot: SupplierPurchaseOrderExportSnapshot) {

@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 
 import { describe, expect, test } from "bun:test";
+import ExcelJS from "exceljs";
 
 import {
   exportPurchaseBatchXlsx,
@@ -11,6 +12,8 @@ import {
 import type {
   SupplierPurchaseOrderExportSnapshot,
 } from "@/repositories/supplier-purchase-order-sharing";
+
+type ExcelLoadBuffer = Parameters<ExcelJS.Workbook["xlsx"]["load"]>[0];
 
 describe("supplier purchase order exporters", () => {
   test("creates real xlsx and pdf files from one snapshot", async () => {
@@ -25,6 +28,43 @@ describe("supplier purchase order exporters", () => {
     expect(xlsx.content.subarray(0, 2).toString()).toBe("PK");
     expect(pdf.content_type).toBe("application/pdf");
     expect(pdf.content.subarray(0, 4).toString()).toBe("%PDF");
+  });
+
+  test("formats xlsx as a purchase order sheet instead of a field-value dump", async () => {
+    const file = await exportPurchaseOrderXlsx(sampleSnapshot());
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(file.content as unknown as ExcelLoadBuffer);
+    const worksheet = workbook.getWorksheet("采购单");
+
+    expect(worksheet).toBeDefined();
+    if (!worksheet) return;
+
+    expect(worksheet.getRow(1).values).not.toContain("字段");
+    expect(worksheet.getRow(1).values).not.toContain("值");
+    expect(worksheet.getCell("A1").value).toBe("采购单号：PO-20260904-00000001");
+    expect(worksheet.getCell("G1").isMerged).toBe(true);
+    expect(worksheet.getCell("A6").value).toBe("备注：deliver");
+    expect(worksheet.getCell("G6").isMerged).toBe(true);
+
+    expect(worksheet.getRow(8).values).toEqual([
+      undefined,
+      "序号",
+      "材料",
+      "规格/型号",
+      "数量",
+      "单位",
+      "单价",
+      "合计",
+    ]);
+    expect(worksheet.getRow(8).values).not.toContain("税额");
+    expect(worksheet.getCell("A9").alignment).toMatchObject({
+      horizontal: "center",
+      vertical: "middle",
+    });
+    expect(worksheet.getCell("B9").value).toBe("Product A");
+    expect(worksheet.getCell("C9").value).toBe("Sku A");
+    expect(worksheet.getCell("G9").formula).toBe("D9*F9");
+    expect(worksheet.getCell("G10").formula).toBe("SUM(G9:G9)");
   });
 
   test("creates pdf when configured Chinese font is a TrueType collection", async () => {
