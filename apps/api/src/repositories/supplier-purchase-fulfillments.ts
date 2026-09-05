@@ -6,6 +6,9 @@ import {
   throwSupplierCommandDatabaseError,
 } from "@/repositories/supplier-command-errors";
 import {
+  assertProjectProcurementDestination,
+} from "@/repositories/procurement-destination-records";
+import {
   SUPPLIER_PURCHASE_ORDER_FULFILLMENT_ITEM_SELECT,
   SUPPLIER_PURCHASE_ORDER_FULFILLMENT_SELECT,
   SUPPLIER_PURCHASE_ORDER_RECEIPT_SELECT,
@@ -273,7 +276,11 @@ export class SupplierPurchaseFulfillmentsRepository {
       if (envelope.status !== successStatus) {
         throw Errors.dbError(message, data);
       }
-      return envelope;
+      assertProjectProcurementDestination(envelope.purchase_order);
+      return {
+        ...envelope,
+        purchase_order: envelope.purchase_order,
+      };
     }
     throw commandEnvelopeError(envelope);
   }
@@ -293,10 +300,7 @@ function pageRange(input: PageInput): [number, number] {
 }
 
 function commandEnvelopeError(
-  envelope: Exclude<
-    z.infer<typeof SupplierPurchaseOrderFulfillmentCommandEnvelopeSchema>,
-    { purchase_order: SupplierPurchaseOrder }
-  >,
+  envelope: { status: string; error_code?: string },
 ) {
   return mapSupplierPurchaseFulfillmentEnvelopeError(
     envelope.status,

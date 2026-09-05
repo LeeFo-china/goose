@@ -12,57 +12,50 @@ import {
   SupplierPurchaseRequisitionRecordSchema,
 } from "./supplier-purchase-requisition-records";
 
-const ID = "20000000-0000-4000-8000-000000000001";
-const TENANT_ID = "20000000-0000-4000-8000-000000000002";
-const PROJECT_ID = "20000000-0000-4000-8000-000000000003";
-const TENANT_SUPPLIER_ID = "20000000-0000-4000-8000-000000000004";
-const SUPPLIER_ID = "20000000-0000-4000-8000-000000000005";
-const EMPLOYEE_ID = "20000000-0000-4000-8000-000000000006";
-const ITEM_ID = "20000000-0000-4000-8000-000000000007";
-const COST_CATEGORY_ID = "20000000-0000-4000-8000-000000000008";
-const PRODUCT_ID = "20000000-0000-4000-8000-000000000009";
-const SKU_ID = "20000000-0000-4000-8000-000000000010";
-const PRICE_LIST_ID = "20000000-0000-4000-8000-000000000011";
-const PRICE_LIST_ITEM_ID = "20000000-0000-4000-8000-000000000012";
-const PURCHASE_UNIT_ID = "20000000-0000-4000-8000-000000000013";
-const BASE_UNIT_ID = "20000000-0000-4000-8000-000000000014";
-const COMMITMENT_ID = "20000000-0000-4000-8000-000000000015";
-const PURCHASE_ORDER_ID = "20000000-0000-4000-8000-000000000016";
+const ID = "20000000-0000-4000-8000-000000000001",
+  TENANT_ID = "20000000-0000-4000-8000-000000000002",
+  PROJECT_ID = "20000000-0000-4000-8000-000000000003",
+  TENANT_SUPPLIER_ID = "20000000-0000-4000-8000-000000000004";
+const SUPPLIER_ID = "20000000-0000-4000-8000-000000000005",
+  EMPLOYEE_ID = "20000000-0000-4000-8000-000000000006",
+  ITEM_ID = "20000000-0000-4000-8000-000000000007",
+  COST_CATEGORY_ID = "20000000-0000-4000-8000-000000000008";
+const PRODUCT_ID = "20000000-0000-4000-8000-000000000009",
+  SKU_ID = "20000000-0000-4000-8000-000000000010",
+  PRICE_LIST_ID = "20000000-0000-4000-8000-000000000011",
+  PRICE_LIST_ITEM_ID = "20000000-0000-4000-8000-000000000012";
+const PURCHASE_UNIT_ID = "20000000-0000-4000-8000-000000000013",
+  BASE_UNIT_ID = "20000000-0000-4000-8000-000000000014",
+  COMMITMENT_ID = "20000000-0000-4000-8000-000000000015",
+  PURCHASE_ORDER_ID = "20000000-0000-4000-8000-000000000016",
+  WAREHOUSE_ID = "20000000-0000-4000-8000-000000000017";
 const AT = "2026-07-30T02:00:00.000Z";
 
 const requisition = {
-  id: ID,
-  tenant_id: TENANT_ID,
-  request_no: "PR-20260730-00000001",
-  project_id: PROJECT_ID,
-  tenant_supplier_id: TENANT_SUPPLIER_ID,
-  supplier_id: SUPPLIER_ID,
-  status: "pending_approval",
-  budget_status: "over_budget",
-  currency: "CNY",
-  reason: "项目现场需要首批主材",
-  expected_delivery_date: "2026-08-15",
-  remark: null,
-  priced_at: AT,
-  subtotal_amount: "100.00",
-  tax_amount: "13.00",
-  total_amount: "113.00",
-  purchase_order_id: null,
-  purchase_batch_id: null,
-  split_generation: null,
-  version: 2,
-  created_by_employee_id: EMPLOYEE_ID,
-  updated_by_employee_id: EMPLOYEE_ID,
-  submitted_by_employee_id: EMPLOYEE_ID,
-  submitted_at: AT,
-  reviewed_by_employee_id: null,
-  reviewed_at: null,
-  review_remark: null,
-  cancelled_by_employee_id: null,
-  cancelled_at: null,
-  cancel_reason: null,
-  created_at: AT,
-  updated_at: AT,
+  id: ID, tenant_id: TENANT_ID, request_no: "PR-20260730-00000001",
+  project_id: PROJECT_ID, destination_type: "project", warehouse_id: null,
+  tenant_supplier_id: TENANT_SUPPLIER_ID, supplier_id: SUPPLIER_ID,
+  status: "pending_approval", budget_status: "over_budget", currency: "CNY",
+  reason: "项目现场需要首批主材", expected_delivery_date: "2026-08-15",
+  remark: null, priced_at: AT, subtotal_amount: "100.00",
+  tax_amount: "13.00", total_amount: "113.00", purchase_order_id: null,
+  purchase_batch_id: null, split_generation: null, version: 2,
+  created_by_employee_id: EMPLOYEE_ID, updated_by_employee_id: EMPLOYEE_ID,
+  submitted_by_employee_id: EMPLOYEE_ID, submitted_at: AT,
+  reviewed_by_employee_id: null, reviewed_at: null, review_remark: null,
+  cancelled_by_employee_id: null, cancelled_at: null, cancel_reason: null,
+  created_at: AT, updated_at: AT,
+  project: { id: PROJECT_ID, name: "示范项目", status: "active" },
+  warehouse: null,
+} as const;
+
+const warehouseRequisition = {
+  ...requisition,
+  project_id: null,
+  destination_type: "warehouse",
+  warehouse_id: WAREHOUSE_ID,
+  project: null,
+  warehouse: { id: WAREHOUSE_ID, name: "中心仓", status: "active" },
 } as const;
 
 const item = {
@@ -127,6 +120,12 @@ const commitment = {
 
 describe("supplier purchase requisition database records", () => {
   test("selects every numeric database fact as text", () => {
+    expect(SUPPLIER_PURCHASE_REQUISITION_SELECT).toContain(
+      "destination_type",
+    );
+    expect(SUPPLIER_PURCHASE_REQUISITION_SELECT).toContain("warehouse_id");
+    expect(SUPPLIER_PURCHASE_REQUISITION_SELECT).toContain("project:projects!supplier_purchase_requisitions_project_tenant_fkey(id,name,status)");
+    expect(SUPPLIER_PURCHASE_REQUISITION_SELECT).toContain("warehouse:warehouses!supplier_purchase_requisitions_warehouse_tenant_fkey(id,name,status)");
     for (const field of [
       "subtotal_amount::text",
       "tax_amount::text",
@@ -153,6 +152,32 @@ describe("supplier purchase requisition database records", () => {
       "available_amount_snapshot::text",
     ]) {
       expect(PROJECT_COST_COMMITMENT_SELECT).toContain(field);
+    }
+  });
+
+  test("parses project and warehouse destination headers", () => {
+    expect(SupplierPurchaseRequisitionRecordSchema.parse(requisition))
+      .toMatchObject({ destination_type: "project", project_id: PROJECT_ID,
+        warehouse_id: null, warehouse: null });
+    expect(SupplierPurchaseRequisitionRecordSchema.parse(warehouseRequisition))
+      .toMatchObject({
+        destination_type: "warehouse",
+        project_id: null,
+        warehouse_id: WAREHOUSE_ID,
+        project: null,
+        warehouse: { id: WAREHOUSE_ID, name: "中心仓", status: "active" },
+      });
+  });
+
+  test("rejects inconsistent requisition destinations", () => {
+    for (const invalid of [
+      { ...requisition, project_id: null },
+      { ...requisition, warehouse_id: WAREHOUSE_ID },
+      { ...warehouseRequisition, project_id: PROJECT_ID },
+      { ...warehouseRequisition, warehouse_id: null },
+    ]) {
+      expect(SupplierPurchaseRequisitionRecordSchema.safeParse(invalid).success)
+        .toBe(false);
     }
   });
 

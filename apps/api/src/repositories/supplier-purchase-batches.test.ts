@@ -297,9 +297,8 @@ const costCategory = {
 };
 const project = { id: PROJECT_ID, name: "示范项目", status: "active" };
 const batch = {
-  id: BATCH_ID,
-  tenant_id: TENANT_ID,
-  project_id: PROJECT_ID,
+  id: BATCH_ID, tenant_id: TENANT_ID, project_id: PROJECT_ID,
+  destination_type: "project", warehouse_id: null,
   batch_no: "PB-20260827-00000001",
   status: "draft",
   reason: "项目主材采购",
@@ -329,7 +328,7 @@ const batch = {
   cancel_reason: null,
   created_at: AT,
   updated_at: AT,
-  project,
+  project, warehouse: null,
 } as const;
 const batchItem = {
   id: "a0000000-0000-4000-8000-000000000020",
@@ -380,10 +379,9 @@ const batchItem = {
 } as const;
 
 const requisition = {
-  id: REQUISITION_ID,
-  tenant_id: TENANT_ID,
-  request_no: "PR-20260827-00000001",
-  project_id: PROJECT_ID,
+  id: REQUISITION_ID, tenant_id: TENANT_ID,
+  request_no: "PR-20260827-00000001", project_id: PROJECT_ID,
+  destination_type: "project", warehouse_id: null,
   tenant_supplier_id: RELATIONSHIP_ID,
   supplier_id: SUPPLIER_ID,
   status: "draft",
@@ -412,12 +410,12 @@ const requisition = {
   cancel_reason: null,
   created_at: AT,
   updated_at: AT,
+  project, warehouse: null,
 } as const;
 
 const order = {
-  id: ORDER_ID,
-  tenant_id: TENANT_ID,
-  project_id: PROJECT_ID,
+  id: ORDER_ID, tenant_id: TENANT_ID, project_id: PROJECT_ID,
+  destination_type: "project", warehouse_id: null,
   tenant_supplier_id: RELATIONSHIP_ID,
   supplier_id: SUPPLIER_ID,
   order_no: "PO-20260827-00000001",
@@ -441,7 +439,7 @@ const order = {
   cancel_reason: null,
   created_at: AT,
   updated_at: AT,
-  project,
+  project, warehouse: null,
   supplier: {
     id: SUPPLIER_ID,
     code: "SUP-001",

@@ -8,12 +8,19 @@ import {
 import {
   NullableSupplierPurchaseEmployeeSnapshotSchema,
 } from "./supplier-purchase-personnel-records";
+import {
+  ProcurementDestinationRecordSchema,
+  ProcurementDestinationRelationSchema,
+  type ProjectProcurementDestinationRecord,
+} from "./procurement-destination-records";
 import { SupplierPurchaseRequisitionRecordSchema } from "./supplier-purchase-requisition-records";
 
 export const SUPPLIER_PURCHASE_BATCH_SELECT = [
   "id",
   "tenant_id",
   "project_id",
+  "destination_type",
+  "warehouse_id",
   "batch_no",
   "status",
   "reason",
@@ -48,6 +55,7 @@ export const SUPPLIER_PURCHASE_BATCH_SELECT = [
   "created_at",
   "updated_at",
   "project:projects!supplier_purchase_batches_project_tenant_fkey(id,name,status)",
+  "warehouse:warehouses!supplier_purchase_batches_warehouse_tenant_fkey(id,name,status)",
 ].join(",");
 
 export const SUPPLIER_PURCHASE_BATCH_ITEM_SELECT = [
@@ -151,10 +159,10 @@ const SupplierPurchaseBatchBudgetSnapshotEntrySchema = z.object({
   available_amount: signedMoney,
 }).strict();
 
-export const SupplierPurchaseBatchRecordSchema = z.object({
+export const SupplierPurchaseBatchRecordSchema =
+  ProcurementDestinationRecordSchema.safeExtend({
   id: uuid,
   tenant_id: uuid,
-  project_id: uuid,
   batch_no: z.string().regex(/^PB-\d{8}-\d{8}$/),
   status: SupplierPurchaseBatchStatusSchema,
   reason: z.string().trim().min(1).max(500),
@@ -196,11 +204,8 @@ export const SupplierPurchaseBatchRecordSchema = z.object({
 
 export const SupplierPurchaseBatchDetailSchema =
   SupplierPurchaseBatchRecordSchema.extend({
-    project: z.object({
-      id: uuid,
-      name: z.string().min(1),
-      status: z.string(),
-    }).strict(),
+    project: ProcurementDestinationRelationSchema.nullable().default(null),
+    warehouse: ProcurementDestinationRelationSchema.nullable().default(null),
   }).strict();
 
 export const SupplierPurchaseBatchItemSchema = z.object({
@@ -299,7 +304,7 @@ export const SupplierPurchaseBatchRequisitionSchema =
   }).strict();
 
 export const SupplierPurchaseBatchOrderSchema =
-  SupplierPurchaseOrderWithReferencesSchema.extend({
+  SupplierPurchaseOrderWithReferencesSchema.safeExtend({
     purchase_batch_id: uuid,
     subtotal_amount: money,
     tax_amount: money,
@@ -341,9 +346,11 @@ function moneyToMinor(value: string): bigint {
 }
 
 export type SupplierPurchaseBatch =
-  z.infer<typeof SupplierPurchaseBatchRecordSchema>;
+  z.infer<typeof SupplierPurchaseBatchRecordSchema> &
+    ProjectProcurementDestinationRecord;
 export type SupplierPurchaseBatchDetail =
-  z.infer<typeof SupplierPurchaseBatchDetailSchema>;
+  z.infer<typeof SupplierPurchaseBatchDetailSchema> &
+    ProjectProcurementDestinationRecord;
 export type SupplierPurchaseBatchItem =
   z.infer<typeof SupplierPurchaseBatchItemSchema>;
 export type SupplierPurchaseBatchCatalogItem =

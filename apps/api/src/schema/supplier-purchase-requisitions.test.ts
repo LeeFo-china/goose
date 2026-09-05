@@ -219,6 +219,11 @@ describe("supplier purchase requisition draft schema", () => {
   });
 
   test("requires valid project, supplier, SKU and cost category ids", () => {
+    const missingProjectId = Object.fromEntries(
+      Object.entries(draft()).filter(([key]) => key !== "project_id"),
+    );
+    expect(SupplierPurchaseRequisitionDraftSchema.safeParse(missingProjectId)
+      .success).toBe(false);
     expect(SupplierPurchaseRequisitionDraftSchema.safeParse(draft({
       project_id: "invalid",
     })).success).toBe(false);

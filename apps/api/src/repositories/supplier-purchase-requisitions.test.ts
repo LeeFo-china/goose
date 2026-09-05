@@ -428,6 +428,7 @@ describe("SupplierPurchaseRequisitionsRepository", () => {
 const requisition = {
   id: REQUISITION_ID, tenant_id: TENANT_ID,
   request_no: "PR-20260730-00000001", project_id: PROJECT_ID,
+  destination_type: "project", warehouse_id: null,
   tenant_supplier_id: RELATIONSHIP_ID, supplier_id: SUPPLIER_ID,
   status: "pending_approval", budget_status: "over_budget", currency: "CNY",
   reason: "项目现场需要主材", expected_delivery_date: null, remark: null,
@@ -439,8 +440,8 @@ const requisition = {
   reviewed_by_employee_id: null, reviewed_at: null, review_remark: null,
   cancelled_by_employee_id: null, cancelled_at: null, cancel_reason: null,
   created_at: AT, updated_at: AT,
+  project: { id: PROJECT_ID, name: "示范项目", status: "active" }, warehouse: null,
 } as const;
-
 const commitment = {
   id: "60000000-0000-4000-8000-000000000011", tenant_id: TENANT_ID,
   project_id: PROJECT_ID, cost_category_id: COST_CATEGORY_ID,
@@ -491,8 +492,7 @@ function convertedEnvelope(purchaseOrderId: string) {
 function invalidSubmittedEnvelope(location: "top-level" | "nested") {
   return {
     status: "submitted",
-    requisition: { ...requisition, purchase_order_id:
-      location === "nested" ? PURCHASE_ORDER_ID : null },
+    requisition: { ...requisition, purchase_order_id: location === "nested" ? PURCHASE_ORDER_ID : null },
     ...(location === "top-level" ? { purchase_order_id: PURCHASE_ORDER_ID } : {}),
     version: requisition.version,
   };

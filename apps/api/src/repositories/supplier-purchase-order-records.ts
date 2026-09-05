@@ -10,11 +10,18 @@ import {
 import {
   NullableSupplierPurchaseEmployeeSnapshotSchema,
 } from "@/repositories/supplier-purchase-personnel-records";
+import {
+  ProcurementDestinationRecordSchema,
+  ProcurementDestinationRelationSchema,
+  type ProjectProcurementDestinationRecord,
+} from "./procurement-destination-records";
 
 export const SUPPLIER_PURCHASE_ORDER_SELECT = [
   "id",
   "tenant_id",
   "project_id",
+  "destination_type",
+  "warehouse_id",
   "tenant_supplier_id",
   "supplier_id",
   "order_no",
@@ -41,6 +48,7 @@ export const SUPPLIER_PURCHASE_ORDER_SELECT = [
   "created_at",
   "updated_at",
   "project:projects!project_id(id,name,status)",
+  "warehouse:warehouses!supplier_purchase_orders_warehouse_tenant_fkey(id,name,status)",
   "supplier:suppliers!supplier_id(id,code,name,legal_name,onboarding_status,operational_status)",
   "purchase_requisition:supplier_purchase_requisitions!supplier_purchase_orders_requisition_tenant_fkey(id,request_no,status,budget_status)",
   [
@@ -120,10 +128,10 @@ const commercialSnapshotSource = z.enum([
   "legacy_default_snapshot",
 ]);
 
-export const SupplierPurchaseOrderRecordSchema = z.object({
+export const SupplierPurchaseOrderRecordSchema =
+  ProcurementDestinationRecordSchema.safeExtend({
   id: uuid,
   tenant_id: uuid,
-  project_id: uuid,
   tenant_supplier_id: uuid,
   supplier_id: uuid,
   order_no: z.string().min(1),
@@ -169,11 +177,8 @@ export const SupplierPurchaseOrderRecordSchema = z.object({
 
 export const SupplierPurchaseOrderWithReferencesSchema =
   SupplierPurchaseOrderRecordSchema.extend({
-    project: z.object({
-      id: uuid,
-      name: z.string(),
-      status: z.string(),
-    }).strict(),
+    project: ProcurementDestinationRelationSchema.nullable().default(null),
+    warehouse: ProcurementDestinationRelationSchema.nullable().default(null),
     supplier: z.object({
       id: uuid,
       code: z.string(),
@@ -332,9 +337,11 @@ export const SupplierPurchaseOrderCommandEnvelopeSchema = z.object({
 }).strict();
 
 export type SupplierPurchaseOrder =
-  z.infer<typeof SupplierPurchaseOrderRecordSchema>;
+  z.infer<typeof SupplierPurchaseOrderRecordSchema> &
+    ProjectProcurementDestinationRecord;
 export type SupplierPurchaseOrderWithReferences =
-  z.infer<typeof SupplierPurchaseOrderWithReferencesSchema>;
+  z.infer<typeof SupplierPurchaseOrderWithReferencesSchema> &
+    ProjectProcurementDestinationRecord;
 export type SupplierPurchaseOrderListOrder =
   z.infer<typeof SupplierPurchaseOrderListOrderSchema>;
 export type SupplierPurchaseOrderItem =

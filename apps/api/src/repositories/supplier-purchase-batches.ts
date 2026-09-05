@@ -28,6 +28,7 @@ import {
   listSupplierPurchaseBatchOrders,
   listSupplierPurchaseBatchRequisitions,
 } from "@/repositories/supplier-purchase-batch-children";
+import { assertProjectProcurementDestination, toProjectProcurementDestination } from "@/repositories/procurement-destination-records";
 import { SupabaseDB } from "@/utils/supabase";
 
 export type Page<T> = {
@@ -159,7 +160,8 @@ export class SupplierPurchaseBatchesRepository {
 
     let request = this.client.from("supplier_purchase_batches")
       .select(SUPPLIER_PURCHASE_BATCH_SELECT, { count: "exact" })
-      .eq("tenant_id", input.tenant_id);
+      .eq("tenant_id", input.tenant_id)
+      .eq("destination_type", "project");
     if (input.project_id) {
       request = request.eq("project_id", input.project_id);
     } else if (input.visible_project_ids) {
@@ -181,7 +183,7 @@ export class SupplierPurchaseBatchesRepository {
         SupplierPurchaseBatchDetailSchema,
         data,
         "查询供应商采购批次失败",
-      ),
+      ).map(toProjectProcurementDestination),
       pagination,
       count,
     );
@@ -197,13 +199,11 @@ export class SupplierPurchaseBatchesRepository {
       .eq("id", batchId)
       .maybeSingle();
     if (error) throw Errors.dbError("查询供应商采购批次失败", error);
-    return data === null
-      ? null
-      : parse(
-        SupplierPurchaseBatchDetailSchema,
-        data,
-        "查询供应商采购批次失败",
-      );
+    if (data === null) return null;
+    const batch = parse(SupplierPurchaseBatchDetailSchema, data,
+      "查询供应商采购批次失败");
+    assertProjectProcurementDestination(batch);
+    return batch;
   }
 
   async listItems(

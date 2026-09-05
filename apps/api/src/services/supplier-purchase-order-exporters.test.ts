@@ -127,6 +127,8 @@ function sampleSnapshot(): SupplierPurchaseOrderExportSnapshot {
       id: "62000000-0000-4000-8000-000000000001",
       tenant_id: "62000000-0000-4000-8000-000000000002",
       project_id: "62000000-0000-4000-8000-000000000003",
+      destination_type: "project",
+      warehouse_id: null,
       tenant_supplier_id: "62000000-0000-4000-8000-000000000004",
       supplier_id: "62000000-0000-4000-8000-000000000005",
       order_no: "PO-20260904-00000001",
@@ -156,6 +158,7 @@ function sampleSnapshot(): SupplierPurchaseOrderExportSnapshot {
         address: "Address A",
         status: "active",
       },
+      warehouse: null,
       supplier: {
         id: "62000000-0000-4000-8000-000000000005",
         code: "SUP-A",

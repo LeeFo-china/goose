@@ -26,6 +26,7 @@ const context = {
 
 const batch = {
   id: BATCH_ID, tenant_id: TENANT_ID, project_id: PROJECT_ID,
+  destination_type: "project", warehouse_id: null,
   batch_no: "PB-20260830-00000001", status: "pending_approval",
   reason: "项目主材采购", expected_delivery_date: null, remark: null,
   priced_at: AT, currency: "CNY", subtotal_amount: "100.00",

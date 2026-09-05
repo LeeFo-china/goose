@@ -50,6 +50,8 @@ describe("SupplierPurchaseRequisitionsRepository scope lookup", () => {
     const scope = {
       id: REQUISITION_ID,
       project_id: PROJECT_ID,
+      destination_type: "project",
+      warehouse_id: null,
       tenant_supplier_id: RELATIONSHIP_ID,
       created_by_employee_id: EMPLOYEE_ID,
       budget_status: "over_budget",
@@ -71,10 +73,12 @@ describe("SupplierPurchaseRequisitionsRepository scope lookup", () => {
     expect(url.pathname).toEndWith("/supplier_purchase_requisitions");
     expect(url.searchParams.get("tenant_id")).toBe(`eq.${TENANT_ID}`);
     expect(url.searchParams.get("id")).toBe(`eq.${REQUISITION_ID}`);
-    expect(url.searchParams.get("project_id")).toBe(`in.(${PROJECT_ID})`);
+    expect(url.searchParams.has("project_id")).toBeFalse();
     expect(url.searchParams.get("select")).toBe([
       "id",
       "project_id",
+      "destination_type",
+      "warehouse_id",
       "tenant_supplier_id",
       "created_by_employee_id",
       "budget_status",
@@ -89,6 +93,8 @@ describe("SupplierPurchaseRequisitionsRepository scope lookup", () => {
     const scope = {
       id: REQUISITION_ID,
       project_id: PROJECT_ID,
+      destination_type: "project",
+      warehouse_id: null,
       tenant_supplier_id: RELATIONSHIP_ID,
       created_by_employee_id: EMPLOYEE_ID,
       budget_status: "within_budget",

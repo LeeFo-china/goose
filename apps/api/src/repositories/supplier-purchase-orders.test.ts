@@ -371,9 +371,8 @@ describe("SupplierPurchaseOrdersRepository", () => {
 });
 
 const order = {
-  id: ORDER_ID,
-  tenant_id: TENANT_ID,
-  project_id: PROJECT_ID,
+  id: ORDER_ID, tenant_id: TENANT_ID, project_id: PROJECT_ID,
+  destination_type: "project", warehouse_id: null,
   tenant_supplier_id: RELATIONSHIP_ID,
   supplier_id: SUPPLIER_ID,
   order_no: "PO-20260729-00000001",
@@ -396,11 +395,8 @@ const order = {
   cancel_reason: null,
   created_at: "2026-07-29T08:00:00.000Z",
   updated_at: "2026-07-29T08:00:00.000Z",
-  project: {
-    id: PROJECT_ID,
-    name: "示范项目",
-    status: "active",
-  },
+  project: { id: PROJECT_ID, name: "示范项目", status: "active" },
+  warehouse: null,
   supplier: {
     id: SUPPLIER_ID,
     code: "SUP-001",
@@ -417,6 +413,7 @@ const order = {
 
 const {
   project: _project, supplier: _supplier,
+  warehouse: _warehouse,
   purchase_requisition: _purchaseRequisition, ...orderSnapshot
 } = order;
 const projectOption = { id: PROJECT_ID, name: "示范项目", status: "active" };

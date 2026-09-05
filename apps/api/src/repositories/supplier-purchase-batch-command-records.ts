@@ -233,7 +233,7 @@ function validateErrorCode(
 }
 
 function validPreview(
-  batch: SupplierPurchaseBatch,
+  batch: z.infer<typeof SupplierPurchaseBatchRecordSchema>,
   preview: SupplierPurchaseBatchSplitPreview[],
 ): boolean {
   const stable = preview.every((item, index) => index === 0 ||
