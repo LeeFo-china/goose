@@ -28,6 +28,13 @@ const SHARE_LINK_SELECT = [
   "created_at",
   "updated_at",
 ].join(",");
+const SHARE_STATUS_SELECT = [
+  "last_viewed_at",
+  "viewed_count",
+  "confirmed_at",
+  "confirm_remark",
+].join(",");
+const SHARE_STATUS_SCAN_LIMIT = 1000;
 
 const ORDER_EXPORT_SELECT = [
   "id",
@@ -84,6 +91,12 @@ const ShareLinkRecordSchema = z.object({
   created_at: dateTime,
   updated_at: dateTime,
 }).strict();
+const ShareStatusRecordSchema = z.object({
+  last_viewed_at: dateTime.nullable(),
+  viewed_count: z.number().int().nonnegative(),
+  confirmed_at: dateTime.nullable(),
+  confirm_remark: z.string().nullable(),
+}).strict();
 
 const ExportOrderSchema = SupplierPurchaseOrderWithReferencesSchema.extend({
   project: z.object({
@@ -96,6 +109,12 @@ const ExportOrderSchema = SupplierPurchaseOrderWithReferencesSchema.extend({
 
 export type SupplierPurchaseOrderShareLink =
   z.infer<typeof ShareLinkRecordSchema>;
+export type SupplierPurchaseOrderShareStatus = {
+  viewed_count: number;
+  last_viewed_at: string | null;
+  confirmed_at: string | null;
+  confirm_remark: string | null;
+};
 export type SupplierPurchaseOrderExportOrder =
   z.infer<typeof ExportOrderSchema>;
 export type SupplierPurchaseOrderExportSnapshot = {
@@ -205,6 +224,31 @@ export class SupplierPurchaseOrderSharingRepository {
       .maybeSingle();
     if (error) throw Errors.dbError("查询采购单分享链接失败", error);
     return parseMaybeLink(data);
+  }
+
+  async getShareStatus(input: {
+    tenantId: string;
+    orderId: string;
+    checkedAt: string;
+  }): Promise<SupplierPurchaseOrderShareStatus> {
+    const { data, error } = await this.client
+      .from("supplier_purchase_order_share_links")
+      .select(SHARE_STATUS_SELECT)
+      .eq("tenant_id", input.tenantId)
+      .eq("supplier_purchase_order_id", input.orderId)
+      .eq("status", "active")
+      .gt("expires_at", input.checkedAt)
+      .order("updated_at", { ascending: false })
+      .limit(SHARE_STATUS_SCAN_LIMIT);
+    if (error) throw Errors.dbError("查询采购单分享状态失败", error);
+
+    return summarizeShareStatus(
+      parseRows(
+        ShareStatusRecordSchema,
+        data,
+        "查询采购单分享状态失败",
+      ),
+    );
   }
 
   async recordViewed(link: SupplierPurchaseOrderShareLink, viewedAt: string) {
@@ -325,6 +369,36 @@ function parseMaybeLink(data: unknown) {
   return data === null
     ? null
     : parseLink(data, "查询采购单分享链接失败");
+}
+
+function summarizeShareStatus(
+  links: Array<z.infer<typeof ShareStatusRecordSchema>>,
+): SupplierPurchaseOrderShareStatus {
+  return links.reduce<SupplierPurchaseOrderShareStatus>(
+    (status, link) => {
+      const confirmedAt = latestDate(status.confirmed_at, link.confirmed_at);
+      return {
+        viewed_count: status.viewed_count + link.viewed_count,
+        last_viewed_at: latestDate(status.last_viewed_at, link.last_viewed_at),
+        confirmed_at: confirmedAt,
+        confirm_remark: link.confirmed_at && confirmedAt === link.confirmed_at
+          ? link.confirm_remark
+          : status.confirm_remark,
+      };
+    },
+    {
+      viewed_count: 0,
+      last_viewed_at: null,
+      confirmed_at: null,
+      confirm_remark: null,
+    },
+  );
+}
+
+function latestDate(current: string | null, candidate: string | null) {
+  if (!candidate) return current;
+  if (!current) return candidate;
+  return Date.parse(candidate) > Date.parse(current) ? candidate : current;
 }
 
 function parse<T extends z.ZodTypeAny>(

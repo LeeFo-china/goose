@@ -29,6 +29,12 @@ describe("SupplierPurchaseOrderSharingService", () => {
       getOrderSnapshot: mock(async () => snapshot("submitted")),
       findShareLinkByIdempotency: mock(async () => existing),
       createShareLink: mock(async () => shareLink()),
+      getShareStatus: mock(async () => ({
+        viewed_count: 4,
+        last_viewed_at: "2026-09-05T02:00:00.000Z",
+        confirmed_at: "2026-09-05T01:00:00.000Z",
+        confirm_remark: "供应商已确认",
+      })),
     };
     const service = serviceWith({ repository });
 
@@ -43,8 +49,19 @@ describe("SupplierPurchaseOrderSharingService", () => {
       token: TOKEN,
       share_path: `/public/supplier-purchase-orders/${TOKEN}`,
       idempotent: true,
+      share_status: {
+        viewed_count: 4,
+        last_viewed_at: "2026-09-05T02:00:00.000Z",
+        confirmed_at: "2026-09-05T01:00:00.000Z",
+        confirm_remark: "供应商已确认",
+      },
     });
     expect(repository.createShareLink).not.toHaveBeenCalled();
+    expect(repository.getShareStatus).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      orderId: ORDER_ID,
+      checkedAt: NOW.toISOString(),
+    });
   });
 
   test("rejects sharing draft orders", async () => {
