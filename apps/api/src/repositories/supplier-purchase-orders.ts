@@ -1,6 +1,9 @@
 import { z } from "zod";
 
 import { Errors } from "@/errors/error-factory";
+import {
+  assertProjectProcurementDestination,
+} from "@/repositories/procurement-destination-records";
 import { throwSupplierCommandDatabaseError } from "@/repositories/supplier-command-errors";
 import {
   SUPPLIER_PURCHASE_ORDER_ITEM_SELECT,
@@ -179,13 +182,14 @@ export class SupplierPurchaseOrdersRepository {
       .eq("id", orderId)
       .maybeSingle();
     if (error) throw Errors.dbError("查询供应商采购单失败", error);
-    return data === null
-      ? null
-      : parse(
-        SupplierPurchaseOrderWithReferencesSchema,
-        data,
-        "查询供应商采购单失败",
-      );
+    if (data === null) return null;
+    const order = parse(
+      SupplierPurchaseOrderWithReferencesSchema,
+      data,
+      "查询供应商采购单失败",
+    );
+    assertProjectProcurementDestination(order);
+    return order;
   }
 
   async listItems(input: SupplierPurchaseOrderItemListInput) {
@@ -369,6 +373,7 @@ export class SupplierPurchaseOrdersRepository {
     if (!envelope.purchase_order || envelope.version === undefined) {
       throw Errors.dbError(message, data);
     }
+    assertProjectProcurementDestination(envelope.purchase_order);
     return {
       status: successStatus,
       idempotent: envelope.idempotent ?? false,

@@ -101,6 +101,8 @@ const purchaseOrder = {
   id: ORDER_ID,
   tenant_id: TENANT_ID,
   project_id: PROJECT_ID,
+  destination_type: "project",
+  warehouse_id: null,
   tenant_supplier_id: RELATIONSHIP_ID,
   supplier_id: SUPPLIER_ID,
   order_no: "PO-20260730-00000001",

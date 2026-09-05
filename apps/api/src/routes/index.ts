@@ -125,6 +125,7 @@ import SupplierPurchaseRequisitionsController from "@/controllers/supplier-purch
 import SupplierPurchaseBatchesController from "@/controllers/supplier-purchase-batches";
 import SupplierPayablesController from "@/controllers/supplier-payables";
 import SupplierPaymentRequestsController from "@/controllers/supplier-payment-requests";
+import WarehousesController from "@/controllers/warehouses";
 import PlatformUploadPreviewsController from "@/controllers/platform-upload-previews";
 import PlatformSupplierOnboardingController from "@/controllers/platform-supplier-onboarding";
 import BrandingController from "@/controllers/branding";
@@ -253,6 +254,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   SupplierPurchaseBatchesController.registerExtraRoutes(app);
   SupplierPayablesController.registerExtraRoutes(app);
   SupplierPaymentRequestsController.registerExtraRoutes(app);
+  WarehousesController.registerExtraRoutes(app);
   PlatformUploadPreviewsController.registerExtraRoutes(app);
   PlatformSupplierOnboardingController.registerExtraRoutes(app);
   BrandingController.registerExtraRoutes(app);

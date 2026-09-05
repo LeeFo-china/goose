@@ -5,6 +5,7 @@ import {
   mapSupplierPurchaseRequisitionEnvelopeError,
   throwSupplierCommandDatabaseError,
 } from "@/repositories/supplier-command-errors";
+import { assertProjectProcurementDestination, toProjectProcurementDestination } from "@/repositories/procurement-destination-records";
 import {
   PROJECT_COST_COMMITMENT_SELECT,
   SUPPLIER_PURCHASE_REQUISITION_ITEM_SELECT,
@@ -159,7 +160,8 @@ export class SupplierPurchaseRequisitionsRepository {
 
     let request = this.client.from("supplier_purchase_requisitions")
       .select(SUPPLIER_PURCHASE_REQUISITION_SELECT, { count: "exact" })
-      .eq("tenant_id", input.tenant_id);
+      .eq("tenant_id", input.tenant_id)
+      .eq("destination_type", "project");
     if (input.project_id) {
       request = request.eq("project_id", input.project_id);
     } else if (input.visible_project_ids) {
@@ -184,7 +186,7 @@ export class SupplierPurchaseRequisitionsRepository {
         SupplierPurchaseRequisitionRecordSchema,
         data,
         "查询供应商采购申请失败",
-      ),
+      ).map(toProjectProcurementDestination),
       pagination,
       count,
     );
@@ -202,11 +204,9 @@ export class SupplierPurchaseRequisitionsRepository {
       .maybeSingle();
     if (error) throw Errors.dbError("查询供应商采购申请失败", error);
     if (data === null) return null;
-    const requisition = parse(
-      SupplierPurchaseRequisitionRecordSchema,
-      data,
-      "查询供应商采购申请失败",
-    );
+    const requisition = parse(SupplierPurchaseRequisitionRecordSchema, data,
+      "查询供应商采购申请失败");
+    assertProjectProcurementDestination(requisition);
 
     const snapshotResult = await this.client
       .from("project_cost_commitments")
@@ -218,23 +218,23 @@ export class SupplierPurchaseRequisitionsRepository {
       .order("id", { ascending: true })
       .limit(100);
     if (snapshotResult.error) {
-      throw Errors.dbError(
-        "查询采购申请预算快照失败",
-        snapshotResult.error,
-      );
+      throw Errors.dbError("查询采购申请预算快照失败", snapshotResult.error);
     }
-    return parse(
-      SupplierPurchaseRequisitionDetailSchema,
-      {
-        requisition,
-        budget_snapshots: parseRows(
-          ProjectCostCommitmentRecordSchema,
-          snapshotResult.data,
-          "查询采购申请预算快照失败",
-        ),
-      },
-      "查询供应商采购申请失败",
-    );
+    return {
+      ...parse(
+        SupplierPurchaseRequisitionDetailSchema,
+        {
+          requisition,
+          budget_snapshots: parseRows(
+            ProjectCostCommitmentRecordSchema,
+            snapshotResult.data,
+            "查询采购申请预算快照失败",
+          ),
+        },
+        "查询供应商采购申请失败",
+      ),
+      requisition,
+    };
   }
 
   async findRequisitionScope(
@@ -242,27 +242,27 @@ export class SupplierPurchaseRequisitionsRepository {
   ): Promise<SupplierPurchaseRequisitionScope | null> {
     if (input.visible_project_ids?.length === 0) return null;
 
-    let request = this.client
+    const { data, error } = await this.client
       .from("supplier_purchase_requisitions")
       .select(SUPPLIER_PURCHASE_REQUISITION_SCOPE_SELECT)
       .eq("tenant_id", input.tenant_id)
-      .eq("id", input.requisition_id);
-    if (input.visible_project_ids) {
-      request = request.in("project_id", input.visible_project_ids);
-    }
-    const { data, error } = await request.maybeSingle();
+      .eq("id", input.requisition_id)
+      .maybeSingle();
     if (error) {
-      throw Errors.dbError(
-        "查询供应商采购申请授权范围失败",
-        error,
-      );
+      throw Errors.dbError("查询供应商采购申请授权范围失败", error);
     }
     if (data === null) return null;
-    return parse(
+    const requisition = parse(
       SupplierPurchaseRequisitionScopeSchema,
       data,
       "查询供应商采购申请授权范围失败",
     );
+    assertProjectProcurementDestination(requisition);
+    if (input.visible_project_ids &&
+      !input.visible_project_ids.includes(requisition.project_id)) {
+      return null;
+    }
+    return requisition;
   }
 
   async listItems(
@@ -384,6 +384,7 @@ export class SupplierPurchaseRequisitionsRepository {
     if (!envelope.requisition || envelope.version === undefined) {
       throw Errors.dbError(message, data);
     }
+    assertProjectProcurementDestination(envelope.requisition);
     if (
       envelope.requisition.status !==
         REQUISITION_STATUS_BY_RESULT[successStatus] ||

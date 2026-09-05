@@ -1,11 +1,18 @@
 import { describe, expect, test } from "bun:test";
 
+import {
+  SUPPLIER_PURCHASE_ORDER_SELECT,
+  SupplierPurchaseOrderWithReferencesSchema,
+} from "./supplier-purchase-order-records";
+
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
 const TENANT_ID = "51000000-0000-4000-8000-000000000001";
 const ORDER_ID = "51000000-0000-4000-8000-000000000002";
+const PROJECT_ID = "51000000-0000-4000-8000-000000000003";
+const WAREHOUSE_ID = "51000000-0000-4000-8000-000000000004";
 
 async function repositoryFor(data: unknown) {
   const result = { data, error: null };
@@ -22,6 +29,45 @@ async function repositoryFor(data: unknown) {
 }
 
 describe("supplier purchase order source projection", () => {
+  test("selects project and warehouse destination facts", () => {
+    expect(SUPPLIER_PURCHASE_ORDER_SELECT).toContain("destination_type");
+    expect(SUPPLIER_PURCHASE_ORDER_SELECT).toContain("warehouse_id");
+    expect(SUPPLIER_PURCHASE_ORDER_SELECT).toContain(
+      "warehouse:warehouses!" +
+        "supplier_purchase_orders_warehouse_tenant_fkey(id,name,status)",
+    );
+  });
+
+  test("parses project and warehouse destination headers", () => {
+    expect(SupplierPurchaseOrderWithReferencesSchema.parse(legacyOrder))
+      .toMatchObject({
+        destination_type: "project",
+        project_id: PROJECT_ID,
+        warehouse_id: null,
+        warehouse: null,
+      });
+    expect(SupplierPurchaseOrderWithReferencesSchema.parse(warehouseOrder))
+      .toMatchObject({
+        destination_type: "warehouse",
+        project_id: null,
+        warehouse_id: WAREHOUSE_ID,
+        project: null,
+        warehouse: { id: WAREHOUSE_ID, name: "中心仓", status: "active" },
+      });
+  });
+
+  test("rejects inconsistent order destinations", () => {
+    for (const invalid of [
+      { ...legacyOrder, project_id: null },
+      { ...legacyOrder, warehouse_id: WAREHOUSE_ID },
+      { ...warehouseOrder, project_id: PROJECT_ID },
+      { ...warehouseOrder, warehouse_id: null },
+    ]) {
+      expect(SupplierPurchaseOrderWithReferencesSchema.safeParse(invalid)
+        .success).toBe(false);
+    }
+  });
+
   test("accepts a legacy order with explicit null source fields", async () => {
     const repository = await repositoryFor(legacyOrder);
 
@@ -61,14 +107,26 @@ describe("supplier purchase order source projection", () => {
     await expect(repository.findOrder(TENANT_ID, ORDER_ID))
       .rejects.toMatchObject({ statusCode: 500, code: "DB_ERROR" });
   });
+
+  test("detail reads reject warehouse procurement before project gates", async () => {
+    const repository = await repositoryFor(warehouseOrder);
+
+    await expect(repository.findOrder(TENANT_ID, ORDER_ID))
+      .rejects.toMatchObject({
+        statusCode: 409,
+        code: "WAREHOUSE_PROCUREMENT_NOT_ENABLED",
+      });
+  });
 });
 
 const legacyOrder = {
   id: ORDER_ID,
   tenant_id: TENANT_ID,
-  project_id: "51000000-0000-4000-8000-000000000003",
-  tenant_supplier_id: "51000000-0000-4000-8000-000000000004",
-  supplier_id: "51000000-0000-4000-8000-000000000005",
+  project_id: PROJECT_ID,
+  destination_type: "project",
+  warehouse_id: null,
+  tenant_supplier_id: "51000000-0000-4000-8000-000000000005",
+  supplier_id: "51000000-0000-4000-8000-000000000006",
   order_no: "PO-20260730-00000001",
   status: "draft",
   currency: "CNY",
@@ -81,8 +139,8 @@ const legacyOrder = {
   purchase_requisition_id: null,
   purchase_batch_id: null,
   version: 1,
-  created_by_employee_id: "51000000-0000-4000-8000-000000000006",
-  updated_by_employee_id: "51000000-0000-4000-8000-000000000006",
+  created_by_employee_id: "51000000-0000-4000-8000-000000000007",
+  updated_by_employee_id: "51000000-0000-4000-8000-000000000007",
   submitted_by_employee_id: null,
   submitted_at: null,
   cancelled_by_employee_id: null,
@@ -91,12 +149,13 @@ const legacyOrder = {
   created_at: "2026-07-30T08:00:00.000Z",
   updated_at: "2026-07-30T08:00:00.000Z",
   project: {
-    id: "51000000-0000-4000-8000-000000000003",
+    id: PROJECT_ID,
     name: "历史项目",
     status: "active",
   },
+  warehouse: null,
   supplier: {
-    id: "51000000-0000-4000-8000-000000000005",
+    id: "51000000-0000-4000-8000-000000000006",
     code: "SUP-LEGACY",
     name: "历史供应商",
     legal_name: "历史供应商有限公司",
@@ -104,4 +163,17 @@ const legacyOrder = {
     operational_status: "active",
   },
   purchase_requisition: null,
+} as const;
+
+const warehouseOrder = {
+  ...legacyOrder,
+  project_id: null,
+  destination_type: "warehouse",
+  warehouse_id: WAREHOUSE_ID,
+  project: null,
+  warehouse: {
+    id: WAREHOUSE_ID,
+    name: "中心仓",
+    status: "active",
+  },
 } as const;

@@ -2,6 +2,11 @@ import { z } from "zod";
 
 import { Errors } from "@/errors/error-factory";
 import {
+  assertProjectProcurementDestination,
+  toProjectProcurementDestination,
+  type ProjectProcurementDestinationRecord,
+} from "@/repositories/procurement-destination-records";
+import {
   SUPPLIER_PURCHASE_ORDER_ITEM_SELECT,
   SupplierPurchaseOrderItemSchema,
   SupplierPurchaseOrderWithReferencesSchema,
@@ -20,6 +25,8 @@ const ORDER_EXPORT_SELECT = [
   "id",
   "tenant_id",
   "project_id",
+  "destination_type",
+  "warehouse_id",
   "tenant_supplier_id",
   "supplier_id",
   "order_no",
@@ -47,6 +54,7 @@ const ORDER_EXPORT_SELECT = [
   "settlement_term_days_snapshot",
   "invoice_required_before_payment_snapshot",
   "project:projects!project_id(id,name,address,status)",
+  "warehouse:warehouses!supplier_purchase_orders_warehouse_tenant_fkey(id,name,status)",
   "supplier:suppliers!supplier_id(id,code,name,legal_name,onboarding_status,operational_status)",
   "purchase_requisition:supplier_purchase_requisitions!supplier_purchase_orders_requisition_tenant_fkey(id,request_no,status,budget_status)",
 ].join(",");
@@ -81,7 +89,7 @@ const ShareStatusRecordSchema = z.object({
   confirm_remark: z.string().nullable(),
 }).strict();
 
-const ExportOrderSchema = SupplierPurchaseOrderWithReferencesSchema.extend({
+const ExportOrderSchema = SupplierPurchaseOrderWithReferencesSchema.safeExtend({
   project: z.object({
     id: uuid,
     name: z.string(),
@@ -103,7 +111,7 @@ export type SupplierPurchaseOrderShareStatus = {
 export type SupplierPurchaseOrderShareStatuses =
   Record<string, SupplierPurchaseOrderShareStatus>;
 export type SupplierPurchaseOrderExportOrder =
-  z.infer<typeof ExportOrderSchema>;
+  z.infer<typeof ExportOrderSchema> & ProjectProcurementDestinationRecord;
 export type SupplierPurchaseOrderExportSnapshot = {
   order: SupplierPurchaseOrderExportOrder;
   items: SupplierPurchaseOrderItem[];
@@ -343,7 +351,7 @@ export class SupplierPurchaseOrderSharingRepository {
       ExportOrderSchema,
       data,
       "查询采购批次采购单导出数据失败",
-    );
+    ).map(toProjectProcurementDestination);
     if (orders.length === 0) return [];
 
     const items = await this.listExportItems(
@@ -366,9 +374,10 @@ export class SupplierPurchaseOrderSharingRepository {
       .eq("id", orderId)
       .maybeSingle();
     if (error) throw Errors.dbError("查询采购单导出数据失败", error);
-    return data === null
-      ? null
-      : parse(ExportOrderSchema, data, "查询采购单导出数据失败");
+    if (data === null) return null;
+    const order = parse(ExportOrderSchema, data, "查询采购单导出数据失败");
+    assertProjectProcurementDestination(order);
+    return order;
   }
 
   private async listExportItems(

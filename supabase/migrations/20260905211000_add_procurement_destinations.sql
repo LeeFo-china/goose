@@ -1,6 +1,11 @@
 -- Stage A: add procurement destination structure while keeping warehouse
 -- procurement disabled at the application command layer.
 
+BEGIN;
+
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '5min';
+
 ALTER TABLE public.supplier_purchase_batches
 ADD COLUMN destination_type text,
 ADD COLUMN warehouse_id uuid NULL;
@@ -123,3 +128,5 @@ WHERE destination_type = 'warehouse';
 
 COMMENT ON COLUMN public.tenant_supplier_settings.warehouse_procurement_enabled
 IS 'Controls future warehouse procurement writes; Stage A keeps the gate disabled by default.';
+
+COMMIT;

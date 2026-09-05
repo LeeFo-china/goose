@@ -243,7 +243,11 @@ describe("supplier purchase batch draft schema", () => {
   });
 
   test("rejects unknown, generated, and invalid draft facts", () => {
+    const missingProjectId = Object.fromEntries(
+      Object.entries(draft()).filter(([key]) => key !== "project_id"),
+    );
     for (const input of [
+      missingProjectId,
       draft({ unknown: true }),
       draft({ project_id: "invalid" }),
       draft({ expected_version: -1 }),

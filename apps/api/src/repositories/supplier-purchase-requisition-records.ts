@@ -4,12 +4,19 @@ import {
   SupplierPurchaseRequisitionBudgetStatusSchema,
   SupplierPurchaseRequisitionStatusSchema,
 } from "@/schema/supplier-purchase-requisitions";
+import {
+  ProcurementDestinationRecordSchema,
+  ProcurementDestinationRelationSchema,
+  type ProjectProcurementDestinationRecord,
+} from "./procurement-destination-records";
 
 export const SUPPLIER_PURCHASE_REQUISITION_SELECT = [
   "id",
   "tenant_id",
   "request_no",
   "project_id",
+  "destination_type",
+  "warehouse_id",
   "tenant_supplier_id",
   "supplier_id",
   "status",
@@ -38,11 +45,15 @@ export const SUPPLIER_PURCHASE_REQUISITION_SELECT = [
   "cancel_reason",
   "created_at",
   "updated_at",
+  "project:projects!supplier_purchase_requisitions_project_tenant_fkey(id,name,status)",
+  "warehouse:warehouses!supplier_purchase_requisitions_warehouse_tenant_fkey(id,name,status)",
 ].join(",");
 
 export const SUPPLIER_PURCHASE_REQUISITION_SCOPE_SELECT = [
   "id",
   "project_id",
+  "destination_type",
+  "warehouse_id",
   "tenant_supplier_id",
   "created_by_employee_id",
   "budget_status",
@@ -161,11 +172,11 @@ const taxRate = decimalString({ integerDigits: 1, scale: 6 }).refine((value) => 
     (normalizedInteger === "1" && !/[1-9]/.test(fractionPart ?? ""));
 }, "税率必须在 0 到 1 之间");
 
-export const SupplierPurchaseRequisitionRecordSchema = z.object({
+export const SupplierPurchaseRequisitionRecordSchema =
+  ProcurementDestinationRecordSchema.safeExtend({
   id: uuid,
   tenant_id: uuid,
   request_no: z.string().regex(/^PR-\d{8}-\d{8}$/),
-  project_id: uuid,
   tenant_supplier_id: uuid,
   supplier_id: uuid,
   status: SupplierPurchaseRequisitionStatusSchema,
@@ -194,6 +205,8 @@ export const SupplierPurchaseRequisitionRecordSchema = z.object({
   cancel_reason: z.string().max(500).nullable(),
   created_at: dateTime,
   updated_at: dateTime,
+  project: ProcurementDestinationRelationSchema.nullable().default(null),
+  warehouse: ProcurementDestinationRelationSchema.nullable().default(null),
 }).strict().superRefine((record, context) => {
   if ((record.purchase_batch_id === null) === (record.split_generation === null)) {
     return;
@@ -205,9 +218,9 @@ export const SupplierPurchaseRequisitionRecordSchema = z.object({
   });
 });
 
-export const SupplierPurchaseRequisitionScopeSchema = z.object({
+export const SupplierPurchaseRequisitionScopeSchema =
+  ProcurementDestinationRecordSchema.safeExtend({
   id: uuid,
-  project_id: uuid,
   tenant_supplier_id: uuid,
   created_by_employee_id: uuid,
   budget_status: SupplierPurchaseRequisitionBudgetStatusSchema,
@@ -329,9 +342,11 @@ export const SupplierPurchaseRequisitionCommandEnvelopeSchema = z.object({
 }).strict();
 
 export type SupplierPurchaseRequisitionRecord =
-  z.infer<typeof SupplierPurchaseRequisitionRecordSchema>;
+  z.infer<typeof SupplierPurchaseRequisitionRecordSchema> &
+    ProjectProcurementDestinationRecord;
 export type SupplierPurchaseRequisitionScope =
-  z.infer<typeof SupplierPurchaseRequisitionScopeSchema>;
+  z.infer<typeof SupplierPurchaseRequisitionScopeSchema> &
+    ProjectProcurementDestinationRecord;
 export type SupplierPurchaseRequisitionItem =
   z.infer<typeof SupplierPurchaseRequisitionItemSchema>;
 export type ProjectCostCommitmentStatus =
@@ -341,7 +356,9 @@ export type ProjectCostCommitmentRecord =
 export type SupplierPurchaseRequisitionBudgetSnapshot =
   z.infer<typeof SupplierPurchaseRequisitionBudgetSnapshotSchema>;
 export type SupplierPurchaseRequisitionDetail =
-  z.infer<typeof SupplierPurchaseRequisitionDetailSchema>;
+  Omit<z.infer<typeof SupplierPurchaseRequisitionDetailSchema>, "requisition"> & {
+    requisition: SupplierPurchaseRequisitionRecord;
+  };
 export type SupplierPurchaseRequisitionItemPage =
   z.infer<typeof SupplierPurchaseRequisitionItemPageSchema>;
 export type SupplierPurchaseRequisitionCommandStatus =

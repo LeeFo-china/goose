@@ -12,7 +12,6 @@ import {
   SupplierPurchaseOrderShipmentCreateSchema,
   SupplierPurchaseOrderSubmitSchema,
 } from "./supplier-purchase-orders";
-
 const projectId = "30000000-0000-4000-8000-000000000001";
 const tenantSupplierId = "30000000-0000-4000-8000-000000000002";
 const skuId = "30000000-0000-4000-8000-000000000003";
@@ -21,7 +20,6 @@ const secondPurchaseOrderItemId = "30000000-0000-4000-8000-000000000005";
 const shipmentId = "30000000-0000-4000-8000-000000000006";
 const receiptId = "30000000-0000-4000-8000-000000000007";
 const caseVariantItemId = "abcdefab-cdef-4abc-8def-abcdefabcdef";
-
 function draft(overrides: Record<string, unknown> = {}) {
   return {
     project_id: projectId,
@@ -92,6 +90,8 @@ describe("supplier purchase order schemas", () => {
 
   test("accepts a project-bound draft without client price facts", () => {
     expect(SupplierPurchaseOrderDraftSchema.parse(draft())).toEqual(draft());
+    const { project_id: _projectId, ...missingProjectId } = draft();
+    expect(SupplierPurchaseOrderDraftSchema.safeParse(missingProjectId).success).toBe(false);
     expect(SupplierPurchaseOrderDraftSchema.safeParse(draft({
       items: [{
         supplier_sku_id: skuId,
