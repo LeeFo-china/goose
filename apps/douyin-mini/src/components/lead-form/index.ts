@@ -16,6 +16,8 @@ Component({
     hasLinkedEstimate: { type: Boolean, value: false },
     estimateNo: { type: String, value: "" },
     estimateRange: { type: String, value: "" },
+    douyinClueEnabled: { type: Boolean, value: false },
+    douyinClueComponentId: { type: String, value: "" },
   },
   methods: {
     onInput(event: { currentTarget: { dataset: { field?: string } }; detail: { value: string } }) {

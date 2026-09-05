@@ -105,6 +105,28 @@ describe("lead page definition", () => {
     expect(harness.page.data.form.consented_at).toBe("");
   });
 
+  test("presents official Douyin clue phone capture only from bootstrap configuration", async () => {
+    const harness = createHarness({
+      ...BOOTSTRAP,
+      features: {
+        ...BOOTSTRAP.features,
+        douyin_phone: true,
+        phone_capture_mode: "douyin_phone",
+        clue_component_id: "clue_1234567890",
+      },
+    });
+    harness.page.onLoad();
+    await flushPromises();
+
+    expect(harness.page.data).toMatchObject({
+      douyinClueEnabled: true,
+      douyinClueComponentId: "clue_1234567890",
+    });
+
+    expect(harness.page.data.form.phone).toBe("");
+    expect(harness.page.data.phoneReady).toBe(false);
+  });
+
   test("a stale policy rejection cannot write or unlock current page navigation", async () => {
     const harness = createHarness();
     harness.page.onShow();
@@ -138,7 +160,7 @@ type TestLeadPage = LeadPageDefinition & {
   setData(patch: Partial<LeadPageDefinition["data"]>): void;
 };
 
-function createHarness() {
+function createHarness(bootstrap: BootstrapData = BOOTSTRAP) {
   const submitFlights: Array<Deferred<SubmitLeadResult>> = [];
   const bootstrapLoads: Array<Deferred<BootstrapData | null>> = [];
   const navigationFlights: Array<Deferred<void>> = [];
@@ -154,9 +176,9 @@ function createHarness() {
         bootstrapLoads.push(flight);
         return flight.promise;
       },
-      getReadyOrLoad: async () => BOOTSTRAP,
+      getReadyOrLoad: async () => bootstrap,
     },
-    startup: Promise.resolve(BOOTSTRAP),
+    startup: Promise.resolve(bootstrap),
     launchContext: {
       entry_path: "pages/lead/index", scene: "0", source_type: "direct",
     },

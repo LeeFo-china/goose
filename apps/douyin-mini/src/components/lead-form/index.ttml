@@ -1,4 +1,4 @@
-<form class="lead-form ui-card" bindsubmit="onSubmit">
+<form class="lead-form ui-card" conversion-target="{{douyinClueEnabled ? 1 : 0}}" clue-component-id="{{douyinClueComponentId}}" bindsubmit="onSubmit">
   <view class="required-fields">
     <view class="field-group">
       <view class="field-label">怎么称呼你 <text class="required" style="color: {{primaryColor}}">*</text></view>

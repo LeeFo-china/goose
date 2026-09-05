@@ -1,6 +1,5 @@
 import type { DouyinAppContext } from "../../app";
 import type { sendLeadSms, submitLead } from "../../api/leads";
-import { ApiRequestError } from "../../api/request";
 import { resolveThemeColor } from "../../components/theme";
 import type { BootstrapData } from "../../models";
 import type {
@@ -34,34 +33,15 @@ import {
   type LeadFieldErrors,
   type LeadFormValue,
 } from "./form-model";
+import { INITIAL_FORM, LEAD_FIELDS } from "./lead-page-constants";
 import {
   LeadPageCoordinator,
   getCooldownRemainingSeconds,
   recordSmsCooldownUntil,
   type LeadOperationAuthority,
 } from "./lead-page-coordinator";
+import { isPrivacyVersionMismatch, readableError } from "./lead-page-errors";
 import { runPolicyNavigation, runPrivacyPolicyRefresh } from "./lead-page-operations";
-
-const INITIAL_FORM: LeadFormValue = {
-  name: "",
-  phone: "",
-  sms_code: "",
-  community: "",
-  preferred_visit_date: "",
-  preferred_visit_period: "",
-  demand: "",
-  consented_at: "",
-};
-const LEAD_FIELDS = new Set<LeadField>([
-  "name",
-  "phone",
-  "sms_code",
-  "community",
-  "preferred_visit_date",
-  "preferred_visit_period",
-  "demand",
-  "consented_at",
-]);
 
 export type LeadPageDependencies = {
   getApp(): DouyinAppContext;
@@ -108,6 +88,8 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
     fieldErrors: {} as LeadFieldErrors,
     focusedField: "",
     optionalDetailsExpanded: false,
+    douyinClueEnabled: false,
+    douyinClueComponentId: "",
   },
   onLoad() {
     this.lifecycle.onLoad();
@@ -174,6 +156,10 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
       primaryColor: theme.primaryColor,
       primaryTextColor: theme.primaryTextColor,
       privacyPolicyVersion: bootstrap.privacy_policy_version,
+      douyinClueEnabled: bootstrap.features.douyin_phone,
+      douyinClueComponentId: bootstrap.features.douyin_phone
+        ? bootstrap.features.clue_component_id
+        : "",
     });
     dependencies.getApp().recordAnalytics("page_view");
   },
@@ -475,16 +461,4 @@ function definePage<
   TCustom & { data: TData; setData(patch: Partial<TData>): void }
 >): TCustom & { data: TData } {
   return options;
-}
-
-function isPrivacyVersionMismatch(error: unknown): error is ApiRequestError {
-  return error instanceof ApiRequestError
-    && (error.code === "DOUYIN_PRIVACY_POLICY_VERSION_MISMATCH"
-      || error.code === "DOUYIN_MEASUREMENT_PRIVACY_VERSION_MISMATCH");
-}
-
-function readableError(error: unknown, fallback: string): string {
-  return error instanceof ApiRequestError && error.message.trim()
-    ? error.message
-    : fallback;
 }

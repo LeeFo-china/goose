@@ -33,7 +33,8 @@ export function parseBootstrap(value: unknown): BootstrapData | null {
   const featuredProjects = value.content.featured_projects === undefined
     ? uniqueProjects([...featuredCases, ...activeSites]).slice(0, 6)
     : parseProjects(value.content.featured_projects, 6);
-  if (!company || !homeBanners || !trustMetrics || !featuredProjects
+  const features = parseFeatures(value.features);
+  if (!company || !homeBanners || !trustMetrics || !featuredProjects || !features
     || contactSlaText === null
     || value.installation.status !== "active"
     || !isNullableString(value.installation.template_version)
@@ -41,11 +42,6 @@ export function parseBootstrap(value: unknown): BootstrapData | null {
     || !/^#[0-9a-f]{6}$/i.test(value.theme.primary_color)
     || (value.theme.navigation_text_color !== "black"
       && value.theme.navigation_text_color !== "white")
-    || typeof value.features.cases !== "boolean"
-    || typeof value.features.sites !== "boolean"
-    || typeof value.features.sms_lead !== "boolean"
-    || value.features.douyin_phone !== false
-    || value.features.phone_capture_mode !== "sms"
     || !isBoundedString(value.privacy_policy_version, 1, 40)) return null;
   return {
     installation: {
@@ -57,13 +53,7 @@ export function parseBootstrap(value: unknown): BootstrapData | null {
       primary_color: value.theme.primary_color,
       navigation_text_color: value.theme.navigation_text_color,
     },
-    features: {
-      cases: value.features.cases,
-      sites: value.features.sites,
-      sms_lead: value.features.sms_lead,
-      douyin_phone: false,
-      phone_capture_mode: "sms",
-    },
+    features,
     content: {
       home_banners: homeBanners,
       trust_metrics: trustMetrics,
@@ -74,6 +64,50 @@ export function parseBootstrap(value: unknown): BootstrapData | null {
     privacy_policy_version: value.privacy_policy_version,
     contact_sla_text: contactSlaText,
   };
+}
+
+function parseFeatures(value: unknown): BootstrapData["features"] | null {
+  if (!isRecord(value)
+    || typeof value.cases !== "boolean"
+    || typeof value.sites !== "boolean"
+    || typeof value.sms_lead !== "boolean") return null;
+  if (value.douyin_phone === false && value.phone_capture_mode === "sms") {
+    if (Object.keys(value).some((key) =>
+      !["cases", "sites", "sms_lead", "douyin_phone", "phone_capture_mode"].includes(key)
+    )) return null;
+    return {
+      cases: value.cases,
+      sites: value.sites,
+      sms_lead: value.sms_lead,
+      douyin_phone: false,
+      phone_capture_mode: "sms",
+    };
+  }
+  if (value.douyin_phone === true
+    && value.phone_capture_mode === "douyin_phone"
+    && value.sms_lead === true
+    && isBoundedString(value.clue_component_id, 1, 128)
+    && /^[A-Za-z0-9_-]+$/.test(value.clue_component_id)
+    && !Object.keys(value).some((key) =>
+      ![
+        "cases",
+        "sites",
+        "sms_lead",
+        "douyin_phone",
+        "phone_capture_mode",
+        "clue_component_id",
+      ].includes(key)
+    )) {
+    return {
+      cases: value.cases,
+      sites: value.sites,
+      sms_lead: true,
+      douyin_phone: true,
+      phone_capture_mode: "douyin_phone",
+      clue_component_id: value.clue_component_id.trim(),
+    };
+  }
+  return null;
 }
 
 export function parseCompany(value: unknown): CompanyData | null {

@@ -69,9 +69,14 @@ export type BootstrapData = {
     cases: boolean;
     sites: boolean;
     sms_lead: boolean;
+  } & ({
     douyin_phone: false;
     phone_capture_mode: "sms";
-  };
+  } | {
+    douyin_phone: true;
+    phone_capture_mode: "douyin_phone";
+    clue_component_id: string;
+  });
   content: {
     home_banners: HomeBanner[];
     trust_metrics: Array<{ label: string; value: string }>;

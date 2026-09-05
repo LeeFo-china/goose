@@ -171,7 +171,7 @@ describe('Douyin miniapp domain contracts', () => {
       'material_lead_click',
     ]);
     expect(DOUYIN_MARKETING_EVENT_VALUES).toContain('lead_submit_success');
-    expect(DOUYIN_PHONE_CAPTURE_MODE_VALUES).toEqual(['sms']);
+    expect(DOUYIN_PHONE_CAPTURE_MODE_VALUES).toEqual(['sms', 'douyin_phone']);
     expect(SMS_SCENE_VALUES).toContain('douyin_lead');
   });
 
@@ -371,6 +371,25 @@ describe('Douyin miniapp domain contracts', () => {
     });
   }
 
+  test('accepts official Douyin clue phone capture configuration', () => {
+    expect(
+      DouyinRuntimeConfigSchema.parse({
+        ...runtimeConfig,
+        features: {
+          ...runtimeConfig.features,
+          douyin_phone: true,
+          phone_capture_mode: 'douyin_phone',
+          clue_component_id: 'clue_1234567890',
+        },
+      }).features,
+    ).toEqual({
+      ...runtimeConfig.features,
+      douyin_phone: true,
+      phone_capture_mode: 'douyin_phone',
+      clue_component_id: 'clue_1234567890',
+    });
+  });
+
   test('rejects unsupported phone capture and unknown configuration', () => {
     expect(
       DouyinRuntimeConfigSchema.safeParse({
@@ -379,6 +398,7 @@ describe('Douyin miniapp domain contracts', () => {
           ...runtimeConfig.features,
           douyin_phone: true,
           phone_capture_mode: 'douyin_phone',
+          clue_component_id: '',
         },
       }).success,
     ).toBe(false);

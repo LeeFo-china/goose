@@ -142,8 +142,16 @@ describe("lead form model", () => {
   });
 
   test("appointment page consumes only the approved transient budget fields", async () => {
-    const [source, formSource, template, successSource, successTemplate] = await Promise.all([
+    const [
+      source,
+      errorSource,
+      formSource,
+      template,
+      successSource,
+      successTemplate,
+    ] = await Promise.all([
       Bun.file(`${__dirname}/lead-page.ts`).text(),
+      Bun.file(`${__dirname}/lead-page-errors.ts`).text(),
       Bun.file(`${__dirname}/form-model.ts`).text(),
       Bun.file(`${__dirname}/../../components/lead-form/index.ttml`).text(),
       Bun.file(`${__dirname}/../lead-success/index.ts`).text(),
@@ -155,8 +163,8 @@ describe("lead form model", () => {
     expect(source).toContain("preferred_visit_date");
     expect(source).toContain("preferred_visit_period");
     expect(source).toContain("const result = await dependencies.submitLead");
-    expect(source).toContain("DOUYIN_MEASUREMENT_PRIVACY_VERSION_MISMATCH");
-    expect(source).toContain("DOUYIN_PRIVACY_POLICY_VERSION_MISMATCH");
+    expect(errorSource).toContain("DOUYIN_MEASUREMENT_PRIVACY_VERSION_MISMATCH");
+    expect(errorSource).toContain("DOUYIN_PRIVACY_POLICY_VERSION_MISMATCH");
     expect(source).not.toContain("throw new TypeError");
     expect(source).toContain("failIdempotentSubmission");
     expect(source).toContain("succeedIdempotentSubmission");
@@ -193,6 +201,10 @@ describe("lead form model", () => {
     expect(frozenContextGuard).toBeLessThan(transientRead);
     expect(source).not.toMatch(/setStorageSync[\s\S]*(?:name|phone)/);
     expect(template).toContain('mode="date"');
+    expect(template).toContain('conversion-target="{{douyinClueEnabled ? 1 : 0}}"');
+    expect(template).toContain('clue-component-id="{{douyinClueComponentId}}"');
+    expect(template).not.toContain('open-type="getPhoneNumber"');
+    expect(template).not.toContain('bindgetphonenumber="onDouyinPhoneNumber"');
     expect(template).toContain("{{estimateNo}}");
     expect(template).toContain("{{estimateRange}}");
     expect(template).not.toContain('data-field="budget"');

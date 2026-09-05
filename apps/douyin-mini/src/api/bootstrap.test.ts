@@ -63,6 +63,24 @@ describe("Douyin bootstrap response validation", () => {
     });
   });
 
+  test("accepts official Douyin clue phone capture configuration", async () => {
+    await expect(fetchBootstrap(clientWith({
+      ...bootstrap,
+      features: {
+        ...bootstrap.features,
+        douyin_phone: true,
+        phone_capture_mode: "douyin_phone",
+        clue_component_id: "clue_1234567890",
+      },
+    }))).resolves.toMatchObject({
+      features: {
+        douyin_phone: true,
+        phone_capture_mode: "douyin_phone",
+        clue_component_id: "clue_1234567890",
+      },
+    });
+  });
+
   test("rejects invalid configured SLA copy", async () => {
     for (const contactSlaText of ["", "   ", "x".repeat(81)]) {
       await expect(fetchBootstrap(clientWith({

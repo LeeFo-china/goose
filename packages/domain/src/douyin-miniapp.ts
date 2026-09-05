@@ -59,12 +59,31 @@ export const DOUYIN_MARKETING_EVENT_VALUES = [
   'material_lead_click',
 ] as const;
 
-export const DOUYIN_PHONE_CAPTURE_MODE_VALUES = ['sms'] as const;
+export const DOUYIN_PHONE_CAPTURE_MODE_VALUES = ['sms', 'douyin_phone'] as const;
 
 export const DOUYIN_DEFAULT_CONTACT_SLA_TEXT =
   '工作人员将在营业时间内与你联系';
 
 export const DouyinContactSlaTextSchema = z.string().trim().min(1).max(80);
+
+const DouyinLeadFeatureBaseSchema = z.object({
+  cases: z.boolean(),
+  sites: z.boolean(),
+});
+
+const DouyinSmsLeadFeaturesSchema = DouyinLeadFeatureBaseSchema.extend({
+  sms_lead: z.boolean(),
+  douyin_phone: z.literal(false),
+  phone_capture_mode: z.literal('sms'),
+}).strict();
+
+const DouyinClueLeadFeaturesSchema = DouyinLeadFeatureBaseSchema.extend({
+  sms_lead: z.literal(true),
+  douyin_phone: z.literal(true),
+  phone_capture_mode: z.literal('douyin_phone'),
+  clue_component_id: z.string().trim()
+    .regex(/^[A-Za-z0-9_-]{1,128}$/),
+}).strict();
 
 export const DouyinRuntimeConfigSchema = z
   .object({
@@ -89,15 +108,10 @@ export const DouyinRuntimeConfigSchema = z
         navigation_text_color: z.enum(['black', 'white']),
       })
       .strict(),
-    features: z
-      .object({
-        cases: z.boolean(),
-        sites: z.boolean(),
-        sms_lead: z.boolean(),
-        douyin_phone: z.literal(false),
-        phone_capture_mode: z.literal('sms'),
-      })
-      .strict(),
+    features: z.union([
+      DouyinSmsLeadFeaturesSchema,
+      DouyinClueLeadFeaturesSchema,
+    ]),
     home_banners: z
       .array(
         z
