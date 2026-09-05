@@ -618,6 +618,26 @@ describe("domain permissions", () => {
         label: "管理供应商采购单",
         module: "supplier",
       },
+      "inventory.warehouse.view": {
+        label: "查看仓库设置",
+        module: "inventory",
+      },
+      "inventory.warehouse.manage": {
+        label: "管理仓库设置",
+        module: "inventory",
+      },
+      "inventory.stock.view": {
+        label: "查看库存",
+        module: "inventory",
+      },
+      "inventory.issue.manage": {
+        label: "管理项目领料",
+        module: "inventory",
+      },
+      "inventory.issue.approve": {
+        label: "审批项目领料",
+        module: "inventory",
+      },
     } as const;
 
     for (const code of Object.keys(expectedPermissions) as Array<
