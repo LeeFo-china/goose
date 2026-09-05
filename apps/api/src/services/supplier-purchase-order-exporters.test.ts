@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -23,6 +25,36 @@ describe("supplier purchase order exporters", () => {
     expect(xlsx.content.subarray(0, 2).toString()).toBe("PK");
     expect(pdf.content_type).toBe("application/pdf");
     expect(pdf.content.subarray(0, 4).toString()).toBe("%PDF");
+  });
+
+  test("creates pdf when configured Chinese font is a TrueType collection", async () => {
+    const collectionFont = "/System/Library/Fonts/Supplemental/Songti.ttc";
+    if (!existsSync(collectionFont)) return;
+
+    const previousFontPath = process.env.SUPPLIER_PURCHASE_ORDER_PDF_FONT_PATH;
+    const previousFontFamily =
+      process.env.SUPPLIER_PURCHASE_ORDER_PDF_FONT_FAMILY;
+    process.env.SUPPLIER_PURCHASE_ORDER_PDF_FONT_PATH = collectionFont;
+    delete process.env.SUPPLIER_PURCHASE_ORDER_PDF_FONT_FAMILY;
+
+    try {
+      const pdf = await exportPurchaseOrderPdf(sampleSnapshot());
+
+      expect(pdf.content_type).toBe("application/pdf");
+      expect(pdf.content.subarray(0, 4).toString()).toBe("%PDF");
+    } finally {
+      if (previousFontPath === undefined) {
+        delete process.env.SUPPLIER_PURCHASE_ORDER_PDF_FONT_PATH;
+      } else {
+        process.env.SUPPLIER_PURCHASE_ORDER_PDF_FONT_PATH = previousFontPath;
+      }
+      if (previousFontFamily === undefined) {
+        delete process.env.SUPPLIER_PURCHASE_ORDER_PDF_FONT_FAMILY;
+      } else {
+        process.env.SUPPLIER_PURCHASE_ORDER_PDF_FONT_FAMILY =
+          previousFontFamily;
+      }
+    }
   });
 
   test("creates a batch workbook with one worksheet per supplier order", async () => {

@@ -939,3 +939,71 @@ worksheet 内包含采购单头部信息、商品明细和金额合计。
 - 供应商改价、改数量。
 - 异常处理闭环。
 - 批次 ZIP。
+
+## 18. 第二阶段 dev 联调样例：供应商分享与真实导出
+
+2026-09-05 已在 dev 准备一组按供应商拆单的采购批次，用于 Orange 验证
+“批次详情 → 采购单 → 供应商分享 / PDF / XLSX 导出”的真实链路。
+
+API Base：
+
+```text
+https://api-dev.goodcms.cn
+```
+
+采购批次：
+
+| 字段 | 值 |
+| --- | --- |
+| 采购批次号 | `PB-20260905-00009001` |
+| 采购批次 ID | `77fb611a-c289-4f0d-9d3a-795fce2b9001` |
+| 项目 | `信合·湖畔春天1期 E4号楼4001` |
+| 状态 | `ordered` |
+| 供应商数 | 2 |
+
+采购单：
+
+| 场景 | 采购单号 | 采购单 ID | 供应商 | 分享 token |
+| --- | --- | --- | --- | --- |
+| 供应商 A 导出 | `PO-20260905-00009001` | `77fb611a-c289-4f0d-9d3a-795fce2b9002` | `E2E验收私有供应商0823222632` | `pos_dev_share_export_20260905_order_a_ABCD1234` |
+| 供应商 B 导出 | `PO-20260905-00009002` | `77fb611a-c289-4f0d-9d3a-795fce2b9003` | `[E2E] 验收供应商 MS78DY98` | `pos_dev_share_export_20260905_order_b_EFGH5678` |
+
+公开访问地址：
+
+```text
+GET /public/supplier-purchase-orders/pos_dev_share_export_20260905_order_a_ABCD1234
+GET /public/supplier-purchase-orders/pos_dev_share_export_20260905_order_a_ABCD1234/export.pdf
+GET /public/supplier-purchase-orders/pos_dev_share_export_20260905_order_a_ABCD1234/export.xlsx
+
+GET /public/supplier-purchase-orders/pos_dev_share_export_20260905_order_b_EFGH5678
+GET /public/supplier-purchase-orders/pos_dev_share_export_20260905_order_b_EFGH5678/export.pdf
+GET /public/supplier-purchase-orders/pos_dev_share_export_20260905_order_b_EFGH5678/export.xlsx
+```
+
+员工态访问地址：
+
+```text
+GET /supplier-purchase-orders/77fb611a-c289-4f0d-9d3a-795fce2b9002/print-preview
+GET /supplier-purchase-orders/77fb611a-c289-4f0d-9d3a-795fce2b9002/export.pdf
+GET /supplier-purchase-orders/77fb611a-c289-4f0d-9d3a-795fce2b9002/export.xlsx
+
+GET /supplier-purchase-batches/77fb611a-c289-4f0d-9d3a-795fce2b9001/export.xlsx
+```
+
+验收要求：
+
+1. 公开采购单详情无需登录，只能读取 token 对应的一张采购单。
+2. PDF 响应应为 `content-type: application/pdf`，文件头为 `%PDF`。
+3. XLSX 响应应为
+   `content-type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`，
+   文件头为 `PK`。
+4. 小程序不要自行拼正式单据；金额、供应商和项目字段以后端导出为准。
+5. token 仅用于 dev 联调，不要写入生产配置或小程序常量。
+
+后端实现说明：
+
+- PDF 导出使用后端 `pdfkit` 生成真实 PDF。
+- XLSX 导出使用后端 `exceljs` 生成真实 OpenXML。
+- dev smoke 发现 Linux/macOS TTC 字体集合必须指定字体 family；否则
+  `pdfkit` 会拿到字体集合对象并触发 500。后端已补字体解析兼容逻辑和
+  回归测试。
