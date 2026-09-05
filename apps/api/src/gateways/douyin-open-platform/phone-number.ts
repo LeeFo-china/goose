@@ -17,6 +17,10 @@ const DecryptedPhoneNumberSchema = z.looseObject({
   purePhoneNumber: PhoneNumberSchema,
   phoneNumber: z.string().min(1).optional(),
   countryCode: z.string().min(1).optional(),
+  watermark: z.looseObject({
+    appid: z.string().min(1),
+    timestamp: z.number().int().nonnegative().optional(),
+  }),
 });
 
 export type GetPhoneNumberInfoInput = AuthorizerRequestInput & {
@@ -28,22 +32,25 @@ export type GetPhoneNumberInfoResult = {
   readonly phone: string;
 };
 
-export function parseGetPhoneNumberInfoResult(body: Record<string, unknown>, privateKeyPem: string): GetPhoneNumberInfoResult {
+export function parseGetPhoneNumberInfoResult(
+  body: Record<string, unknown>,
+  input: { readonly appId: string; readonly privateKeyPem: string },
+): GetPhoneNumberInfoResult {
   const parsed = GetPhoneNumberInfoSuccessSchema.safeParse(body);
   const logId = safeLogId(body);
   if (!parsed.success) throw invalidResponseError(logId);
 
-  let decrypted: Buffer;
+  let decryptedBlock: Buffer;
   try {
-    decrypted = privateDecrypt({
-      key: privateKeyPem,
-      padding: constants.RSA_PKCS1_OAEP_PADDING,
-      oaepHash: "sha256",
+    decryptedBlock = privateDecrypt({
+      key: input.privateKeyPem,
+      padding: constants.RSA_NO_PADDING,
     }, Buffer.from(parsed.data.data, "base64"));
   } catch {
     throw invalidResponseError(logId);
   }
 
+  const decrypted = readPkcs1V15Message(decryptedBlock, logId);
   let decoded: unknown;
   try {
     decoded = JSON.parse(decrypted.toString("utf8"));
@@ -53,5 +60,23 @@ export function parseGetPhoneNumberInfoResult(body: Record<string, unknown>, pri
 
   const phone = DecryptedPhoneNumberSchema.safeParse(decoded);
   if (!phone.success) throw invalidResponseError(logId);
+  if (phone.data.watermark.appid !== input.appId) throw invalidResponseError(logId);
   return { phone: phone.data.purePhoneNumber };
+}
+
+function readPkcs1V15Message(block: Buffer, logId: string | undefined) {
+  if (block.length < 11 || block[0] !== 0 || block[1] !== 2) {
+    throw invalidResponseError(logId);
+  }
+  let delimiterIndex = -1;
+  for (let index = 2; index < block.length; index += 1) {
+    if (block[index] === 0) {
+      delimiterIndex = index;
+      break;
+    }
+  }
+  if (delimiterIndex < 10 || delimiterIndex >= block.length - 1) {
+    throw invalidResponseError(logId);
+  }
+  return block.subarray(delimiterIndex + 1);
 }

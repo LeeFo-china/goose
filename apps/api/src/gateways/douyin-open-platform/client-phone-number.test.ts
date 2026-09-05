@@ -13,15 +13,15 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-function encryptedPhoneData(phone: string): string {
+function encryptedPhoneData(phone: string, appId = "authorizer-appid"): string {
   return publicEncrypt({
     key: publicKey,
-    padding: constants.RSA_PKCS1_OAEP_PADDING,
-    oaepHash: "sha256",
+    padding: constants.RSA_PKCS1_PADDING,
   }, Buffer.from(JSON.stringify({
     phoneNumber: `+86 ${phone}`,
     purePhoneNumber: phone,
     countryCode: "86",
+    watermark: { appid: appId, timestamp: 1_799_999_999 },
   }), "utf8")).toString("base64");
 }
 
@@ -76,5 +76,25 @@ describe("DouyinOpenPlatformClient phone number", () => {
     });
     expect(JSON.stringify(caught)).not.toContain(AUTHORIZER_TOKEN);
     expect(JSON.stringify(caught)).not.toContain("phone-code");
+  });
+
+  test("rejects decrypted phone data for another miniapp", async () => {
+    const client = new DouyinOpenPlatformClient({
+      fetch: async () => jsonResponse({
+        err_no: 0,
+        log_id: "phone-log",
+        data: encryptedPhoneData("13800000000", "another-appid"),
+      }),
+    });
+
+    await expect(client.getPhoneNumberInfo({
+      appId: "authorizer-appid",
+      authorizerAccessToken: AUTHORIZER_TOKEN,
+      code: "phone-code",
+      privateKeyPem,
+    })).rejects.toMatchObject({
+      statusCode: 502,
+      code: "DOUYIN_OPEN_PLATFORM_RESPONSE_INVALID",
+    });
   });
 });

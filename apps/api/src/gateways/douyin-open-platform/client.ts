@@ -322,7 +322,10 @@ export class DouyinOpenPlatformClient
         body: JSON.stringify({ code: input.code }),
       });
       assertOpenApiSuccess(body);
-      return parseGetPhoneNumberInfoResult(body, input.privateKeyPem);
+      return parseGetPhoneNumberInfoResult(body, {
+        appId: input.appId,
+        privateKeyPem: input.privateKeyPem,
+      });
     });
   }
 
