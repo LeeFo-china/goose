@@ -2,6 +2,9 @@ import { randomBytes } from "node:crypto";
 
 import { Errors } from "@/errors/error-factory";
 import {
+  assertProjectProcurementDestination,
+} from "@/repositories/procurement-destination-records";
+import {
   supplierPurchaseOrderSharingRepository,
   type SupplierPurchaseOrderExportSnapshot,
   type SupplierPurchaseOrderShareLink,
@@ -212,6 +215,8 @@ export class SupplierPurchaseOrderSharingService {
     input: SupplierPurchaseOrderPublicConfirmViewInput,
   ) {
     const link = await this.requirePublicLink(token);
+    const snapshot = await this.requireSnapshotForPublicLink(link);
+    assertProjectProcurementDestination(snapshot.order);
     const confirmed = await this.repository.confirmViewed({
       link,
       confirmedAt: input.confirmed_at,

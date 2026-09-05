@@ -146,6 +146,27 @@ describe("WarehousesService", () => {
     });
   });
 
+  test("maps default warehouse guard errors to stable business responses", async () => {
+    const { Errors } = await import("@/errors/error-factory");
+    const update = mock(async () => {
+      throw Errors.dbError("更新仓库失败", {
+        message: "WAREHOUSE_DEFAULT_REQUIRED",
+      });
+    });
+    const service = await serviceWith({ update });
+
+    await expect(service.update(
+      auth(["inventory.warehouse.manage"]),
+      WAREHOUSE_ID,
+      { expected_version: 1, status: "inactive" },
+      "key-4",
+    )).rejects.toMatchObject({
+      statusCode: 409,
+      code: "WAREHOUSE_DEFAULT_REQUIRED",
+      message: "请先设置其他默认仓库",
+    });
+  });
+
   test("does not forward undefined optional update fields as submitted fields", async () => {
     const update = mock(async () => warehouse);
     const service = await serviceWith({ update });

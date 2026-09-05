@@ -18,6 +18,8 @@ describe("procurement destination migration", () => {
   test("adds project and warehouse destinations to procurement headers", async () => {
     const sql = await migrationSql();
 
+    expect(sql).toContain("BEGIN;\n\nSET LOCAL lock_timeout = '5s';\nSET LOCAL statement_timeout = '5min';");
+    expect(sql.trimEnd()).toEndWith("COMMIT;");
     for (const table of headers) {
       expect(sql).toContain(`ALTER TABLE public.${table}`);
       expect(sql).toContain("ADD COLUMN destination_type text");

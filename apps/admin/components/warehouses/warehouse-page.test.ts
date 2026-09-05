@@ -19,8 +19,10 @@ describe("warehouse admin page contract", () => {
     expect(workspace).toContain("暂未设置仓库");
     expect(workspace).not.toContain("warehouse_code");
     expect(table).toContain("设为默认");
+    expect(table).toContain("!warehouse.is_default");
     expect(dialog).toContain("仓库名称");
     expect(dialog).toContain("设为默认");
+    expect(dialog).toContain("disabled={warehouse?.is_default || submitting}");
     expect(page).toContain("inventory.warehouse.view");
     expect(page).toContain("inventory.warehouse.manage");
     expect(menu).toContain('href: "/warehouses"');

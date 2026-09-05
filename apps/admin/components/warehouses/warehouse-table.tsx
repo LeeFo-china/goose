@@ -95,19 +95,21 @@ export function WarehouseTable({
                         设为默认
                       </Button>
                     ) : null}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        onMutate(warehouse, {
-                          expected_version: warehouse.version,
-                          status: warehouse.status === "active"
-                            ? "inactive"
-                            : "active",
-                        })}
-                    >
-                      {warehouse.status === "active" ? "停用" : "启用"}
-                    </Button>
+                    {!warehouse.is_default ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          onMutate(warehouse, {
+                            expected_version: warehouse.version,
+                            status: warehouse.status === "active"
+                              ? "inactive"
+                              : "active",
+                          })}
+                      >
+                        {warehouse.status === "active" ? "停用" : "启用"}
+                      </Button>
+                    ) : null}
                   </>
                 ) : (
                   <span className="text-sm text-muted-foreground">只读</span>

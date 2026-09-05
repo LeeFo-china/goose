@@ -163,6 +163,7 @@ export function WarehouseDialog({
             <Switch
               id="warehouse-default"
               checked={draft.isDefault ?? false}
+              disabled={warehouse?.is_default || submitting}
               onCheckedChange={(checked) =>
                 setDraft((current) => ({
                   ...current,

@@ -130,6 +130,8 @@ export class WarehousesService {
     try {
       return await action();
     } catch (error) {
+      const mapped = mapWarehouseCommandError(error);
+      if (mapped) throw mapped;
       if (isWarehouseStateConflict(error)) {
         throw Errors.business(
           409,
@@ -144,6 +146,34 @@ export class WarehousesService {
 
 export const warehousesService = new WarehousesService();
 
+const WAREHOUSE_COMMAND_ERRORS = {
+  WAREHOUSE_DEFAULT_REQUIRED: {
+    statusCode: 409,
+    message: "请先设置其他默认仓库",
+  },
+  WAREHOUSE_ACTIVE_REQUIRED: {
+    statusCode: 409,
+    message: "至少需要保留一个启用仓库",
+  },
+  WAREHOUSE_MANAGER_INVALID: {
+    statusCode: 409,
+    message: "仓库负责人无效",
+  },
+  WAREHOUSE_IDEMPOTENCY_CONFLICT: {
+    statusCode: 409,
+    message: "幂等键已用于其他仓库操作",
+  },
+} as const;
+
+function mapWarehouseCommandError(error: unknown): AppError | null {
+  const token = Object.keys(WAREHOUSE_COMMAND_ERRORS).find((candidate) =>
+    containsToken(error, candidate)
+  ) as keyof typeof WAREHOUSE_COMMAND_ERRORS | undefined;
+  if (!token) return null;
+  const definition = WAREHOUSE_COMMAND_ERRORS[token];
+  return Errors.business(definition.statusCode, definition.message, token);
+}
+
 function isWarehouseStateConflict(error: unknown): boolean {
   if (!(error instanceof AppError)) return containsConflictToken(error);
   return error.code === "WAREHOUSE_STATE_CONFLICT" ||
@@ -156,4 +186,13 @@ function containsConflictToken(value: unknown): boolean {
   if (Array.isArray(value)) return value.some(containsConflictToken);
   if (!value || typeof value !== "object") return false;
   return Object.values(value).some(containsConflictToken);
+}
+
+function containsToken(value: unknown, token: string): boolean {
+  if (typeof value === "string") return value.includes(token);
+  if (Array.isArray(value)) {
+    return value.some((item) => containsToken(item, token));
+  }
+  if (!value || typeof value !== "object") return false;
+  return Object.values(value).some((item) => containsToken(item, token));
 }

@@ -120,6 +120,36 @@ describe("SupplierPurchaseOrderSharingService", () => {
       });
   });
 
+  test("public confirm-view rejects warehouse destination orders before fulfillment sync", async () => {
+    const link = shareLink();
+    const repository = {
+      findActiveShareLinkByToken: mock(async () => link),
+      getOrderSnapshot: mock(async () => snapshot("submitted", {
+        destination_type: "warehouse",
+        project_id: null,
+        warehouse_id: "63000000-0000-4000-8000-000000000011",
+        project: null,
+        warehouse: {
+          id: "63000000-0000-4000-8000-000000000011",
+          name: "公司仓库",
+          status: "active",
+        },
+      })),
+      confirmViewed: mock(async () => shareLink({ confirmed_at: NOW.toISOString() })),
+      ensureFulfillmentFromShareConfirmation: mock(async () => undefined),
+    };
+    const service = serviceWith({ repository });
+
+    await expect(service.confirmPublicView(TOKEN, {
+      confirmed_at: "2026-09-04T01:00:00+00:00",
+    })).rejects.toMatchObject({
+      code: "WAREHOUSE_PROCUREMENT_NOT_ENABLED",
+    });
+    expect(repository.confirmViewed).not.toHaveBeenCalled();
+    expect(repository.ensureFulfillmentFromShareConfirmation)
+      .not.toHaveBeenCalled();
+  });
+
   test("exports a batch after asserting batch project access", async () => {
     const repository = {
       getBatchOrderSnapshots: mock(async () => [snapshot("submitted")]),
@@ -211,12 +241,17 @@ function shareLink(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function snapshot(status: "draft" | "submitted") {
+function snapshot(
+  status: "draft" | "submitted",
+  orderOverrides: Record<string, unknown> = {},
+) {
   return {
     order: {
       id: ORDER_ID,
       tenant_id: TENANT_ID,
       project_id: PROJECT_ID,
+      destination_type: "project",
+      warehouse_id: null,
       tenant_supplier_id: TENANT_SUPPLIER_ID,
       supplier_id: SUPPLIER_ID,
       order_no: "PO-20260904-00000001",
@@ -255,6 +290,8 @@ function snapshot(status: "draft" | "submitted") {
         operational_status: "active",
       },
       purchase_requisition: null,
+      warehouse: null,
+      ...orderOverrides,
     },
     items: [],
   } as const;
