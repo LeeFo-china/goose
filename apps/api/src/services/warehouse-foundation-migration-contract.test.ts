@@ -16,7 +16,8 @@ function functionSignature(sql: string, name: string): string {
   ));
 
   expect(match).not.toBeNull();
-  return match?.[1].replace(/\s+/g, ' ').trim() ?? '';
+  const signature = match?.[1];
+  return signature?.replace(/\s+/g, ' ').trim() ?? '';
 }
 
 function functionBody(sql: string, name: string): string {
