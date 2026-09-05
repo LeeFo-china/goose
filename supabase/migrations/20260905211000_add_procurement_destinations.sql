@@ -81,9 +81,15 @@ ALTER TABLE public.supplier_purchase_orders
 ADD COLUMN destination_type text,
 ADD COLUMN warehouse_id uuid NULL;
 
+ALTER TABLE public.supplier_purchase_orders
+DISABLE TRIGGER supplier_purchase_orders_prevent_submitted_mutation;
+
 UPDATE public.supplier_purchase_orders
 SET destination_type = 'project'
 WHERE destination_type IS NULL;
+
+ALTER TABLE public.supplier_purchase_orders
+ENABLE TRIGGER supplier_purchase_orders_prevent_submitted_mutation;
 
 ALTER TABLE public.supplier_purchase_orders
 ALTER COLUMN destination_type SET DEFAULT 'project',

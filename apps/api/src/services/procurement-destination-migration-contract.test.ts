@@ -36,6 +36,12 @@ describe("procurement destination migration", () => {
       expect(sql).toContain(`${table}_tenant_warehouse_updated_idx`);
       expect(sql).toContain(`WHERE destination_type = 'warehouse'`);
     }
+    expect(sql).toContain(
+      "DISABLE TRIGGER supplier_purchase_orders_prevent_submitted_mutation",
+    );
+    expect(sql).toContain(
+      "ENABLE TRIGGER supplier_purchase_orders_prevent_submitted_mutation",
+    );
   });
 
   test("keeps warehouse procurement disabled in this stage", async () => {
