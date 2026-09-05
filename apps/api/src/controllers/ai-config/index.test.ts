@@ -12,6 +12,8 @@ describe("AiConfigController routes", () => {
       '@Get("/platform/ai-config/providers")',
       '@Get("/platform/ai-config/models")',
       '@Get("/platform/ai-config/routes")',
+      '@Get("/platform/ai-config/providers/:id/route-model-options")',
+      '@Post("/platform/ai-config/providers/:id/route-model-options:resolve")',
       '@Get("/platform/ai-config/catalog-runs")',
       '@Get("/platform/ai-config/catalog-runs/:id/entries")',
       '@Post("/platform/ai-config/openrouter/models/sync-preview")',
@@ -23,6 +25,8 @@ describe("AiConfigController routes", () => {
       expect(code).toContain(route);
     }
     expect(code).toContain("AiModelListQuerySchema.safeParse");
+    expect(code).toContain("AiRouteModelOptionListQuerySchema.safeParse");
+    expect(code).toContain("AiRouteModelOptionResolvePayloadSchema.safeParse");
     expect(code).toContain("OpenRouterCatalogApplyPayloadSchema.safeParse");
     expect(code).toContain("this.getAiConfigManageContext(request)");
   });

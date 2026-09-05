@@ -15,6 +15,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
 const originalFetch = globalThis.fetch;
 const insertedAiLogs: Array<Record<string, unknown>> = [];
+let routeData: Record<string, unknown> | null = null;
 
 function createRouteQuery() {
   return {
@@ -25,7 +26,7 @@ function createRouteQuery() {
       return this;
     },
     async maybeSingle() {
-      return { data: null, error: null };
+      return { data: routeData, error: null };
     },
   };
 }
@@ -81,6 +82,7 @@ function installFetch(response: Response) {
 
 beforeEach(() => {
   insertedAiLogs.length = 0;
+  routeData = null;
 });
 
 beforeAll(async () => {
@@ -92,6 +94,38 @@ afterAll(() => {
 });
 
 describe("AiGateway.chat", () => {
+  test("fails closed when route model is inactive", async () => {
+    routeData = {
+      scene_code: "decoration_qa",
+      temperature: 0.7,
+      response_format: null,
+      timeout_ms: 60000,
+      primary_model: {
+        code: "openrouter.openai_gpt_4o",
+        model_name: "openai/gpt-4o",
+        status: "inactive",
+        provider: {
+          code: "openrouter",
+          status: "active",
+          endpoint_url: "https://openrouter.ai/api/v1/chat/completions",
+          api_key_setting_key: "DEEPSEEK_API_KEY",
+        },
+      },
+    };
+    installFetch(new Response(JSON.stringify({
+      id: "chatcmpl-1",
+      choices: [{ message: { content: "ok" } }],
+    }), { status: 200 }));
+
+    await expect(aiGateway.chat({
+      sceneCode: "decoration_qa",
+      messages: [{ role: "user", content: "test" }],
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: "AI_MODEL_INACTIVE",
+    });
+  });
+
   test("converts non-2xx null JSON responses into a stable gateway error", async () => {
     installFetch(new Response("null", { status: 429 }));
 

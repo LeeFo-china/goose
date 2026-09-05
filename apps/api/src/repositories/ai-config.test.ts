@@ -52,6 +52,23 @@ function createProviderBuilder(existingCodes: string[]) {
   return root;
 }
 
+function listBuilder(rows: unknown[], count = rows.length) {
+  const calls: Array<{ method: string; args: unknown[] }> = [];
+  const response = { data: rows, error: null, count };
+  const builder = {
+    select: (...args: unknown[]) => { calls.push({ method: "select", args }); return builder; },
+    eq: (...args: unknown[]) => { calls.push({ method: "eq", args }); return builder; },
+    or: (...args: unknown[]) => { calls.push({ method: "or", args }); return builder; },
+    order: (...args: unknown[]) => { calls.push({ method: "order", args }); return builder; },
+    range: (...args: unknown[]) => { calls.push({ method: "range", args }); return builder; },
+    maybeSingle: async () => ({ data: Array.isArray(rows) ? rows[0] ?? null : rows, error: null }),
+    single: async () => ({ data: Array.isArray(rows) ? rows[0] ?? null : rows, error: null }),
+    then: Promise.resolve(response).then.bind(Promise.resolve(response)),
+    calls,
+  };
+  return builder;
+}
+
 describe("AiConfigRepository optimistic version errors", () => {
   test("maps stale version updates to stable 409 without raw database details", async () => {
     const { AiConfigRepository } = await import("./ai-config");
@@ -99,5 +116,45 @@ describe("AiConfigRepository optimistic version errors", () => {
     expect(builder.calls).toContainEqual({ method: "select", args: ["code"] });
     expect(builder.calls).toContainEqual({ method: "ilike", args: ["code", "openrouter%"] });
     expect(JSON.stringify(builder.inserted[0])).not.toContain("manual");
+  });
+
+  test("lists provider-scoped route models with search before pagination", async () => {
+    const { AiConfigRepository } = await import("./ai-config");
+    const builder = listBuilder([{
+      id: "44444444-4444-4444-8444-444444444444",
+      provider_id: "11111111-1111-4111-8111-111111111111",
+      code: "openrouter.openai_gpt_4o",
+      name: "GPT-4o",
+      model_name: "openai/gpt-4o",
+      modality: "text",
+      status: "active",
+      sort_order: 0,
+      created_at: "2026-09-05T00:00:00.000Z",
+      updated_at: "2026-09-05T00:00:00.000Z",
+    }]);
+    const repository = new AiConfigRepository({ from: () => builder } as never);
+
+    const result = await repository.listRouteModels("11111111-1111-4111-8111-111111111111", {
+      page: 2,
+      pageSize: 20,
+      keyword: "gpt",
+      modality: "text",
+      status: "active",
+    });
+
+    expect(result.list[0]).toMatchObject({
+      source: "internal",
+      value: "44444444-4444-4444-8444-444444444444",
+      label: "GPT-4o",
+      description: "openai/gpt-4o",
+    });
+    expect(builder.calls).toContainEqual({
+      method: "eq",
+      args: ["provider_id", "11111111-1111-4111-8111-111111111111"],
+    });
+    expect(builder.calls).toContainEqual({ method: "eq", args: ["modality", "text"] });
+    expect(builder.calls).toContainEqual({ method: "eq", args: ["status", "active"] });
+    expect(builder.calls.some((call) => call.method === "or" && String(call.args[0]).includes("gpt"))).toBe(true);
+    expect(builder.calls).toContainEqual({ method: "range", args: [20, 39] });
   });
 });

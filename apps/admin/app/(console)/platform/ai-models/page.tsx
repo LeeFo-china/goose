@@ -2,10 +2,7 @@ import { redirect } from "next/navigation";
 import { Cpu, GitBranch, ServerCog } from "lucide-react";
 import { AiModelRoutingPanel } from "@/components/platform-ai/ai-model-routing-panel";
 import type {
-  AiCatalogEntryRecord,
-  AiCatalogRunRecord,
   AiConfigData,
-  AiModelRecord,
   AiProviderRecord,
   AiSceneRouteRecord,
   PageData,
@@ -44,68 +41,37 @@ async function getAiConfig() {
     return {
       data: emptyConfig(),
       providerPage: emptyPage<AiProviderRecord>(),
-      modelPage: emptyPage<AiModelRecord>(),
       routePage: emptyPage<AiSceneRouteRecord>(),
       providerOptions: [],
-      modelOptions: [],
-      catalogRuns: emptyPage<AiCatalogRunRecord>(),
-      catalogEntries: emptyPage<AiCatalogEntryRecord>(),
       error: "缺少登录凭证",
     };
   }
 
   try {
-    const [summary, providers, models, routes, providerOptions, modelOptions] = await Promise.all([
+    const [summary, providers, routes, providerOptions] = await Promise.all([
       fetchBackendData<AiConfigData>(token, "/platform/ai-config"),
       fetchBackendData<PageData<AiProviderRecord>>(token, "/platform/ai-config/providers?page=1&pageSize=20"),
-      fetchBackendData<PageData<AiModelRecord>>(token, "/platform/ai-config/models?page=1&pageSize=20"),
       fetchBackendData<PageData<AiSceneRouteRecord>>(token, "/platform/ai-config/routes?page=1&pageSize=20"),
       fetchBackendData<PageData<AiProviderRecord>>(token, "/platform/ai-config/providers?page=1&pageSize=100"),
-      fetchBackendData<PageData<AiModelRecord>>(token, "/platform/ai-config/models?page=1&pageSize=100"),
     ]);
-    const openRouterProviderId = providerOptions?.list
-      ?.find((provider) => provider.provider_type === "openrouter")?.id;
-    const catalogRuns = openRouterProviderId
-      ? await fetchBackendData<PageData<AiCatalogRunRecord>>(
-        token,
-        `/platform/ai-config/catalog-runs?page=1&pageSize=20&provider_id=${openRouterProviderId}`,
-      )
-      : emptyPage<AiCatalogRunRecord>();
-    const firstRunId = catalogRuns?.list?.[0]?.id;
-    const catalogEntries = firstRunId
-      ? await fetchBackendData<PageData<AiCatalogEntryRecord>>(
-        token,
-        `/platform/ai-config/catalog-runs/${firstRunId}/entries?page=1&pageSize=20`,
-      )
-      : emptyPage<AiCatalogEntryRecord>();
     return {
       data: {
         ...(summary || emptyConfig()),
         providers: providers?.list || [],
-        models: models?.list || [],
+        models: [],
         routes: routes?.list || [],
       },
       providerPage: providers || emptyPage<AiProviderRecord>(),
-      modelPage: models || emptyPage<AiModelRecord>(),
       routePage: routes || emptyPage<AiSceneRouteRecord>(),
       providerOptions: providerOptions?.list || providers?.list || [],
-      modelOptions: modelOptions?.list || models?.list || [],
-      catalogRuns: catalogRuns || emptyPage<AiCatalogRunRecord>(),
-      catalogEntries: catalogEntries || emptyPage<AiCatalogEntryRecord>(),
-      loadedEntryRunId: firstRunId ?? null,
       error: null,
     };
   } catch (error) {
     return {
       data: emptyConfig(),
       providerPage: emptyPage<AiProviderRecord>(),
-      modelPage: emptyPage<AiModelRecord>(),
       routePage: emptyPage<AiSceneRouteRecord>(),
       providerOptions: [],
-      modelOptions: [],
-      catalogRuns: emptyPage<AiCatalogRunRecord>(),
-      catalogEntries: emptyPage<AiCatalogEntryRecord>(),
-      loadedEntryRunId: null,
       error: error instanceof Error ? error.message : "AI 模型路由配置加载失败",
     };
   }
@@ -123,13 +89,8 @@ export default async function PlatformAiModelsPage() {
     : {
       data: emptyConfig(),
       providerPage: emptyPage<AiProviderRecord>(),
-      modelPage: emptyPage<AiModelRecord>(),
       routePage: emptyPage<AiSceneRouteRecord>(),
       providerOptions: [],
-      modelOptions: [],
-      catalogRuns: emptyPage<AiCatalogRunRecord>(),
-      catalogEntries: emptyPage<AiCatalogEntryRecord>(),
-      loadedEntryRunId: null,
       error: "当前账号不是平台超管，无法维护 AI 模型路由",
     };
 
@@ -190,15 +151,9 @@ export default async function PlatformAiModelsPage() {
 
       {hasPlatformAccess ? (
         <AiModelRoutingPanel
-          data={result.data}
           providerPage={result.providerPage}
-          modelPage={result.modelPage}
           routePage={result.routePage}
           providerOptions={result.providerOptions}
-          modelOptions={result.modelOptions}
-          catalogRuns={result.catalogRuns}
-          catalogEntries={result.catalogEntries}
-          loadedEntryRunId={result.loadedEntryRunId}
         />
       ) : null}
     </div>

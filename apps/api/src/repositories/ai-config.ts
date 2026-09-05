@@ -1,6 +1,7 @@
 import { Errors } from "@/errors/error-factory";
 import type {
   AiModelPayload,
+  AiRouteModelOptionListQuery,
   AiProviderPayload,
   AiSceneRoutePayload,
   UpdateAiModelPayload,
@@ -28,6 +29,10 @@ export type AiModelRecord = {
   code: string;
   name: string;
   model_name: string;
+  modality?: "text" | "image" | "video" | "speech";
+  input_modalities?: string[] | null;
+  catalog_managed?: boolean | null;
+  probe_status?: "unverified" | "eligible" | "ineligible" | "stale";
   status: "active" | "inactive";
   sort_order: number;
   created_at: string;
@@ -49,6 +54,13 @@ export type AiSceneRouteRecord = {
   updated_at: string;
   primary_model?: AiModelRecord | null;
   fallback_model?: AiModelRecord | null;
+};
+
+export type AiRouteModelOptionRecord = AiModelRecord & {
+  source: "internal";
+  value: string;
+  label: string;
+  description: string | null;
 };
 
 type AiConfigClient = {
@@ -95,6 +107,47 @@ function providerCodeBase(input: AiProviderPayload): string {
   return truncateProviderCodeBase(nameSeed || input.provider_type || "ai_provider");
 }
 
+function modelCodeSeed(value: string): string {
+  return normalizeProviderCodeSeed(value) || "model";
+}
+
+function pageRange(query: { page: number; pageSize: number }) {
+  const from = (query.page - 1) * query.pageSize;
+  return { from, to: from + query.pageSize - 1 };
+}
+
+function totalPages(total: number, pageSize: number) {
+  return total ? Math.ceil(total / pageSize) : 0;
+}
+
+const MODEL_SELECT = [
+  "id",
+  "provider_id",
+  "code",
+  "name",
+  "model_name",
+  "modality",
+  "input_modalities",
+  "catalog_managed",
+  "probe_status",
+  "status",
+  "sort_order",
+  "version",
+  "created_at",
+  "updated_at",
+  "provider:ai_providers!ai_models_provider_id_fkey(id,code,name,provider_type,status)",
+].join(",");
+
+function routeModelOptionFromRecord(item: AiModelRecord): AiRouteModelOptionRecord {
+  return {
+    ...item,
+    source: "internal",
+    value: item.id,
+    label: item.name,
+    description: item.model_name || null,
+  };
+}
+
 export class AiConfigRepository {
   private readonly client: AiConfigClient;
 
@@ -133,6 +186,101 @@ export class AiConfigRepository {
     }
 
     return (data || []) as AiModelRecord[];
+  }
+
+  async listRouteModels(providerId: string, query: AiRouteModelOptionListQuery) {
+    const { from, to } = pageRange(query);
+    let request = this.from("ai_models")
+      .select(MODEL_SELECT, { count: "exact" })
+      .eq("provider_id", providerId)
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true })
+      .range(from, to);
+
+    if (query.modality) request = request.eq("modality", query.modality);
+    if (query.status) request = request.eq("status", query.status);
+    if (query.keyword) {
+      request = request.or(`name.ilike.%${query.keyword}%,model_name.ilike.%${query.keyword}%`);
+    }
+
+    const { data, error, count } = await request;
+    if (error) {
+      throw Errors.dbError("查询供应商模型候选失败", error);
+    }
+
+    const total = count ?? 0;
+    return {
+      list: ((data || []) as AiModelRecord[]).map(routeModelOptionFromRecord),
+      pagination: {
+        page: query.page,
+        pageSize: query.pageSize,
+        total,
+        totalPages: totalPages(total, query.pageSize),
+      },
+    };
+  }
+
+  async getProviderById(id: string): Promise<AiProviderRecord | null> {
+    const { data, error } = await this.from("ai_providers")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询 AI 供应商失败", error);
+    }
+
+    return data as AiProviderRecord | null;
+  }
+
+  async getModelById(id: string): Promise<AiModelRecord | null> {
+    const { data, error } = await this.from("ai_models")
+      .select(MODEL_SELECT)
+      .eq("id", id)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询 AI 模型失败", error);
+    }
+
+    return data as AiModelRecord | null;
+  }
+
+  async findModelByProviderAndCallName(
+    providerId: string,
+    modelName: string,
+    modality: "text" | "image" | "video" | "speech" = "text",
+  ): Promise<AiModelRecord | null> {
+    const { data, error } = await this.from("ai_models")
+      .select(MODEL_SELECT)
+      .eq("provider_id", providerId)
+      .eq("model_name", modelName)
+      .eq("modality", modality)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询 AI 模型失败", error);
+    }
+
+    return data as AiModelRecord | null;
+  }
+
+  async createManualModel(input: {
+    provider: Pick<AiProviderRecord, "id" | "code">;
+    modelName: string;
+    displayName?: string | null;
+  }): Promise<AiModelRecord> {
+    const code = `manual.${input.provider.code}.${modelCodeSeed(input.modelName)}`.slice(0, 120);
+    return this.createModel({
+      provider_id: input.provider.id,
+      code,
+      name: input.displayName || input.modelName,
+      model_name: input.modelName,
+      modality: "text",
+      input_modalities: ["text"],
+      status: "active",
+      sort_order: 0,
+    });
   }
 
   async listSceneRoutes() {
