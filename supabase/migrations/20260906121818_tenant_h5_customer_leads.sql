@@ -1440,9 +1440,11 @@ BEGIN
         RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'CUSTOMER_LEAD_DIRECT_WRITE_FORBIDDEN';
       END IF;
     END IF;
+    -- Capture may bind the logged-in customer while the form contains another
+    -- contact phone. Preserve that identity; conversion separately checks phones.
     IF NEW.customer_id IS NOT NULL AND NOT EXISTS (
       SELECT 1 FROM public.customers WHERE id = NEW.customer_id
-        AND tenant_id = NEW.tenant_id AND phone IS NOT DISTINCT FROM NEW.phone
+        AND tenant_id = NEW.tenant_id
     ) THEN
       RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'CUSTOMER_LEAD_CUSTOMER_SCOPE_INVALID';
     END IF;

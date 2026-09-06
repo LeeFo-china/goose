@@ -285,6 +285,58 @@ BEGIN
 END;
 $tenant_boundaries$;
 
+DO $token_customer_capture$
+DECLARE
+  t uuid; actor uuid; page uuid; pv uuid; other_tenant uuid;
+  other_customer uuid := gen_random_uuid();
+  token_customer uuid := gen_random_uuid(); lead uuid := gen_random_uuid(); reply jsonb;
+  customer_count bigint;
+BEGIN
+  SELECT id INTO STRICT t FROM public.tenants WHERE name = 'H5 lead SQL smoke';
+  SELECT id INTO STRICT actor FROM public.employees WHERE tenant_id = t;
+  SELECT id INTO STRICT page FROM public.marketing_pages WHERE tenant_id = t;
+  SELECT id INTO STRICT pv FROM public.marketing_page_versions WHERE page_id = page;
+  SELECT id INTO STRICT other_tenant FROM public.tenants WHERE name = 'Other H5 smoke';
+  INSERT INTO public.customers(id, tenant_id, name, phone, status)
+    VALUES (token_customer, t, '登录客户A', '13900000821', 'potential'),
+      (other_customer, other_tenant, '其他租户客户', '13900000821', 'potential');
+  SELECT count(*) INTO customer_count FROM public.customers WHERE tenant_id = t;
+  BEGIN
+    SET LOCAL ROLE service_role;
+    INSERT INTO public.marketing_leads(tenant_id, source, customer_id, phone)
+      VALUES (t, 'h5', other_customer, '13900000822');
+    RAISE EXCEPTION 'Different capture phone must not weaken customer tenant scope';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'CUSTOMER_LEAD_CUSTOMER_SCOPE_INVALID' THEN RAISE; END IF;
+  END;
+  -- Existing capture resolves a valid login token before the submitted phone.
+  SET LOCAL ROLE service_role;
+  INSERT INTO public.marketing_leads(id, tenant_id, page_id, page_version_id,
+    source, customer_id, name, phone, form_data)
+    VALUES (lead, t, page, pv, 'h5', token_customer, '表单联系人B', '13900000822', '{}');
+  UPDATE public.marketing_leads SET name = '重复报名B', customer_id = token_customer,
+    phone = '13900000822', form_data = '{"submitted_again":true}' WHERE id = lead;
+  RESET ROLE;
+  ASSERT (SELECT version = 2 AND customer_id = token_customer AND lead_status = 'new'
+    FROM public.marketing_leads WHERE id = lead), 'Token identity survives different capture phone';
+  reply := public.assign_customer_lead(t, lead, actor, actor, 2, gen_random_uuid(), NULL);
+  ASSERT reply->'error' IS NULL AND reply #>> '{data,lead_version}' = '3', reply::text;
+  reply := public.append_customer_lead_follow_up(t, lead, NULL, actor,
+    'phone', '联系表单联系人B', '等待核对联系方式', NULL, NULL, NULL, 3, gen_random_uuid());
+  ASSERT reply->'error' IS NULL AND reply #>> '{data,lead_version}' = '4', reply::text;
+  reply := public.convert_customer_lead_to_customer(t, lead, actor, 4,
+    gen_random_uuid(), NULL, true);
+  ASSERT reply #>> '{error,code}' = 'DOUYIN_LEAD_CUSTOMER_PREFLIGHT_CONFLICT',
+    'Conversion still requires the phone match to agree with the bound token customer';
+  ASSERT (SELECT count(*) = customer_count FROM public.customers WHERE tenant_id = t),
+    'Conflicting token identity must not create another customer';
+  ASSERT (SELECT customer_id = token_customer AND phone = '13900000822'
+    AND version = 4 AND lead_status = 'contacted'
+    FROM public.marketing_leads WHERE id = lead), 'Conversion conflict preserves captured identity';
+  RAISE NOTICE 'H5 TOKEN CUSTOMER CAPTURE SMOKE PASSED';
+END;
+$token_customer_capture$;
+
 DO $performance$
 DECLARE t uuid; actor uuid; page uuid; pv uuid; plan record; query text;
 BEGIN
