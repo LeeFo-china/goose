@@ -37,11 +37,12 @@ export async function listTenantDouyinLeadAssigneeCandidates(input: {
   authContext: AuthContext;
   query: TenantDouyinLeadAssigneeCandidatesQueryInput;
   dependencies: Dependencies;
+  permissionResource?: "douyin_lead" | "customer_lead";
 }) {
   const tenantId = input.dependencies.accessPolicy
     .assertTenantContext(input.authContext);
   const scope = input.dependencies.accessPolicy.assertPermission(
-    input.authContext, "douyin_lead.assign",
+    input.authContext, `${input.permissionResource ?? "douyin_lead"}.assign`,
   );
   if (!scope || !input.authContext.employeeId
     || (scope === "department" && !input.authContext.tenantDepartmentId)) {
@@ -60,16 +61,17 @@ export async function listTenantDouyinLeadAssigneeFilterOptions(input: {
   authContext: AuthContext;
   query: TenantDouyinLeadAssigneeFilterOptionsQueryInput;
   dependencies: Dependencies;
+  permissionResource?: "douyin_lead" | "customer_lead";
 }) {
   const tenantId = input.dependencies.accessPolicy
     .assertTenantContext(input.authContext);
   const scope = input.dependencies.accessPolicy.assertPermission(
-    input.authContext, "douyin_lead.read",
+    input.authContext, `${input.permissionResource ?? "douyin_lead"}.read`,
   );
   const query = parseQuery(TenantDouyinLeadAssigneeFilterOptionsQuerySchema,
     input.query);
   const visibleEmployeeIds = await input.dependencies.accessPolicy
-    .getVisibleCustomerOwnerIds(input.authContext, "douyin_lead.read");
+    .getVisibleCustomerOwnerIds(input.authContext, `${input.permissionResource ?? "douyin_lead"}.read`);
   if (visibleEmployeeIds !== null && visibleEmployeeIds.length === 0) {
     return candidatePage({ rows: [], total: 0 }, query.page, query.pageSize);
   }

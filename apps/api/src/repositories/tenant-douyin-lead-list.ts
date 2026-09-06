@@ -18,11 +18,13 @@ const EnvelopeSchema = z.strictObject({ data: z.strictObject({
   total: z.number().int().min(0),
 }) });
 
-type Client = { rpc(name: "list_tenant_douyin_leads",
+type Client = { rpc(name: "list_tenant_douyin_leads" | "list_tenant_customer_leads",
   args: Readonly<Record<string, Json | undefined>>): Promise<{
     readonly data: unknown; readonly error: unknown;
   }> };
 export type ScopedLeadListInput = TenantDouyinLeadListQuery & {
+  readonly source?: "douyin_miniapp";
+  readonly assignment?: "all" | "assigned" | "unassigned";
   readonly tenantId: string;
   readonly visibleAssigneeIds: readonly string[] | null;
 };
@@ -30,6 +32,7 @@ export type ScopedLeadListInput = TenantDouyinLeadListQuery & {
 export async function listTenantDouyinLeads(
   client: Client,
   input: ScopedLeadListInput,
+  mode: "douyin_lead" | "customer_lead" = "douyin_lead",
 ) {
   if (input.visibleAssigneeIds !== null
     && (input.visibleAssigneeIds.length === 0
@@ -39,7 +42,10 @@ export async function listTenantDouyinLeads(
   }
   let result: Awaited<ReturnType<Client["rpc"]>>;
   try {
-    result = await client.rpc("list_tenant_douyin_leads", {
+    result = await client.rpc(mode === "customer_lead"
+      ? "list_tenant_customer_leads" : "list_tenant_douyin_leads", {
+      ...(mode === "customer_lead" ? { p_source: input.source ?? null,
+        p_assignment: input.assignment ?? "all" } : {}),
       p_tenant_id: input.tenantId,
       p_visible_assignee_ids: input.visibleAssigneeIds
         ? [...input.visibleAssigneeIds] : null,
@@ -89,6 +95,8 @@ function assertScope(rows: readonly z.infer<typeof TenantDouyinLeadRowSchema>[],
       || (input.assigneeId !== undefined
         && row.assigned_employee_id !== input.assigneeId)
       || (input.status !== undefined && row.lead_status !== input.status)
+      || (input.assignment === "assigned" && row.assigned_employee_id === null)
+      || (input.assignment === "unassigned" && row.assigned_employee_id !== null)
       || (from !== null && created < from) || (to !== null && created >= to)
       || !matchesKeyword) {
       throw Errors.dbError("解析抖音线索失败");

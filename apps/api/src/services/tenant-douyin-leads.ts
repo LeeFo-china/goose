@@ -1,4 +1,6 @@
 import { Errors } from "@/errors/error-factory";
+import { CustomerLeadListQuerySchema, CustomerLeadFollowUpSchema,
+  type CustomerLeadListQueryInput, type CustomerLeadFollowUpInput } from "@gooes/domain";
 import type {
   TenantDouyinAppointmentDetailRow,
   TenantDouyinLeadCommandResult,
@@ -83,6 +85,7 @@ type RepositoryPort = {
     employeeId: string | null; tenantDepartmentId: string | null;
   }): Promise<{ rows: readonly { id: string; name: string | null }[]; total: number }>;
   listLeads(input: TenantDouyinLeadListQuery & {
+    source?: "douyin_miniapp"; assignment?: "all" | "assigned" | "unassigned";
     tenantId: string;
     visibleAssigneeIds: readonly string[] | null;
   }): Promise<{
@@ -93,6 +96,7 @@ type RepositoryPort = {
   } | null>;
   getLeadDetail(input: { tenantId: string; leadId: string }): Promise<
     (TenantDouyinLeadBundle & {
+      appointments: readonly TenantDouyinAppointmentDetailRow[];
       appointmentTotal: number;
       followUps: readonly TenantDouyinFollowUpBundle[];
       followUpTotal: number;
@@ -119,7 +123,7 @@ type RepositoryPort = {
     expectedAssigneeDepartmentId: string | null }):
     Promise<TenantDouyinLeadCommandResult>;
   appendFollowUp(input: CommandBase & {
-    appointmentId: string; followUpType: string; summary: string; result: string;
+    appointmentId: string | null; followUpType: string; summary: string; result: string;
     nextFollowUpAt: string | null; appointmentStatus: string | null;
     confirmedVisitAt: string | null;
   }): Promise<TenantDouyinLeadCommandResult>;
@@ -144,48 +148,71 @@ type CommandBase = {
   expectedVersion: number; idempotencyKey: string;
 };
 
+// Shared workflow lives at its historical import path to preserve legacy
+// consumers. Only server composition selects the permission/schema profile.
 export class TenantDouyinLeadsService {
   constructor(private readonly dependencies: {
     readonly repository: RepositoryPort;
     readonly accessPolicy: AccessPolicyPort;
     readonly phonePrivacy: PhonePrivacyPort;
-  }) {}
+  }, private readonly permissionResource: "douyin_lead" | "customer_lead" = "douyin_lead") {}
+
+  private permission(action: LeadAction): string {
+    return permissionFor(action).replace("douyin_lead", this.permissionResource);
+  }
+
   async list(authContext: AuthContext, input: TenantDouyinLeadListQueryInput) {
+    const { rows, tenantId, page, pageSize, total } = await this.listBundles(authContext, input);
+    return { list: rows.map((bundle) => serializeLeadBundle({ bundle, tenantId,
+      phonePrivacy: this.dependencies.phonePrivacy, includeDetail: false })),
+    pagination: pagination(page, pageSize, total) };
+  }
+
+  async listBundles(authContext: AuthContext, input: CustomerLeadListQueryInput) {
     const { tenantId, visibleAssigneeIds } = await this.requireRead(
       authContext,
       "list",
     );
-    const query = parseRequest(TenantDouyinLeadListQuerySchema, input);
+    const query = this.permissionResource === "customer_lead"
+      ? parseRequest(CustomerLeadListQuerySchema, input)
+      : parseRequest(TenantDouyinLeadListQuerySchema, input);
     if (visibleAssigneeIds !== null && visibleAssigneeIds.length === 0) {
-      return { list: [], pagination: pagination(query.page, query.pageSize, 0) };
+      return { rows: [], tenantId, ...query, total: 0 };
     }
     const result = await this.dependencies.repository.listLeads({
       tenantId, ...query, visibleAssigneeIds,
     });
     assertTotal(result.total);
-    return {
-      list: result.rows.map((bundle) => serializeLeadBundle({
-        bundle, tenantId,
-        phonePrivacy: this.dependencies.phonePrivacy,
-        includeDetail: false,
-      })),
-      pagination: pagination(query.page, query.pageSize, result.total),
-    };
+    return { ...result, tenantId, ...query };
   }
 
   async listAssigneeCandidates(authContext: AuthContext,
     input: TenantDouyinLeadAssigneeCandidatesQueryInput) {
     return listTenantDouyinLeadAssigneeCandidates({ authContext, query: input,
-      dependencies: this.dependencies });
+      dependencies: this.dependencies, permissionResource: this.permissionResource });
   }
 
   async listAssigneeFilterOptions(authContext: AuthContext,
     input: TenantDouyinLeadAssigneeFilterOptionsQueryInput) {
     return listTenantDouyinLeadAssigneeFilterOptions({ authContext, query: input,
-      dependencies: this.dependencies });
+      dependencies: this.dependencies, permissionResource: this.permissionResource });
   }
 
   async getDetail(authContext: AuthContext, leadId: string) {
+    const { detail, tenantId, id } = await this.getDetailBundle(authContext, leadId);
+    const serialized = serializeLeadBundle({ bundle: detail, tenantId,
+      phonePrivacy: this.dependencies.phonePrivacy, includeDetail: true });
+    return { ...serialized,
+      appointments: { list: detail.appointments.map((row) =>
+        serializePublicAppointment(row, { includeSource: true })),
+      pagination: pagination(1, 20, detail.appointmentTotal),
+      truncated: detail.appointmentTotal > detail.appointments.length },
+      follow_ups: { list: detail.followUps.map((row) =>
+        serializeFollowUpBundle(row, tenantId, id)),
+      pagination: pagination(1, 20, detail.followUpTotal) } };
+  }
+
+  async getDetailBundle(authContext: AuthContext, leadId: string) {
     const { tenantId, visibleAssigneeIds } = await this.requireRead(
       authContext,
       "detail",
@@ -208,23 +235,7 @@ export class TenantDouyinLeadsService {
     )) throwLeadNotFound();
     assertTotal(detail.appointmentTotal);
     assertTotal(detail.followUpTotal);
-    const serialized = serializeLeadBundle({ bundle: detail, tenantId,
-      phonePrivacy: this.dependencies.phonePrivacy,
-      includeDetail: true });
-    return {
-      ...serialized,
-      appointments: {
-        list: detail.appointments.map((row) =>
-          serializePublicAppointment(row, { includeSource: true })),
-        pagination: pagination(1, 20, detail.appointmentTotal),
-        truncated: detail.appointmentTotal > detail.appointments.length,
-      },
-      follow_ups: {
-        list: detail.followUps.map((row) =>
-          serializeFollowUpBundle(row, tenantId, id)),
-        pagination: pagination(1, 20, detail.followUpTotal),
-      },
-    };
+    return { detail, tenantId, id };
   }
 
   async listAppointments(authContext: AuthContext, leadId: string,
@@ -247,6 +258,13 @@ export class TenantDouyinLeadsService {
 
   async listFollowUps(authContext: AuthContext, leadId: string,
     input: TenantDouyinLeadFollowUpListQueryInput) {
+    const { rows, tenantId, id, page, pageSize, total } = await this.listFollowUpBundles(authContext, leadId, input);
+    return { list: rows.map((row) => serializeFollowUpBundle(row, tenantId, id)),
+      pagination: pagination(page, pageSize, total) };
+  }
+
+  async listFollowUpBundles(authContext: AuthContext, leadId: string,
+    input: TenantDouyinLeadFollowUpListQueryInput) {
     const { tenantId, visibleAssigneeIds } = await this.requireRead(
       authContext,
       "follow_up_list",
@@ -258,10 +276,7 @@ export class TenantDouyinLeadsService {
       tenantId, leadId: id, ...query,
     });
     assertTotal(result.total);
-    return {
-      list: result.rows.map((row) => serializeFollowUpBundle(row, tenantId, id)),
-      pagination: pagination(query.page, query.pageSize, result.total),
-    };
+    return { ...result, tenantId, id, ...query };
   }
 
   async assign(authContext: AuthContext, leadId: string,
@@ -280,7 +295,7 @@ export class TenantDouyinLeadsService {
       if (target && (target.id !== body.assigned_employee_id
         || target.tenant_id !== context.tenantId)) throwInvalidResponse();
       if (!target || !this.dependencies.accessPolicy.canAccessEmployee(
-        authContext, target, permissionFor("assign"),
+        authContext, target, this.permission("assign"),
       )) throw Errors.forbidden();
     }
     const result = await this.dependencies.repository.assign({
@@ -298,9 +313,11 @@ export class TenantDouyinLeadsService {
   }
 
   async appendFollowUp(authContext: AuthContext, leadId: string,
-    input: TenantDouyinLeadFollowUp) {
+    input: TenantDouyinLeadFollowUp | CustomerLeadFollowUpInput) {
     const context = await this.commandContext(authContext, "follow_up", leadId);
-    const body = parseRequest(TenantDouyinLeadFollowUpSchema, input);
+    const body = this.permissionResource === "customer_lead"
+      ? parseRequest(CustomerLeadFollowUpSchema, input)
+      : parseRequest(TenantDouyinLeadFollowUpSchema, input);
     const result = await this.dependencies.repository.appendFollowUp({
       ...commandBase(context), appointmentId: body.appointment_id,
       followUpType: body.follow_up_type, summary: body.summary,
@@ -350,10 +367,10 @@ export class TenantDouyinLeadsService {
     const data = unwrapCommand(result);
     if (data.action !== "convert" || data.lead_id !== context.leadId
       || (data.created_customer && data.repeated_conversion)
-      || (data.created_customer && !allowCustomerCreate)
+      || (data.created_customer && !allowCustomerCreate && !data.idempotent)
       || (data.repeated_conversion && allowCustomerCreate)
       || (preflight.customerId !== null
-        && (data.customer_id !== preflight.customerId || data.created_customer))) {
+        && (data.customer_id !== preflight.customerId || (data.created_customer && !data.idempotent)))) {
       throwInvalidResponse();
     }
     return data;
@@ -377,9 +394,12 @@ export class TenantDouyinLeadsService {
 
   private requireAction(authContext: AuthContext, action: LeadAction) {
     const tenantId = this.dependencies.accessPolicy.assertTenantContext(authContext);
+    if (this.permissionResource === "customer_lead" && !authContext.employeeId) {
+      throw Errors.business(403, "当前操作需要员工身份", "DOUYIN_LEAD_EMPLOYEE_REQUIRED");
+    }
     this.dependencies.accessPolicy.assertPermission(
       authContext,
-      permissionFor(action),
+      this.permission(action),
     );
     return tenantId;
   }
@@ -391,7 +411,7 @@ export class TenantDouyinLeadsService {
   ) {
     const tenantId = this.requireAction(authContext, action);
     const visibleAssigneeIds = await this.dependencies.accessPolicy
-      .getVisibleCustomerOwnerIds(authContext, permissionFor(action));
+      .getVisibleCustomerOwnerIds(authContext, this.permission(action));
     return { tenantId, visibleAssigneeIds };
   }
 
@@ -414,7 +434,7 @@ export class TenantDouyinLeadsService {
       }> {
     const tenantId = this.dependencies.accessPolicy
       .assertTenantContext(authContext);
-    const permission = permissionFor(action);
+    const permission = this.permission(action);
     const scope = this.dependencies.accessPolicy.assertPermission(
       authContext, permission,
     );
@@ -423,8 +443,15 @@ export class TenantDouyinLeadsService {
       throw Errors.business(403, "当前操作需要员工身份",
         "DOUYIN_LEAD_EMPLOYEE_REQUIRED");
     }
-    const visibleAssigneeIds = await this.dependencies.accessPolicy
+    let visibleAssigneeIds = await this.dependencies.accessPolicy
       .getVisibleCustomerOwnerIds(authContext, permission);
+    if (this.permissionResource === "customer_lead") {
+      const read = await this.requireRead(authContext, "detail");
+      const readIds = read.visibleAssigneeIds;
+      visibleAssigneeIds = visibleAssigneeIds === null ? readIds
+        : readIds === null ? visibleAssigneeIds
+          : visibleAssigneeIds.filter((employeeId) => readIds.includes(employeeId));
+    }
     const access = await this.dependencies.repository.findLeadAccess({
       tenantId, leadId: id,
     });
