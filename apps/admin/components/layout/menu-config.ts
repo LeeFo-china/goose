@@ -202,6 +202,8 @@ export const tenantNavGroups: AdminMenuGroup[] = [
     items: [
       { href: "/dashboard", label: "概览", icon: LayoutDashboard },
       { href: "/customers", label: "客户", icon: Users },
+      { href: "/customer-leads", label: "客户线索", icon: Inbox,
+        permission: "customer_lead.read" },
       {
         href: "/wechat-rebind-requests",
         label: "微信换绑",
