@@ -113,7 +113,7 @@ describe("TenantDouyinMiniappWorkspaceRepository", () => {
     );
     expect(select?.args[0]).toBe(
       "id,authorizer_appid,installation_kind,authorization_status,"
-      + "permission_snapshot,runtime_config,template_version,template_release_id,"
+      + "clue_component_id,permission_snapshot,runtime_config,template_version,template_release_id,"
       + "created_at,updated_at",
     );
     expect(String(select?.args[0])).not.toMatch(
@@ -152,6 +152,46 @@ describe("TenantDouyinMiniappWorkspaceRepository", () => {
       method: "limit",
       args: [1],
     });
+  });
+
+  test("returns the retained component ID outside SMS runtime config", async () => {
+    const row = {
+      id: INSTALLATION_ID,
+      authorizer_appid: "tt-authorizer",
+      installation_kind: "merchant",
+      authorization_status: "active",
+      clue_component_id: "5785490b6443ad9def6f88e69c57920c",
+      permission_snapshot: [],
+      runtime_config: {
+        brand: { logo_url: null, qualifications: [] },
+        theme: { primary_color: "#C45A32", navigation_text_color: "black" },
+        features: {
+          cases: true,
+          sites: true,
+          sms_lead: true,
+          douyin_phone: false,
+          phone_capture_mode: "sms",
+        },
+        home_banners: [],
+        trust_metrics: [],
+        privacy_policy_version: "2026-07-19",
+      },
+      template_version: null,
+      template_release_id: null,
+      created_at: "2026-09-06T00:00:00.000Z",
+      updated_at: "2026-09-06T00:00:01.000Z",
+    };
+    const { client } = createClient([{ data: row, error: null }]);
+    const repository = new Repository(client);
+
+    await expect(repository.findCurrentInstallation(TENANT_ID))
+      .resolves.toMatchObject({
+        ...row,
+        runtime_config: {
+          ...row.runtime_config,
+          contact_sla_text: "工作人员将在营业时间内与你联系",
+        },
+      });
   });
 
   test("loads the internal tenant name separately from the public brand", async () => {

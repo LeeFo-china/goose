@@ -20,6 +20,7 @@ const SAFE_INSTALLATION_SELECT = [
   "authorizer_appid",
   "installation_kind",
   "authorization_status",
+  "clue_component_id",
   "permission_snapshot",
   "runtime_config",
   "template_version",
@@ -72,6 +73,8 @@ const InstallationSchema = z.strictObject({
   authorizer_appid: z.string().trim().min(1).max(128),
   installation_kind: z.literal("merchant"),
   authorization_status: z.enum(["active", "disabled", "revoked"]),
+  clue_component_id: z.string().trim()
+    .regex(/^[A-Za-z0-9_-]{1,128}$/).nullable(),
   permission_snapshot: z.array(z.unknown()),
   runtime_config: DouyinRuntimeConfigSchema,
   template_version: NullableStringSchema,

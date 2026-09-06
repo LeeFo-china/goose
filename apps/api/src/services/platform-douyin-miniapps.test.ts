@@ -210,9 +210,20 @@ describe("PlatformDouyinMiniappsService", () => {
     const deps = dependencies({ findById: mock(async () => unbound) });
     const service = new PlatformDouyinMiniappsService(deps as never);
 
+    const officialRuntimeConfig = {
+      ...runtimeConfig,
+      features: {
+        cases: true,
+        sites: true,
+        sms_lead: true as const,
+        douyin_phone: true as const,
+        phone_capture_mode: "douyin_phone" as const,
+        clue_component_id: "old-component-id",
+      },
+    };
     await service.bind(authContext, INSTALLATION_ID, {
       tenant_id: TENANT_ID,
-      runtime_config: runtimeConfig,
+      runtime_config: officialRuntimeConfig,
     });
 
     expect(deps.repository.findTenantStatusById).toHaveBeenCalledWith(TENANT_ID);
@@ -224,7 +235,16 @@ describe("PlatformDouyinMiniappsService", () => {
     expect(input).toMatchObject({
       authorizerAppId: "merchant-appid",
       tenantId: TENANT_ID,
-      runtimeConfig,
+      runtimeConfig: {
+        ...officialRuntimeConfig,
+        features: {
+          cases: true,
+          sites: true,
+          sms_lead: true,
+          douyin_phone: false,
+          phone_capture_mode: "sms",
+        },
+      },
     });
     expect(Buffer.from(String(input.deploymentKey), "base64url").byteLength).toBe(32);
   });
@@ -372,5 +392,36 @@ describe("PlatformDouyinMiniappsService", () => {
         code: "DOUYIN_INSTALLATION_STATE_CONFLICT",
       });
     }
+  });
+
+  test("platform config edits preserve merchant-owned lead capture features", async () => {
+    const officialFeatures = {
+      cases: true,
+      sites: false,
+      sms_lead: true as const,
+      douyin_phone: true as const,
+      phone_capture_mode: "douyin_phone" as const,
+      clue_component_id: "5785490b6443ad9def6f88e69c57920c",
+    };
+    const deps = dependencies({
+      findById: mock(async () => ({
+        ...installation,
+        runtime_config: { ...runtimeConfig, features: officialFeatures },
+      })),
+      updateRuntimeConfig: mock(async (_id: string, config: unknown) => ({
+        ...installation,
+        runtime_config: config,
+      })),
+    });
+    const service = new PlatformDouyinMiniappsService(deps as never);
+
+    await service.updateConfig(authContext, INSTALLATION_ID, {
+      runtime_config: runtimeConfig,
+    });
+
+    expect(deps.repository.updateRuntimeConfig).toHaveBeenCalledWith(
+      INSTALLATION_ID,
+      { ...runtimeConfig, features: officialFeatures },
+    );
   });
 });
