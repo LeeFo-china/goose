@@ -17,6 +17,11 @@ export const SMOKE_IDS = {
   overflowOrder: "23000000-0000-4000-8000-000000000016",
   overflowPriceList: "23000000-0000-4000-8000-000000000017",
   overflowPriceItem: "23000000-0000-4000-8000-000000000018",
+  requisition: "23000000-0000-4000-8000-000000000019",
+  cancellationRequisition: "23000000-0000-4000-8000-000000000020",
+  costCategory: "23000000-0000-4000-8000-000000000021",
+  budget: "23000000-0000-4000-8000-000000000022",
+  directBlockedOrder: "23000000-0000-4000-8000-000000000023",
 } as const;
 
 export type SmokeSql = Bun.SQL & {
@@ -37,6 +42,7 @@ export type FixtureReferences = {
 };
 
 class SupplierPurchaseOrderSmokeFixtureError extends Error {}
+class SupplierPurchaseOrderSmokeFixtureCommandError extends Error {}
 
 export async function selectFixtureReferences(
   sql: SmokeSql,
@@ -183,21 +189,25 @@ export async function seedSupplierFixture(
   await sql`
     insert into public.tenant_suppliers (
       id, tenant_id, supplier_id, relationship_status, default_currency,
-      started_at, created_by_employee_id, updated_by_employee_id
+      internal_supplier_code, started_at,
+      created_by_employee_id, updated_by_employee_id
     ) values (
       ${SMOKE_IDS.relationship}::uuid, ${fixture.tenant_id}::uuid,
-      ${SMOKE_IDS.supplier}::uuid, 'active', 'CNY', current_date,
-      ${fixture.employee_id}::uuid, ${fixture.employee_id}::uuid
+      ${SMOKE_IDS.supplier}::uuid, 'active', 'CNY',
+      'SMOKE-PO-SUPPLIER', current_date, ${fixture.employee_id}::uuid,
+      ${fixture.employee_id}::uuid
     );
   `;
   await sql`
     insert into public.tenant_suppliers (
       id, tenant_id, supplier_id, relationship_status, default_currency,
-      started_at, created_by_employee_id, updated_by_employee_id
+      internal_supplier_code, started_at,
+      created_by_employee_id, updated_by_employee_id
     ) values (
       ${SMOKE_IDS.otherRelationship}::uuid,
       ${fixture.other_tenant_id}::uuid,
-      ${SMOKE_IDS.supplier}::uuid, 'active', 'CNY', current_date,
+      ${SMOKE_IDS.supplier}::uuid, 'active', 'CNY',
+      'SMOKE-PO-SUPPLIER-OTHER', current_date,
       ${fixture.other_employee_id}::uuid, ${fixture.other_employee_id}::uuid
     );
   `;
@@ -219,13 +229,13 @@ export async function seedSupplierFixture(
       id, supplier_id, supplier_product_id, sku_code, name,
       purchase_unit_id, base_unit_id, base_unit_conversion, status,
       acting_tenant_id, acting_employee_id, proxy_reason,
-      created_by_employee_id, updated_by_employee_id
+      created_by_employee_id, updated_by_employee_id, spec_values
     ) values (
       ${SMOKE_IDS.sku}::uuid, ${SMOKE_IDS.supplier}::uuid,
       ${SMOKE_IDS.product}::uuid, 'SMOKE-PO-SKU', '采购单 Smoke SKU',
       ${SMOKE_IDS.unit}::uuid, ${SMOKE_IDS.unit}::uuid, 1, 'active',
       ${fixture.tenant_id}::uuid, ${fixture.employee_id}::uuid, '数据库 smoke',
-      ${fixture.employee_id}::uuid, ${fixture.employee_id}::uuid
+      ${fixture.employee_id}::uuid, ${fixture.employee_id}::uuid, '{}'::jsonb
     );
   `;
   await sql`
@@ -253,36 +263,85 @@ export async function createPublishedPrice(
 ) {
   await sql`
     insert into public.supplier_price_lists (
-      id, supplier_id, price_list_code, version_number, name, currency,
-      lifecycle_status, effective_from, acting_tenant_id, acting_employee_id,
-      proxy_reason, created_by_employee_id, updated_by_employee_id
+      id, tenant_id, tenant_supplier_id, supplier_id, price_list_code,
+      version_number, name, currency, lifecycle_status, effective_from,
+      acting_tenant_id, acting_employee_id, operation_source, proxy_reason,
+      created_by_employee_id, updated_by_employee_id
     ) values (
-      ${priceListId}::uuid, ${SMOKE_IDS.supplier}::uuid,
-      'SMOKE-PO-BASE', ${version}, '采购单 Smoke 基础价', 'CNY',
-      'draft', now() - interval '1 day',
-      ${fixture.tenant_id}::uuid, ${fixture.employee_id}::uuid, '数据库 smoke',
+      ${priceListId}::uuid, ${fixture.tenant_id}::uuid,
+      ${SMOKE_IDS.relationship}::uuid, ${SMOKE_IDS.supplier}::uuid,
+      'SMOKE-PO-BASE', ${version}, '采购单 Smoke 基础价',
+      'CNY', 'draft', now() - interval '1 day',
+      ${fixture.tenant_id}::uuid, ${fixture.employee_id}::uuid,
+      'tenant_proxy', '数据库 smoke',
       ${fixture.employee_id}::uuid, ${fixture.employee_id}::uuid
     );
   `;
   await sql`
     insert into public.supplier_price_list_items (
-      id, supplier_id, supplier_price_list_id, supplier_sku_id,
-      minimum_quantity, purchase_unit_id, base_unit_id, base_unit_conversion,
-      unit_price, tax_rate, tax_inclusive, acting_tenant_id,
-      acting_employee_id, proxy_reason, created_by_employee_id,
+      id, tenant_id, supplier_id, supplier_price_list_id,
+      supplier_product_id, supplier_sku_id, minimum_quantity,
+      purchase_unit_id, base_unit_id, base_unit_conversion, unit_price,
+      tax_rate, tax_inclusive, acting_tenant_id, acting_employee_id,
+      operation_source, proxy_reason, created_by_employee_id,
       updated_by_employee_id
     ) values (
-      ${priceItemId}::uuid, ${SMOKE_IDS.supplier}::uuid, ${priceListId}::uuid,
-      ${SMOKE_IDS.sku}::uuid, 1, ${SMOKE_IDS.unit}::uuid,
-      ${SMOKE_IDS.unit}::uuid, 1, ${unitPrice}::numeric, 0.13, true,
-      ${fixture.tenant_id}::uuid, ${fixture.employee_id}::uuid,
-      '数据库 smoke', ${fixture.employee_id}::uuid, ${fixture.employee_id}::uuid
+      ${priceItemId}::uuid, ${fixture.tenant_id}::uuid,
+      ${SMOKE_IDS.supplier}::uuid, ${priceListId}::uuid,
+      ${SMOKE_IDS.product}::uuid, ${SMOKE_IDS.sku}::uuid, 1,
+      ${SMOKE_IDS.unit}::uuid, ${SMOKE_IDS.unit}::uuid, 1,
+      ${unitPrice}::numeric, 0.13, true, ${fixture.tenant_id}::uuid,
+      ${fixture.employee_id}::uuid, 'tenant_proxy', '数据库 smoke',
+      ${fixture.employee_id}::uuid, ${fixture.employee_id}::uuid
     );
   `;
-  await sql`
-    update public.supplier_price_lists
-    set lifecycle_status = 'published', published_at = now(),
-        row_version = row_version + 1
-    where id = ${priceListId}::uuid;
+  await publishSupplierPriceList(sql, fixture, priceListId);
+}
+
+async function publishSupplierPriceList(
+  sql: SmokeSql,
+  fixture: FixtureReferences,
+  priceListId: string,
+) {
+  const versionRows = await sql<{ row_version: number }[]>`
+    select row_version
+    from public.supplier_price_lists
+    where id = ${priceListId}::uuid
+      and tenant_id = ${fixture.tenant_id}::uuid
+      and tenant_supplier_id = ${SMOKE_IDS.relationship}::uuid
+      and supplier_id = ${SMOKE_IDS.supplier}::uuid;
   `;
+  const rowVersion = versionRows[0]?.row_version;
+  if (!rowVersion) {
+    throw new SupplierPurchaseOrderSmokeFixtureCommandError(
+      "price list draft row version missing",
+    );
+  }
+
+  const commandRows = await sql<{ result: unknown }[]>`
+    select public.command_supplier_price_list_v2(
+      'publish',
+      ${priceListId}::uuid,
+      null::uuid,
+      ${fixture.tenant_id}::uuid,
+      ${SMOKE_IDS.relationship}::uuid,
+      ${SMOKE_IDS.supplier}::uuid,
+      ${rowVersion}::integer,
+      '{}'::jsonb,
+      ${fixture.user_id}::uuid,
+      ${fixture.employee_id}::uuid,
+      ${`supplier-purchase-order-smoke-publish-${priceListId}`}::text
+    ) as result;
+  `;
+  const result = commandRows[0]?.result;
+  if (
+    typeof result !== "object" ||
+    result === null ||
+    Array.isArray(result) ||
+    (result as Record<string, unknown>).status !== "published"
+  ) {
+    throw new SupplierPurchaseOrderSmokeFixtureCommandError(
+      "price list publish command failed",
+    );
+  }
 }

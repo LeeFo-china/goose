@@ -8,14 +8,25 @@ const migrationUrl = new URL(
 const migration = existsSync(migrationUrl)
   ? readFileSync(migrationUrl, "utf8")
   : "";
+const cancelTimestampMigrationUrl = new URL(
+  "../../../../supabase/migrations/20260906100000_fix_supplier_purchase_order_cancel_timestamp.sql",
+  import.meta.url,
+);
+const cancelTimestampMigration = existsSync(cancelTimestampMigrationUrl)
+  ? readFileSync(cancelTimestampMigrationUrl, "utf8")
+  : "";
 
 function sqlFunction(schema: string, name: string) {
-  const start = migration.search(
+  return sqlFunctionFrom(migration, schema, name);
+}
+
+function sqlFunctionFrom(source: string, schema: string, name: string) {
+  const start = source.search(
     new RegExp(`CREATE (?:OR REPLACE )?FUNCTION ${schema}\\.${name}\\s*\\(`),
   );
   if (start < 0) return "";
-  const end = migration.indexOf("\n$$;", start);
-  return end < 0 ? migration.slice(start) : migration.slice(start, end + 4);
+  const end = source.indexOf("\n$$;", start);
+  return end < 0 ? source.slice(start) : source.slice(start, end + 4);
 }
 
 function sqlObject(prefix: string, name: string, terminator: string) {
@@ -402,6 +413,22 @@ describe("supplier purchase fulfillment migration contract", () => {
       "cancel_supplier_purchase_order",
       /RETURN jsonb_build_object\(\s*'status', 'cancelled',\s*'idempotent', true,\s*'purchase_order', v_event\.to_state,\s*'version', v_event\.result_version\s*\)/);
     lockOrder(fn, "supplier_purchase_order_item_fulfillments", "item_fulfillment", "UPDATE");
+  });
+
+  test("uses the cancellation command timestamp for submitted order updates", () => {
+    const fn = sqlFunctionFrom(
+      cancelTimestampMigration,
+      "public",
+      "cancel_supplier_purchase_order_fulfillment_v1",
+    );
+    expect(fn).toContain("v_cancelled_at timestamptz := clock_timestamp()");
+    expect(fn).toMatch(
+      /UPDATE public\.supplier_purchase_order_fulfillments AS fulfillment[\s\S]*updated_at = v_cancelled_at/,
+    );
+    expect(fn).toMatch(
+      /UPDATE public\.supplier_purchase_orders AS purchase_order[\s\S]*updated_at = v_cancelled_at/,
+    );
+    expect(fn).not.toContain("updated_at = now()");
   });
 
   test("keeps command grants narrow, processing set-based, and rollback safe", () => {

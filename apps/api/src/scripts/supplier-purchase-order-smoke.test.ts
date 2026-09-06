@@ -1,10 +1,24 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 
 import {
   SMOKE_IDS,
   assertCommandResult,
   runWithForcedRollback,
 } from "./supplier-purchase-order-smoke";
+
+const fixtureSource = readFileSync(
+  new URL("./supplier-purchase-order-smoke-fixture.ts", import.meta.url),
+  "utf8",
+);
+const orderSmokeSource = readFileSync(
+  new URL("./supplier-purchase-order-smoke.ts", import.meta.url),
+  "utf8",
+);
+const orderRequisitionSource = readFileSync(
+  new URL("./supplier-purchase-order-smoke-requisition.ts", import.meta.url),
+  "utf8",
+);
 
 type FakeTransaction = {
   marker: string;
@@ -41,6 +55,37 @@ describe("supplier purchase order database smoke helpers", () => {
           .test(value)
       ),
     ).toBe(true);
+  });
+
+  test("seeds tenant supplier relationships with internal supplier codes", () => {
+    expect(fixtureSource.match(/insert into public\.tenant_suppliers/g))
+      .toHaveLength(2);
+    expect(fixtureSource.match(/internal_supplier_code/g)).toHaveLength(2);
+    expect(fixtureSource).toContain("'SMOKE-PO-SUPPLIER'");
+    expect(fixtureSource).toContain("'SMOKE-PO-SUPPLIER-OTHER'");
+  });
+
+  test("seeds supplier SKUs with explicit empty structured specs", () => {
+    expect(fixtureSource).toContain("insert into public.supplier_skus");
+    expect(fixtureSource).toContain("spec_values");
+    expect(fixtureSource).toContain("'{}'::jsonb");
+  });
+
+  test("publishes price lists through the supplier price command", () => {
+    expect(fixtureSource).toContain("publishSupplierPriceList");
+    expect(fixtureSource).toContain("command_supplier_price_list_v2");
+    expect(fixtureSource).not.toContain("set lifecycle_status = 'published'");
+  });
+
+  test("creates smoke purchase orders from approved purchase requisitions", () => {
+    expect(orderSmokeSource).toContain("createDraftOrderFromApprovedRequisition");
+    expect(orderRequisitionSource).toContain("saveRequisition");
+    expect(orderRequisitionSource).toContain("reviewRequisition");
+    expect(orderRequisitionSource).toContain("convertRequisition");
+    expect(orderSmokeSource).toContain("direct_creation_blocked");
+    expect(orderSmokeSource).not.toContain(
+      `await saveDraft(sql, fixture, 0, 2, "smoke-save-1")`,
+    );
   });
 
   test("returns the smoke result only after forcing transaction rollback", async () => {

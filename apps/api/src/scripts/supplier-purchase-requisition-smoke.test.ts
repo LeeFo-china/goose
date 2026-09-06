@@ -163,9 +163,17 @@ describe("supplier purchase requisition database smoke helpers", () => {
       },
       { "QUERY PLAN": "Buffers: shared hit=2" },
     ])).toBe(true);
+    expect(assertExplainUsesIndex([
+      {
+        "QUERY PLAN":
+          "Index Only Scan using project_cost_commitments_active_remaining_idx " +
+          "(actual time=0.010..0.011 rows=1 loops=1)",
+      },
+      { "QUERY PLAN": "Buffers: shared hit=2" },
+    ])).toBe(true);
     expect(() => assertExplainUsesIndex([
       { "QUERY PLAN": "Seq Scan on project_cost_commitments" },
-    ])).toThrow("project_cost_commitments_active_lookup_idx");
+    ])).toThrow("active commitment index");
     expect(() => assertExplainUsesIndex([
       {
         "QUERY PLAN":
@@ -354,6 +362,10 @@ describe("supplier purchase requisition database smoke helpers", () => {
       commitments: "public.project_cost_commitments",
       activeCommitmentIndex:
         "project_cost_commitments_active_lookup_idx",
+      activeCommitmentIndexes: [
+        "project_cost_commitments_active_lookup_idx",
+        "project_cost_commitments_active_remaining_idx",
+      ],
     });
   });
 
@@ -381,6 +393,10 @@ describe("supplier purchase requisition database smoke helpers", () => {
     )).text();
     const concurrencySource = await Bun.file(new URL(
       "./supplier-purchase-requisition-smoke-concurrency.ts",
+      import.meta.url,
+    )).text();
+    const concurrencyFixtureSource = await Bun.file(new URL(
+      "./supplier-purchase-requisition-smoke-concurrency-fixture.ts",
       import.meta.url,
     )).text();
     const budgetLockSource = await Bun.file(new URL(
@@ -411,16 +427,16 @@ describe("supplier purchase requisition database smoke helpers", () => {
     expect(mainSource).toContain(
       REQUISITION_SMOKE_SQL_CONTRACTS.activeCommitmentIndex,
     );
-    expect(concurrencySource).toContain(
+    expect(concurrencyFixtureSource).toContain(
       "get_tenant_supplier_order_eligibility_set",
     );
-    expect(concurrencySource).toContain(
+    expect(concurrencyFixtureSource).toContain(
       "catalog_brand.id as catalog_brand_id",
     );
-    expect(concurrencySource).toContain(
+    expect(concurrencyFixtureSource).toContain(
       "from public.catalog_brands",
     );
-    expect(concurrencySource).toContain(
+    expect(concurrencyFixtureSource).toContain(
       "${fixture.catalog_brand_id}::uuid",
     );
     expect(budgetLockSource).toContain("pg_backend_pid()");
@@ -431,7 +447,7 @@ describe("supplier purchase requisition database smoke helpers", () => {
     );
     expect(concurrencySource).not.toContain("await Promise.allSettled");
     expect(concurrencySource).not.toContain("setTimeout(");
-    expect(concurrencySource).toContain(
+    expect(concurrencyFixtureSource).toContain(
       "cardinality(type.applicable_supplier_types) = 0",
     );
     expect(concurrencySource).toContain(

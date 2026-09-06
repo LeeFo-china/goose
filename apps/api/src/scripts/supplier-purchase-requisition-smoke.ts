@@ -51,6 +51,10 @@ export const REQUISITION_SMOKE_SQL_CONTRACTS = {
   requisitions: "public.supplier_purchase_requisitions",
   commitments: "public.project_cost_commitments",
   activeCommitmentIndex: "project_cost_commitments_active_lookup_idx",
+  activeCommitmentIndexes: [
+    "project_cost_commitments_active_lookup_idx",
+    "project_cost_commitments_active_remaining_idx",
+  ],
 } as const;
 
 const SUMMARY_KEYS = [
@@ -162,14 +166,15 @@ export function assertExplainUsesIndex(
   rows: { "QUERY PLAN": string }[],
 ) {
   const plan = rows.map((row) => row["QUERY PLAN"]).join("\n");
+  const usesActiveIndex = REQUISITION_SMOKE_SQL_CONTRACTS
+    .activeCommitmentIndexes
+    .some((indexName) => plan.includes(indexName));
   if (
-    !/Bitmap Index Scan|Index Scan/.test(plan) ||
-    !plan.includes(REQUISITION_SMOKE_SQL_CONTRACTS.activeCommitmentIndex)
+    !/Bitmap Index Scan|Index Scan|Index Only Scan/.test(plan) ||
+    !usesActiveIndex
   ) {
     throw new SupplierPurchaseRequisitionSmokeAssertionError(
-      `EXPLAIN must use ${
-        REQUISITION_SMOKE_SQL_CONTRACTS.activeCommitmentIndex
-      }`,
+      "EXPLAIN must use an active commitment index",
     );
   }
   if (!plan.includes("actual time=") || !plan.includes("Buffers:")) {

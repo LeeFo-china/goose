@@ -11,6 +11,12 @@ import {
   runRolledBackSavepoint,
   saveDraft,
 } from "./supplier-purchase-order-smoke-commands";
+import {
+  createDraftOrderFromApprovedRequisition,
+} from "./supplier-purchase-order-smoke-requisition";
+import {
+  extendFixture,
+} from "./supplier-purchase-requisition-smoke-sql";
 
 export { SMOKE_IDS };
 
@@ -140,7 +146,7 @@ type SmokeSummary = {
   draft_cancelled: boolean;
   submitted_facts_immutable: boolean;
   amount_limit_enforced: boolean;
-  cross_tenant_id_collision_safe: boolean;
+  direct_creation_blocked: boolean;
   supplier_options_paginated: boolean;
   tenant_isolation: boolean;
   transaction_rolled_back: boolean;
@@ -149,8 +155,14 @@ type SmokeSummary = {
 async function executeSmoke(
   sql: SmokeSql,
 ): Promise<Omit<SmokeSummary, "transaction_rolled_back">> {
-  const fixture = await selectFixtureReferences(sql);
-  await seedSupplierFixture(sql, fixture);
+  const baseFixture = await selectFixtureReferences(sql);
+  await seedSupplierFixture(sql, baseFixture);
+  const fixture = await extendFixture(
+    sql,
+    baseFixture,
+    SMOKE_IDS.costCategory,
+    SMOKE_IDS.budget,
+  );
   const optionRows = await sql<{ result: unknown }[]>`
     select public.list_supplier_purchase_order_supplier_options(
       ${fixture.tenant_id}::uuid,
@@ -177,79 +189,65 @@ async function executeSmoke(
     );
   }
 
+  const directCreation = requireRecord(
+    await saveDraft(
+      sql,
+      fixture,
+      0,
+      2,
+      "smoke-direct-create-blocked",
+      { orderId: SMOKE_IDS.directBlockedOrder },
+    ),
+    "direct creation",
+  );
+  assertEqual(
+    directCreation.status,
+    "state_conflict",
+    "direct creation status",
+  );
+  assertEqual(
+    directCreation.error_code,
+    "SUPPLIER_PURCHASE_ORDER_STATE_CONFLICT",
+    "direct creation error code",
+  );
+
+  await createDraftOrderFromApprovedRequisition(
+    sql,
+    fixture,
+    SMOKE_IDS.requisition,
+    SMOKE_IDS.order,
+    "smoke-order-source",
+  );
+  await createDraftOrderFromApprovedRequisition(
+    sql,
+    fixture,
+    SMOKE_IDS.cancellationRequisition,
+    SMOKE_IDS.otherOrder,
+    "smoke-order-cancellation-source",
+  );
+
   const first = assertCommandResult(
-    await saveDraft(sql, fixture, 0, 2, "smoke-save-1"),
-    { status: "saved", idempotent: false, version: 1, totalAmount: "20.00" },
+    await saveDraft(sql, fixture, 1, 2, "smoke-save-1"),
+    { status: "saved", idempotent: false, version: 2, totalAmount: "20.00" },
   );
   const replay = assertCommandResult(
-    await saveDraft(sql, fixture, 0, 2, "smoke-save-1"),
-    { status: "saved", idempotent: true, version: 1, totalAmount: "20.00" },
+    await saveDraft(sql, fixture, 1, 2, "smoke-save-1"),
+    { status: "saved", idempotent: true, version: 2, totalAmount: "20.00" },
   );
   await expectDatabaseError(
     sql,
     (savepoint) => saveDraft(
       savepoint,
       fixture,
-      0,
+      1,
       3,
       "smoke-save-1",
     ),
     "SUPPLIER_IDEMPOTENCY_CONFLICT",
   );
   const versionConflict = requireRecord(
-    await saveDraft(sql, fixture, 0, 2, "smoke-save-stale"),
+    await saveDraft(sql, fixture, 1, 2, "smoke-save-stale"),
     "version conflict",
-  );
-  const crossTenantIdCollision = requireRecord(
-    await saveDraft(
-      sql,
-      fixture,
-      0,
-      2,
-      "smoke-other-tenant-id-collision",
-      {
-        tenantId: fixture.other_tenant_id,
-        projectId: fixture.other_project_id,
-        relationshipId: SMOKE_IDS.otherRelationship,
-        userId: fixture.other_user_id,
-        employeeId: fixture.other_employee_id,
-      },
-    ),
-    "cross tenant id collision",
-  );
-  assertEqual(
-    crossTenantIdCollision.status,
-    "state_conflict",
-    "cross tenant id collision status",
-  );
-  assertEqual(
-    crossTenantIdCollision.error_code,
-    "SUPPLIER_PURCHASE_ORDER_ID_CONFLICT",
-    "cross tenant id collision error code",
-  );
-  if ("version" in crossTenantIdCollision) {
-    throw new SupplierPurchaseOrderSmokeAssertionError(
-      "cross tenant id collision must not reveal a version",
-    );
-  }
-
-  assertCommandResult(
-    await saveDraft(
-      sql,
-      fixture,
-      0,
-      2,
-      "smoke-other-tenant-save",
-      {
-        orderId: SMOKE_IDS.otherOrder,
-        tenantId: fixture.other_tenant_id,
-        projectId: fixture.other_project_id,
-        relationshipId: SMOKE_IDS.otherRelationship,
-        userId: fixture.other_user_id,
-        employeeId: fixture.other_employee_id,
-      },
-    ),
-    { status: "saved", idempotent: false, version: 1, totalAmount: "20.00" },
   );
 
   const primaryTenantRows = await sql<{ id: string }[]>`
@@ -275,9 +273,6 @@ async function executeSmoke(
   assertCommandResult(
     await orderCommand(sql, fixture, "cancel", 1, {
       orderId: SMOKE_IDS.otherOrder,
-      tenantId: fixture.other_tenant_id,
-      userId: fixture.other_user_id,
-      employeeId: fixture.other_employee_id,
     }),
     { status: "cancelled", idempotent: false, version: 2, totalAmount: "20.00" },
   );
@@ -301,10 +296,9 @@ async function executeSmoke(
       await saveDraft(
         savepoint,
         fixture,
-        0,
+        2,
         10_000_000_000_000,
         "smoke-amount-overflow",
-        { orderId: SMOKE_IDS.overflowOrder },
       ),
       "amount overflow",
     );
@@ -331,18 +325,18 @@ async function executeSmoke(
     "12.00",
   );
   const priceChanged = requireRecord(
-    await orderCommand(sql, fixture, "submit", 1),
+    await orderCommand(sql, fixture, "submit", 2),
     "price changed",
   );
   assertEqual(priceChanged.status, "price_changed", "price changed status");
 
   assertCommandResult(
-    await saveDraft(sql, fixture, 1, 2, "smoke-save-2"),
-    { status: "saved", idempotent: false, version: 2, totalAmount: "24.00" },
+    await saveDraft(sql, fixture, 2, 2, "smoke-save-2"),
+    { status: "saved", idempotent: false, version: 3, totalAmount: "24.00" },
   );
   assertCommandResult(
-    await orderCommand(sql, fixture, "submit", 2),
-    { status: "submitted", idempotent: false, version: 3, totalAmount: "24.00" },
+    await orderCommand(sql, fixture, "submit", 3),
+    { status: "submitted", idempotent: false, version: 4, totalAmount: "24.00" },
   );
   await expectDatabaseError(
     sql,
@@ -373,12 +367,12 @@ async function executeSmoke(
     "SUPPLIER_PURCHASE_ORDER_STATE_CONFLICT",
   );
   assertCommandResult(
-    await orderCommand(sql, fixture, "cancel", 3),
-    { status: "cancelled", idempotent: false, version: 4, totalAmount: "24.00" },
+    await orderCommand(sql, fixture, "cancel", 4),
+    { status: "cancelled", idempotent: false, version: 5, totalAmount: "24.00" },
   );
 
   const crossTenantMutation = requireRecord(
-    await orderCommand(sql, fixture, "cancel", 4, {
+    await orderCommand(sql, fixture, "cancel", 5, {
       tenantId: fixture.other_tenant_id,
       userId: fixture.other_user_id,
       employeeId: fixture.other_employee_id,
@@ -391,25 +385,26 @@ async function executeSmoke(
     "cross tenant mutation status",
   );
   return {
-    draft_saved: first.version === 1,
+    draft_saved: first.version === 2,
     idempotent_replay: replay.idempotent,
     idempotency_conflict: true,
     version_conflict:
       versionConflict.status === "version_conflict" &&
-      versionConflict.version === 1,
+      versionConflict.version === 2,
     price_changed: priceChanged.status === "price_changed",
     repriced_and_submitted: true,
     submitted_cancelled: true,
     draft_cancelled: true,
     submitted_facts_immutable: true,
     amount_limit_enforced: amountLimitEnforced,
-    cross_tenant_id_collision_safe: true,
+    direct_creation_blocked:
+      directCreation.error_code === "SUPPLIER_PURCHASE_ORDER_STATE_CONFLICT",
     supplier_options_paginated: true,
     tenant_isolation:
-      primaryTenantRows.length === 1 &&
+      primaryTenantRows.length === 2 &&
       primaryTenantRows[0]?.id === SMOKE_IDS.order &&
-      otherTenantRows.length === 1 &&
-      otherTenantRows[0]?.id === SMOKE_IDS.otherOrder &&
+      primaryTenantRows[1]?.id === SMOKE_IDS.otherOrder &&
+      otherTenantRows.length === 0 &&
       crossTenantMutation.status === "not_found",
   };
 }
@@ -429,6 +424,7 @@ export async function runSupplierPurchaseOrderSmoke(
       where id in (
         ${SMOKE_IDS.order}::uuid,
         ${SMOKE_IDS.otherOrder}::uuid,
+        ${SMOKE_IDS.directBlockedOrder}::uuid,
         ${SMOKE_IDS.overflowOrder}::uuid
       );
     `;
