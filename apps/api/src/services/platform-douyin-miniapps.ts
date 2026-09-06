@@ -16,6 +16,7 @@ import {
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { loadDouyinMiniappConfig } from "@/services/douyin-miniapp/config";
+import { resetLeadCaptureToSms } from "@/services/tenant-douyin-miniapp/authorization";
 
 const MANAGE_PERMISSION = "platform.douyin_miniapp.manage";
 
@@ -126,7 +127,10 @@ export class PlatformDouyinMiniappsService {
       authorizerAppId: installation.authorizer_appid,
       tenantId: input.tenant_id,
       deploymentKey: this.createDeploymentKey(),
-      runtimeConfig: input.runtime_config,
+      runtimeConfig: {
+        ...input.runtime_config,
+        features: resetLeadCaptureToSms(input.runtime_config.features),
+      },
     });
     return sanitizeInstallation(await this.requireInstallation(installationId));
   }
@@ -157,9 +161,15 @@ export class PlatformDouyinMiniappsService {
     if (!["active", "disabled"].includes(installation.authorization_status)) {
       throw stateConflict();
     }
+    const runtimeConfig = installation.installation_kind === "merchant"
+      ? {
+        ...input.runtime_config,
+        features: installation.runtime_config.features,
+      }
+      : input.runtime_config;
     const updated = await this.repository.updateRuntimeConfig(
       installationId,
-      input.runtime_config,
+      runtimeConfig,
     );
     if (!updated) throw stateConflict();
     return sanitizeInstallation(updated);

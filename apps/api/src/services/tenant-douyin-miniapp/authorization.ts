@@ -293,6 +293,13 @@ export class TenantDouyinMiniappAuthorizationService {
     const runtimeConfig = DouyinRuntimeConfigSchema.parse({
       ...this.dependencies.runtimeConfig,
       ...previousInstallation?.runtime_config,
+      ...(previousInstallation
+        ? {
+          features: resetLeadCaptureToSms(
+            previousInstallation.runtime_config.features,
+          ),
+        }
+        : {}),
     });
     await this.dependencies.intents.complete({
       intentId: input.claim.intentId,
@@ -316,6 +323,16 @@ export class TenantDouyinMiniappAuthorizationService {
       // The original upstream error remains the actionable failure.
     }
   }
+}
+
+export function resetLeadCaptureToSms(features: DouyinRuntimeConfig["features"]) {
+  return {
+    cases: features.cases,
+    sites: features.sites,
+    sms_lead: true as const,
+    douyin_phone: false as const,
+    phone_capture_mode: "sms" as const,
+  };
 }
 
 function requireEmployeeId(authContext: AuthContext): string {

@@ -300,6 +300,13 @@ describe("TenantDouyinMiniappAuthorizationService", () => {
         logo_url: "https://assets.gooes.cn/douyin/tenant/logo.png",
         qualifications: [],
       },
+      features: {
+        ...runtimeConfig.features,
+        sms_lead: true as const,
+        douyin_phone: true as const,
+        phone_capture_mode: "douyin_phone" as const,
+        clue_component_id: "old-app-component-id",
+      },
     };
     const { service, intents, workspace } = createService({
       previousInstallation: {
@@ -319,7 +326,16 @@ describe("TenantDouyinMiniappAuthorizationService", () => {
       AUTHORIZER_APP_ID,
     );
     expect(intents.complete).toHaveBeenCalledWith(expect.objectContaining({
-      runtimeConfig: previousRuntimeConfig,
+      runtimeConfig: {
+        ...previousRuntimeConfig,
+        features: {
+          cases: previousRuntimeConfig.features.cases,
+          sites: previousRuntimeConfig.features.sites,
+          sms_lead: true,
+          douyin_phone: false,
+          phone_capture_mode: "sms",
+        },
+      },
     }));
   });
 
