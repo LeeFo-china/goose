@@ -116,3 +116,22 @@ test("409 conflicts require reading fresh state before another confirmation", ()
   expect(view.getLeadActionFailure({ status: 409, code: "DOUYIN_LEAD_VERSION_CONFLICT" }).requiresRefresh).toBe(true);
   expect(view.getLeadActionFailure(new TypeError("offline")).requiresRefresh).toBe(false);
 });
+
+test("H5 filtering and activity context render in the shared workbench", () => {
+  expect(parseLeadFilters(new URLSearchParams("source=h5"), "customer").source).toBe("h5");
+  const empty = { list: [], pagination: { ...pagination, total: 0, totalPages: 0 } };
+  const detail = CUSTOMER_LEAD_PROFILE.normalizeDetail({ ...summary, source: "h5", source_label: "H5活动", follow_remark: "迁移前已有跟进摘要",
+    source_context: { demand: "需要设计", attribution: {}, budget: null, ai: null,
+      h5: { page_id: id, page_version_id: null, page_title: "秋季装修活动", page_slug: "autumn" } },
+    latest_appointment: null, appointments: empty, follow_ups: empty,
+    actions: Object.fromEntries(["assign", "follow_up", "convert", "mark_invalid"].map((action) =>
+      [action, { enabled: true, reason: null }])) });
+  expect(detail).not.toBeNull();
+  if (!detail) return;
+  const html = renderToStaticMarkup(createElement(LeadDetailPanel, { detail, actions: [],
+    busy: false, followUpLoading: false, onAction: () => {}, onFollowUpPage: () => {} }));
+  expect(html).toContain("秋季装修活动");
+  expect(html).toContain("H5活动");
+  expect(html).toContain("迁移前已有跟进摘要");
+  expect(html).not.toContain("确定性预算");
+});

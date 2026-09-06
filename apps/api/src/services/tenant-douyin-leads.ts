@@ -85,7 +85,7 @@ type RepositoryPort = {
     employeeId: string | null; tenantDepartmentId: string | null;
   }): Promise<{ rows: readonly { id: string; name: string | null }[]; total: number }>;
   listLeads(input: TenantDouyinLeadListQuery & {
-    source?: "douyin_miniapp"; assignment?: "all" | "assigned" | "unassigned";
+    source?: "douyin_miniapp" | "h5"; assignment?: "all" | "assigned" | "unassigned";
     tenantId: string;
     visibleAssigneeIds: readonly string[] | null;
   }): Promise<{

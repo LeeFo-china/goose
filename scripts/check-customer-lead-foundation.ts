@@ -35,7 +35,7 @@ for (const pageSchema of [CustomerLeadListQuerySchema, CustomerLeadPageQuerySche
 for (const query of [
   { assignment: 'unassigned', assigneeId: id },
   { dateFrom: '2026-09-07', dateTo: '2026-09-06' },
-  { source: 'xiaohongshu' }, { source: 'h5' }, { keyword: '%_' },
+  { source: 'xiaohongshu' }, { source: 'platform' }, { keyword: '%_' },
 ]) check(!CustomerLeadListQuerySchema.safeParse(query).success, 'invalid filter rejected');
 check(CustomerLeadListQuerySchema.safeParse({ source: 'douyin_miniapp', assignment: 'unassigned' }).success,
   'integrated source and independent unassigned filter');
@@ -79,7 +79,7 @@ check(!CustomerLeadCommandResultSchema.safeParse({ ...conversion, customer_id: i
   'customer ID cannot bypass view permission');
 check(!CustomerLeadCommandResultSchema.safeParse({ ...conversion, repeated_conversion: true }).success,
   'repeated conversion cannot create another customer');
-assert.deepEqual(CUSTOMER_LEAD_SOURCE_VALUES, ['douyin_miniapp']);
+assert.deepEqual(CUSTOMER_LEAD_SOURCE_VALUES, ['douyin_miniapp', 'h5']);
 checks += 1;
 for (const action of ['read', 'assign', 'follow_up', 'convert'] as const) {
   const code = `customer_lead.${action}` as const;

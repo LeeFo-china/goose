@@ -26,8 +26,12 @@ const availabilitySchema = z.discriminatedUnion("enabled", [
   z.strictObject({ enabled: z.literal(true), reason: z.null() }),
   z.strictObject({ enabled: z.literal(false), reason: z.string().min(1) }),
 ]);
+const customerSourceSchema = sourceSchema.extend({
+  h5: z.strictObject({ page_id: z.uuid().nullable(), page_version_id: z.uuid().nullable(),
+    page_title: z.string().nullable(), page_slug: z.string().nullable() }).optional(),
+});
 const detailSchema = z.strictObject({ ...summaryShape,
-  source_context: sourceSchema.nullable(), latest_appointment: appointmentSchema.nullable(),
+  source_context: customerSourceSchema.nullable(), latest_appointment: appointmentSchema.nullable(),
   appointments: appointmentPageSchema, follow_ups: followUpPageSchema,
   actions: z.strictObject({ assign: availabilitySchema, follow_up: availabilitySchema,
     convert: availabilitySchema, mark_invalid: availabilitySchema }),

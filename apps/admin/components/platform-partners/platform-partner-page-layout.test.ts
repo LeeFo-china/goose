@@ -6,6 +6,60 @@ function readSource(path: string) {
 }
 
 describe("Platform partner operation page", () => {
+  test("wires partner approval into the table using the server session permission", () => {
+    const pageSource = readSource("../../app/(console)/platform/partners/page.tsx");
+    const tableSource = readSource("./platform-partner-tables.tsx");
+
+    expect(tableSource).toContain("<ApprovePartnerButton");
+    expect(tableSource).toContain("partner={row.original} canManagePartners={canManagePartners}");
+    expect(pageSource).toMatch(/const canManagePartners = session\.permissions\.some\(/);
+    expect(pageSource).toContain('permission.code === "platform.partner.manage"');
+    expect(pageSource).toContain("canManagePartners={canManagePartners}");
+  });
+
+  test("offers pending partner approval with explicit region and remark review", () => {
+    const actionUrl = new URL("./platform-partner-approval-action.tsx", import.meta.url);
+    expect(existsSync(actionUrl)).toBe(true);
+    const source = readFileSync(actionUrl, "utf8");
+
+    expect(source).toContain('!canManagePartners || partner.status !== "pending"');
+    expect(source).toContain('title="审核通过并启用"');
+    expect(source).toContain('submitLabel="审核通过并启用"');
+    expect(source).toContain('method="PATCH"');
+    expect(source).toContain('/platform/partners/${partner.id}/status');
+    expect(source).not.toContain("/partner-applications/");
+    expect(source).toContain('status: "active"');
+    expect(source).toContain('reason: stringField(formData, "reason")');
+    expect(source).toContain('name: "reason"');
+    expect(source).toContain("required: true");
+    expect(source).toContain("maxLength: 300");
+    expect(source).toContain("审核说明将更新合伙人备注");
+    for (const field of ["partner.name", "partner.contact_name", "partner.phone", "partner.remark", "partner.region_codes.map", "full_name"]) {
+      expect(source).toContain(field);
+    }
+    expect(source).toContain("submitDisabled={partner.region_codes.length === 0}");
+    expect(source).toContain("请先编辑运营区县");
+    expect(source).not.toContain(".slice(0, 3)");
+  });
+
+  test("guards duplicate and disabled submissions synchronously and releases the lock", () => {
+    const source = readSource("./platform-partner-actions.tsx");
+    const submitSource = source.slice(source.indexOf("export function MutationDialogButton"), source.indexOf("function DialogField"));
+
+    expect(submitSource).toContain("const submittingRef = useRef(false)");
+    expect(submitSource).toContain("if (submittingRef.current || pending || submitDisabled) return");
+    expect(submitSource.indexOf("submittingRef.current = true")).toBeLessThan(submitSource.indexOf("startTransition(async"));
+    expect(submitSource).toMatch(/finally\s*\{\s*submittingRef\.current = false/);
+    expect(submitSource).toContain("setOpen(false)");
+    expect(submitSource).toContain("refreshAfterDialogClose(router)");
+    expect(submitSource).toContain("setError(submitError instanceof Error ? submitError.message : fallbackMessage)");
+  });
+
+  test("passes the field length limit to the shared textarea", () => {
+    const source = readSource("./platform-partner-actions.tsx");
+    expect(source).toMatch(/<Textarea\s[^>]*maxLength=\{field\.maxLength\}/);
+  });
+
   test("registers the platform partner entry in platform navigation", () => {
     const source = readSource("../layout/menu-config.ts");
 

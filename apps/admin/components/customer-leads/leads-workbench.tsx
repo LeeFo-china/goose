@@ -65,7 +65,8 @@ export function transitionAssigneeFilterOptions(current: AssigneeFilterOptionsSt
 export { validateLeadFilterDraft } from "./leads-workbench-view";
 
 export function LeadsWorkbench({ initialData, initialError, initialFilters,
-  initialFilterAssigneeOptions, permissions, profileId = "douyin" }: {
+  initialFilterAssigneeOptions, initialLeadId, permissions, profileId = "douyin" }: {
+  initialLeadId?: string;
   initialData: LeadPage; initialError: string | null; initialFilters: LeadFilters;
   initialFilterAssigneeOptions?: AssigneeFilterOptionsState;
   permissions: readonly string[]; profileId?: LeadWorkbenchProfileId;
@@ -75,7 +76,7 @@ export function LeadsWorkbench({ initialData, initialError, initialFilters,
   const [filters, setFilters] = useState(initialFilters);
   const [loading, setLoading] = useState(false);
   const [listError, setListError] = useState(initialError);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(initialLeadId ?? null);
   const [detail, setDetail] = useState<LeadDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
@@ -174,6 +175,13 @@ export function LeadsWorkbench({ initialData, initialError, initialFilters,
       if (detailAuthority.isCurrent(request)) setDetailLoading(false);
     }
   }, [detailAuthority, followUpAuthority, profile]);
+
+  useEffect(() => {
+    if (initialLeadId) {
+      setSelectedId(initialLeadId);
+      void loadDetail(initialLeadId);
+    }
+  }, [initialLeadId, loadDetail]);
 
   const loadAssigneeCandidates = useCallback(async (keyword: string) => {
     const request = assigneeAuthority.begin();

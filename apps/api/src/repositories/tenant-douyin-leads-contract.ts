@@ -10,6 +10,9 @@ const LeadStatusSchema = z.enum(["new", "contacted", "converted", "invalid"]);
 export const TenantDouyinLeadRowSchema = z.strictObject({
   id: z.uuid(),
   tenant_id: z.uuid(),
+  source: z.enum(["douyin_miniapp", "h5"]).optional(),
+  page_id: NullableUuidSchema.optional(),
+  page_version_id: NullableUuidSchema.optional(),
   douyin_miniapp_installation_id: NullableUuidSchema,
   customer_id: NullableUuidSchema,
   assigned_employee_id: NullableUuidSchema,

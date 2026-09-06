@@ -66,7 +66,10 @@ export async function submitLead(this: any, input: SubmitMarketingLeadInput & {
         phone,
         tenantId: publishedPage.page.tenant_id,
         pageVersionId: publishedPage.version.id,
-        customerId: identity.customerId,
+        // Tenant leads keep the customer already linked by capture/conversion.
+        // A later token identity must not rebind that workflow relationship.
+        customerId: publishedPage.page.tenant_id !== null
+          ? existingLead.customer_id ?? identity.customerId : identity.customerId,
         wxOpenid: identity.wxOpenid,
       },
     );
@@ -137,24 +140,18 @@ export async function listLeads(this: any, authContext: AuthContext, query: Mark
 
 export async function updateLead(this: any, 
   authContext: AuthContext,
-  id: string,
-  input: UpdateMarketingLeadInput,
+  _id: string,
+  _input: UpdateMarketingLeadInput,
 ) {
-  return marketingPageRepository.updateLead(id, {
-    ...input,
-    tenantId: accessPolicyService.assertTenantId(authContext),
-    employeeId: authContext.employeeId,
-  });
+  accessPolicyService.assertTenantId(authContext);
+  throw Errors.business(409, "请前往客户线索处理，本入口仅保留查看", "CUSTOMER_LEAD_LEGACY_WRITE_DISABLED");
 }
 
 export async function convertLeadToCustomer(this: any, 
   authContext: AuthContext,
-  id: string,
-  input: ConvertMarketingLeadInput,
+  _id: string,
+  _input: ConvertMarketingLeadInput,
 ) {
-  return marketingPageRepository.convertLeadToCustomer(id, {
-    ...input,
-    tenantId: accessPolicyService.assertTenantId(authContext),
-    employeeId: authContext.employeeId,
-  });
+  accessPolicyService.assertTenantId(authContext);
+  throw Errors.business(409, "请前往客户线索处理，本入口仅保留查看", "CUSTOMER_LEAD_LEGACY_WRITE_DISABLED");
 }

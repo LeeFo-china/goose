@@ -2,10 +2,11 @@ import type { PermissionCode } from './permission';
 
 // Only integrated sources are accepted. Adding a channel also requires its
 // ingestion, attribution and database constraints; unknown sources stay closed.
-export const CUSTOMER_LEAD_SOURCE_VALUES = ['douyin_miniapp'] as const;
+export const CUSTOMER_LEAD_SOURCE_VALUES = ['douyin_miniapp', 'h5'] as const;
 export type CustomerLeadSource = (typeof CUSTOMER_LEAD_SOURCE_VALUES)[number];
 export const CUSTOMER_LEAD_SOURCE_LABELS = {
   douyin_miniapp: '抖音小程序',
+  h5: 'H5活动',
 } as const satisfies Readonly<Record<CustomerLeadSource, string>>;
 
 export const CUSTOMER_LEAD_STATUS_VALUES = [
@@ -66,6 +67,12 @@ export interface CustomerLeadBudget {
   readonly ai_status: 'pending' | 'succeeded' | 'failed' | 'skipped' | null;
 }
 export interface CustomerLeadSourceContext {
+  readonly h5?: {
+    readonly page_id: string | null;
+    readonly page_version_id: string | null;
+    readonly page_title: string | null;
+    readonly page_slug: string | null;
+  };
   readonly demand: string | null;
   readonly attribution: Readonly<Partial<Record<
     'source_type' | 'entry_path' | 'scene' | 'campaign_code' | 'content_id', string
