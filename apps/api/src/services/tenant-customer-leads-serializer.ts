@@ -8,6 +8,7 @@ import type { TenantDouyinAppointmentDetailRow } from
 import { assertPublicLeadBundleScope, serializePublicAppointment,
   serializePublicFollowUp, serializePublicLead } from "@/services/tenant-douyin-leads-public";
 import type { TenantDouyinLeadPhonePrivacyPort } from "@/services/tenant-douyin-leads-serializer";
+import { Errors } from "@/errors/error-factory";
 
 export function customerLink(customer: { id: string; tenant_id: string;
   owner_id: string | null } | null, tenantId: string,
@@ -23,6 +24,10 @@ export function serializeCustomerLead(input: { bundle: TenantDouyinLeadBundle;
   tenantId: string; visibleCustomerOwnerIds: readonly string[] | null;
   phonePrivacy: TenantDouyinLeadPhonePrivacyPort }): CustomerLeadSummary {
   assertPublicLeadBundleScope(input.bundle, input.tenantId);
+  const source = input.bundle.lead.source;
+  if (source !== "h5" && source !== "douyin_miniapp") {
+    throw Errors.business(500, "客户线索来源无效", "CUSTOMER_LEAD_RESPONSE_INVALID");
+  }
   const phone = input.phonePrivacy.serializeMaskedPhoneOnly(input.bundle.lead.phone);
   const publicLead = serializePublicLead({ bundle: input.bundle, tenantId: input.tenantId,
     phoneMasked: phone.phone_masked, detail: false });
@@ -30,7 +35,7 @@ export function serializeCustomerLead(input: { bundle: TenantDouyinLeadBundle;
     created_at, followed_at, follow_remark } = publicLead;
   return { id, name, phone_masked, community, status, version, assignee,
     created_at, followed_at, follow_remark,
-    source: "douyin_miniapp", source_label: CUSTOMER_LEAD_SOURCE_LABELS.douyin_miniapp,
+    source, source_label: CUSTOMER_LEAD_SOURCE_LABELS[source],
     assigned_employee_id: input.bundle.lead.assigned_employee_id,
     ...customerLink(input.bundle.customer, input.tenantId, input.visibleCustomerOwnerIds) };
 }

@@ -18,10 +18,11 @@ import { customerAppointmentFromPublic, customerLink, serializeCustomerLead,
 import { TenantDouyinLeadsService } from "@/services/tenant-douyin-leads";
 import { serializePublicLeadSource } from "@/services/tenant-douyin-leads-public";
 import { isVisibleAssignee, pagination } from "@/services/tenant-douyin-leads-service-helpers";
+import { serializeH5LeadSource } from "./tenant-customer-lead-h5-source";
 
 type Dependencies = ConstructorParameters<typeof TenantDouyinLeadsService>[0] & {
   repository: ConstructorParameters<typeof TenantDouyinLeadsService>[0]["repository"]
-    & Pick<typeof tenantCustomerLeadsRepository, "findCustomerAccess">;
+    & Pick<typeof tenantCustomerLeadsRepository, "findCustomerAccess" | "findH5Page">;
 };
 
 export class TenantCustomerLeadsService {
@@ -50,8 +51,12 @@ export class TenantCustomerLeadsService {
       const summary = serializeCustomerLead({ bundle: detail, tenantId,
         visibleCustomerOwnerIds, phonePrivacy: this.dependencies.phonePrivacy });
       const appointments = detail.appointments.map(serializeCustomerLeadAppointment);
+      const sourceContext = summary.source === "h5"
+        ? serializeH5LeadSource(detail.lead, detail.lead.page_id
+          ? await this.dependencies.repository.findH5Page(tenantId, detail.lead.page_id) : null)
+        : serializePublicLeadSource(detail.appointments[0]?.source_snapshot ?? detail.lead.form_data);
       return { ...summary,
-        source_context: serializePublicLeadSource(detail.appointments[0]?.source_snapshot ?? detail.lead.form_data),
+        source_context: sourceContext,
         latest_appointment: appointments[0] ?? null,
         appointments: { list: appointments, pagination: pagination(1, 20, detail.appointmentTotal) },
         follow_ups: { list: detail.followUps.map((row) => serializeCustomerLeadFollowUp(row, tenantId, id)),

@@ -13,7 +13,7 @@ export type {
 
 export type LeadAction = "assign" | "follow_up" | "convert" | "mark_invalid";
 export type LeadFilters = {
-  source?: "douyin_miniapp" | "";
+  source?: "douyin_miniapp" | "h5" | "";
   assignment?: "all" | "assigned" | "unassigned";
   page: number;
   pageSize: number;
@@ -56,7 +56,8 @@ export function parseLeadFilters(params: URLSearchParams, profile: "douyin" | "c
   const assigneeId = z.uuid().safeParse(assigneeValue).success ? assigneeValue : "";
   return normalizeLeadDateRange({ page, pageSize, status, assigneeId,
     ...(profile === "customer" ? {
-      source: params.get("source") === "douyin_miniapp" ? "douyin_miniapp" as const : "" as const,
+      source: params.get("source") === "douyin_miniapp" ? "douyin_miniapp" as const
+        : params.get("source") === "h5" ? "h5" as const : "" as const,
       assignment: params.get("assignment") === "assigned" ? "assigned" as const
         : params.get("assignment") === "unassigned" ? "unassigned" as const : "all" as const,
       ...(params.get("assignment") === "unassigned" ? { assigneeId: "" } : {}),

@@ -1,10 +1,12 @@
-import { DouyinBudgetAiAnalysisSchema, type CustomerLeadActionAvailability } from "@gooes/domain";
+import { DouyinBudgetAiAnalysisSchema, type CustomerLeadActionAvailability,
+  type CustomerLeadSourceContext, type CustomerLeadSource } from "@gooes/domain";
 import { z } from "zod";
 
 export const LEAD_STATUSES = ["new", "contacted", "converted", "invalid"] as const;
 export type LeadStatus = (typeof LEAD_STATUSES)[number];
 export type Pagination = { page: number; pageSize: number; total: number; totalPages: number };
 export type LeadSourceProjection = {
+  h5?: CustomerLeadSourceContext["h5"];
   attribution: Partial<Record<
     "source_type" | "entry_path" | "scene" | "campaign_code" | "content_id",
     string
@@ -24,6 +26,7 @@ export type Appointment = {
   source?: LeadSourceProjection;
 };
 export type LeadRow = {
+  source?: CustomerLeadSource;
   source_label?: string; assigned_employee_id?: string | null;
   customer_id?: string | null; can_view_customer?: boolean;
   id: string; name: string | null; phone_masked: string | null; community: string | null;

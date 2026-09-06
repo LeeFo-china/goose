@@ -18,6 +18,12 @@ let refreshFailed;
 function reset(input = {}) {
   options = input;
   detail = structuredClone(examples.detail.response.data);
+  if (input.h5) {
+    detail.source = 'h5';
+    detail.source_label = 'H5活动';
+    detail.source_context = { demand: '需要设计', attribution: {}, budget: null, ai: null,
+      h5: { page_id: leadId, page_version_id: null, page_title: '秋季装修活动', page_slug: 'autumn' } };
+  }
   detail.actions.convert = { enabled: true, reason: null };
   journal = [];
   reads = [];
@@ -83,13 +89,16 @@ const server = createServer(async (req, res) => {
         return fail(res, 503, 'UNAVAILABLE', '列表刷新暂时失败');
       }
       const rows = Array.from({ length: 21 }, (_, i) => ({ ...detail,
+        ...(options.h5 && i % 2 === 1 ? { source: 'douyin_miniapp', source_label: '抖音小程序' } : {}),
         id: i ? `11111111-1111-4111-8111-${String(i).padStart(12, '0')}` : leadId,
         name: i ? `分页示例${i}` : detail.name,
       })).map(({ source_context, latest_appointment, appointments, follow_ups, actions, ...row }) => row);
       const keyword = url.searchParams.get('keyword') || '';
       const assignment = url.searchParams.get('assignment');
       const status = url.searchParams.get('status');
+      const source = url.searchParams.get('source');
       const filtered = rows.filter((row) => row.name.includes(keyword)
+        && (!source || row.source === source)
         && (!status || row.status === status)
         && (assignment !== 'assigned' || row.assigned_employee_id !== null)
         && (assignment !== 'unassigned' || row.assigned_employee_id === null));

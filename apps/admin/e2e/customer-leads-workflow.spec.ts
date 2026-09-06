@@ -1,4 +1,5 @@
 import { expect, test, type Page, type APIRequestContext } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 
 const mock = 'http://127.0.0.1:3988';
 async function enter(page: Page, token = 'generic', path = '/customer-leads') {
@@ -142,4 +143,38 @@ test('无 read 权限不加载线索或负责人', async ({ page, request }) => 
   await enter(page, 'none');
   await expect(page.getByText('当前账号缺少客户线索查看权限', { exact: true })).toBeVisible();
   expect((await state(request)).reads).toHaveLength(0);
+});
+
+test('H5 旧入口目标直达活动详情，筛选并记录普通跟进', async ({ page, request }, testInfo) => {
+  await request.post(`${mock}/__test/reset`, { data: { h5: true } });
+  const examples = JSON.parse(readFileSync(new URL('../../../docs/customer-leads-api-examples.json', import.meta.url), 'utf8'));
+  const leadId = examples.detail.response.data.id;
+  await enter(page, 'generic', `/customer-leads?source=h5&leadId=${leadId}`);
+  const sheet = page.getByRole('dialog', { name: '示例客户', exact: true });
+  await expect(sheet.getByText('秋季装修活动', { exact: true })).toBeVisible();
+  await expect(sheet.getByText('确定性预算', { exact: true })).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath('h5-lead-detail.png'), fullPage: true });
+  await sheet.getByRole('button', { name: '记录跟进', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '记录线索跟进', exact: true });
+  await dialog.getByLabel('跟进摘要', { exact: true }).fill('H5 活动电话回访');
+  await dialog.getByLabel('沟通结果', { exact: true }).fill('预约沟通设计需求');
+  await dialog.getByRole('button', { name: '提交跟进记录', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect(sheet.getByText('H5 活动电话回访', { exact: true })).toBeVisible();
+  const result = await state(request);
+  expect(result.reads).toContain('/tenant/customer-leads?page=1&pageSize=20&source=h5&assignment=all');
+  expect(result.journal).toHaveLength(1);
+  expect(result.journal[0].payload).toMatchObject({ appointment_id: null, expected_lead_version: 1 });
+});
+
+test('全部来源混合分页，H5 和抖音可以分别筛选', async ({ page, request }) => {
+  await request.post(`${mock}/__test/reset`, { data: { h5: true } });
+  await enter(page);
+  await expect(page.getByRole('cell', { name: 'H5活动', exact: true })).toHaveCount(10);
+  await expect(page.getByRole('cell', { name: '抖音小程序', exact: true })).toHaveCount(10);
+  await page.locator('#customer-lead-source').click();
+  await page.getByRole('option', { name: 'H5活动', exact: true }).click();
+  await page.getByRole('button', { name: '筛选', exact: true }).click();
+  await expect(page.getByRole('cell', { name: 'H5活动', exact: true })).toHaveCount(11);
+  await expect(page.getByRole('cell', { name: '抖音小程序', exact: true })).toHaveCount(0);
 });

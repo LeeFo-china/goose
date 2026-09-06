@@ -2,12 +2,9 @@
 
 import { type ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "@/components/admin/data-table";
-import {
-  LeadConvertAction,
-  LeadFollowAction,
-  LeadInvalidateAction,
-  type LeadUpdatedHandler,
-} from "@/components/marketing/h5-lead-actions";
+import type { LeadUpdatedHandler } from "@/components/marketing/h5-lead-actions";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import { h5MarketingLeadStatusOptions } from "@/components/marketing/marketing-constants";
 import type { H5MarketingLeadRecord } from "@/components/marketing/marketing-types";
 import { Badge } from "@/components/ui/badge";
@@ -111,18 +108,9 @@ const columns: ColumnDef<H5MarketingLeadRecord>[] = [
   {
     id: "actions",
     header: "操作",
-    cell: ({ row, table }) => {
-      const meta = table.options.meta as { onLeadUpdated?: LeadUpdatedHandler } | undefined;
-      const onLeadUpdated = meta?.onLeadUpdated;
-
-      return (
-        <div className="flex justify-end gap-2">
-          <LeadFollowAction lead={row.original} onLeadUpdated={onLeadUpdated} />
-          <LeadConvertAction lead={row.original} onLeadUpdated={onLeadUpdated} />
-          <LeadInvalidateAction lead={row.original} onLeadUpdated={onLeadUpdated} />
-        </div>
-      );
-    },
+    cell: ({ row }) => <Button asChild variant="ghost" size="sm">
+      <Link href={`/customer-leads?source=h5&leadId=${row.original.id}`}>查看客户线索</Link>
+    </Button>,
     meta: {
       headerClassName: "text-right",
       cellClassName: "whitespace-nowrap text-right",

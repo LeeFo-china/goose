@@ -1,5 +1,6 @@
 import { CUSTOMER_LEAD_PROFILE } from "@/components/customer-leads/leads-workbench-profile";
 import { redirect } from "next/navigation";
+import { z } from "zod";
 
 import { StatusAlert } from "@/components/admin/status-alert";
 import type { AssigneeFilterOptionsState } from "@/components/customer-leads/leads-assignee-options";
@@ -15,7 +16,7 @@ import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
 type PageSearchParams = Partial<Record<
-  "source" | "assignment" | "page" | "pageSize" | "status" | "assigneeId" | "dateFrom" | "dateTo" | "keyword",
+  "leadId" | "source" | "assignment" | "page" | "pageSize" | "status" | "assigneeId" | "dateFrom" | "dateTo" | "keyword",
   string
 >>;
 
@@ -30,12 +31,13 @@ export default async function TenantCustomerLeadsPage({ searchParams }: {
   const permissions = session.permissions.map((permission) => permission.code);
   const canRead = session.tenant !== null && permissions.includes("customer_lead.read");
   if (!canRead) {
-    return <StatusAlert>当前账号缺少客户线索查看权限</StatusAlert>;
+    return <StatusAlert><p>当前账号缺少客户线索查看权限</p>
+      <p>请联系管理员配置 customer_lead.read 权限。</p></StatusAlert>;
   }
 
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(rawParams)) {
-    if (value) params.set(key, value);
+    if (value && key !== "leadId") params.set(key, value);
   }
   const filters = parseLeadFilters(params, "customer");
   let data = emptyPage(filters);
@@ -59,6 +61,7 @@ export default async function TenantCustomerLeadsPage({ searchParams }: {
   return <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col overflow-hidden">
     <LeadsWorkbench
       profileId="customer"
+      initialLeadId={z.uuid().safeParse(rawParams.leadId).data}
       initialData={data}
       initialError={error}
       initialFilters={filters}

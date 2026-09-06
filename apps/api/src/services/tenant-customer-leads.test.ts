@@ -26,8 +26,9 @@ function auth(codes = ["customer_lead.read"], scope: EffectivePermission["scope"
     postId: null, postName: null, avatar: null, roleCodes: [], roles: [],
     permissions: codes.map((code) => ({ code, scope })) };
 }
-function fixture() {
-  const lead = { id: leadId, tenant_id: tenant, douyin_miniapp_installation_id: null,
+function fixture(source: "douyin_miniapp" | "h5" = "douyin_miniapp") {
+  const lead = { id: leadId, tenant_id: tenant, source, page_id: followUpId, page_version_id: null,
+    douyin_miniapp_installation_id: null,
     customer_id: customerId, assigned_employee_id: employee, name: "客户",
     phone: "13800138000", community: "测试小区", lead_status: "new" as const,
     created_at: timestamp, followed_at: null, follow_remark: null, version: 1,
@@ -45,6 +46,7 @@ function fixture() {
     listAssigneeFilterOptions: mock(async () => ({ rows: [], total: 0 })),
     findEmployeeAccess: mock(async () => ({ id: employee, tenant_id: tenant, tenant_department_id: null, status: "active" })),
     findCustomerAccess: mock(async () => customer),
+    findH5Page: mock(async () => ({ id: followUpId, tenant_id: tenant, title: "秋季装修活动", slug: "autumn" })),
     findConversionPreflight: mock(async (): Promise<{ leadId: string; phone: string; assignedEmployeeId: string | null; customerId: string | null }> =>
       ({ leadId, phone: lead.phone, assignedEmployeeId: employee, customerId })),
     assign: mock(async () => ({ ok: true as const, data: { action: "assign" as const, result: "assigned" as const,
@@ -68,6 +70,20 @@ test("generic read is employee-only and does not accept legacy permissions", asy
     await expect(context.service.list(actor, {})).rejects.toMatchObject({ statusCode: 403 });
   }
   expect(context.repository.listLeads).not.toHaveBeenCalled();
+});
+
+test("H5 list/detail preserves the real source and safe activity context without fabricated appointments", async () => {
+  const context = fixture("h5");
+  const page = await context.service.list(auth(), { source: "h5" });
+  expect(page.list[0]).toMatchObject({ source: "h5", source_label: "H5活动", customer_id: null });
+  expect(context.repository.findH5Page).not.toHaveBeenCalled();
+  const detail = await context.service.getDetail(auth(), leadId);
+  expect(detail.source_context).toEqual({ demand: "需要设计", attribution: {}, budget: null, ai: null,
+    h5: { page_id: followUpId, page_version_id: null, page_title: "秋季装修活动", page_slug: "autumn" } });
+  expect(detail.latest_appointment).toBeNull();
+  expect(detail.appointments.list).toEqual([]);
+  expect(JSON.stringify(detail)).not.toContain("secret");
+  expect(context.repository.findH5Page).toHaveBeenCalledWith(tenant, followUpId);
 });
 
 test("list projects common fields and hides customer ID without customer.read", async () => {
@@ -195,6 +211,15 @@ test("HTTP smoke verifies JWT/session isolation and employee-only list through r
     expect((await app.inject({ method: "GET", url: `${url}?pageSize=101`,
       headers: { authorization: `Bearer ${adminToken}` } })).statusCode).toBe(400);
     expect(binding).toHaveBeenCalledTimes(2);
+    context.lead.source = "h5";
+    const h5 = await app.inject({ method: "GET", url: `${url}?source=h5`,
+      headers: { authorization: `Bearer ${adminToken}` } });
+    expect(h5.statusCode).toBe(200);
+    expect(h5.json().data.list[0]).toMatchObject({ source: "h5", source_label: "H5活动" });
+    const h5Detail = await app.inject({ method: "GET", url: `${url}/${leadId}`,
+      headers: { authorization: `Bearer ${adminToken}` } });
+    expect(h5Detail.statusCode).toBe(200);
+    expect(h5Detail.json().data.source_context.h5.page_title).toBe("秋季装修活动");
   } finally {
     await app.close();
     contextLookup.mockRestore();

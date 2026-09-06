@@ -36,6 +36,7 @@ import {
 } from "@/repositories/tenant-douyin-lead-list";
 import type { Json } from "@/types/database";
 import { SupabaseDB } from "@/utils/supabase";
+import { scopedLeadQuery, findH5LeadPage } from "./tenant-customer-lead-source";
 
 const LEAD_DETAIL_FIELDS = `${TENANT_DOUYIN_LEAD_FIELDS},form_data`;
 const APPOINTMENT_FIELDS = [
@@ -124,7 +125,8 @@ export class TenantDouyinLeadsRepository {
     if (leads.length === 0) return { rows: [], total };
 
     const [appointments, customers, employees] = await Promise.all([
-      this.loadLatestAppointments(input.tenantId, leads.map((lead) => lead.id)),
+      this.loadLatestAppointments(input.tenantId,
+        leads.filter((lead) => lead.source !== "h5").map((lead) => lead.id)),
       this.loadCustomers(input.tenantId, compactIds(leads, "customer_id")),
       this.loadEmployees(
         input.tenantId,
@@ -155,9 +157,9 @@ export class TenantDouyinLeadsRepository {
 
   async getLeadDetail(input: { tenantId: string; leadId: string }) {
     const leadResult = await executeDatabase(
-      () => this.client.from("marketing_leads").select(LEAD_DETAIL_FIELDS)
-        .eq("tenant_id", input.tenantId).eq("source", "douyin_miniapp")
-        .eq("id", input.leadId).maybeSingle(),
+      () => scopedLeadQuery(this.client, this.mode,
+        this.mode === "customer_lead" ? `${LEAD_DETAIL_FIELDS},source,page_id,page_version_id`
+          : LEAD_DETAIL_FIELDS, input).maybeSingle(),
       "查询抖音线索详情失败",
     );
     assertDatabaseSuccess(leadResult, "查询抖音线索详情失败");
@@ -165,7 +167,8 @@ export class TenantDouyinLeadsRepository {
     const lead = parseData(TenantDouyinLeadRowSchema, leadResult.data,
       "解析抖音线索详情失败");
     const [appointmentPage, customers, employees, followUps] = await Promise.all([
-      this.listAppointments({ ...input, page: 1, pageSize: 20 }),
+      lead.source === "h5" ? { rows: [], total: 0 }
+        : this.listAppointments({ ...input, page: 1, pageSize: 20 }),
       this.loadCustomers(input.tenantId, compactIds([lead], "customer_id")),
       this.loadEmployees(input.tenantId,
         compactIds([lead], "assigned_employee_id")),
@@ -182,10 +185,8 @@ export class TenantDouyinLeadsRepository {
 
   async findLeadAccess(input: { tenantId: string; leadId: string }) {
     const result = await executeDatabase(
-      () => this.client.from("marketing_leads")
-        .select("id,tenant_id,assigned_employee_id")
-        .eq("tenant_id", input.tenantId).eq("source", "douyin_miniapp")
-        .eq("id", input.leadId).maybeSingle(),
+      () => scopedLeadQuery(this.client, this.mode,
+        "id,tenant_id,assigned_employee_id", input).maybeSingle(),
       "查询抖音线索访问范围失败",
     );
     assertDatabaseSuccess(result, "查询抖音线索访问范围失败");
@@ -238,10 +239,8 @@ export class TenantDouyinLeadsRepository {
 
   async findConversionPreflight(input: { tenantId: string; leadId: string }) {
     const leadResult = await executeDatabase(
-      () => this.client.from("marketing_leads")
-        .select(`${PRE_FLIGHT_FIELDS},assigned_employee_id`)
-        .eq("tenant_id", input.tenantId).eq("source", "douyin_miniapp")
-        .eq("id", input.leadId).maybeSingle(),
+      () => scopedLeadQuery(this.client, this.mode,
+        `${PRE_FLIGHT_FIELDS},assigned_employee_id`, input).maybeSingle(),
       "查询抖音线索转化条件失败",
     );
     assertDatabaseSuccess(leadResult, "查询抖音线索转化条件失败");
@@ -270,6 +269,10 @@ export class TenantDouyinLeadsRepository {
     return { leadId: lead.id, phone: lead.phone,
       assignedEmployeeId: lead.assigned_employee_id,
       customerId: customer?.id ?? null };
+  }
+
+  findH5Page(tenantId: string, pageId: string) {
+    return findH5LeadPage(this.client, tenantId, pageId);
   }
 
   async findCustomerAccess(tenantId: string, customerId: string) {
@@ -357,6 +360,7 @@ export class TenantDouyinLeadsRepository {
 
   private async loadLatestAppointments(tenantId: string,
     leadIds: readonly string[]) {
+    if (leadIds.length === 0) return [];
     const result = await executeDatabase(
       () => this.client.rpc("list_tenant_douyin_lead_latest_appointments", {
         p_tenant_id: tenantId, p_marketing_lead_ids: [...leadIds],
