@@ -14,6 +14,8 @@
 
 **后续更新：** 用户继续批准后，Task 6–7 已完成代码及本地交付：新旧 Admin 共用工作台、42 条定向回归及 8 条真实浏览器/模拟后端用例通过；domain 1.20.0 本地 tarball、packed consumer、完整 JSON 示例/错误码/验收交接完成。记录见 `docs/operations/evidence/2026-09-06-customer-leads-admin-handoff.md`。没有提交/推送或远端 API/Admin 部署；没有 registry 发布；orange 未修改，Task 8–9 仍待小程序实施与正式联调。下面 Task 6–7 的勾选表示实现及本地验收，不代表远端上线。
 
+**当前发布状态：** 上述两段保留阶段历史。功能已提交并推送到当前分支，开发环境 API/Admin 已通过 Release Dev `34016423164` 发布提交 `d1d29a09c8331863ea5b3e4d99d3e3e1208114f5`，2026-09-06 14:33:04（北京时间）发布成功。579 条迁移对齐，单个现有 Admin 账号的新旧 API/浏览器只读检查通过；新旧列表逐项 ID 相同。实际环境地址及证据见 `docs/operations/evidence/2026-09-06-customer-leads-dev-release.md`。未合并 main、未发布生产/registry、未修改 orange；Task 8 与 Task 9 的微信/双账号/远端写操作矩阵仍待执行。
+
 ---
 
 ## 工作边界与验证约定
@@ -215,10 +217,11 @@ bun run check:permission-boundaries
 
 ## Task 9：迁移发布与双端验收
 
-- [ ] 在明确的目标环境检查现有 migration 对齐与待应用集合；不能把无关待执行文件混入本次发布。目标库从项目受控配置解析，日志只记录非敏感环境标识。
-- [ ] 先预演三组 migration，再应用。目标为已核对 linked 环境时使用 `supabase migration list --linked`、`supabase db push --linked --dry-run`、`supabase db push --linked`；若项目使用 direct URL，按现有目标环境命令传参，禁止为了使用示例而 relink 到其他项目。
-- [ ] 应用后再次 `supabase migration list`（使用同一目标选项），记录 Local/Remote 对齐；任何权限/函数/约束修复必须追加 migration。
-- [ ] 部署 API 后先通过旧接口 smoke，再发布新 Admin。配置验收角色的新权限后，交付小程序团队联调；微信发布以真机证据为完成条件。
+- [x] 开发目标 api-dev 已通过受控配置核对，579 条迁移对齐，本次发布无待应用 migration；不混入无关文件、不输出敏感连接信息。
+- [x] 最终合并为两项 migration，此前已预演并应用开发库，证据见后端记录；本轮只复查，不重复应用，不 relink。其他环境需独立确认与预演。
+- [x] 应用后及发布前均用同一开发 direct 目标执行 migration list；发布流程也确认完整 Local/Remote 集合对齐。修复仍须追加 migration。
+- [x] 开发 API/Admin 已通过现有 Release Dev 按 API 健康检查 → Admin 顺序发布；整体发布后新旧线索专用只读 smoke 通过。未向发布流程增加线索专用门禁，未执行远端业务写入。
+- [ ] 配置小程序验收角色的新权限并完成双端联调；普通角色不自动授权，微信发布以真机证据为完成条件。
 
 | 验收场景 | 必须观察到的结果 |
 |---|---|
@@ -250,9 +253,9 @@ bun run check:permission-boundaries
 
 依赖顺序：1 → 2 → 3 → 4 → 5 → 6 → 7 → 小程序团队 8 → 双端 9。任务 9 的 migration 预演/开发环境应用需在任务 3–5 的数据库验证期间执行，正式发布再复核一次目标与待执行集合。
 
-- [ ] 后端可用：任务 1–5、静态检查、事务/权限 smoke、开发 migration 对齐完成。
-- [x] Admin 本地实现可用：任务 6 完成，新旧入口本地验证通过，尚未部署。
-- [x] 交接材料齐全：任务 7 包、示例、权限说明和验收表完整，远端联调等待发布。
+- [x] 后端开发联调可用：任务 1–5、静态检查、本地事务/权限 smoke、开发 migration 对齐及发布后只读 API 检查完成；不等于双端验收完成。
+- [x] Admin 开发联调可用：任务 6 完成，新旧入口本地验证及开发环境发布后浏览器只读检查通过。
+- [x] 交接材料齐全：任务 7 包、示例、权限说明和验收表完整，已登记开发 API 基地址与实际发布提交。
 - [ ] 微信功能完成：小程序团队完成任务 8，任务 9 双端证据齐全。
 
 每一阶段单独审查 diff 和最小验证；需要提交时按明确任务文件逐项暂存，使用 `feat(customer-leads): ...` 等 Conventional Commit，禁止 `git add -A` 纳入无关改动。

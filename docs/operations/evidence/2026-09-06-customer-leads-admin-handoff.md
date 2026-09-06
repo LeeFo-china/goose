@@ -1,5 +1,7 @@
 # 客户线索 Admin 与小程序交接验证记录
 
+后续开发环境发布已完成，见 [开发发布记录](./2026-09-06-customer-leads-dev-release.md)。下文保留 Task 6–7 完成时的历史状态，“未提交/未部署”不代表当前发布状态。
+
 日期：2026-09-06。执行已确认计划 Task 6–7。分支 `feature/customer-leads-foundation`，基线 HEAD `28d1ae3761766093d3cffe2c8547c743e5e7c202`。本轮及前轮功能均仍在未提交工作区；没有 commit、push、npm publish、远端部署或数据库写入。
 
 ## 交付内容

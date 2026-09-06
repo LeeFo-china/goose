@@ -1,10 +1,10 @@
 # 客户线索：小程序后端交接
 
-日期：2026-09-06。范围包括 gooes 通用后端、旧抖音兼容、Admin 客户线索入口及 domain 本地交付包；不包含小程序页面或远端部署。
+日期：2026-09-06。范围包括 gooes 通用后端、旧抖音兼容、Admin 客户线索入口、domain 本地交付包及开发环境发布；不包含小程序页面或生产发布。
 
 ## 状态和边界
 
-通用 HTTP 路由、共享业务、DTO、分页和权限检查已实现；数据库应用及实际验证结果以 `docs/operations/evidence/2026-09-06-customer-leads.md` 为准。不能仅凭此文认定远端 API 已部署。
+通用 HTTP 路由、共享业务、DTO、分页和权限检查已实现，API 与 Admin 已发布开发环境。实际版本、迁移及只读接口/浏览器验证见 [开发发布记录](./operations/evidence/2026-09-06-customer-leads-dev-release.md)。微信页面和真机验收仍由小程序团队完成。
 
 首期来源只有 `douyin_miniapp`，显示为“抖音小程序”。小程序模块统一叫“客户线索”。小红书、视频号、既有 H5/平台线索采集不在本次范围，不能直接传入未接入的 source。
 
@@ -129,7 +129,7 @@ assignment 为 all/assigned/unassigned，默认 all；unassigned 不允许同时
 | APPOINTMENT_TRANSITION_INVALID | 409 | 预约状态变更不允许，刷新预约 |
 | RESPONSE_INVALID | 500 | 提示异常并保留 requestId，不宣称写入失败或自动换键 |
 
-基础码 `UNAUTHORIZED`（401）、`FORBIDDEN`（403）、`VALIDATION_ERROR`（400）、`DB_ERROR`（500）沿用现有处理。超时/5xx 且结果未知时，保留原请求意图；已确认 200 后刷新失败，只重试 GET，不再 POST。改派成功后详情 404 是可能的正常权限变化，关闭详情并提示分配成功。
+基础认证错误按 HTTP 401 沿用现有会话处理，实际缺失 Bearer 返回 `TOKEN_MISSING`，不要只识别 `UNAUTHORIZED`；`FORBIDDEN`（403）、`VALIDATION_ERROR`（400）、`DB_ERROR`（500）沿用现有处理。超时/5xx 且结果未知时，保留原请求意图；已确认 200 后刷新失败，只重试 GET，不再 POST。改派成功后详情 404 是可能的正常权限变化，关闭详情并提示分配成功。
 
 ## Domain 1.20.0 本地交付
 
@@ -149,9 +149,12 @@ pnpm add /Users/leefo/Public/work/gooes/.artifacts/domain/gooes-domain-1.20.0.tg
 
 ## 联调准备与验收责任
 
-开发库目标标识 `api-dev`，前轮已应用两项客户线索 migration，记录为 579 条 Local/Remote 对齐。本轮不重复应用。API 基地址需在部署后由后端团队确认，不能将数据库主机名直接当作客户端 API 基地址。
+开发库目标标识 `api-dev`，两项客户线索 migration 已应用，发布前再次验证 579 条 Local/Remote 对齐，发布流程的迁移门禁也已通过。本轮不重复应用。
 
-代码仍在 `feature/customer-leads-foundation` 工作区，基线提交 `28d1ae3761766093d3cffe2c8547c743e5e7c202`；未提交的新功能不包含在这个提交内。实际发布提交、API 部署时间及环境 smoke 需由发布阶段登记，当前不能宣称远端新接口可用。
+- API 基地址：`https://api-dev.goodcms.cn`；通用列表为 `GET /tenant/customer-leads`。
+- Admin 新入口：`https://admin-dev.goodcms.cn/customer-leads`；旧入口 `/douyin-miniapp/leads` 保留。
+- 实际发布提交：`d1d29a09c8331863ea5b3e4d99d3e3e1208114f5`，分支 `feature/customer-leads-foundation`，未合并 main。
+- [Release Dev 34016423164](https://github.com/LeeFo-china/goose/actions/runs/34016423164) 于 2026-09-06 14:33:04（北京时间）成功结束。新旧 API 分页、详情、候选、历史及两页浏览器只读检查通过，新旧列表返回相同的 2 条线索 ID。没有对现有线索执行写命令。
 
 | 阶段 | 责任方 | 放行条件 |
 |---|---|---|
@@ -161,13 +164,13 @@ pnpm add /Users/leefo/Public/work/gooes/.artifacts/domain/gooes-domain-1.20.0.tg
 | 页面接入 | orange 团队 | 工作台入口、分包页面、分页、动作/错误/幂等处理 |
 | 双端验收 | gooes + orange | self/部门/all、无权限、改派后不可见、无预约/有预约、已有客户归属不变、无客户查看权限、并发冲突、同键重试、租户切换 |
 
-实际微信真机、双账号并发、部署后接口验收尚未完成；后端 mock/本地 SQL 结果不能代替这些证据。
+部署后单个现有 Admin 账号的只读接口/页面检查已完成。实际微信真机、双账号并发、普通角色数据范围完整矩阵及远端写命令验收尚未完成；后端 mock/本地 SQL 结果不能代替这些证据。
 
 ## 旧 Admin 与数据兼容
 
 现有 `/tenant/douyin-miniapp/leads` 保留原路径、旧权限、严格 DTO 与 DOUYIN_* 错误；旧新增跟进仍要求预约。历史 marketing_leads、负责人、版本及跟进/操作流水不复制、不清空。新旧入口共享命令核心和幂等记录。通用普通跟进也可在旧线索历史中读取，但旧端仍不提供无预约新增表单。
 
-Admin 已新增 `/customer-leads`「客户线索」入口，使用新权限；旧 `/douyin-miniapp/leads` 入口与旧权限保留。两者共享工作台组件，不做自动跳转，不要求现有员工立刻换入口。本地验证通过，尚未部署新 Admin。
+Admin 已新增并发布开发环境 `/customer-leads`「客户线索」入口，使用新权限；旧 `/douyin-miniapp/leads` 入口与旧权限保留。两者共享工作台组件，不做自动跳转，不要求现有员工立刻换入口。两页开发环境浏览器只读检查通过，生产环境尚未发布本功能。
 
 ## orange 团队待办（本次未修改）
 

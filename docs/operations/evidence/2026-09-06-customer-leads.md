@@ -2,7 +2,7 @@
 
 日期：2026-09-06。分支 `feature/customer-leads-foundation`，基线 HEAD `28d1ae3761766093d3cffe2c8547c743e5e7c202`。当前工作未提交、未推送。
 
-后续 Task 6–7 的 Admin、domain 1.20.0 本地制品和浏览器验收已完成，见 [Admin 与交接验证记录](./2026-09-06-customer-leads-admin-handoff.md)。下文“发布与剩余边界”保留后端阶段当时状态，不代表后续阶段尚未实现；API/前端远端部署仍未执行。
+后续 Task 6–7 的 Admin、domain 1.20.0 本地制品和浏览器验收已完成，见 [Admin 与交接验证记录](./2026-09-06-customer-leads-admin-handoff.md)。开发 API/Admin 也已发布，见 [开发发布记录](./2026-09-06-customer-leads-dev-release.md)。下文“未提交”和“发布与剩余边界”保留后端阶段当时状态，不代表当前发布状态。
 
 ## 本次实现
 
