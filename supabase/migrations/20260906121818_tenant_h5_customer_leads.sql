@@ -915,6 +915,18 @@ BEGIN
   LIMIT 1
   FOR UPDATE;
 
+  -- H5 capture can pre-bind a customer before conversion. If that customer's
+  -- phone changed, preserve the historical binding and return a reviewable
+  -- conflict before creating or linking any other customer. Refresh alone
+  -- cannot resolve it: the linked customer's phone must be checked.
+  IF v_lead.source = 'h5' AND v_lead.lead_status <> 'converted'
+    AND v_lead.customer_id IS NOT NULL
+    AND v_customer.id IS DISTINCT FROM v_lead.customer_id
+  THEN
+    RETURN jsonb_build_object('error', jsonb_build_object(
+      'status_code', 409, 'code', 'DOUYIN_LEAD_CUSTOMER_PREFLIGHT_CONFLICT'));
+  END IF;
+
   IF NOT p_allow_customer_create AND (
     v_customer.id IS NULL OR v_customer.id IS DISTINCT FROM p_expected_customer_id
   ) THEN
@@ -1388,7 +1400,17 @@ AS $function$
 DECLARE
   v_owner name;
 BEGIN
-  IF TG_OP = 'UPDATE' AND OLD.source = 'h5' THEN
+  IF TG_OP = 'DELETE' THEN
+    IF OLD.source = 'h5' AND OLD.tenant_id IS NOT NULL THEN
+      SELECT pg_get_userbyid(relowner) INTO v_owner FROM pg_class WHERE oid = TG_RELID;
+      IF current_user <> v_owner THEN
+        RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'CUSTOMER_LEAD_DIRECT_WRITE_FORBIDDEN';
+      END IF;
+    END IF;
+    RETURN OLD;
+  END IF;
+  -- Check the original tenant first so changing tenant/source cannot escape.
+  IF TG_OP = 'UPDATE' AND OLD.source = 'h5' AND OLD.tenant_id IS NOT NULL THEN
     IF NEW.source IS DISTINCT FROM OLD.source OR NEW.tenant_id IS DISTINCT FROM OLD.tenant_id
       OR NEW.page_id IS DISTINCT FROM OLD.page_id
       OR (OLD.customer_id IS NOT NULL AND NEW.customer_id IS DISTINCT FROM OLD.customer_id)
@@ -1399,7 +1421,7 @@ BEGIN
       RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'CUSTOMER_LEAD_VERSION_MANAGED';
     END IF;
   END IF;
-  IF NEW.source <> 'h5' THEN RETURN NEW; END IF;
+  IF NEW.source <> 'h5' OR NEW.tenant_id IS NULL THEN RETURN NEW; END IF;
   SELECT pg_get_userbyid(relowner) INTO v_owner FROM pg_class WHERE oid = TG_RELID;
   IF NEW.tenant_id IS NOT NULL THEN
     IF current_user <> v_owner THEN
@@ -1432,11 +1454,13 @@ BEGIN
       RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'CUSTOMER_LEAD_EMPLOYEE_SCOPE_INVALID';
     END IF;
   END IF;
-  IF TG_OP = 'UPDATE' AND OLD.source = 'h5' THEN NEW.version := OLD.version + 1; END IF;
+  IF TG_OP = 'UPDATE' AND OLD.source = 'h5' AND OLD.tenant_id IS NOT NULL THEN
+    NEW.version := OLD.version + 1;
+  END IF;
   RETURN NEW;
 END;
 $function$;
-CREATE TRIGGER h5_customer_lead_guard BEFORE INSERT OR UPDATE ON public.marketing_leads
+CREATE TRIGGER h5_customer_lead_guard BEFORE INSERT OR UPDATE OR DELETE ON public.marketing_leads
   FOR EACH ROW EXECUTE FUNCTION public.h5_customer_lead_guard();
 REVOKE ALL ON FUNCTION public.h5_customer_lead_guard() FROM PUBLIC, anon, authenticated, service_role;
 

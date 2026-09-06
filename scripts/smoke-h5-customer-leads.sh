@@ -14,6 +14,7 @@ esac
   do
     sed '/^BEGIN;$/d; /^COMMIT;$/d' "$migration_file"
   done
+  sed -n '1,$p' scripts/smoke-h5-customer-leads-history.sql
   if [[ "$smoke_mode" = green ]]; then
     sed '/^BEGIN;$/d; /^COMMIT;$/d' supabase/migrations/20260906121818_tenant_h5_customer_leads.sql
   fi
