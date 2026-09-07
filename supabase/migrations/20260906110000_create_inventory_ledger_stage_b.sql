@@ -151,17 +151,13 @@ FROM PUBLIC, anon, authenticated, service_role;
 GRANT SELECT ON TABLE public.inventory_transactions, public.inventory_balances
 TO service_role;
 
+-- Populate existing facts through the column default without firing immutable
+-- or command-only UPDATE triggers. Keep the default for legacy project writes.
 ALTER TABLE public.supplier_payable_events
-ADD COLUMN destination_type text,
+ADD COLUMN destination_type text NOT NULL DEFAULT 'project',
 ADD COLUMN warehouse_id uuid NULL;
 
-UPDATE public.supplier_payable_events
-SET destination_type = 'project'
-WHERE destination_type IS NULL;
-
 ALTER TABLE public.supplier_payable_events
-ALTER COLUMN destination_type SET DEFAULT 'project',
-ALTER COLUMN destination_type SET NOT NULL,
 ALTER COLUMN project_id DROP NOT NULL,
 ADD CONSTRAINT supplier_payable_events_warehouse_tenant_fkey
   FOREIGN KEY (warehouse_id, tenant_id)
@@ -191,16 +187,10 @@ ON public.supplier_payable_events(
 WHERE destination_type = 'warehouse';
 
 ALTER TABLE public.supplier_payment_requests
-ADD COLUMN destination_type text,
+ADD COLUMN destination_type text NOT NULL DEFAULT 'project',
 ADD COLUMN warehouse_id uuid NULL;
 
-UPDATE public.supplier_payment_requests
-SET destination_type = 'project'
-WHERE destination_type IS NULL;
-
 ALTER TABLE public.supplier_payment_requests
-ALTER COLUMN destination_type SET DEFAULT 'project',
-ALTER COLUMN destination_type SET NOT NULL,
 ALTER COLUMN project_id DROP NOT NULL,
 ADD CONSTRAINT supplier_payment_requests_warehouse_tenant_fkey
   FOREIGN KEY (warehouse_id, tenant_id)
@@ -230,16 +220,10 @@ ON public.supplier_payment_requests(
 WHERE destination_type = 'warehouse';
 
 ALTER TABLE public.supplier_payments
-ADD COLUMN destination_type text,
+ADD COLUMN destination_type text NOT NULL DEFAULT 'project',
 ADD COLUMN warehouse_id uuid NULL;
 
-UPDATE public.supplier_payments
-SET destination_type = 'project'
-WHERE destination_type IS NULL;
-
 ALTER TABLE public.supplier_payments
-ALTER COLUMN destination_type SET DEFAULT 'project',
-ALTER COLUMN destination_type SET NOT NULL,
 ALTER COLUMN project_id DROP NOT NULL,
 ADD CONSTRAINT supplier_payments_warehouse_tenant_fkey
   FOREIGN KEY (warehouse_id, tenant_id)
@@ -281,6 +265,22 @@ ALTER FUNCTION public.create_supplier_purchase_order_receipt(
   uuid,
   text
 ) RENAME TO create_supplier_purchase_order_receipt_fulfillment_v2;
+
+-- Renaming retains the old EXECUTE ACL. Only the SECURITY DEFINER wrapper
+-- may call this fulfillment-only helper so receipt and accounting stay atomic.
+REVOKE ALL ON FUNCTION public.create_supplier_purchase_order_receipt_fulfillment_v2(
+  uuid,
+  uuid,
+  uuid,
+  integer,
+  text,
+  timestamptz,
+  text,
+  jsonb,
+  uuid,
+  uuid,
+  text
+) FROM PUBLIC, anon, authenticated, service_role;
 
 CREATE OR REPLACE FUNCTION public.create_supplier_purchase_order_receipt(
   p_receipt_id uuid,
@@ -623,15 +623,18 @@ BEGIN
 
     WITH previous AS MATERIALIZED (
       SELECT
-        inventory_transaction.source_id AS receipt_item_id,
+        receipt_item.supplier_purchase_order_item_id,
         COALESCE(SUM(inventory_transaction.value_delta), 0)::numeric(18, 2)
           AS previous_posted_amount
       FROM public.inventory_transactions AS inventory_transaction
       JOIN public.supplier_purchase_order_receipt_items AS receipt_item
         ON receipt_item.id = inventory_transaction.source_id
+        AND receipt_item.tenant_id = inventory_transaction.tenant_id
       WHERE inventory_transaction.tenant_id = p_tenant_id
+        AND inventory_transaction.source_type =
+          'supplier_purchase_receipt_item'
         AND receipt_item.supplier_purchase_order_id = p_order_id
-      GROUP BY inventory_transaction.source_id
+      GROUP BY receipt_item.supplier_purchase_order_item_id
     ),
     financial_line AS MATERIALIZED (
       SELECT
@@ -660,7 +663,7 @@ BEGIN
         AND item_fulfillment.supplier_purchase_order_id =
           purchase_item.supplier_purchase_order_id
       LEFT JOIN previous
-        ON previous.receipt_item_id = receipt_item.id
+        ON previous.supplier_purchase_order_item_id = purchase_item.id
       WHERE receipt_item.receipt_id = p_receipt_id
         AND receipt_item.tenant_id = p_tenant_id
         AND receipt_item.accepted_quantity > 0

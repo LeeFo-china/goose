@@ -58,9 +58,11 @@ describe('warehouse inventory stage b migration', () => {
       'supplier_payments',
     ]) {
       expect(sql).toContain(`ALTER TABLE public.${table}`);
-      expect(sql).toContain('ADD COLUMN destination_type text');
+      expect(sql).toContain(
+        `ALTER TABLE public.${table}\nADD COLUMN destination_type text NOT NULL DEFAULT 'project',`,
+      );
       expect(sql).toContain('ADD COLUMN warehouse_id uuid NULL');
-      expect(sql).toContain(`UPDATE public.${table}`);
+      expect(sql).not.toContain(`UPDATE public.${table}`);
       expect(sql).toMatch(new RegExp(
         `${table}_warehouse_tenant_fkey[\\s\\S]+FOREIGN KEY \\(warehouse_id, tenant_id\\)[\\s\\S]+REFERENCES public\\.warehouses\\(id, tenant_id\\)`,
       ));
@@ -68,6 +70,48 @@ describe('warehouse inventory stage b migration', () => {
         `${table}_destination_check[\\s\\S]+destination_type = 'project'[\\s\\S]+project_id IS NOT NULL[\\s\\S]+warehouse_id IS NULL[\\s\\S]+destination_type = 'warehouse'[\\s\\S]+project_id IS NULL[\\s\\S]+warehouse_id IS NOT NULL`,
       ));
     }
+    expect(sql).not.toMatch(/DISABLE\s+TRIGGER|DROP\s+TRIGGER|session_replication_role/i);
+  });
+
+  test('deducts previous warehouse postings by purchase line across receipts', async () => {
+    const sql = await migrationSql();
+    const body = functionBody(sql, 'create_supplier_purchase_order_receipt');
+    const warehouseBody = body.split("ELSIF v_order.destination_type = 'warehouse' THEN")[1] ?? '';
+    const previous = warehouseBody.match(/WITH previous AS MATERIALIZED \(([\s\S]*?)\n    \),/);
+
+    expect(previous).not.toBeNull();
+    const previousBody = previous?.[1] ?? '';
+    expect(previousBody).toContain('receipt_item.supplier_purchase_order_item_id');
+    expect(previousBody).toContain('SUM(inventory_transaction.value_delta)');
+    expect(previousBody).toContain('receipt_item.tenant_id = inventory_transaction.tenant_id');
+    expect(previousBody).toContain('inventory_transaction.tenant_id = p_tenant_id');
+    expect(previousBody).toContain('receipt_item.supplier_purchase_order_id = p_order_id');
+    expect(previousBody).toMatch(/inventory_transaction\.source_type =\s*'supplier_purchase_receipt_item'/);
+    expect(previousBody).toContain('GROUP BY receipt_item.supplier_purchase_order_item_id');
+    expect(warehouseBody).toMatch(
+      /LEFT JOIN previous\s+ON previous\.supplier_purchase_order_item_id = purchase_item\.id/,
+    );
+    expect(warehouseBody).not.toContain('previous.receipt_item_id = receipt_item.id');
+    expect(warehouseBody).toMatch(
+      /WHEN financial_line\.cumulative_accepted_quantity >=\s*financial_line\.ordered_quantity\s*THEN financial_line\.line_total_amount/,
+    );
+    expect(warehouseBody).toMatch(
+      /financial_line\.line_total_amount \*\s*financial_line\.cumulative_accepted_quantity \/\s*financial_line\.ordered_quantity/,
+    );
+    expect(warehouseBody).toContain(') - financial_line.previous_posted_amount,');
+  });
+
+  test('restricts the renamed fulfillment helper to the accounting wrapper', async () => {
+    const sql = (await migrationSql()).replace(/\s+/g, ' ');
+    const signature = 'uuid, uuid, uuid, integer, text, timestamptz, text, jsonb, uuid, uuid, text';
+
+    expect(sql).toContain(
+      `REVOKE ALL ON FUNCTION public.create_supplier_purchase_order_receipt_fulfillment_v2( ${signature} ) FROM PUBLIC, anon, authenticated, service_role;`,
+    );
+    expect(sql).not.toMatch(/GRANT\s+EXECUTE ON FUNCTION public\.create_supplier_purchase_order_receipt_fulfillment_v2\(/);
+    expect(sql).toContain(
+      `GRANT EXECUTE ON FUNCTION public.create_supplier_purchase_order_receipt( ${signature} ) TO service_role;`,
+    );
   });
 
   test('makes supplier purchase receipt destination-aware', async () => {

@@ -40,7 +40,7 @@ const CAPABILITY_RULES: readonly TenantServiceCapabilityRule[] = [
 const EXCLUDED_TOP_LEVEL = [
   "admin", "ai", "appointment-reward-claim-vouchers", "auth", "billing",
   "branding", "catalog", "expense-request-categories", "expense-requests",
-  "finance", "internal", "marketing-leads", "marketing-pages", "ocr",
+  "finance", "internal", "inventory", "marketing-leads", "marketing-pages", "ocr",
   "partner", "partner-onboarding", "payments", "platform", "posts", "public",
   "share-campaign-claim-vouchers", "share-campaigns", "social-video",
   "supplier-payable-filter-options", "supplier-payables",
