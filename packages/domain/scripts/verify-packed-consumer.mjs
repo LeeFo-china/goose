@@ -100,7 +100,10 @@ try {
 import { z } from 'zod';
 
 const schema: z.ZodType<SiteContentDraftBlock> = SiteContentDraftBlockSchema;
-const leadSource: CustomerLeadSource = CUSTOMER_LEAD_SOURCE_VALUES[0];
+const leadSource: CustomerLeadSource = 'h5';
+const getH5ActivityTitle = (detail: CustomerLeadDetail): string | null =>
+  detail.source_context?.h5?.page_title ?? null;
+void getH5ActivityTitle;
 const leadFollowUpInput: CustomerLeadFollowUpInput = {
   expected_lead_version: 1,
   idempotency_key: '11111111-1111-4111-8111-111111111111',
@@ -231,7 +234,10 @@ const expectedTrialStatuses = [
   'revoked',
   'converted',
 ];
-assert.deepEqual(CUSTOMER_LEAD_SOURCE_VALUES, ['douyin_miniapp']);
+assert.deepEqual(CUSTOMER_LEAD_SOURCE_VALUES, ['douyin_miniapp', 'h5']);
+assert.equal(CustomerLeadListQuerySchema.parse({ source: 'h5' }, { jitless: true }).source, 'h5');
+assert.equal(Object.hasOwn(CustomerLeadListQuerySchema.parse({}), 'source'), false);
+assert.equal(CustomerLeadListQuerySchema.safeParse({ source: 'h5_campaign' }).success, false);
 assert.equal(CUSTOMER_LEAD_ACTION_PERMISSIONS.mark_invalid, 'customer_lead.convert');
 assert.equal(CUSTOMER_LEAD_ERROR_CONFIG.CUSTOMER_LEAD_VERSION_CONFLICT.statusCode, 409);
 assert.ok(CustomerLeadFollowUpSchema instanceof z.ZodType);

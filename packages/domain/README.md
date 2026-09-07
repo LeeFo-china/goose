@@ -5,7 +5,7 @@ Shared domain constants, literal unions, config maps, and type guards for Gooes.
 ## Install
 
 ```bash
-npm install @gooes/domain@1.20.0
+npm install @gooes/domain@1.21.0
 ```
 
 ## Usage
@@ -48,6 +48,12 @@ command schemas and error catalog. Existing exports remain available. See
 The version is a local tarball delivery; the install example above requires
 that your registry actually hosts this version.
 
+`1.21.0` additionally accepts the `h5` customer-lead source and optional
+`source_context.h5` activity information. Omitting `source` selects all
+integrated sources. Existing command, permission and pagination contracts
+remain unchanged. See `docs/2026-09-06-h5-customer-leads-miniprogram-handoff.md`.
+This local package does not imply the backend has been deployed.
+
 From the repository root:
 
 ```bash
@@ -55,7 +61,7 @@ bun run --cwd packages/domain build
 bun run --cwd packages/domain verify:packed-consumer
 mkdir -p .artifacts/domain
 npm pack ./packages/domain --ignore-scripts --pack-destination .artifacts/domain
-shasum -a 256 .artifacts/domain/gooes-domain-1.20.0.tgz
+shasum -a 256 .artifacts/domain/gooes-domain-1.21.0.tgz
 ```
 
 Build before packing. `--ignore-scripts` intentionally avoids the legacy
