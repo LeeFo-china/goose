@@ -265,6 +265,19 @@ tenant/employee 与指定身份精确相符。没有打印或保存 token，没�
 审查通过，详见[类型同步证据](./2026-09-07-warehouse-stage-b-types.md)。
 本局部类型门禁不替代下方最终 API/Domain/Admin、权限与数据库写入审计总门禁。
 
+### 开发候选的上游整合
+
+类型同步提交 `a152cd91` 后，重新 fetch 并核对 `origin/main` 为 `d424be4c`，仅有
+`7b658c58`（停用租户隐藏公开项目）和 `d424be4c`（公开项目展示真实施工节点）两个未合入提交。
+为避免后续候选部署覆盖当前开发环境已上线的这两项修复，将其合入**功能分支**，不是将
+Stage B 合回 main。先 `merge --no-commit --no-ff`，无冲突；15 个上游文件逐字匹配
+`origin/main`，不涉及仓库/Admin/migration/源数据库类型。本地 main 仍为 `ce2c67fb`。
+
+合并候选在提交前通过 API typecheck、build（975 模块）和文件大小门禁；逐文件运行
+公开项目 controller、workflow 状态读取、公开范围/缓存/节点标签，以及仓库路由分类/访问
+7 个文件，**81 tests / 156 assertions，0 fail**。这些是本地整合检查，不代表新 API 已部署。
+独立功能分支及 `.artifacts/` 保留，不推送 main、不清理未完成的工作树，不操作生产。
+
 ### 前次本地证据与最终门槛
 
 本地的采购领域隔离 PostgreSQL 12 组夹具、库存 Admin 18 项单元/组件测试、8 项浏览器测试及
