@@ -287,6 +287,12 @@ export const tenantNavGroups: AdminMenuGroup[] = [
         icon: PackageOpen,
         permission: "inventory.warehouse.view",
       },
+      {
+        href: "/inventory",
+        label: "仓库库存",
+        icon: PackageSearch,
+        permission: "inventory.stock.view",
+      },
     ],
   },
   {
