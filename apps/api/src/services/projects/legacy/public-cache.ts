@@ -83,12 +83,14 @@ export async function listPublicProjects(
     });
     const cached = this.getCachedValue(this.publicProjectListCache, cacheKey);
     if (cached) {
-        return cached;
+        return attachLivePublicProjectWorkflowStatuses.call(this, cached);
     }
 
     const inFlight = this.publicProjectListInFlight.get(cacheKey);
     if (inFlight) {
-        return inFlight;
+        return inFlight.then((result: PublicProjectListResult) =>
+            attachLivePublicProjectWorkflowStatuses.call(this, result)
+        );
     }
 
     const request = projectRepository.listPublicProjects({
@@ -120,7 +122,19 @@ export async function listPublicProjects(
         });
 
     this.publicProjectListInFlight.set(cacheKey, request);
-    return request;
+    return request.then((result: PublicProjectListResult) =>
+        attachLivePublicProjectWorkflowStatuses.call(this, result)
+    );
+}
+
+async function attachLivePublicProjectWorkflowStatuses(
+    this: any,
+    result: PublicProjectListResult,
+): Promise<PublicProjectListResult> {
+    return {
+        ...result,
+        rows: await this.attachPublicProjectWorkflowStatuses(result.rows),
+    };
 }
 
 export function invalidatePublicProjectsCache(this: any) {

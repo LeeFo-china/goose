@@ -44,8 +44,8 @@ Run the same Bun test command and expect all cases to pass.
 ### Task 2: Bounded workflow-state repository query
 
 **Files:**
-- Modify: `apps/api/src/repositories/workflow-subject-states.ts`
-- Test: `apps/api/src/repositories/workflow-subject-states.test.ts`
+- Create: `apps/api/src/repositories/public-project-workflow-states.ts`
+- Modify: `apps/api/src/repositories/workflow-subject-states.test.ts`
 
 - [ ] **Step 1: Write a failing repository contract test**
 
@@ -62,7 +62,7 @@ cd apps/api
 bun test src/repositories/workflow-subject-states.test.ts
 ```
 
-- [ ] **Step 3: Add `listCompactByTenantSubjectIds`**
+- [ ] **Step 3: Add `listByTenantProjectIds`**
 
 Return only `tenant_id`, `subject_id`, `instance_status`, `current_node_key`,
 and `current_node_title`. Wrap database failures with `Errors.dbError`.
@@ -147,4 +147,3 @@ pagination is unchanged, and no internal workflow fields are returned.
 Run `git diff --check`, inspect the scoped diff, and create a Conventional
 Commit containing only the documentation, tests, repository, and public-list
 service changes.
-

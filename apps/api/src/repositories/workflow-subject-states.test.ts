@@ -7,6 +7,7 @@ const eqCalls: EqCall[] = [];
 const inCalls: InCall[] = [];
 const orderCalls: Array<readonly [string, unknown]> = [];
 const selectCalls: string[] = [];
+const limitCalls: number[] = [];
 let runningSingleData: Record<string, unknown> | null = runtimeInstance("instance-running", "running");
 let completedSingleData: Record<string, unknown> | null = runtimeInstance(
   "instance-completed",
@@ -43,7 +44,8 @@ class WorkflowInstancesQuery {
     return this;
   }
 
-  limit() {
+  limit(value: number) {
+    limitCalls.push(value);
     return this;
   }
 
@@ -189,6 +191,39 @@ describe("workflowSubjectStateRepository", () => {
     expect(selectCalls.some((columns) => columns.includes("definition:")))
       .toBeFalse();
     expect(inCalls).toContainEqual(["subject_id", ["batch-1", "batch-2"]]);
+  });
+
+  test("loads public project states in one tenant-scoped bounded query", async () => {
+    eqCalls.length = 0;
+    inCalls.length = 0;
+    limitCalls.length = 0;
+    selectCalls.length = 0;
+    const { publicProjectWorkflowStateRepository } = await import(
+      "./public-project-workflow-states"
+    );
+
+    await publicProjectWorkflowStateRepository.listByTenantProjectIds({
+      tenantIds: ["tenant-2", "tenant-1", "tenant-1"],
+      projectIds: [
+        ...Array.from({ length: 101 }, (_, index) => `project-${index + 1}`),
+        "project-1",
+      ],
+    });
+
+    expect(selectCalls).toContain([
+      "tenant_id",
+      "subject_id",
+      "instance_status",
+      "current_node_key",
+      "current_node_title",
+    ].join(", "));
+    expect(eqCalls).toContainEqual(["subject_type", "project"]);
+    expect(inCalls).toContainEqual(["tenant_id", ["tenant-2", "tenant-1"]]);
+    expect(inCalls).toContainEqual([
+      "subject_id",
+      Array.from({ length: 100 }, (_, index) => `project-${index + 1}`),
+    ]);
+    expect(limitCalls).toContain(100);
   });
 });
 

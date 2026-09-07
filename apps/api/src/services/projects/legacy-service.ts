@@ -48,6 +48,9 @@ import {
     resolvePublicProjectAudienceScope,
 } from "./legacy/public-audience-scope";
 import {
+    attachPublicProjectWorkflowStatuses,
+} from "./legacy/public-workflow-status";
+import {
     listProjectCreateCustomers,
     listProjectCreateConstructionWorkflows,
     listProjectCreateEmployees,
@@ -126,6 +129,8 @@ class ProjectService {
     searchProjectsByName = searchProjectsByName;
     listProjectWorkflowFilters = listProjectWorkflowFilters;
     listPublicProjects = listPublicProjects;
+    private attachPublicProjectWorkflowStatuses =
+        attachPublicProjectWorkflowStatuses;
     private invalidatePublicProjectsCache = invalidatePublicProjectsCache;
     private getCachedValue = getCachedValue;
     private setCachedValue = setCachedValue;
