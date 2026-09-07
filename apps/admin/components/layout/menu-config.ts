@@ -258,6 +258,12 @@ export const tenantNavGroups: AdminMenuGroup[] = [
         permission: "supplier.product.view",
       },
       {
+        href: "/supplier-purchase-batches",
+        label: "采购批次",
+        icon: ClipboardList,
+        permission: "supplier.purchase-requisition.view",
+      },
+      {
         href: "/supplier-purchase-requisitions",
         label: "采购申请",
         icon: ClipboardPlus,

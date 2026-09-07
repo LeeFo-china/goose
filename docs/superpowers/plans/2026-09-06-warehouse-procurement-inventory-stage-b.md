@@ -438,6 +438,8 @@ bun test apps/api/src/services/supplier-purchase-fulfillments.test.ts \
 
 ### Task 6: Admin 仓库库存页面
 
+2026-09-07：本任务已提交为 `aba8a5cf`。18 项单元/组件测试、8 项真实浏览器 UI 契约测试、Admin check/build 及独立规格/质量审查通过；不表示 Task 7/8/9 完成。详见[执行证据](../../operations/evidence/2026-09-07-warehouse-stage-b-execution.md)。
+
 **Files:**
 
 - Create: `apps/admin/components/inventory/inventory-types.ts`
@@ -448,7 +450,7 @@ bun test apps/api/src/services/supplier-purchase-fulfillments.test.ts \
 - Create: `apps/admin/app/(console)/inventory/page.tsx`
 - Modify: `apps/admin/components/layout/menu-config.ts`
 
-- [ ] **Step 1: RED tests**
+- [x] **Step 1: RED tests**
 
 Cover UI pure rules:
 
@@ -457,7 +459,7 @@ Cover UI pure rules:
 - blank warehouse filter omitted.
 - `pageSize` capped at 100.
 
-- [ ] **Step 2: Implement UI**
+- [x] **Step 2: Implement UI**
 
 Page layout:
 
@@ -484,7 +486,7 @@ Page layout:
 
 Use compact admin table styling. Do not expose internal UUID/code unless it is part of an explicit technical source link.
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run:
 
@@ -497,12 +499,14 @@ pnpm --dir apps/admin check
 
 ### Task 7: Admin 新建采购批次开放仓库补货
 
+2026-09-07：本地 UI 实现与独立规格/质量复核完成；根代理最终运行 71 项测试、18 项浏览器 HTTP 契约测试及 Admin check/build 通过。补货仍受设置与权限限制，没有在开发/生产环境开放；Task 8/9 和财务页面仍待完成。详见[执行证据](../../operations/evidence/2026-09-07-warehouse-stage-b-execution.md)。
+
 **Files:**
 
 - Modify: `apps/admin/components/supplier-purchase-batches/*`
 - Modify: related tests under `apps/admin/components/supplier-purchase-batches`
 
-- [ ] **Step 1: RED tests**
+- [x] **Step 1: RED tests**
 
 Cover:
 
@@ -513,7 +517,7 @@ Cover:
 - warehouse mode hides project picker and shows warehouse destination.
 - user-facing copy says `仓库补货` and `采购去向`，不展示内部编码。
 
-- [ ] **Step 2: Implement UI**
+- [x] **Step 2: Implement UI**
 
 Use a segmented control for destination:
 
@@ -527,7 +531,7 @@ When `仓库补货` is selected:
 - if none, disable submit and show “暂无启用仓库，请先维护仓库设置”。
 - if gate disabled, hide or disable the warehouse option with “仓库补货暂未开放”。
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run admin focused tests and `pnpm --dir apps/admin check`.
 

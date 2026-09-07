@@ -12,7 +12,7 @@
 
 - [ ] 1. 采购、收货双目的地闭环：API、拆单核算、工作流、真实收货和指定同价跨订单并发场景已通过隔离验证及两轮审查；开发库真实 API 联调和完整验收仍待完成。
 - [ ] 2. 仓库应付、付款申请、审批、付款记录：API/SQL 已实现并通过隔离验证及两轮审查，仓库不写项目成本/占用；新增付款并发、冻结发票限制及回滚证据见下文，仍待真实 API 联调。
-- [ ] 3. Admin 库存余额、流水、菜单及采购单目的地适配已实现并完成下述本地 UI 验收；批次补货入口和财务页面目的地适配仍待完成，后端未验收不开放补货。
+- [ ] 3. Admin 库存余额、流水、菜单、采购单目的地及批次补货入口已实现并完成下述本地 UI 验收；财务页面目的地适配仍待完成，后端未验收不开放补货。
 - [ ] 4. 开发库目标及 migration 清单确认、完整历史升级与 Local/Remote 对齐、并发/幂等/尾差/租户隔离/性能/原项目回归、最终审查、合并和安全清理。
 
 生产发布不包含在本次授权内。未修改 orange、main 工作区或生产配置。
@@ -106,7 +106,7 @@
 - 独立规格、质量审查均通过，各自重跑本夹具 exit 0；根代理单独重跑本夹具及包含它的全部 13 组采购领域夹具，均 exit 0。此测试走内部拆单核算入口和真实收货，不代替完整工作流、真实 API、历史升级、不同价格并发或性能验收。
 - 测试准备最初出现变量/别名歧义及旧商品创建 v1 与完整 SKU 编码不匹配；均修正为明确别名与当前 API 创建契约，不计作库存业务缺陷或库存修复证据。
 
-另行发现的旧 SKU 兼容风险（尚未修复）：旧 v1 生成的 16 位短码 SKU 在真实改价命令中返回 `catalog_result_not_exact`。有效 SQL `20260902110000_guard_supplier_purchasable_sku_noop_period_overlap.sql` 构造完整码用于目录搜索，但更新 payload 不改原短码；Repository 虽接受旧码响应，SQL 已先失败。独立源码/历史核查确认该逻辑早于 Stage B；尚未核对开发/生产库实际受影响行数。修正成本夹具不表示旧 SKU 改价问题已解决，最终历史兼容验收须保留此项跟踪。
+另行发现的旧 SKU 兼容风险：旧 v1 生成的 16 位短码 SKU 在真实改价命令中返回 `catalog_result_not_exact`。有效 SQL `20260902110000_guard_supplier_purchasable_sku_noop_period_overlap.sql` 构造完整码用于目录搜索，但更新 payload 不改原短码；Repository 虽接受旧码响应，SQL 已先失败。独立源码/历史核查确认该逻辑早于 Stage B。现已提交精确 SKU 解析修复 `30439488`，通过隔离测试及独立规格/质量审查，见[回归证据](./2026-09-07-warehouse-stage-b-sku-legacy-compatibility.md)。未应用到开发/生产库；实际受影响行数与真实接口兼容仍待验收。
 
 ### Admin 前置：库存来源单据
 
@@ -143,6 +143,16 @@
 - 已查看根代理本次生成的 375px 截图，关闭按钮可见且可由键盘触发，页面无整体横向溢出；截图在忽略的 `apps/admin/test-results/supplier-purchase-order/`。履约时间线沿用已有员工 ID 展示，当前 DTO 未提供该处员工姓名，此单元未扩展人员查询。
 - 浏览器测试走真实 Admin 与独立 HTTP 合成 fixture（3024/3997），不是开发库真实 API；结束后两端口释放、专用 `.next-e2e/supplier-purchase-order` 目录清理，未修改已有数据库、生产或 orange。此单元不代表批次补货入口、财务页面或整体 Stage B 验收完成。
 
+## Admin 采购批次本地验收
+
+- 新增 `/supplier-purchase-batches` 及采购批次菜单，包含项目/仓库草稿、分页商品目录及子单、服务端拆单预览、提交/审批/驳回/撤回再提交/取消。列表默认 20、最大 100；批次最多 100 项 SKU、20 个供应商，不提交客户端价格事实。
+- 仓库新建同时检查采购及仓库权限、模块/补货/工作流设置；项目模式默认保留，缺少 `supplier.view` 不请求设置且不禁用项目采购。启用仓库分页查询默认仓库，目的地变化清空商品和旧价格；停用仓库和关闭补货后仍可查看历史。
+- 独立质量审查曾复现 HTTP 200 截断 JSON 被误认为 accepted、冻结请求提前清除。修复后 unknown 回执必须通过当前命令、资源、版本、目的地及必要拆单/工作流事实检查；损坏或矛盾回执保持 uncertain，原 UUID、payload、version、key 不变。修订提示显示本次持久化版本，不冒充最新版本。
+- 定向规格复审又复现非保存命令未绑定目的地、终态容许运行中 workflow。现确认动作时复制冻结原目的地，仅保存在本地元数据，不改变 HTTP 指纹；刷新后仍按原快照重放。旧保存可从原 payload 恢复，旧动作缺快照则保留 key、禁发写入并提示核查。终态按真实 HTTP 适配不接受多余 workflow_state。
+- 上述缺陷均有真实 sender 或浏览器 RED/GREEN。根代理最终独立逐文件运行 71 项测试、141 断言，Admin check/build exit 0（95 页、采购批次 22.8 kB）；18 项浏览器 HTTP 契约用例通过（56.4 秒）。本次桌面/375px 截图已查看，表格内部横滚、保存/关闭页脚可见。
+- 完整规格审查、修复后的定向规格复核及最终质量复核均通过，最终两位审查者分别独立重跑 71 项测试、141 断言，无剩余 Critical / Important / Minor。
+- 3036/3986 为本域独立测试端口，已释放。HTTP fixture 在故障场景先记录操作，再截断响应或篡改首次回执目的地，刷新后重放原请求验证只有一条事实；这仍非真实 API/数据库联调。补货开关未因此开放，财务页面和开发库验收未完成。
+
 ## 隔离 PostgreSQL 证据与复跑方式
 
 运行：
@@ -161,7 +171,12 @@ bun scripts/verify-warehouse-stage-b-database.ts \
   scripts/fixtures/warehouse-stage-b/receipt-accounting.sql \
   scripts/fixtures/warehouse-stage-b/receipt-cross-order-concurrency.sql \
   scripts/fixtures/warehouse-stage-b/receipt-lock-order.sql \
-  scripts/fixtures/warehouse-stage-b/receipt-weighted-cost.sql
+  scripts/fixtures/warehouse-stage-b/receipt-weighted-cost.sql \
+  scripts/fixtures/warehouse-stage-b/inventory-transactions-legacy-reference.sql \
+  scripts/fixtures/warehouse-stage-b/sku-legacy-compatibility.sql \
+  scripts/fixtures/warehouse-stage-b/sku-legacy-guards.sql \
+  scripts/fixtures/warehouse-stage-b/inventory-read-performance.sql \
+  scripts/fixtures/warehouse-stage-b/receipt-weighted-race.sql
 ```
 
 - 已只读核对本地 `supabase_db_gooes`：迁移基线 `20260828160000`，527 条记录。
@@ -203,7 +218,7 @@ bun scripts/verify-warehouse-stage-b-database.ts \
 - 批次 submit/review、子申请单转订单和订单提交的会计核心及仓库工作流：已完成隔离测试和双阶段审查；真实 API 联调待执行。
 - 工作流 submit/preflight/review/withdraw/task-list 已完成上述隔离验证与两轮审查，开发库联调待执行。
 - 默认采购审批图的预算分支是 `budget_status != over_budget`，已通过 `not_applicable` 的真实仓库审批；未修改已发布审批图。
-- 收货 wrapper、历史项目收货、库存/应付原子事务及同单并发/回滚已通过上述隔离测试；同价同仓同 SKU 的跨订单并发与不同价格顺序收货的加权成本已补证。不同价格并发、完整租户隔离矩阵、性能及真实接口 smoke 仍需最终验收；旧短码 SKU 改价兼容问题见上文。
+- 收货 wrapper、历史项目收货、库存/应付原子事务及同单并发/回滚已通过上述隔离测试；同价同仓同 SKU 跨订单并发与不同价格顺序收货已补证。另提交 `175d21b0` [不同冻结价格并发收货](./2026-09-07-warehouse-stage-b-weighted-receipt-concurrency.md)，覆盖两单第二仓的新余额创建、已有余额累加及重放；完整租户隔离矩阵、实际负载及真实接口 smoke 仍需最终验收。最新整组运行 18 份夹具通过，性能探针必须在新增不同价并发夹具之前执行，保持其固定读负载基线；旧短码 SKU 兼容修复和追加 guard 测试已分别提交 `30439488`、`d1cc9367`。
 - 付款查询及命令已完成上述隔离验证和双阶段复审；追加测试覆盖上述同 AP 并发申请/付款、同键重放、冻结发票限制及失败回滚。真实 API 联调与完整最终验收仍待完成，第二步不能视为已发布。
 - 库存列表已取得 1 万余额/10 万流水合成读负载的[性能诊断基线](./2026-09-07-warehouse-stage-b-inventory-read-performance.md)。后续[流水分页优化](./2026-09-07-warehouse-stage-b-inventory-read-optimization.md)将计数/分页候选与宽字段关联分开，提交时 14 组计划中流水临时写块均为 0、旧新完整 JSON 一致，全部 15 份采购领域夹具及独立规格/质量审查通过；该单元当时尚未完成 generic plan 验收。
 - [计划缓存补验](./2026-09-07-warehouse-stage-b-inventory-plan-modes.md)已提交 `364dea57`：30 组函数外计划证明 generic 选择性退化。进一步[真实 RPC 计划稳定性修复](./2026-09-07-warehouse-stage-b-inventory-rpc-plans.md)在特定宽查询预热后复现默认 auto 退化，并以函数级专用规划修复；当前验收状态及扫描证据见该记录。大来源/跨租户规模、规划 CPU/并发负载及真实联调仍未完成，不能视为整体性能放行。
