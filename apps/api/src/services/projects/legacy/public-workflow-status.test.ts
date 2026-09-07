@@ -13,6 +13,9 @@ describe("appendPublicProjectWorkflowStatusLabels", () => {
       status: "constructing",
       display_status_label: "水电",
     });
+    expect(rows[0]).not.toHaveProperty("current_node_key");
+    expect(rows[0]).not.toHaveProperty("current_node_title");
+    expect(rows[0]).not.toHaveProperty("actions");
   });
 
   test("does not attach a state from another tenant", () => {

@@ -22,7 +22,8 @@ existing project status label.
 1. Load or reuse the cached public project page containing project base data
    and public assignee fields.
 2. Extract at most 100 `(tenant_id, project_id)` pairs from that page.
-3. Query `workflow_subject_states` once for those tenant and project IDs.
+3. Query `workflow_subject_states` for those exact tenant/project pairs in
+   chunks of 25, with at most four bounded queries running in parallel.
 4. Match results back by tenant and project ID.
 5. Build the public label from the current state and return a new row object.
 
@@ -44,11 +45,12 @@ on the next request even when `projects.status` remains `constructing`.
 ## Performance And Isolation
 
 - Public list `pageSize` remains capped at 100.
-- Enrichment performs one bounded repository query per response, not one query
-  per project or tenant.
-- The repository filters by `subject_type=project`, requested tenant IDs, and
-  requested project IDs, then the service verifies both IDs again while
-  joining results.
+- Enrichment performs at most four bounded repository queries per response,
+  not one query per project or tenant. Each query contains no more than 25
+  exact pairs so the PostgREST request URL stays within proxy limits.
+- The repository filters by `subject_type=project` and an exact OR-of-AND set
+  of requested tenant/project pairs, then the service verifies both IDs again
+  while joining results.
 - The existing workflow subject-state uniqueness/indexing is reused; no schema
   migration is required.
 
@@ -58,6 +60,7 @@ on the next request even when `projects.status` remains `constructing`.
   fallback, and tenant-safe matching.
 - A public-cache test proves a cached project page can return `拆改` and then
   `水电` on consecutive requests without invalidating the base cache.
+- A development database boundary smoke covers 100 exact tenant/project pairs
+  to verify the chunked PostgREST requests do not exceed proxy URL limits.
 - Run targeted Bun tests, API build, and a development endpoint smoke using a
   visitor session when credentials are available.
-

@@ -8,6 +8,7 @@ const inCalls: InCall[] = [];
 const orderCalls: Array<readonly [string, unknown]> = [];
 const selectCalls: string[] = [];
 const limitCalls: number[] = [];
+const orCalls: string[] = [];
 let runningSingleData: Record<string, unknown> | null = runtimeInstance("instance-running", "running");
 let completedSingleData: Record<string, unknown> | null = runtimeInstance(
   "instance-completed",
@@ -36,6 +37,11 @@ class WorkflowInstancesQuery {
 
   in(column: string, values: unknown[]) {
     inCalls.push([column, values]);
+    return this;
+  }
+
+  or(filters: string) {
+    orCalls.push(filters);
     return this;
   }
 
@@ -193,21 +199,26 @@ describe("workflowSubjectStateRepository", () => {
     expect(inCalls).toContainEqual(["subject_id", ["batch-1", "batch-2"]]);
   });
 
-  test("loads public project states in one tenant-scoped bounded query", async () => {
+  test("loads public project states in exact bounded pair chunks", async () => {
     eqCalls.length = 0;
     inCalls.length = 0;
     limitCalls.length = 0;
+    orCalls.length = 0;
     selectCalls.length = 0;
     const { publicProjectWorkflowStateRepository } = await import(
       "./public-project-workflow-states"
     );
 
+    const pairs = [
+      { tenantId: "tenant-2", projectId: "project-1" },
+      { tenantId: "tenant-1", projectId: "project-2" },
+      ...Array.from({ length: 99 }, (_, index) => ({
+        tenantId: "tenant-3",
+        projectId: `project-${index + 3}`,
+      })),
+    ];
     await publicProjectWorkflowStateRepository.listByTenantProjectIds({
-      tenantIds: ["tenant-2", "tenant-1", "tenant-1"],
-      projectIds: [
-        ...Array.from({ length: 101 }, (_, index) => `project-${index + 1}`),
-        "project-1",
-      ],
+      pairs: [...pairs, pairs[0]!],
     });
 
     expect(selectCalls).toContain([
@@ -218,12 +229,16 @@ describe("workflowSubjectStateRepository", () => {
       "current_node_title",
     ].join(", "));
     expect(eqCalls).toContainEqual(["subject_type", "project"]);
-    expect(inCalls).toContainEqual(["tenant_id", ["tenant-2", "tenant-1"]]);
-    expect(inCalls).toContainEqual([
-      "subject_id",
-      Array.from({ length: 100 }, (_, index) => `project-${index + 1}`),
-    ]);
-    expect(limitCalls).toContain(100);
+    expect(orCalls).toEqual(
+      Array.from({ length: 4 }, (_, chunkIndex) =>
+        pairs.slice(chunkIndex * 25, (chunkIndex + 1) * 25).map((pair) =>
+          `and(tenant_id.eq.${pair.tenantId},subject_id.eq.${pair.projectId})`
+        ).join(",")
+      ),
+    );
+    expect(inCalls.some(([column]) => column === "tenant_id")).toBeFalse();
+    expect(inCalls.some(([column]) => column === "subject_id")).toBeFalse();
+    expect(limitCalls).toEqual([25, 25, 25, 25]);
   });
 });
 

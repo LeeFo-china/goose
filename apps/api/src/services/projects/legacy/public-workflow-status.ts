@@ -35,8 +35,7 @@ export async function attachPublicProjectWorkflowStatuses(
   );
   const states = await publicProjectWorkflowStateRepository
     .listByTenantProjectIds({
-      tenantIds: pairs.map((pair) => pair.tenantId),
-      projectIds: pairs.map((pair) => pair.projectId),
+      pairs,
     });
 
   return appendPublicProjectWorkflowStatusLabels({ rows, states });
