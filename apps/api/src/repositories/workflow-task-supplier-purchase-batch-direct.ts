@@ -26,9 +26,8 @@ export async function listAccessibleSupplierPurchaseBatchTasksViaDirectSql(
   const subjectIdFilter = input.subjectId
     ? sql`AND instance.subject_id = ${input.subjectId}`
     : sql``;
-  const projectFilter = input.visibleProjectIds
-    ? sql`AND batch.project_id IN ${sql(input.visibleProjectIds)}`
-    : sql``;
+  const includeWarehouse = input.permissionCodes?.includes("inventory.warehouse.view") === true;
+  const projectFilter = buildProcurementTaskDestinationScope(sql, input.visibleProjectIds, includeWarehouse, status);
   const pendingRuntimeFilter = status === "pending"
     ? sql`
       AND instance.status = 'running'
@@ -89,7 +88,8 @@ export async function listAccessibleSupplierPurchaseBatchTasksViaDirectSql(
         'subject_id', instance.subject_id,
         'status', instance.status,
         'current_node_key', instance.current_node_key,
-        'current_node_snapshot', instance.current_node_snapshot
+        'current_node_snapshot', instance.current_node_snapshot,
+        'context', instance.context
       ) AS instance,
       count(*) OVER() AS total_count
     FROM public.workflow_tasks AS task
@@ -134,3 +134,4 @@ export async function listAccessibleSupplierPurchaseBatchTasksViaDirectSql(
     },
   };
 }
+import { buildProcurementTaskDestinationScope } from "./workflow-task-procurement-scope";

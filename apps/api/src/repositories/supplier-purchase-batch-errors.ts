@@ -1,4 +1,10 @@
 export const SUPPLIER_PURCHASE_BATCH_ERRORS = {
+  WAREHOUSE_PROCUREMENT_NOT_ENABLED: { statusCode: 409, message: "仓库采购尚未开放" },
+  WAREHOUSE_NOT_FOUND: { statusCode: 404, message: "仓库不存在" },
+  WAREHOUSE_INACTIVE: { statusCode: 409, message: "仓库已停用" },
+  PROCUREMENT_DESTINATION_INVALID: { statusCode: 400, message: "采购目的地无效" },
+  INVENTORY_SOURCE_CONFLICT: { statusCode: 409, message: "库存入账来源冲突" },
+  SUPPLIER_PURCHASE_ORDER_COST_CATEGORY_REQUIRED: { statusCode: 409, message: "采购单缺少成本分类" },
   SUPPLIER_PURCHASE_BATCH_VALIDATION_ERROR: {
     statusCode: 400, message: "采购批次参数校验失败",
   },

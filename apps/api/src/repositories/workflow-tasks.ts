@@ -33,7 +33,7 @@ type WorkflowTaskInstanceSummary = Pick<
   | "status"
   | "current_node_key"
   | "current_node_snapshot"
->;
+> & { context?: Record<string, unknown> };
 
 export type WorkflowTaskWithInstanceRow = WorkflowTaskRow & {
   instance: WorkflowTaskInstanceSummary | null;

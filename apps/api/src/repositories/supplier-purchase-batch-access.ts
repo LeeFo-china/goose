@@ -5,7 +5,9 @@ import { SupabaseDB } from "@/utils/supabase";
 
 const AccessContextSchema = z.object({
   tenant_id: z.uuid(),
-  project_id: z.uuid(),
+  project_id: z.uuid().nullable(),
+  destination_type: z.enum(["project", "warehouse"]).optional(),
+  warehouse_id: z.uuid().nullable().optional(),
   submitted_by_employee_id: z.uuid().nullable(),
 }).strict();
 
@@ -23,7 +25,7 @@ export class SupplierPurchaseBatchAccessRepository {
   async findBatchAccessContext(tenantId: string, batchId: string) {
     const { data, error } = await this.clientProvider()
       .from("supplier_purchase_batches")
-      .select("tenant_id,project_id,submitted_by_employee_id")
+      .select("tenant_id,project_id,destination_type,warehouse_id,submitted_by_employee_id")
       .eq("tenant_id", tenantId)
       .eq("id", batchId)
       .maybeSingle();

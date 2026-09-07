@@ -35,6 +35,7 @@ import type {
 import {
   PROJECT_ACCEPTANCE_STAGE_LABELS,
 } from "@gooes/domain";
+import { taskProcurementDestination, taskProcurementDisplayFacts } from "./workflow-task-procurement-destination";
 
 type CardContextSources = {
   projectsById: Map<string, WorkflowTaskProjectSummary>;
@@ -117,11 +118,13 @@ export class WorkflowTaskCardContextService {
         batchIds: [...supplierPurchaseBatchIds],
       });
     const employeeIds = new Set<string>();
-    for (const batch of supplierPurchaseBatches) {
-      projectIds.add(batch.project_id);
-      if (batch.submitted_by_employee_id) {
-        employeeIds.add(batch.submitted_by_employee_id);
-      }
+    for (const { task } of items) {
+      if (task.instance?.subject_type !== "supplier_purchase_batch") continue;
+      const batch = supplierPurchaseBatches.find((row) => row.id === task.instance?.subject_id) ?? null;
+      const destination = taskProcurementDestination(task, batch);
+      if (destination?.project_id) projectIds.add(destination.project_id);
+      const facts = taskProcurementDisplayFacts(task, batch);
+      if (facts?.submitted_by_employee_id) employeeIds.add(facts.submitted_by_employee_id);
     }
 
     const [
@@ -218,12 +221,14 @@ export class WorkflowTaskCardContextService {
 
     if (subjectType === "supplier_purchase_batch") {
       const batch = sources.supplierPurchaseBatchesById.get(subjectId) ?? null;
+      const destination = taskProcurementDestination(item.task, batch);
+      const facts = taskProcurementDisplayFacts(item.task, batch);
       return this.buildSupplierPurchaseBatchContext(
         item,
         batch,
-        batch ? sources.projectsById.get(batch.project_id) ?? null : null,
-        batch?.submitted_by_employee_id
-          ? sources.employeesById.get(batch.submitted_by_employee_id) ?? null
+        destination?.project_id ? sources.projectsById.get(destination.project_id) ?? null : null,
+        facts?.submitted_by_employee_id
+          ? sources.employeesById.get(facts.submitted_by_employee_id) ?? null
           : null,
       );
     }
@@ -383,6 +388,8 @@ export class WorkflowTaskCardContextService {
   ): WorkflowTaskCardContext {
     const batchId = batch?.id ?? readString(item.task.instance?.subject_id) ?? "";
     const batchNo = batch?.batch_no ?? null;
+    const destination = taskProcurementDestination(item.task, batch);
+    const facts = taskProcurementDisplayFacts(item.task, batch);
     const applicantName = applicant?.name?.trim() || null;
     const targetUrl = [
       "/packageProcurement/pages/batch-review/index",
@@ -393,27 +400,27 @@ export class WorkflowTaskCardContextService {
     return {
       todo_type: "supplier_purchase_batch",
       title: taskTitle(item.task, "采购批次审批"),
-      subtitle: joinText([projectNameOrFallback(project), batchNo], " · "),
+      subtitle: joinText([destination?.destination_type === "warehouse" ? destination.warehouse?.name ?? "仓库" : projectNameOrFallback(project), batchNo], " · "),
       primary_meta: batchNo ? `批次 ${batchNo}` : null,
       secondary_meta: item.assignee.current_handler_label ?? null,
-      amount_text: formatMoney(batch?.total_amount),
+      amount_text: formatMoney(facts?.total_amount),
       people_text: joinText([
         applicantName ? `申请人 ${applicantName}` : null,
-        typeof batch?.item_count === "number"
-          ? `商品 ${batch.item_count} 项`
+        typeof facts?.item_count === "number"
+          ? `商品 ${facts.item_count} 项`
           : null,
-        typeof batch?.supplier_count === "number"
-          ? `供应商 ${batch.supplier_count} 家`
+        typeof facts?.supplier_count === "number"
+          ? `供应商 ${facts.supplier_count} 家`
           : null,
       ], " · "),
-      time_text: batch?.submitted_at
-        ? `提交 ${formatDateText(batch.submitted_at)}`
+      time_text: facts?.submitted_at
+        ? `提交 ${formatDateText(facts.submitted_at)}`
         : formatDateText(item.task.created_at),
       target_url: targetUrl,
       project: buildProjectPayload(project),
-      applicant: batch?.submitted_by_employee_id
+      applicant: facts?.submitted_by_employee_id
         ? {
-          id: batch.submitted_by_employee_id,
+          id: facts.submitted_by_employee_id,
           name: applicantName ?? "申请人",
         }
         : null,
@@ -422,10 +429,13 @@ export class WorkflowTaskCardContextService {
         ...baseBusiness(item),
         batch_id: batchId || null,
         batch_no: batchNo,
-        total_amount: batch?.total_amount ?? null,
-        item_count: batch?.item_count ?? null,
-        supplier_count: batch?.supplier_count ?? null,
-        submitted_at: batch?.submitted_at ?? null,
+        destination_type: destination?.destination_type ?? "project",
+        warehouse_id: destination?.warehouse_id ?? null,
+        warehouse_name: destination?.warehouse?.name ?? null,
+        total_amount: facts?.total_amount ?? null,
+        item_count: facts?.item_count ?? null,
+        supplier_count: facts?.supplier_count ?? null,
+        submitted_at: facts?.submitted_at ?? null,
       },
     };
   }

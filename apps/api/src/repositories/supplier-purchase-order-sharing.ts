@@ -2,11 +2,6 @@ import { z } from "zod";
 
 import { Errors } from "@/errors/error-factory";
 import {
-  assertProjectProcurementDestination,
-  toProjectProcurementDestination,
-  type ProjectProcurementDestinationRecord,
-} from "@/repositories/procurement-destination-records";
-import {
   SUPPLIER_PURCHASE_ORDER_ITEM_SELECT,
   SupplierPurchaseOrderItemSchema,
   SupplierPurchaseOrderWithReferencesSchema,
@@ -95,7 +90,7 @@ const ExportOrderSchema = SupplierPurchaseOrderWithReferencesSchema.safeExtend({
     name: z.string(),
     address: z.string().nullable().optional(),
     status: z.string(),
-  }).strict(),
+  }).strict().nullable(),
 }).strict();
 
 export type SupplierPurchaseOrderShareLink =
@@ -111,7 +106,7 @@ export type SupplierPurchaseOrderShareStatus = {
 export type SupplierPurchaseOrderShareStatuses =
   Record<string, SupplierPurchaseOrderShareStatus>;
 export type SupplierPurchaseOrderExportOrder =
-  z.infer<typeof ExportOrderSchema> & ProjectProcurementDestinationRecord;
+  z.infer<typeof ExportOrderSchema>;
 export type SupplierPurchaseOrderExportSnapshot = {
   order: SupplierPurchaseOrderExportOrder;
   items: SupplierPurchaseOrderItem[];
@@ -351,7 +346,7 @@ export class SupplierPurchaseOrderSharingRepository {
       ExportOrderSchema,
       data,
       "查询采购批次采购单导出数据失败",
-    ).map(toProjectProcurementDestination);
+    );
     if (orders.length === 0) return [];
 
     const items = await this.listExportItems(
@@ -376,7 +371,6 @@ export class SupplierPurchaseOrderSharingRepository {
     if (error) throw Errors.dbError("查询采购单导出数据失败", error);
     if (data === null) return null;
     const order = parse(ExportOrderSchema, data, "查询采购单导出数据失败");
-    assertProjectProcurementDestination(order);
     return order;
   }
 

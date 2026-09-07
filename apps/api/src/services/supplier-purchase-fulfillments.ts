@@ -1,4 +1,5 @@
 import { Errors } from "@/errors/error-factory";
+import { assertProcurementDestinationAccess } from "./procurement-destination-access";
 import { supplierPurchaseFulfillmentsRepository } from "@/repositories/supplier-purchase-fulfillments";
 import { supplierPurchaseOrdersRepository } from "@/repositories/supplier-purchase-orders";
 import type {
@@ -141,14 +142,14 @@ export class SupplierPurchaseFulfillmentsService {
   private async authorizeRead(auth: AuthContext, orderId: string) {
     const scope = await this.access.requireRead(auth);
     const order = await this.requireOrder(scope.tenantId, orderId);
-    await this.access.assertProjectRead(auth, order.project_id);
+    await assertProcurementDestinationAccess(auth, order, "read", this.access.assertProjectRead.bind(this.access));
     return scope.tenantId;
   }
 
   private async authorizeManage(auth: AuthContext, orderId: string) {
     const scope = await this.access.requireManage(auth);
     const order = await this.requireOrder(scope.tenantId, orderId);
-    await this.access.assertProjectUpdate(auth, order.project_id);
+    await assertProcurementDestinationAccess(auth, order, "manage", this.access.assertProjectUpdate.bind(this.access));
     return scope;
   }
 

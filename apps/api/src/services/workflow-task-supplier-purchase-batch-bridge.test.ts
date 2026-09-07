@@ -1,14 +1,14 @@
 import { describe, expect, mock, test } from "bun:test";
 import { Errors } from "@/errors/error-factory";
-import type {
-  SupplierPurchaseBatchPendingWorkflowTask,
-  SupplierPurchaseBatchRunningWorkflowInstance,
-} from "@/repositories/supplier-purchase-batch-workflow-review-lookup";
+import type { SupplierPurchaseBatchPendingWorkflowTask, SupplierPurchaseBatchRunningWorkflowInstance } from "@/repositories/supplier-purchase-batch-workflow-review-lookup";
 import type { AuthContext } from "@/services/authorization";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
+mock.module("@/repositories/supplier-purchase-batch-workflow-review-lookup", () => ({
+  supplierPurchaseBatchWorkflowReviewLookupRepository: { listReviewEvents: async () => [] },
+}));
 
 async function bridgeClass() {
   return (await import("@/services/workflow-task-supplier-purchase-batch-bridge"))

@@ -108,13 +108,13 @@ describe("supplier purchase order source projection", () => {
       .rejects.toMatchObject({ statusCode: 500, code: "DB_ERROR" });
   });
 
-  test("detail reads reject warehouse procurement before project gates", async () => {
+  test("detail reads return warehouse destination for service authorization", async () => {
     const repository = await repositoryFor(warehouseOrder);
 
     await expect(repository.findOrder(TENANT_ID, ORDER_ID))
-      .rejects.toMatchObject({
-        statusCode: 409,
-        code: "WAREHOUSE_PROCUREMENT_NOT_ENABLED",
+      .resolves.toMatchObject({
+        destination_type: "warehouse",
+        project_id: null,
       });
   });
 });

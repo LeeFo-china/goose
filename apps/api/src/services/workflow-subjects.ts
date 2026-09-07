@@ -1,4 +1,6 @@
 import { Errors } from "@/errors/error-factory";
+import { authorizeSupplierPurchaseBatchSubject, authorizeSupplierPurchaseBatchInstance } from "./supplier-purchase-batch-subject-access";
+import { filterWarehouseProcurementActions, type ProcurementDestination } from "./procurement-destination-access";
 import {
   workflowTaskRepository,
   type WorkflowTaskWithInstanceRow,
@@ -96,6 +98,7 @@ class WorkflowSubjectsService {
   ) {
     const tenantId = this.assertTenantId(authContext);
     const subjectId = params.subjectId.trim();
+    let destination = await authorizeSupplierPurchaseBatchSubject(authContext, params);
     const preloadedState = this.buildStateFromWorkflowProgress({
       tenantId,
       subjectType: params.subjectType,
@@ -117,12 +120,13 @@ class WorkflowSubjectsService {
       };
     }
 
-    const actions = await (options.actionsPromise ??
+    destination = await authorizeSupplierPurchaseBatchInstance(authContext, params, state.instance_id) ?? destination;
+    const actions = filterWarehouseProcurementActions(authContext, destination?.destination_type, await (options.actionsPromise ??
       this.loadAccessibleActions(authContext, {
         subjectType: params.subjectType,
         subjectId,
         instanceId: state.instance_id,
-      }));
+      }, destination)));
     const timelineNodes = preloadedState && options.workflowProgress
       ? fillMissingWorkflowActionsToTimelineNodes(
         options.workflowProgress.timeline_nodes,
@@ -148,9 +152,17 @@ class WorkflowSubjectsService {
   async loadAccessibleActions(
     authContext: AuthContext,
     params: WorkflowSubjectStateParams & { instanceId?: string | null },
+    authorizedDestination?: ProcurementDestination | null,
   ): Promise<WorkflowTaskActionPayload[]> {
     const tenantId = this.assertTenantId(authContext);
     const subjectId = params.subjectId.trim();
+    let destination = authorizedDestination === undefined
+      ? await authorizeSupplierPurchaseBatchSubject(authContext, params) : authorizedDestination;
+    if (authorizedDestination === undefined && params.instanceId) {
+      destination = await authorizeSupplierPurchaseBatchInstance(authContext, params, params.instanceId) ?? destination;
+    }
+    if (destination?.destination_type === "warehouse" &&
+      !authContext.permissions.some(({ code }) => code === "inventory.warehouse.manage")) return [];
     const tasks = params.instanceId
       ? (await workflowTaskRepository.listPendingByInstance({
         tenantId,
@@ -188,6 +200,7 @@ class WorkflowSubjectsService {
     query: WorkflowSubjectTimelineQuery,
   ) {
     const tenantId = this.assertTenantId(authContext);
+    await authorizeSupplierPurchaseBatchSubject(authContext, params);
     const state = await workflowSubjectStateService.getSubjectState({
       tenantId,
       subjectType: params.subjectType,
@@ -206,6 +219,7 @@ class WorkflowSubjectsService {
       };
     }
 
+    await authorizeSupplierPurchaseBatchInstance(authContext, params, state.instance_id);
     return workflowTaskRepository.listTransitionLogs({
       tenantId,
       instanceId: state.instance_id,

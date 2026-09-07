@@ -16,6 +16,7 @@ export const SUPPLIER_PURCHASE_REQUISITION_STATUS_VALUES = [
 ] as const;
 
 export const SUPPLIER_PURCHASE_REQUISITION_BUDGET_STATUS_VALUES = [
+  "not_applicable",
   "unchecked",
   "within_budget",
   "over_budget",
@@ -65,6 +66,8 @@ export const SupplierPurchaseRequisitionListQuerySchema =
     status: SupplierPurchaseRequisitionStatusSchema.optional(),
     budget_status: SupplierPurchaseRequisitionBudgetStatusSchema.optional(),
     project_id: uuid("无效的项目 ID").optional(),
+    destination_type: z.enum(["project", "warehouse"]).optional(),
+    warehouse_id: uuid("无效的仓库 ID").optional(),
     tenant_supplier_id: uuid("无效的租户供应商关系 ID").optional(),
   }).strict();
 

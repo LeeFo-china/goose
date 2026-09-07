@@ -47,6 +47,7 @@ export type WorkflowTaskCardContext = {
 };
 
 export type WorkflowTaskCardContextTask = {
+  status?: string;
   id: string;
   instance_id: string;
   instance_node_id?: string | null;
@@ -63,6 +64,7 @@ export type WorkflowTaskCardContextTask = {
     subject_type?: string | null;
     subject_id?: string | null;
     current_node_snapshot?: unknown;
+    context?: Record<string, unknown>;
   } | null;
 };
 

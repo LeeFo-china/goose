@@ -179,11 +179,13 @@ function dependencies() {
       submit: mock(async () => ({})),
     },
     workflowRead: {
+      // Workflow personnel projection has a separate bounded repository read.
       listSubjectStates,
       listAccessiblePendingTasks,
       buildTaskActions,
       getState,
     },
+    workflowTasks: { listPendingBySubjectIds: mock(async () => []) },
   };
 }
 

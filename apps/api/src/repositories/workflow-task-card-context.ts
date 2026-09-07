@@ -79,7 +79,10 @@ export type WorkflowTaskProjectAcceptanceSummary = {
 export type WorkflowTaskSupplierPurchaseBatchSummary = {
   id: string;
   batch_no: string;
-  project_id: string;
+  project_id: string | null;
+  destination_type?: "project" | "warehouse";
+  warehouse_id?: string | null;
+  warehouse?: { id: string; name: string; status: string } | null;
   total_amount: number | null;
   item_count: number;
   supplier_count: number;
@@ -273,6 +276,9 @@ class WorkflowTaskCardContextRepository {
         id,
         batch_no,
         project_id,
+        destination_type,
+        warehouse_id,
+        warehouse:warehouses!supplier_purchase_batches_warehouse_tenant_fkey(id,name,status),
         total_amount,
         item_count,
         supplier_count,
@@ -293,6 +299,9 @@ class WorkflowTaskCardContextRepository {
         id: row.id,
         batch_no: row.batch_no,
         project_id: row.project_id,
+        destination_type: row.destination_type,
+        warehouse_id: row.warehouse_id,
+        warehouse: row.warehouse,
         total_amount: toFiniteNumber(row.total_amount),
         item_count: row.item_count,
         supplier_count: row.supplier_count,

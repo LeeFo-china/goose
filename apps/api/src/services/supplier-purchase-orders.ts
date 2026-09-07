@@ -1,4 +1,5 @@
 import { Errors } from "@/errors/error-factory";
+import { assertProcurementDestinationAccess, canReadWarehouseProcurement } from "./procurement-destination-access";
 import {
   emptyShareStatus,
   supplierPurchaseOrderSharingRepository,
@@ -92,6 +93,9 @@ export class SupplierPurchaseOrdersService {
     const page = await this.repository.listOrders({
       tenant_id: scope.tenantId,
       visible_project_ids: visibleProjectIds,
+      ...(canReadWarehouseProcurement(auth) ? { include_warehouse: true } : {}),
+      ...(query.destinationType ? { destination_type: query.destinationType } : {}),
+      ...(query.warehouseId ? { warehouse_id: query.warehouseId } : {}),
       page: query.page,
       pageSize: query.pageSize,
       ...(query.keyword ? { keyword: query.keyword } : {}),
@@ -121,7 +125,7 @@ export class SupplierPurchaseOrdersService {
   async getOrder(auth: AuthContext, orderId: string) {
     const scope = await this.access.requireRead(auth);
     const order = await this.requireOrder(scope.tenantId, orderId);
-    await this.access.assertProjectRead(auth, order.project_id);
+    await assertProcurementDestinationAccess(auth, order, "read", this.access.assertProjectRead.bind(this.access));
     return {
       ...attachSupplierPurchaseOrderPersonnel(order),
       share_status: await this.getShareStatus(scope.tenantId, orderId),
@@ -135,7 +139,7 @@ export class SupplierPurchaseOrdersService {
   ) {
     const scope = await this.access.requireRead(auth);
     const order = await this.requireOrder(scope.tenantId, orderId);
-    await this.access.assertProjectRead(auth, order.project_id);
+    await assertProcurementDestinationAccess(auth, order, "read", this.access.assertProjectRead.bind(this.access));
     return this.repository.listItems({
       tenant_id: scope.tenantId,
       order_id: orderId,
@@ -191,7 +195,7 @@ export class SupplierPurchaseOrdersService {
   async getFinancialSummary(auth: AuthContext, orderId: string) {
     const scope = await this.access.requireRead(auth);
     const order = await this.requireOrder(scope.tenantId, orderId);
-    await this.access.assertProjectRead(auth, order.project_id);
+    await assertProcurementDestinationAccess(auth, order, "read", this.access.assertProjectRead.bind(this.access));
     return this.repository.getFinancialSummary(scope.tenantId, orderId);
   }
 
@@ -204,7 +208,7 @@ export class SupplierPurchaseOrdersService {
     const scope = await this.access.requireManage(auth);
     if (input.expected_version > 0) {
       const order = await this.requireOrder(scope.tenantId, orderId);
-      await this.access.assertProjectUpdate(auth, order.project_id);
+      await assertProcurementDestinationAccess(auth, order, "manage", this.access.assertProjectUpdate.bind(this.access));
       this.assertDraftScopeUnchanged(order, input);
     } else {
       await this.access.assertProjectUpdate(auth, input.project_id);
@@ -236,7 +240,7 @@ export class SupplierPurchaseOrdersService {
   ) {
     const scope = await this.access.requireManage(auth);
     const order = await this.requireOrder(scope.tenantId, orderId);
-    await this.access.assertProjectUpdate(auth, order.project_id);
+    await assertProcurementDestinationAccess(auth, order, "manage", this.access.assertProjectUpdate.bind(this.access));
     await this.tenantSuppliers.assertCanCreatePurchaseOrderForTenant(
       scope.tenantId,
       order.tenant_supplier_id,
@@ -259,7 +263,7 @@ export class SupplierPurchaseOrdersService {
   ) {
     const scope = await this.access.requireManage(auth);
     const order = await this.requireOrder(scope.tenantId, orderId);
-    await this.access.assertProjectUpdate(auth, order.project_id);
+    await assertProcurementDestinationAccess(auth, order, "manage", this.access.assertProjectUpdate.bind(this.access));
     return this.repository.cancel({
       tenant_id: scope.tenantId,
       order_id: orderId,

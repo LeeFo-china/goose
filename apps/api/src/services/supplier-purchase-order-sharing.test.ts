@@ -120,7 +120,7 @@ describe("SupplierPurchaseOrderSharingService", () => {
       });
   });
 
-  test("public confirm-view rejects warehouse destination orders before fulfillment sync", async () => {
+  test("public confirm-view accepts authorized warehouse share links", async () => {
     const link = shareLink();
     const repository = {
       findActiveShareLinkByToken: mock(async () => link),
@@ -142,12 +142,12 @@ describe("SupplierPurchaseOrderSharingService", () => {
 
     await expect(service.confirmPublicView(TOKEN, {
       confirmed_at: "2026-09-04T01:00:00+00:00",
-    })).rejects.toMatchObject({
-      code: "WAREHOUSE_PROCUREMENT_NOT_ENABLED",
+    })).resolves.toMatchObject({
+      status: "confirmed",
     });
-    expect(repository.confirmViewed).not.toHaveBeenCalled();
+    expect(repository.confirmViewed).toHaveBeenCalled();
     expect(repository.ensureFulfillmentFromShareConfirmation)
-      .not.toHaveBeenCalled();
+      .toHaveBeenCalled();
   });
 
   test("exports a batch after asserting batch project access", async () => {

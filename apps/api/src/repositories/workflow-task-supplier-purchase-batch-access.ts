@@ -57,7 +57,8 @@ export async function listAccessibleSupplierPurchaseBatchTasks(
   };
   const page = normalizedInput.page ?? 1;
   const pageSize = Math.min(normalizedInput.pageSize ?? 20, 100);
-  if (normalizedInput.visibleProjectIds?.length === 0) {
+  if (normalizedInput.visibleProjectIds?.length === 0 &&
+    !normalizedInput.permissionCodes?.includes("inventory.warehouse.view")) {
     return emptyPage(page, pageSize);
   }
 

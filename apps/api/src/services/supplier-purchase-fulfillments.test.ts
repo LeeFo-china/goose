@@ -23,7 +23,7 @@ const auth = {
   permissions: [],
 } as unknown as AuthContext;
 
-function dependencies(options: { orderExists?: boolean } = {}) {
+function dependencies(options: { orderExists?: boolean; warehouse?: boolean } = {}) {
   const calls: string[] = [];
   const scope = {
     tenantId: TENANT_ID,
@@ -35,7 +35,9 @@ function dependencies(options: { orderExists?: boolean } = {}) {
     : {
       id: ORDER_ID,
       tenant_id: TENANT_ID,
-      project_id: PROJECT_ID,
+      project_id: options.warehouse ? null : PROJECT_ID,
+      destination_type: options.warehouse ? "warehouse" : "project",
+      warehouse_id: options.warehouse ? ITEM_ID : null,
     };
   return {
     calls,
@@ -100,6 +102,21 @@ async function serviceFor(
 }
 
 describe("SupplierPurchaseFulfillmentsService", () => {
+  test("warehouse fulfillment requires real warehouse permission without project scope", async () => {
+    const deps = dependencies({ warehouse: true });
+    const service = await serviceFor(deps);
+    await expect(service.getDetail(auth, ORDER_ID)).rejects.toMatchObject({ statusCode: 403 });
+    expect(deps.fulfillment.getDetail).not.toHaveBeenCalled();
+    const reader = { ...auth, permissions: [{ code: "inventory.warehouse.view", scope: "all" as const }] };
+    await service.getDetail(reader, ORDER_ID);
+    expect(deps.access.assertProjectRead).not.toHaveBeenCalled();
+    await expect(service.confirm(reader, ORDER_ID, { expected_version: 1, confirmed_at: "2026-07-30T02:00:00.000Z" }, "key"))
+      .rejects.toMatchObject({ statusCode: 403 });
+    const manager = { ...auth, permissions: [{ code: "inventory.warehouse.manage", scope: "all" as const }] };
+    await service.confirm(manager, ORDER_ID, { expected_version: 1, confirmed_at: "2026-07-30T02:00:00.000Z" }, "key");
+    expect(deps.access.assertProjectUpdate).not.toHaveBeenCalled();
+    expect(deps.fulfillment.confirm).toHaveBeenCalledTimes(1);
+  });
   test("authorizes tenant and project before every fulfillment read", async () => {
     const deps = dependencies();
     const service = await serviceFor(deps);

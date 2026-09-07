@@ -1,3 +1,4 @@
+import { hasWarehouseOnlyProjectScope } from "./procurement-destination-access";
 import type { SupplierPurchaseBatchStatus } from "@gooes/domain";
 
 import { Errors } from "@/errors/error-factory";
@@ -50,6 +51,7 @@ export type SupplierPurchaseBatchActions = {
 };
 
 export type SupplierPurchaseBatchActionInput = {
+  destinationType?: "project" | "warehouse";
   status: SupplierPurchaseBatchStatus;
   createdByEmployeeId: string;
   submittedByEmployeeId: string | null;
@@ -72,6 +74,13 @@ function hasPermission(
 export function deriveSupplierPurchaseBatchActions(
   input: SupplierPurchaseBatchActionInput,
 ): SupplierPurchaseBatchActions {
+  if (input.destinationType === "warehouse") {
+    input = { ...input,
+      canReadProject: input.permissions.includes("inventory.warehouse.view") &&
+        input.permissions.includes("inventory.warehouse.manage"),
+      canUpdateProject: input.permissions.includes("inventory.warehouse.manage"),
+    };
+  }
   const hasActor = Boolean(input.actorEmployeeId);
   const canEditRejected = input.workflowEnabled === true &&
     input.status === "rejected" &&
@@ -150,10 +159,12 @@ export class SupplierPurchaseBatchAccessService {
   }
 
   getVisibleProjectIds(auth: AuthContext): Promise<string[] | null> {
+    if (hasWarehouseOnlyProjectScope(auth, "project.read")) return Promise.resolve([]);
     return this.accessPolicy.getVisibleProjectIds(auth, "project.read");
   }
 
   getVisibleProjectUpdateIds(auth: AuthContext): Promise<string[] | null> {
+    if (hasWarehouseOnlyProjectScope(auth, "project.update")) return Promise.resolve([]);
     return this.accessPolicy.getVisibleProjectIds(auth, "project.update");
   }
 

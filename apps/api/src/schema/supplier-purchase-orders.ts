@@ -80,6 +80,8 @@ export const SupplierPurchaseOrderListQuerySchema =
     fulfillmentStatus: SupplierPurchaseOrderListFulfillmentStatusSchema
       .optional(),
     projectId: uuid("无效的项目 ID").optional(),
+    destinationType: z.enum(["project", "warehouse"]).optional(),
+    warehouseId: uuid("无效的仓库 ID").optional(),
     tenantSupplierId: uuid("无效的租户供应商关系 ID").optional(),
   }).strict();
 

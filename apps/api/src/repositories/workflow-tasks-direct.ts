@@ -114,7 +114,8 @@ export async function listAccessibleTasksViaDirectSql(params: {
         'subject_id', instance.subject_id,
         'status', instance.status,
         'current_node_key', instance.current_node_key,
-        'current_node_snapshot', instance.current_node_snapshot
+        'current_node_snapshot', instance.current_node_snapshot,
+        'context', instance.context
       ) AS instance,
       count(*) OVER() AS total_count
     FROM public.workflow_tasks AS task
@@ -179,17 +180,13 @@ function buildSupplierPurchaseBatchScopePredicate(
   if (input.supplierPurchaseBatchAccess === null) {
     return sql`AND instance.subject_type <> 'supplier_purchase_batch'`;
   }
-  if (input.supplierPurchaseBatchAccess.visibleProjectIds?.length === 0) {
+  const includeWarehouse = input.permissionCodes?.includes("inventory.warehouse.view") === true;
+  if (input.supplierPurchaseBatchAccess.visibleProjectIds?.length === 0 && !includeWarehouse) {
     return sql`AND instance.subject_type <> 'supplier_purchase_batch'`;
   }
 
-  const projectFilter = input.supplierPurchaseBatchAccess.visibleProjectIds
-    ? sql`
-      AND batch.project_id IN ${sql(
-        input.supplierPurchaseBatchAccess.visibleProjectIds,
-      )}
-    `
-    : sql``;
+  const projectIds = input.supplierPurchaseBatchAccess.visibleProjectIds;
+  const projectFilter = buildProcurementTaskDestinationScope(sql, projectIds, includeWarehouse, status);
   const pendingRuntimeFilter = status === "pending"
     ? sql`
       AND instance.status = 'running'
@@ -256,7 +253,8 @@ export async function listAccessiblePendingByProjectIdsViaDirectSql(input: {
         'subject_id', instance.subject_id,
         'status', instance.status,
         'current_node_key', instance.current_node_key,
-        'current_node_snapshot', instance.current_node_snapshot
+        'current_node_snapshot', instance.current_node_snapshot,
+        'context', instance.context
       ) AS instance
     FROM public.workflow_tasks AS task
     JOIN public.workflow_instances AS instance
@@ -308,7 +306,8 @@ export async function listAccessiblePendingBySubjectIdsViaDirectSql(input: {
         'subject_id', instance.subject_id,
         'status', instance.status,
         'current_node_key', instance.current_node_key,
-        'current_node_snapshot', instance.current_node_snapshot
+        'current_node_snapshot', instance.current_node_snapshot,
+        'context', instance.context
       ) AS instance
     FROM public.workflow_tasks AS task
     JOIN public.workflow_instances AS instance
@@ -390,3 +389,4 @@ export function toWorkflowTaskRows(
     return task;
   });
 }
+import { buildProcurementTaskDestinationScope } from "./workflow-task-procurement-scope";

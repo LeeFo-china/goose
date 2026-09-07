@@ -188,6 +188,9 @@ export class SupplierPurchaseBatchWorkflowProjectionService {
     const candidates = await Promise.all(tasks.map(async (task) => {
       const subjectId = task.instance?.subject_id;
       const batch = subjectId ? batchById.get(subjectId) : undefined;
+      if (batch?.destination_type === "warehouse" && !input.auth.permissions.some(
+        ({ code }) => code === "inventory.warehouse.manage",
+      )) return null;
       if (!subjectId || !batch || !taskIsAccessible({
         auth: input.auth,
         task,
@@ -224,6 +227,7 @@ function deriveWorkflowActions(input: {
   workflowState: unknown;
 }) {
   return deriveSupplierPurchaseBatchActions({
+    destinationType: input.batch.destination_type,
     status: input.batch.status,
     createdByEmployeeId: input.batch.created_by_employee_id,
     submittedByEmployeeId: input.batch.submitted_by_employee_id,
@@ -310,10 +314,10 @@ function requiredPermissions(task: WorkflowTaskActionRow): string[] {
 }
 
 function projectIsVisible(
-  projectId: string,
+  projectId: string | null,
   visibleProjectIds: string[] | null,
 ): boolean {
-  return visibleProjectIds === null || visibleProjectIds.includes(projectId);
+  return projectId !== null && (visibleProjectIds === null || visibleProjectIds.includes(projectId));
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {

@@ -28,7 +28,7 @@ import {
   listSupplierPurchaseBatchOrders,
   listSupplierPurchaseBatchRequisitions,
 } from "@/repositories/supplier-purchase-batch-children";
-import { assertProjectProcurementDestination, toProjectProcurementDestination } from "@/repositories/procurement-destination-records";
+import { applyProcurementListScope, procurementScopeIsEmpty, type ProcurementListScope } from "./procurement-destination-scope";
 import { SupabaseDB } from "@/utils/supabase";
 
 export type Page<T> = {
@@ -41,7 +41,7 @@ export type Page<T> = {
   };
 };
 type PageInput = { page: number; pageSize: number };
-export type BatchListInput = PageInput & {
+export type BatchListInput = PageInput & ProcurementListScope & {
   tenant_id: string;
   visible_project_ids: string[] | null;
   keyword?: string;
@@ -55,7 +55,9 @@ export type BatchChildPageInput = PageInput & {
 };
 export type BatchCatalogInput = PageInput & {
   tenant_id: string;
-  project_id: string;
+  project_id: string | null;
+  destination_type?: "project" | "warehouse";
+  warehouse_id?: string | null;
   keyword?: string;
   category_id?: string;
   brand_id?: string;
@@ -96,7 +98,9 @@ export type BatchCommandContext = {
   idempotency_key: string;
 };
 export type BatchDraftCommandInput = BatchCommandContext & {
-  project_id: string;
+  project_id: string | null;
+  destination_type?: "project" | "warehouse";
+  warehouse_id?: string | null;
   reason: string;
   expected_delivery_date?: string | null;
   remark?: string | null;
@@ -154,19 +158,14 @@ export class SupplierPurchaseBatchesRepository {
     input: BatchListInput,
   ): Promise<Page<SupplierPurchaseBatchDetail>> {
     const pagination = normalizePage(input);
-    if (scopeIsEmpty(input.visible_project_ids, input.project_id)) {
+    if (procurementScopeIsEmpty(input)) {
       return toPage([], pagination, 0);
     }
 
     let request = this.client.from("supplier_purchase_batches")
       .select(SUPPLIER_PURCHASE_BATCH_SELECT, { count: "exact" })
-      .eq("tenant_id", input.tenant_id)
-      .eq("destination_type", "project");
-    if (input.project_id) {
-      request = request.eq("project_id", input.project_id);
-    } else if (input.visible_project_ids) {
-      request = request.in("project_id", input.visible_project_ids);
-    }
+      .eq("tenant_id", input.tenant_id);
+    request = applyProcurementListScope(request, input);
     if (input.status) request = request.eq("status", input.status);
     request = applyKeyword(
       request,
@@ -183,7 +182,7 @@ export class SupplierPurchaseBatchesRepository {
         SupplierPurchaseBatchDetailSchema,
         data,
         "查询供应商采购批次失败",
-      ).map(toProjectProcurementDestination),
+      ),
       pagination,
       count,
     );
@@ -202,7 +201,6 @@ export class SupplierPurchaseBatchesRepository {
     if (data === null) return null;
     const batch = parse(SupplierPurchaseBatchDetailSchema, data,
       "查询供应商采购批次失败");
-    assertProjectProcurementDestination(batch);
     return batch;
   }
 
@@ -233,6 +231,7 @@ export class SupplierPurchaseBatchesRepository {
       {
         p_tenant_id: input.tenant_id,
         p_project_id: input.project_id,
+        ...(input.destination_type === "warehouse" ? { p_destination_type: "warehouse", p_warehouse_id: input.warehouse_id } : {}),
         p_keyword: input.keyword?.trim() || null,
         p_category_id: input.category_id ?? null,
         p_brand_id: input.brand_id ?? null,
@@ -342,6 +341,7 @@ export class SupplierPurchaseBatchesRepository {
       {
         ...commandParams(input),
         p_project_id: input.project_id,
+        ...(input.destination_type === "warehouse" ? { p_destination_type: "warehouse", p_warehouse_id: input.warehouse_id } : {}),
         p_reason: input.reason,
         p_expected_delivery_date: input.expected_delivery_date ?? null,
         p_remark: input.remark ?? null,

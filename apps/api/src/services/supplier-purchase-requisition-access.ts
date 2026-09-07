@@ -1,3 +1,4 @@
+import { hasWarehouseOnlyProjectScope } from "./procurement-destination-access";
 import { Errors } from "@/errors/error-factory";
 import { tenantSuppliersRepository } from "@/repositories/tenant-suppliers";
 import { accessPolicyService } from "@/services/access-policy";
@@ -61,10 +62,12 @@ export class SupplierPurchaseRequisitionAccessService {
   }
 
   getVisibleProjectIds(auth: AuthContext) {
+    if (hasWarehouseOnlyProjectScope(auth, "project.read")) return Promise.resolve([]);
     return this.accessPolicy.getVisibleProjectIds(auth, "project.read");
   }
 
   getVisibleProjectUpdateIds(auth: AuthContext) {
+    if (hasWarehouseOnlyProjectScope(auth, "project.update")) return Promise.resolve([]);
     return this.accessPolicy.getVisibleProjectIds(auth, "project.update");
   }
 

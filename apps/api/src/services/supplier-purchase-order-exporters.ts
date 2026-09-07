@@ -125,8 +125,9 @@ export async function exportPurchaseOrderPdf(
   doc.fontSize(10);
   writePair(doc, "采购单号", snapshot.order.order_no);
   writePair(doc, "供应商", snapshot.order.supplier.name);
-  writePair(doc, "项目", snapshot.order.project.name);
-  writePair(doc, "项目地址", snapshot.order.project.address ?? "-");
+  writePair(doc, snapshot.order.destination_type === "warehouse" ? "仓库" : "项目",
+    snapshot.order.warehouse?.name ?? snapshot.order.project?.name ?? "-");
+  if (snapshot.order.destination_type !== "warehouse") writePair(doc, "项目地址", snapshot.order.project?.address ?? "-");
   writePair(doc, "预计到货", snapshot.order.expected_delivery_date ?? "-");
   writePair(doc, "备注", snapshot.order.remark ?? "-");
   doc.moveDown();
@@ -195,8 +196,9 @@ function appendOrderWorksheet(
   [
     ["采购单号", snapshot.order.order_no],
     ["供应商", snapshot.order.supplier.name],
-    ["项目", snapshot.order.project.name],
-    ["项目地址", snapshot.order.project.address ?? ""],
+    [snapshot.order.destination_type === "warehouse" ? "仓库" : "项目",
+      snapshot.order.warehouse?.name ?? snapshot.order.project?.name ?? ""],
+    ["项目地址", snapshot.order.project?.address ?? ""],
     ["预计到货", snapshot.order.expected_delivery_date ?? ""],
     ["备注", snapshot.order.remark ?? ""],
   ].forEach(([label, value], index) => {
@@ -318,11 +320,14 @@ function serializeOrder(snapshot: SupplierPurchaseOrderExportSnapshot) {
     subtotal_amount: snapshot.order.subtotal_amount,
     tax_amount: snapshot.order.tax_amount,
     total_amount: snapshot.order.total_amount,
-    project: {
+    destination_type: snapshot.order.destination_type,
+    warehouse_id: snapshot.order.warehouse_id,
+    warehouse: snapshot.order.warehouse,
+    project: snapshot.order.project ? {
       id: snapshot.order.project.id,
       name: snapshot.order.project.name,
       address: snapshot.order.project.address ?? null,
-    },
+    } : null,
     supplier: {
       id: snapshot.order.supplier.id,
       code: snapshot.order.supplier.code,

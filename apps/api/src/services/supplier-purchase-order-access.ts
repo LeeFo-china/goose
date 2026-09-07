@@ -1,3 +1,4 @@
+import { hasWarehouseOnlyProjectScope } from "./procurement-destination-access";
 import { Errors } from "@/errors/error-factory";
 import {
   tenantSuppliersRepository,
@@ -49,6 +50,7 @@ export class SupplierPurchaseOrderAccessService {
   }
 
   getVisibleProjectIds(auth: AuthContext) {
+    if (hasWarehouseOnlyProjectScope(auth, "project.read")) return Promise.resolve([]);
     return this.accessPolicy.getVisibleProjectIds(auth, "project.read");
   }
 

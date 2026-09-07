@@ -35,7 +35,7 @@ import {
   resolveSupplierPurchaseBatchTaskAccess,
 } from "@/services/workflow-task-supplier-purchase-batch-access";
 import { assertGenericWorkflowMutationAllowed } from "@/services/workflow-supplier-purchase-batch-boundary";
-
+import { filterWarehouseProcurementActions } from "./procurement-destination-access";
 const PROJECT_PROCEDURE_PERMISSION_BY_ACTION: Record<string, string> = {
   start_procedure: "project_procedure.assign",
   adjust_procedure_schedule: "project_procedure.adjust",
@@ -103,7 +103,7 @@ export class WorkflowTaskService {
       list: enrichedTasks.map(({ task, assignee, actions }) => ({
         ...task,
         ...assignee,
-        actions,
+        actions: filterWarehouseProcurementActions(authContext, cardContextByTaskId.get(task.id)?.business?.destination_type, actions),
         ...(cardContextByTaskId.has(task.id)
           ? { card_context: cardContextByTaskId.get(task.id) }
           : {}),

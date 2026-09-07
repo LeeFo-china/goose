@@ -3,6 +3,10 @@ import { describe, expect, mock, test } from "bun:test";
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
+mock.module("@/services/supplier-purchase-batch-subject-access", () => ({
+  authorizeSupplierPurchaseBatchInstance: mock(async () => ({ destination_type: "project", project_id: "project-1" })),
+  authorizeSupplierPurchaseBatchSubject: mock(async () => ({ destination_type: "project", project_id: "project-1" })),
+}));
 
 const getSubjectStateWithRuntime = mock(async () => ({
   subjectState: {

@@ -13,7 +13,6 @@ import {
 import {
   ProcurementDestinationRecordSchema,
   ProcurementDestinationRelationSchema,
-  type ProjectProcurementDestinationRecord,
 } from "./procurement-destination-records";
 
 export const SUPPLIER_PURCHASE_ORDER_SELECT = [
@@ -337,11 +336,9 @@ export const SupplierPurchaseOrderCommandEnvelopeSchema = z.object({
 }).strict();
 
 export type SupplierPurchaseOrder =
-  z.infer<typeof SupplierPurchaseOrderRecordSchema> &
-    ProjectProcurementDestinationRecord;
+  z.infer<typeof SupplierPurchaseOrderRecordSchema>;
 export type SupplierPurchaseOrderWithReferences =
-  z.infer<typeof SupplierPurchaseOrderWithReferencesSchema> &
-    ProjectProcurementDestinationRecord;
+  z.infer<typeof SupplierPurchaseOrderWithReferencesSchema>;
 export type SupplierPurchaseOrderListOrder =
   z.infer<typeof SupplierPurchaseOrderListOrderSchema>;
 export type SupplierPurchaseOrderItem =

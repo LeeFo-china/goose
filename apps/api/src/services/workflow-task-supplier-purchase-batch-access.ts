@@ -18,16 +18,16 @@ export async function resolveSupplierPurchaseBatchTaskAccess(
   if (
     !authContext.employeeId ||
     !permissionCodes.has("supplier.purchase-requisition.view") ||
-    !permissionCodes.has("project.read")
+    (!permissionCodes.has("project.read") && !permissionCodes.has("inventory.warehouse.view"))
   ) {
     return null;
   }
 
-  const visibleProjectIds = await accessPolicyService.getVisibleProjectIds(
+  const visibleProjectIds = permissionCodes.has("project.read") ? await accessPolicyService.getVisibleProjectIds(
     authContext,
     "project.read",
-  );
-  if (visibleProjectIds?.length === 0) return null;
+  ) : [];
+  if (visibleProjectIds?.length === 0 && !permissionCodes.has("inventory.warehouse.view")) return null;
 
   return {
     employeeId: authContext.employeeId,

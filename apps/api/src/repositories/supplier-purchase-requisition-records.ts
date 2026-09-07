@@ -7,7 +7,6 @@ import {
 import {
   ProcurementDestinationRecordSchema,
   ProcurementDestinationRelationSchema,
-  type ProjectProcurementDestinationRecord,
 } from "./procurement-destination-records";
 
 export const SUPPLIER_PURCHASE_REQUISITION_SELECT = [
@@ -342,11 +341,9 @@ export const SupplierPurchaseRequisitionCommandEnvelopeSchema = z.object({
 }).strict();
 
 export type SupplierPurchaseRequisitionRecord =
-  z.infer<typeof SupplierPurchaseRequisitionRecordSchema> &
-    ProjectProcurementDestinationRecord;
+  z.infer<typeof SupplierPurchaseRequisitionRecordSchema>;
 export type SupplierPurchaseRequisitionScope =
-  z.infer<typeof SupplierPurchaseRequisitionScopeSchema> &
-    ProjectProcurementDestinationRecord;
+  z.infer<typeof SupplierPurchaseRequisitionScopeSchema>;
 export type SupplierPurchaseRequisitionItem =
   z.infer<typeof SupplierPurchaseRequisitionItemSchema>;
 export type ProjectCostCommitmentStatus =

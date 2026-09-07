@@ -49,7 +49,7 @@ describe("supplier purchase requisition destination gates", () => {
     expect(eqCalls).toContainEqual(["destination_type", "project"]);
   });
 
-  test("detail reads reject warehouse procurement before loading budgets", async () => {
+  test("warehouse detail reads return no project budgets", async () => {
     let fromCalls = 0;
     const query = {
       select: () => query,
@@ -71,15 +71,14 @@ describe("supplier purchase requisition destination gates", () => {
       }) as never,
     );
 
-    await expect(repository.findRequisition(TENANT_ID, ID))
-      .rejects.toMatchObject({
-        statusCode: 409,
-        code: "WAREHOUSE_PROCUREMENT_NOT_ENABLED",
-      });
+    expect(await repository.findRequisition(TENANT_ID, ID)).toMatchObject({
+      requisition: { destination_type: "warehouse", project_id: null },
+      budget_snapshots: [],
+    });
     expect(fromCalls).toBe(1);
   });
 
-  test("scope reads reject warehouse procurement before project authorization", async () => {
+  test("warehouse scope is available only when explicitly authorized", async () => {
     const query = {
       select: () => query,
       eq: () => query,
@@ -109,14 +108,15 @@ describe("supplier purchase requisition destination gates", () => {
       }) as never,
     );
 
-    await expect(repository.findRequisitionScope({
+    expect(await repository.findRequisitionScope({
       tenant_id: TENANT_ID,
       requisition_id: ID,
       visible_project_ids: null,
-    })).rejects.toMatchObject({
-      statusCode: 409,
-      code: "WAREHOUSE_PROCUREMENT_NOT_ENABLED",
-    });
+    })).toBeNull();
+    expect(await repository.findRequisitionScope({
+      tenant_id: TENANT_ID, requisition_id: ID,
+      visible_project_ids: [], include_warehouse: true,
+    })).toMatchObject({ destination_type: "warehouse", project_id: null });
   });
 });
 

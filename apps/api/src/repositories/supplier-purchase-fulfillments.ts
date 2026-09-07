@@ -6,9 +6,6 @@ import {
   throwSupplierCommandDatabaseError,
 } from "@/repositories/supplier-command-errors";
 import {
-  assertProjectProcurementDestination,
-} from "@/repositories/procurement-destination-records";
-import {
   SUPPLIER_PURCHASE_ORDER_FULFILLMENT_ITEM_SELECT,
   SUPPLIER_PURCHASE_ORDER_FULFILLMENT_SELECT,
   SUPPLIER_PURCHASE_ORDER_RECEIPT_SELECT,
@@ -276,7 +273,6 @@ export class SupplierPurchaseFulfillmentsRepository {
       if (envelope.status !== successStatus) {
         throw Errors.dbError(message, data);
       }
-      assertProjectProcurementDestination(envelope.purchase_order);
       return {
         ...envelope,
         purchase_order: envelope.purchase_order,

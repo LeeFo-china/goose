@@ -1,4 +1,7 @@
 import { Errors } from "@/errors/error-factory";
+import { resolveExactSupplierPurchaseReview } from "./supplier-purchase-batch-exact-review";
+import { parseFrozenProcurementDestination } from "./procurement-frozen-destination";
+import { assertProcurementReviewAccess } from "./procurement-destination-access";
 import {
   supplierPurchaseBatchWorkflowRepository,
   type SupplierPurchaseBatchWorkflowReviewInput,
@@ -14,7 +17,6 @@ import { SupplierPurchaseBatchAccessRepository } from
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import {
-  frozenReviewProjectId,
   hasReservedCompatibilityMetadata,
   isPureLegacyReviewEvent,
   reviewEventReference,
@@ -53,7 +55,9 @@ type Dependencies = {
   batchesRepository: {
     findBatchAccessContext: (tenantId: string, batchId: string) => Promise<{
       tenant_id: string;
-      project_id: string;
+      project_id: string | null;
+      destination_type?: "project" | "warehouse";
+      warehouse_id?: string | null;
       submitted_by_employee_id: string | null;
     } | null>;
   };
@@ -189,64 +193,12 @@ export class WorkflowTaskSupplierPurchaseBatchBridge {
   }
   async replayExactLegacyReview(input: ExactLegacyReplayInput) {
     input = withTrustedCompatibilityOutput(input);
-    const events = await this.dependencies.lookupRepository.listReviewEvents({
-      tenantId: input.tenantId,
-      batchId: input.batchId,
-      idempotencyKey: input.idempotencyKey ?? undefined,
-    });
-    if (events.length > 1) {
-      throw workflowResolutionError(
-        "SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT",
-      );
-    }
-    const event = events[0];
-    if (!event || isPureLegacyReviewEvent(event.request)) {
-      return { matched: false as const };
-    }
-    const reference = reviewEventReference(event.request);
-    if (!reference || reference.tenantId !== input.tenantId ||
-      reference.batchId !== input.batchId) {
-      throw workflowResolutionError(
-        "SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT",
-      );
-    }
-    const tasks = await this.dependencies.lookupRepository.listTasksById({
-      tenantId: input.tenantId,
-      taskId: reference.taskId,
-    });
-    if (tasks.length !== 1 || !tasks[0]) {
-      throw workflowResolutionError(
-        "SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT",
-      );
-    }
-    const task = tasks[0];
-    const instances = await this.dependencies.lookupRepository.listInstancesById({
-      tenantId: input.tenantId,
-      instanceId: task.instance_id,
-    });
-    const instance = instances[0];
-    if (instances.length !== 1 || !instance || task.id !== reference.taskId ||
-      task.tenant_id !== input.tenantId || instance.tenant_id !== input.tenantId ||
-      instance.subject_type !== "supplier_purchase_batch" ||
-      instance.subject_id !== input.batchId ||
-      (task.node_key !== "purchase_review" && task.node_key !== "finance_review") ||
-      instance.context.approval_round !== reference.approvalRound) {
-      throw workflowResolutionError(
-        "SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT",
-      );
-    }
-    const projectId = frozenReviewProjectId(instance.context);
-    if (!projectId) throw workflowResolutionError(
-      "SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT",
-    );
-    const permissionCode = NODE_PERMISSION[task.node_key];
-    const canReadProject = await this.dependencies.accessPolicy
-      .canAccessProject(input.authContext, projectId, "project.read");
-    const canReviewProject = canReadProject &&
-      await this.dependencies.accessPolicy.canAccessProject(
-        input.authContext, projectId, permissionCode,
-      );
-    if (!canReviewProject) throw Errors.forbidden();
+    const match = await resolveExactSupplierPurchaseReview(input, this.dependencies.lookupRepository);
+    if (!match) return { matched: false as const };
+    const { task, instance } = match;
+    const permissionCode = NODE_PERMISSION[task.node_key as SupplierReviewNodeKey];
+    await assertProcurementReviewAccess(input.authContext,
+      parseFrozenProcurementDestination(instance.context), permissionCode, this.dependencies.accessPolicy);
     const result = await this.completeTrusted({
       authContext: input.authContext,
       task: { id: task.id, tenant_id: task.tenant_id,
@@ -369,6 +321,20 @@ export class WorkflowTaskSupplierPurchaseBatchBridge {
         "VALIDATION_ERROR",
       );
     }
+    if (!(input.task.node_key in NODE_PERMISSION)) return null;
+    const match = await resolveExactSupplierPurchaseReview({
+      tenantId: input.task.tenant_id, batchId: input.task.instance.subject_id,
+      taskId: input.task.id, idempotencyKey: input.idempotencyKey,
+    }, this.dependencies.lookupRepository);
+    if (match) {
+      if (match.task.node_key !== input.task.node_key) {
+        throw workflowResolutionError("SUPPLIER_PURCHASE_BATCH_WORKFLOW_CONFLICT");
+      }
+      await assertProcurementReviewAccess(input.authContext,
+        parseFrozenProcurementDestination(match.instance.context),
+        NODE_PERMISSION[match.task.node_key as SupplierReviewNodeKey], this.dependencies.accessPolicy);
+      return this.completeTrusted(input, true);
+    }
     return this.completeTrusted(input);
   }
 
@@ -408,15 +374,7 @@ export class WorkflowTaskSupplierPurchaseBatchBridge {
           "SUPPLIER_PURCHASE_BATCH_SELF_REVIEW",
         );
       }
-      const canReadProject = await this.dependencies.accessPolicy
-        .canAccessProject(input.authContext, batch.project_id, "project.read");
-      const canReviewProject = canReadProject &&
-        await this.dependencies.accessPolicy.canAccessProject(
-          input.authContext,
-          batch.project_id,
-          permissionCode,
-        );
-      if (!canReviewProject) throw Errors.forbidden();
+      await assertProcurementReviewAccess(input.authContext, batch, permissionCode, this.dependencies.accessPolicy);
     }
     if (!input.authContext.authUserId || !input.authContext.employeeId) {
       throw Errors.forbidden();
@@ -438,7 +396,6 @@ export class WorkflowTaskSupplierPurchaseBatchBridge {
   private assertPermissions(authContext: AuthContext, permissionCode: string) {
     for (const required of [
       "supplier.purchase-requisition.view",
-      "project.read",
       permissionCode,
     ]) {
       if (!this.dependencies.accessPolicy.hasPermission(authContext, required)) {

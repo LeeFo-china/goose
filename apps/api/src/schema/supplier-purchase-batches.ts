@@ -35,6 +35,8 @@ export const SupplierPurchaseBatchListQuerySchema =
     keyword: keyword.optional(),
     status: SupplierPurchaseBatchStatusSchema.optional(),
     projectId: uuid("无效的项目 ID").optional(),
+    destinationType: z.enum(["project", "warehouse"]).optional(),
+    warehouseId: uuid("无效的仓库 ID").optional(),
   }).strict();
 
 export const SupplierPurchaseBatchParamSchema = z.object({
@@ -61,12 +63,17 @@ export const SupplierPurchaseBatchCostCategoryQuerySchema = optionQuery;
 
 export const SupplierPurchaseBatchCatalogQuerySchema =
   PaginationQuerySchema.extend({
-    projectId: uuid("无效的项目 ID"),
+    projectId: uuid("无效的项目 ID").nullable().optional(),
+    destinationType: z.enum(["project", "warehouse"]).optional(),
+    warehouseId: uuid("无效的仓库 ID").nullable().optional(),
     keyword: keyword.optional(),
     categoryId: uuid("无效的目录分类 ID").optional(),
     brandId: uuid("无效的目录品牌 ID").optional(),
     tenantSupplierId: uuid("无效的租户供应商关系 ID").optional(),
-  }).strict();
+  }).strict().refine((input) => input.destinationType === "warehouse"
+    ? Boolean(input.warehouseId) && !input.projectId
+    : Boolean(input.projectId) && !input.warehouseId,
+  "请选择唯一的采购目的地");
 
 export const SupplierPurchaseBatchDraftItemSchema = z.object({
   supplier_sku_id: uuid("无效的供应商 SKU ID"),
@@ -75,7 +82,9 @@ export const SupplierPurchaseBatchDraftItemSchema = z.object({
 }).strict();
 
 export const SupplierPurchaseBatchDraftSchema = z.object({
-  project_id: uuid("无效的项目 ID"),
+  project_id: uuid("无效的项目 ID").nullable().default(null),
+  destination_type: z.enum(["project", "warehouse"]).optional(),
+  warehouse_id: uuid("无效的仓库 ID").nullable().optional(),
   expected_version: z.number().int().nonnegative("版本号不能为负数"),
   reason: requiredText("采购原因"),
   expected_delivery_date: z.iso.date({
@@ -86,6 +95,10 @@ export const SupplierPurchaseBatchDraftSchema = z.object({
     .min(1, "采购批次至少需要一个明细")
     .max(100, "采购批次明细不能超过 100 行"),
 }).strict().superRefine((input, context) => {
+  const validDestination = input.destination_type === "warehouse"
+    ? Boolean(input.warehouse_id) && !input.project_id
+    : Boolean(input.project_id) && !input.warehouse_id;
+  if (!validDestination) context.addIssue({ code: "custom", path: ["destination_type"], message: "请选择唯一的采购目的地" });
   const seen = new Set<string>();
   input.items.forEach((item, index) => {
     const normalizedId = item.supplier_sku_id.toLowerCase();

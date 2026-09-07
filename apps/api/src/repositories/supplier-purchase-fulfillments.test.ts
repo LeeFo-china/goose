@@ -58,6 +58,19 @@ async function repositoryFor(
 }
 
 describe("SupplierPurchaseFulfillmentsRepository", () => {
+  test("accepts warehouse fulfillment success after authorization", async () => {
+    const warehouseOrder = { ...purchaseOrder, project_id: null, destination_type: "warehouse", warehouse_id: PROJECT_ID };
+    const { repository } = await repositoryFor(() => ({ body: {
+      status: "confirmed", idempotent: false, purchase_order: warehouseOrder,
+      fulfillment, version: fulfillment.version,
+    } }));
+    const result = await repository.confirm({
+      tenant_id: TENANT_ID, order_id: ORDER_ID, expected_version: 2,
+      confirmed_at: "2026-07-30T02:00:00.000Z", actor_user_id: USER_ID,
+      actor_employee_id: EMPLOYEE_ID, idempotency_key: "warehouse-confirm",
+    });
+    expect(result.purchase_order.destination_type).toBe("warehouse");
+  });
   test("loads the tenant fulfillment header and cumulative lines in parallel", async () => {
     const { repository, requests } = await repositoryFor((request) =>
       new URL(request.url).pathname.endsWith(

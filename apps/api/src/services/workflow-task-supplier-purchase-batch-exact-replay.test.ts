@@ -18,6 +18,7 @@ const MISSING_PROJECT_ID = Symbol("missing-project-id");
 async function subject(
   request: Record<string, unknown>,
   frozenProjectId: unknown = PROJECT_ID,
+  frozenWarehouseId?: string,
 ) {
   const { WorkflowTaskSupplierPurchaseBatchBridge } = await import(
     "./workflow-task-supplier-purchase-batch-bridge"
@@ -48,7 +49,9 @@ async function subject(
       listRunningInstances: mock(async () => [instance("running", frozenProjectId)]),
       listPendingTasks,
       listTasksById: mock(async () => [task("completed")]),
-      listInstancesById: mock(async () => [instance("completed", frozenProjectId)]),
+      listInstancesById: mock(async () => [{ ...instance("completed", frozenProjectId),
+        ...(frozenWarehouseId ? { context: { approval_round: 3, destination_type: "warehouse", project_id: null, warehouse_id: frozenWarehouseId } } : {}),
+      }]),
     },
   });
   return { bridge, completeTask, findBatchAccessContext, canAccessProject,
@@ -56,6 +59,42 @@ async function subject(
 }
 
 describe("WorkflowTaskSupplierPurchaseBatchBridge exact replay", () => {
+  test.each(["warehouse", "project"] as const)("generic completed-task replay authorizes frozen %s after destination changes", async (destination) => {
+    const current = await subject({ workflow_task_request: {
+      tenant_id: TENANT_ID, batch_id: BATCH_ID, task_id: TASK_ID, approval_round: 3,
+    } }, destination === "project" ? PROJECT_ID : null, destination === "warehouse" ? PROJECT_ID : undefined);
+    current.findBatchAccessContext.mockImplementation(async () => ({
+      tenant_id: TENANT_ID, project_id: destination === "warehouse" ? PROJECT_ID : null,
+      destination_type: destination === "warehouse" ? "project" : "warehouse",
+      warehouse_id: destination === "warehouse" ? null : PROJECT_ID, submitted_by_employee_id: USER_ID,
+    }) as never);
+    const context = auth();
+    const command = { authContext: context, task: { ...task("completed"), instance: { subject_id: BATCH_ID } },
+      action: "reject", reason: "库存过高", output: {}, idempotencyKey: "exact-key" };
+    if (destination === "warehouse") {
+      await expect(current.bridge.complete(command)).rejects.toMatchObject({ statusCode: 403 });
+      context.permissions = context.permissions.filter(({ code }) => code !== "project.read");
+      context.permissions.push({ code: "inventory.warehouse.view", scope: "all" }, { code: "inventory.warehouse.manage", scope: "all" });
+    }
+    expect(await current.bridge.complete(command)).toMatchObject({ status: "ordered" });
+    expect(current.findBatchAccessContext).not.toHaveBeenCalled();
+    if (destination === "warehouse") expect(current.canAccessProject).not.toHaveBeenCalled();
+  });
+  test("warehouse frozen replay enforces read/manage without current project or batch gates", async () => {
+    const current = await subject({ workflow_task_request: {
+      tenant_id: TENANT_ID, batch_id: BATCH_ID, task_id: TASK_ID, approval_round: 3,
+    } }, null, PROJECT_ID);
+    const context = auth();
+    context.permissions = context.permissions.filter(({ code }) => code !== "project.read");
+    context.permissions.push({ code: "inventory.warehouse.view", scope: "all" });
+    const command = { authContext: context, tenantId: TENANT_ID, batchId: BATCH_ID,
+      action: "approve", reason: null, expectedVersion: 2, output: {}, idempotencyKey: "exact-key" };
+    await expect(current.bridge.replayExactLegacyReview(command)).rejects.toMatchObject({ statusCode: 403 });
+    context.permissions.push({ code: "inventory.warehouse.manage", scope: "all" });
+    expect(await current.bridge.replayExactLegacyReview(command)).toMatchObject({ matched: true });
+    expect(current.canAccessProject).not.toHaveBeenCalled();
+    expect(current.findBatchAccessContext).not.toHaveBeenCalled();
+  });
   test("adopts a pure legacy event through the current pending task", async () => {
     const current = await subject({
       tenant_id: TENANT_ID, batch_id: BATCH_ID, expected_version: 2,

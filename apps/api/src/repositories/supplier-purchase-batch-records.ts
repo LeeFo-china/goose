@@ -11,7 +11,6 @@ import {
 import {
   ProcurementDestinationRecordSchema,
   ProcurementDestinationRelationSchema,
-  type ProjectProcurementDestinationRecord,
 } from "./procurement-destination-records";
 import { SupplierPurchaseRequisitionRecordSchema } from "./supplier-purchase-requisition-records";
 
@@ -174,7 +173,7 @@ export const SupplierPurchaseBatchRecordSchema =
   tax_amount: money,
   total_amount: money,
   budget_checked_at: nullableDateTime,
-  budget_status: z.enum(["unchecked", "within_budget", "over_budget"]),
+  budget_status: z.enum(["unchecked", "within_budget", "over_budget", "not_applicable"]),
   budget_snapshot: z.record(
     uuid,
     SupplierPurchaseBatchBudgetSnapshotEntrySchema,
@@ -346,11 +345,9 @@ function moneyToMinor(value: string): bigint {
 }
 
 export type SupplierPurchaseBatch =
-  z.infer<typeof SupplierPurchaseBatchRecordSchema> &
-    ProjectProcurementDestinationRecord;
+  z.infer<typeof SupplierPurchaseBatchRecordSchema>;
 export type SupplierPurchaseBatchDetail =
-  z.infer<typeof SupplierPurchaseBatchDetailSchema> &
-    ProjectProcurementDestinationRecord;
+  z.infer<typeof SupplierPurchaseBatchDetailSchema>;
 export type SupplierPurchaseBatchItem =
   z.infer<typeof SupplierPurchaseBatchItemSchema>;
 export type SupplierPurchaseBatchCatalogItem =

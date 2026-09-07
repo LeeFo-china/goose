@@ -49,6 +49,24 @@ const context = {
 };
 
 describe("SupplierPurchaseBatchesRepository commands", () => {
+  test("warehouse draft and catalog append destination RPC parameters", async () => {
+    const warehouseBatch = { ...batch, project_id: null, destination_type: "warehouse",
+      warehouse_id: PROJECT_ID, budget_status: "not_applicable" };
+    const { repository, calls } = await repositoryFor([
+      { data: { status: "saved", idempotent: false, batch: warehouseBatch, version: 1,
+        split_preview: [{ tenant_supplier_id: RELATIONSHIP_ID, supplier_id: SUPPLIER_ID,
+          supplier_name: "测试供应商", item_count: 1, subtotal_amount: "100.00", tax_amount: "13.00", total_amount: "113.00" }] }, error: null },
+      { data: { items: [], total: 0, page: 1, page_size: 20 }, error: null },
+    ]);
+    expect((await repository.saveDraft({ ...context, project_id: null, destination_type: "warehouse",
+      warehouse_id: PROJECT_ID, reason: "补货", items: [{ supplier_sku_id: SKU_ID, cost_category_id: CATEGORY_ID, quantity: "1" }] })).batch)
+      .toMatchObject({ destination_type: "warehouse", budget_status: "not_applicable" });
+    await repository.listCatalog({ tenant_id: TENANT_ID, project_id: null, destination_type: "warehouse",
+      warehouse_id: PROJECT_ID, priced_at: AT, page: 1, pageSize: 20 });
+    for (const call of calls) expect(call.params).toMatchObject({
+      p_project_id: null, p_destination_type: "warehouse", p_warehouse_id: PROJECT_ID,
+    });
+  });
   test("calls the exact save RPC with client-owned intent only", async () => {
     const split_preview = [{ tenant_supplier_id: RELATIONSHIP_ID,
       supplier_id: SUPPLIER_ID, supplier_name: "测试供应商", item_count: 1,

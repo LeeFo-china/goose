@@ -16,6 +16,19 @@ import type {
 type ExcelLoadBuffer = Parameters<ExcelJS.Workbook["xlsx"]["load"]>[0];
 
 describe("supplier purchase order exporters", () => {
+  test("warehouse exports expose destination without requiring project", async () => {
+    const snapshot = sampleSnapshot();
+    snapshot.order = { ...snapshot.order, destination_type: "warehouse", project_id: null,
+      warehouse_id: snapshot.order.id, project: null,
+      warehouse: { id: snapshot.order.id, name: "中心仓", status: "active" } } as never;
+    const preview = toPurchaseOrderPrintPreview(snapshot);
+    expect(preview.order).toMatchObject({ destination_type: "warehouse", project: null, warehouse: { name: "中心仓" } });
+    const xlsx = await exportPurchaseOrderXlsx(snapshot);
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(xlsx.content as unknown as ExcelLoadBuffer);
+    expect(JSON.stringify(workbook.getWorksheet("采购单")?.getSheetValues())).toContain("中心仓");
+    expect((await exportPurchaseOrderPdf(snapshot)).content.subarray(0, 4).toString()).toBe("%PDF");
+  });
   test("creates real xlsx and pdf files from one snapshot", async () => {
     const snapshot = sampleSnapshot();
 

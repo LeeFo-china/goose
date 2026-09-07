@@ -73,6 +73,7 @@ export const SupplierPurchaseBatchOrderSummarySchema = z.object({
 
 const ERROR_CODES_BY_STATUS: Record<string, ReadonlySet<string>> = {
   validation_error: new Set([
+    "PROCUREMENT_DESTINATION_INVALID",
     "SUPPLIER_PURCHASE_BATCH_VALIDATION_ERROR",
     "SUPPLIER_PURCHASE_BATCH_DUPLICATE_SKU",
     "SUPPLIER_PURCHASE_BATCH_LIMIT_EXCEEDED",
@@ -80,6 +81,9 @@ const ERROR_CODES_BY_STATUS: Record<string, ReadonlySet<string>> = {
   not_found: new Set(["SUPPLIER_PURCHASE_BATCH_NOT_FOUND"]),
   version_conflict: new Set(["SUPPLIER_PURCHASE_BATCH_VERSION_CONFLICT"]),
   state_conflict: new Set([
+    "WAREHOUSE_PROCUREMENT_NOT_ENABLED",
+    "WAREHOUSE_NOT_FOUND",
+    "WAREHOUSE_INACTIVE",
     "SUPPLIER_PURCHASE_BATCH_STATE_CONFLICT",
     "SUPPLIER_PURCHASE_BATCH_ID_CONFLICT",
     "SUPPLIER_PURCHASE_BATCH_BUDGET_CHANGED",

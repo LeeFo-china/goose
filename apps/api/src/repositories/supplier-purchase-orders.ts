@@ -1,9 +1,7 @@
 import { z } from "zod";
 
 import { Errors } from "@/errors/error-factory";
-import {
-  assertProjectProcurementDestination,
-} from "@/repositories/procurement-destination-records";
+import { procurementScopeIsEmpty, type ProcurementListScope } from "./procurement-destination-scope";
 import { throwSupplierCommandDatabaseError } from "@/repositories/supplier-command-errors";
 import {
   SUPPLIER_PURCHASE_ORDER_ITEM_SELECT,
@@ -56,7 +54,7 @@ type Page<T> = {
   };
 };
 type PageInput = { page: number; pageSize: number };
-export type SupplierPurchaseOrderListInput = PageInput & {
+export type SupplierPurchaseOrderListInput = PageInput & ProcurementListScope & {
   tenant_id: string;
   visible_project_ids: string[] | null;
   keyword?: string;
@@ -136,7 +134,7 @@ export class SupplierPurchaseOrdersRepository {
 
   async listOrders(input: SupplierPurchaseOrderListInput) {
     const pagination = normalizePage(input);
-    if (input.visible_project_ids?.length === 0) {
+    if (procurementScopeIsEmpty(input)) {
       return toPage([], pagination, 0);
     }
     if (
@@ -152,6 +150,9 @@ export class SupplierPurchaseOrdersRepository {
       {
         p_tenant_id: input.tenant_id,
         p_visible_project_ids: input.visible_project_ids,
+        ...(input.include_warehouse ? { p_include_warehouse: true } : {}),
+        ...(input.destination_type ? { p_destination_type: input.destination_type } : {}),
+        ...(input.warehouse_id ? { p_warehouse_id: input.warehouse_id } : {}),
         p_page: pagination.page,
         p_page_size: pagination.pageSize,
         p_status: input.status ?? null,
@@ -188,7 +189,6 @@ export class SupplierPurchaseOrdersRepository {
       data,
       "查询供应商采购单失败",
     );
-    assertProjectProcurementDestination(order);
     return order;
   }
 
@@ -373,7 +373,6 @@ export class SupplierPurchaseOrdersRepository {
     if (!envelope.purchase_order || envelope.version === undefined) {
       throw Errors.dbError(message, data);
     }
-    assertProjectProcurementDestination(envelope.purchase_order);
     return {
       status: successStatus,
       idempotent: envelope.idempotent ?? false,

@@ -161,7 +161,7 @@ describe("supplier purchase batch destination records", () => {
     expect(eqCalls).toContainEqual(["destination_type", "project"]);
   });
 
-  test("detail reads reject warehouse procurement before project gates", async () => {
+  test("detail reads return warehouse destination for service authorization", async () => {
     const query = {
       select: () => query,
       eq: () => query,
@@ -175,9 +175,9 @@ describe("supplier purchase batch destination records", () => {
     );
 
     await expect(repository.findBatch(TENANT_ID, BATCH_ID))
-      .rejects.toMatchObject({
-        statusCode: 409,
-        code: "WAREHOUSE_PROCUREMENT_NOT_ENABLED",
+      .resolves.toMatchObject({
+        destination_type: "warehouse",
+        project_id: null,
       });
   });
 });

@@ -90,6 +90,21 @@ mock.module("@/utils/supabase", () => ({
 }));
 
 describe("supplier purchase batch workflow task access repository", () => {
+  test.each(["explicit", "mixed"] as const)("historical %s list scopes frozen destination, not editable batch", async (mode) => {
+    directSql = createDirectSqlMock([taskRow()]);
+    const { workflowTaskRepository } = await import("./workflow-tasks");
+    const input = { tenantId: "tenant-1", employeeId: "employee-1", roleCodes: [],
+      permissionCodes: ["supplier.purchase-requisition.view", "supplier.purchase-requisition.approve", "inventory.warehouse.view"],
+      visibleProjectIds: ["project-1"], page: 1, pageSize: 20, status: "completed" as const };
+    if (mode === "explicit") await workflowTaskRepository.listAccessibleSupplierPurchaseBatchTasks(input);
+    else await workflowTaskRepository.listAccessibleTasks({ ...input,
+      supplierPurchaseBatchAccess: { employeeId: "employee-1", visibleProjectIds: ["project-1"] } });
+    const serialized = JSON.stringify(directSqlQueries[0]);
+    expect(serialized).toContain("instance.context->>'destination_type'");
+    expect(serialized).toContain("instance.context->>'project_id'");
+    expect(serialized).toContain("instance.context->>'warehouse_id'");
+    expect(serialized).not.toContain("batch.project_id IN");
+  });
   beforeEach(() => {
     directSqlQueries.length = 0;
     rpcCalls.length = 0;
@@ -139,6 +154,18 @@ describe("supplier purchase batch workflow task access repository", () => {
       total: 41,
       totalPages: 3,
     });
+  });
+
+  test("warehouse reviewer without projects retains destination-scoped task pagination", async () => {
+    directSql = createDirectSqlMock([taskRow(1)]);
+    const { workflowTaskRepository } = await import("./workflow-tasks");
+    const page = await workflowTaskRepository.listAccessibleSupplierPurchaseBatchTasks({
+      tenantId: "tenant-1", employeeId: "employee-1", roleCodes: [],
+      permissionCodes: ["supplier.purchase-requisition.view", "supplier.purchase-requisition.approve", "inventory.warehouse.view"],
+      visibleProjectIds: [], page: 1, pageSize: 20,
+    });
+    expect(page.pagination.total).toBe(1);
+    expect(JSON.stringify(directSqlQueries[0])).toContain("batch.destination_type = 'warehouse'");
   });
 
   test("keeps tenant and self filters for all-project completed access", async () => {

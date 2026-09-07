@@ -1,8 +1,5 @@
 import { Errors } from "@/errors/error-factory";
-import {
-  assertProjectProcurementDestination,
-} from "@/repositories/procurement-destination-records";
-import { throwSupplierCommandDatabaseError } from "@/repositories/supplier-command-errors";
+import { mapSupplierCommandDatabaseError, throwSupplierCommandDatabaseError } from "@/repositories/supplier-command-errors";
 import {
   SupplierPurchaseBatchCommandEnvelopeSchema,
   SupplierPurchaseBatchRevisionErrorCodeSchema,
@@ -80,7 +77,6 @@ export async function executeSupplierPurchaseBatchCommand(input: {
     if (!envelope.details || !revisionCode.success) {
       throw Errors.dbError(input.message, envelope);
     }
-    assertProjectProcurementDestination(envelope.batch!);
     return { status: "revision_required", idempotent: envelope.idempotent,
       batch: envelope.batch!, version: envelope.version!,
       error_code: revisionCode.data, details: envelope.details };
@@ -92,9 +88,10 @@ export async function executeSupplierPurchaseBatchCommand(input: {
     if (!statusCode || !envelope.error_code) {
       throw Errors.dbError(input.message, envelope);
     }
+    const mappedError = mapSupplierCommandDatabaseError(envelope.error_code);
     throw Errors.business(
-      statusCode,
-      envelope.reason ?? input.message,
+      mappedError?.statusCode ?? statusCode,
+      mappedError?.message ?? envelope.reason ?? input.message,
       envelope.error_code,
       envelope.details,
     );
@@ -108,7 +105,6 @@ export async function executeSupplierPurchaseBatchCommand(input: {
   } else if (envelope.requisition_ids !== undefined) {
     throw Errors.dbError(input.message, envelope);
   }
-  assertProjectProcurementDestination(envelope.batch!);
   const base = { idempotent: envelope.idempotent, batch: envelope.batch,
     version: envelope.version } as BaseResult;
   if (envelope.status === "saved") {

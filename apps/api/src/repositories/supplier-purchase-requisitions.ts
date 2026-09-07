@@ -5,7 +5,8 @@ import {
   mapSupplierPurchaseRequisitionEnvelopeError,
   throwSupplierCommandDatabaseError,
 } from "@/repositories/supplier-command-errors";
-import { assertProjectProcurementDestination, toProjectProcurementDestination } from "@/repositories/procurement-destination-records";
+import { applyProcurementListScope, procurementScopeIsEmpty, type ProcurementListScope } from "./procurement-destination-scope";
+import { assertProjectProcurementDestination } from "./procurement-destination-records";
 import {
   PROJECT_COST_COMMITMENT_SELECT,
   SUPPLIER_PURCHASE_REQUISITION_ITEM_SELECT,
@@ -39,7 +40,7 @@ type Page<T> = {
 };
 type PageInput = { page: number; pageSize: number };
 
-export type SupplierPurchaseRequisitionListInput = PageInput & {
+export type SupplierPurchaseRequisitionListInput = PageInput & ProcurementListScope & {
   tenant_id: string;
   visible_project_ids: string[] | null;
   keyword?: string;
@@ -53,6 +54,7 @@ export type SupplierPurchaseRequisitionItemListInput = PageInput & {
   requisition_id: string;
 };
 export type SupplierPurchaseRequisitionScopeInput = {
+  include_warehouse?: boolean;
   tenant_id: string;
   requisition_id: string;
   visible_project_ids: string[] | null;
@@ -147,7 +149,7 @@ export class SupplierPurchaseRequisitionsRepository {
     input: SupplierPurchaseRequisitionListInput,
   ): Promise<SupplierPurchaseRequisitionPage> {
     const pagination = normalizePage(input);
-    if (input.visible_project_ids?.length === 0) {
+    if (procurementScopeIsEmpty(input)) {
       return toPage([], pagination, 0);
     }
     if (
@@ -160,13 +162,8 @@ export class SupplierPurchaseRequisitionsRepository {
 
     let request = this.client.from("supplier_purchase_requisitions")
       .select(SUPPLIER_PURCHASE_REQUISITION_SELECT, { count: "exact" })
-      .eq("tenant_id", input.tenant_id)
-      .eq("destination_type", "project");
-    if (input.project_id) {
-      request = request.eq("project_id", input.project_id);
-    } else if (input.visible_project_ids) {
-      request = request.in("project_id", input.visible_project_ids);
-    }
+      .eq("tenant_id", input.tenant_id);
+    request = applyProcurementListScope(request, input);
     if (input.status) request = request.eq("status", input.status);
     if (input.budget_status) {
       request = request.eq("budget_status", input.budget_status);
@@ -186,7 +183,7 @@ export class SupplierPurchaseRequisitionsRepository {
         SupplierPurchaseRequisitionRecordSchema,
         data,
         "查询供应商采购申请失败",
-      ).map(toProjectProcurementDestination),
+      ),
       pagination,
       count,
     );
@@ -206,7 +203,9 @@ export class SupplierPurchaseRequisitionsRepository {
     if (data === null) return null;
     const requisition = parse(SupplierPurchaseRequisitionRecordSchema, data,
       "查询供应商采购申请失败");
-    assertProjectProcurementDestination(requisition);
+    if (requisition.destination_type === "warehouse") {
+      return { requisition, budget_snapshots: [] };
+    }
 
     const snapshotResult = await this.client
       .from("project_cost_commitments")
@@ -240,7 +239,7 @@ export class SupplierPurchaseRequisitionsRepository {
   async findRequisitionScope(
     input: SupplierPurchaseRequisitionScopeInput,
   ): Promise<SupplierPurchaseRequisitionScope | null> {
-    if (input.visible_project_ids?.length === 0) return null;
+    if (input.visible_project_ids?.length === 0 && !input.include_warehouse) return null;
 
     const { data, error } = await this.client
       .from("supplier_purchase_requisitions")
@@ -257,9 +256,9 @@ export class SupplierPurchaseRequisitionsRepository {
       data,
       "查询供应商采购申请授权范围失败",
     );
-    assertProjectProcurementDestination(requisition);
+    if (requisition.destination_type === "warehouse") return input.include_warehouse ? requisition : null;
     if (input.visible_project_ids &&
-      !input.visible_project_ids.includes(requisition.project_id)) {
+      !input.visible_project_ids.includes(requisition.project_id!)) {
       return null;
     }
     return requisition;

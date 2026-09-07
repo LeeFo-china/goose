@@ -21,7 +21,7 @@ export const WORKFLOW_TASK_SELECT = [
   "updated_at",
   [
     "instance:workflow_instances!inner(",
-    "id, subject_type, subject_id, status, current_node_key, current_node_snapshot",
+    "id, subject_type, subject_id, status, current_node_key, current_node_snapshot, context",
     ")",
   ].join(""),
 ].join(", ");

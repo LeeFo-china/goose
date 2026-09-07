@@ -1,9 +1,7 @@
 import { randomBytes } from "node:crypto";
 
 import { Errors } from "@/errors/error-factory";
-import {
-  assertProjectProcurementDestination,
-} from "@/repositories/procurement-destination-records";
+import { assertProcurementDestinationAccess } from "./procurement-destination-access";
 import {
   supplierPurchaseOrderSharingRepository,
   type SupplierPurchaseOrderExportSnapshot,
@@ -188,10 +186,10 @@ export class SupplierPurchaseOrderSharingService {
         "SUPPLIER_PURCHASE_BATCH_NOT_FOUND",
       );
     }
-    await this.batchAccess.assertProjectRead(auth, batch.project_id);
-    const visibleProjectIds = await this.batchAccess.getVisibleProjectIds(auth);
-    if (visibleProjectIds && !visibleProjectIds.includes(batch.project_id)) {
-      throw Errors.forbidden();
+    await assertProcurementDestinationAccess(auth, batch, "read", this.batchAccess.assertProjectRead.bind(this.batchAccess));
+    if (batch.destination_type !== "warehouse") {
+      const visibleProjectIds = await this.batchAccess.getVisibleProjectIds(auth);
+      if (visibleProjectIds && (!batch.project_id || !visibleProjectIds.includes(batch.project_id))) throw Errors.forbidden();
     }
     const snapshots = await this.repository.getBatchOrderSnapshots(
       scope.tenantId,
@@ -216,7 +214,6 @@ export class SupplierPurchaseOrderSharingService {
   ) {
     const link = await this.requirePublicLink(token);
     const snapshot = await this.requireSnapshotForPublicLink(link);
-    assertProjectProcurementDestination(snapshot.order);
     const confirmed = await this.repository.confirmViewed({
       link,
       confirmedAt: input.confirmed_at,
@@ -268,9 +265,9 @@ export class SupplierPurchaseOrderSharingService {
       );
     }
     if (mode === "update") {
-      await this.orderAccess.assertProjectUpdate(auth, snapshot.order.project_id);
+      await assertProcurementDestinationAccess(auth, snapshot.order, "manage", this.orderAccess.assertProjectUpdate.bind(this.orderAccess));
     } else {
-      await this.orderAccess.assertProjectRead(auth, snapshot.order.project_id);
+      await assertProcurementDestinationAccess(auth, snapshot.order, "read", this.orderAccess.assertProjectRead.bind(this.orderAccess));
     }
     return snapshot;
   }

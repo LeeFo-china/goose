@@ -1,4 +1,5 @@
 import { Errors } from "@/errors/error-factory";
+import { assertProcurementDestinationAccess, assertWarehouseProcurementEnabled, assertWarehouseProcurementPermission, canReadWarehouseProcurement, procurementDestinationRepository, type ProcurementDestinationPort } from "./procurement-destination-access";
 import { supplierPurchaseBatchWorkflowRepository } from "@/repositories/supplier-purchase-batch-workflow";
 import { supplierPurchaseBatchesRepository } from "@/repositories/supplier-purchase-batches";
 import { workflowTaskRepository } from "@/repositories/workflow-tasks";
@@ -25,8 +26,7 @@ type BatchRepositoryPort = Pick<typeof supplierPurchaseBatchesRepository,
   "listBatches" | "findBatch" | "listItems" | "listRequisitions" |
   "listOrders" | "listProjectOptions" | "listCostCategories" | "listCatalog" |
   "resolveCostCategoryDefaults" | "saveDraft" | "submit" | "review" | "cancel">;
-type BatchWorkflowRuntimePort = Pick<typeof supplierPurchaseBatchWorkflowRuntime,
-  "isEnabled" | "submit">;
+type BatchWorkflowRuntimePort = Pick<typeof supplierPurchaseBatchWorkflowRuntime, "isEnabled" | "submit">;
 type BatchWorkflowRepositoryPort = Pick<
   typeof supplierPurchaseBatchWorkflowRepository, "withdraw">;
 type BatchWorkflowReviewBridgePort = Pick<
@@ -39,6 +39,7 @@ type BatchWorkflowTaskReadPort = Pick<
 >;
 
 export type SupplierPurchaseBatchesServiceDependencies = {
+  destination?: ProcurementDestinationPort;
   access?: BatchAccessPort;
   repository?: BatchRepositoryPort;
   workflowRuntime?: BatchWorkflowRuntimePort;
@@ -60,6 +61,7 @@ type ActorScope = {
 };
 
 export class SupplierPurchaseBatchesService {
+  private readonly destination: ProcurementDestinationPort;
   private readonly access: BatchAccessPort;
   private readonly repository: BatchRepositoryPort;
   private readonly workflowRuntime: BatchWorkflowRuntimePort;
@@ -73,6 +75,7 @@ export class SupplierPurchaseBatchesService {
   private readonly nowFactory: () => Date;
 
   constructor(dependencies: SupplierPurchaseBatchesServiceDependencies = {}) {
+    this.destination = dependencies.destination ?? procurementDestinationRepository;
     this.access = dependencies.access ?? supplierPurchaseBatchAccessService;
     this.repository = dependencies.repository ??
       supplierPurchaseBatchesRepository;
@@ -101,6 +104,9 @@ export class SupplierPurchaseBatchesService {
     const page = await this.repository.listBatches({
       tenant_id: scope.tenantId,
       visible_project_ids: visibleProjectIds,
+      ...(canReadWarehouseProcurement(auth) ? { include_warehouse: true } : {}),
+      ...(query.destinationType ? { destination_type: query.destinationType } : {}),
+      ...(query.warehouseId ? { warehouse_id: query.warehouseId } : {}),
       page: query.page,
       pageSize: query.pageSize,
       ...(query.keyword ? { keyword: query.keyword } : {}),
@@ -134,7 +140,7 @@ export class SupplierPurchaseBatchesService {
     const scope = await this.access.requireView(auth);
     const visibleProjectIds = await this.access.getVisibleProjectIds(auth);
     const batch = await this.requireBatchInScope(
-      scope.tenantId,
+      auth, scope.tenantId,
       batchId,
       visibleProjectIds,
     );
@@ -165,6 +171,7 @@ export class SupplierPurchaseBatchesService {
     return {
       ...attachSupplierPurchaseBatchPersonnel(batch),
       actions: deriveSupplierPurchaseBatchActions({
+        destinationType: batch.destination_type,
         status: batch.status,
         createdByEmployeeId: batch.created_by_employee_id,
         submittedByEmployeeId: batch.submitted_by_employee_id,
@@ -243,10 +250,15 @@ export class SupplierPurchaseBatchesService {
     query: SupplierPurchaseBatchCatalogQuery,
   ) {
     const scope = await this.access.requireManage(auth);
-    await this.access.assertProjectUpdate(auth, query.projectId);
+    const destination = { destination_type: query.destinationType, project_id: query.projectId ?? null, warehouse_id: query.warehouseId };
+    await assertProcurementDestinationAccess(auth, destination, "manage", this.access.assertProjectUpdate.bind(this.access));
+    if (destination.destination_type === "warehouse") {
+      await assertWarehouseProcurementEnabled(this.destination, scope.tenantId, destination.warehouse_id);
+    }
     return this.repository.listCatalog({
       tenant_id: scope.tenantId,
-      project_id: query.projectId,
+      project_id: query.projectId ?? null,
+      ...(query.destinationType === "warehouse" ? { destination_type: "warehouse" as const, warehouse_id: query.warehouseId } : {}),
       priced_at: this.nowFactory().toISOString(),
       page: query.page,
       pageSize: query.pageSize,
@@ -266,17 +278,16 @@ export class SupplierPurchaseBatchesService {
     idempotencyKey: string,
   ) {
     const scope = await this.access.requireManage(auth);
-    if (input.expected_version === 0) {
-      await this.access.assertProjectUpdate(auth, input.project_id);
-    } else {
+    if (input.expected_version > 0) {
       const batch = await this.requireUpdateBatch(auth, scope, batchId);
       if (batch.status === "rejected" &&
         batch.submitted_by_employee_id !== scope.employeeId) {
         throw Errors.forbidden();
       }
-      if (batch.project_id !== input.project_id) {
-        await this.access.assertProjectUpdate(auth, input.project_id);
-      }
+    }
+    await assertProcurementDestinationAccess(auth, input, "manage", this.access.assertProjectUpdate.bind(this.access));
+    if (input.destination_type === "warehouse") {
+      await assertWarehouseProcurementEnabled(this.destination, scope.tenantId, input.warehouse_id);
     }
     const items = await resolveSupplierPurchaseBatchDraftCostCategories(
       this.repository, scope.tenantId, input.items,
@@ -284,6 +295,7 @@ export class SupplierPurchaseBatchesService {
     return this.repository.saveDraft({
       ...this.commandContext(scope, batchId, input, idempotencyKey),
       project_id: input.project_id,
+      ...(input.destination_type === "warehouse" ? { destination_type: "warehouse" as const, warehouse_id: input.warehouse_id } : {}),
       reason: input.reason,
       expected_delivery_date: input.expected_delivery_date ?? null,
       remark: input.remark ?? null,
@@ -298,11 +310,15 @@ export class SupplierPurchaseBatchesService {
     idempotencyKey: string,
   ) {
     const scope = await this.access.requireManage(auth);
-    await this.requireUpdateBatch(auth, scope, batchId);
+    const batch = await this.requireUpdateBatch(auth, scope, batchId);
+    if (batch.destination_type === "warehouse") {
+      await assertWarehouseProcurementEnabled(this.destination, scope.tenantId, batch.warehouse_id);
+    }
     const command = this.commandContext(scope, batchId, input, idempotencyKey);
     if (await this.workflowRuntime.isEnabled(scope.tenantId)) {
       return this.workflowRuntime.submit(command);
     }
+    if (batch.destination_type === "warehouse") throw Errors.business(409, "仓库采购必须启用审批流程", "SUPPLIER_PURCHASE_BATCH_WORKFLOW_DISABLED");
     return this.repository.submit(command);
   }
 
@@ -359,13 +375,14 @@ export class SupplierPurchaseBatchesService {
     }
     const visibleProjectIds = await this.access.getVisibleProjectIds(auth);
     const batch = await this.requireBatchInScope(
-      scope.tenantId,
+      auth, scope.tenantId,
       batchId,
       visibleProjectIds,
     );
-    await this.access.assertProjectRead(auth, batch.project_id);
+    await assertProcurementDestinationAccess(auth, batch, "read", this.access.assertProjectRead.bind(this.access));
+    if (batch.destination_type === "warehouse") assertWarehouseProcurementPermission(auth, "manage");
+    if (!workflowEnabled && batch.destination_type === "warehouse") throw Errors.business(409, "仓库采购必须启用审批流程", "SUPPLIER_PURCHASE_BATCH_WORKFLOW_DISABLED");
     assertSupplierPurchaseBatchReviewVersion(batch, input.expected_version);
-
     if (!workflowEnabled) {
       assertLegacySupplierPurchaseBatchReviewSelf(batch, scope.employeeId);
     }
@@ -405,14 +422,14 @@ export class SupplierPurchaseBatchesService {
     const scope = await this.access.requireView(auth);
     const visibleProjectIds = await this.access.getVisibleProjectIds(auth);
     const batch = await this.requireBatchInScope(
-      scope.tenantId,
+      auth, scope.tenantId,
       batchId,
       visibleProjectIds,
     );
     const page = await this.repository[method]({
       tenant_id: scope.tenantId,
       batch_id: batchId,
-      visible_project_ids: visibleProjectIds,
+      visible_project_ids: batch.destination_type === "warehouse" ? null : visibleProjectIds,
       page: query.page,
       pageSize: query.pageSize,
     });
@@ -423,43 +440,37 @@ export class SupplierPurchaseBatchesService {
     });
   }
 
-  private async requireUpdateBatch(
-    auth: AuthContext,
-    scope: ActorScope,
-    batchId: string,
-  ) {
+  private async requireUpdateBatch(auth: AuthContext, scope: ActorScope, batchId: string) {
     const visibleProjectIds = await this.access
       .getVisibleProjectUpdateIds(auth);
     const batch = await this.requireBatchInScope(
-      scope.tenantId,
+      auth, scope.tenantId,
       batchId,
       visibleProjectIds,
+      "manage",
     );
-    await this.access.assertProjectUpdate(auth, batch.project_id);
+    await assertProcurementDestinationAccess(auth, batch, "manage", this.access.assertProjectUpdate.bind(this.access));
     return batch;
   }
 
-  private async requireBatchInScope(
-    tenantId: string,
-    batchId: string,
-    visibleProjectIds: string[] | null,
-  ) {
-    if (visibleProjectIds?.length === 0) {
+  private async requireBatchInScope(auth: AuthContext, tenantId: string, batchId: string,
+    visibleProjectIds: string[] | null, mode: "read" | "manage" = "read") {
+    const canAccessWarehouse = mode === "read" ? canReadWarehouseProcurement(auth)
+      : auth.permissions.some(({ code }) => code === "inventory.warehouse.manage");
+    if (visibleProjectIds?.length === 0 && !canAccessWarehouse) throw supplierPurchaseBatchNotFound();
+    const batch = await this.repository.findBatch(tenantId, batchId);
+    if (batch?.destination_type === "warehouse") {
+      if (canAccessWarehouse) return batch;
       throw supplierPurchaseBatchNotFound();
     }
-    const batch = await this.repository.findBatch(tenantId, batchId);
     if (batch && projectIsVisible(batch.project_id, visibleProjectIds)) {
       return batch;
     }
     throw supplierPurchaseBatchNotFound();
   }
 
-  private commandContext(
-    scope: ActorScope,
-    batchId: string,
-    input: { expected_version: number },
-    idempotencyKey: string,
-  ) {
+  private commandContext(scope: ActorScope, batchId: string,
+    input: { expected_version: number }, idempotencyKey: string) {
     return {
       tenant_id: scope.tenantId,
       batch_id: batchId,
@@ -472,10 +483,10 @@ export class SupplierPurchaseBatchesService {
 }
 
 function projectIsVisible(
-  projectId: string,
+  projectId: string | null,
   visibleProjectIds: string[] | null,
 ): boolean {
-  return visibleProjectIds === null || visibleProjectIds.includes(projectId);
+  return projectId !== null && (visibleProjectIds === null || visibleProjectIds.includes(projectId));
 }
 
 function supplierPurchaseBatchNotFound() {

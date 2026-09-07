@@ -6,7 +6,7 @@ process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
 describe("SupplierPurchaseBatchAccessRepository", () => {
-  test("selects only the three workflow access fields", async () => {
+  test("selects workflow access fields including destination", async () => {
     const requests: Request[] = [];
     const context = {
       tenant_id: "a0000000-0000-4000-8000-000000000001",
@@ -35,7 +35,7 @@ describe("SupplierPurchaseBatchAccessRepository", () => {
     )).toEqual(context);
     const url = new URL(requests[0]!.url);
     expect(url.searchParams.get("select")).toBe(
-      "tenant_id,project_id,submitted_by_employee_id",
+      "tenant_id,project_id,destination_type,warehouse_id,submitted_by_employee_id",
     );
     expect(url.searchParams.get("select")).not.toContain("projects");
   });

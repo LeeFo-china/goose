@@ -233,7 +233,7 @@ describe("SupplierPurchaseOrdersRepository", () => {
     });
   });
 
-  test("uses p-prefixed parameters for all purchase order commands", async () => {
+  test.each(["project", "warehouse"] as const)("uses p-prefixed commands and accepts %s cancellation", async (destination) => {
     const statuses = ["saved", "submitted", "cancelled"] as const;
     const { repository, requests } = await repositoryFor((_request, index) => ({
       body: {
@@ -241,6 +241,7 @@ describe("SupplierPurchaseOrdersRepository", () => {
         idempotent: false,
         purchase_order: {
           ...orderSnapshot,
+          ...(index === 2 && destination === "warehouse" ? { destination_type: "warehouse", project_id: null, warehouse_id: PROJECT_ID } : {}),
           status: statuses[index] === "saved" ? "draft" : statuses[index],
         },
         version: index + 1,

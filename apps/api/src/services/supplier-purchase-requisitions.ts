@@ -1,4 +1,5 @@
 import { Errors } from "@/errors/error-factory";
+import { canReadWarehouseProcurement } from "./procurement-destination-access";
 import {
   financeCostCategoryRepository,
 } from "@/repositories/finance-cost-categories";
@@ -106,6 +107,9 @@ export class SupplierPurchaseRequisitionsService {
     return this.repository.listRequisitions({
       tenant_id: scope.tenantId,
       visible_project_ids: visibleProjectIds,
+      ...(canReadWarehouseProcurement(auth) ? { include_warehouse: true } : {}),
+      ...(query.destination_type ? { destination_type: query.destination_type } : {}),
+      ...(query.warehouse_id ? { warehouse_id: query.warehouse_id } : {}),
       page: query.page,
       pageSize: query.pageSize,
       ...(query.keyword ? { keyword: query.keyword } : {}),
@@ -130,6 +134,7 @@ export class SupplierPurchaseRequisitionsService {
       scope.tenantId,
       requisitionId,
       visibleProjectIds,
+      canReadWarehouseProcurement(auth),
     );
     return this.requireRequisition(scope.tenantId, requisitionId);
   }
@@ -145,6 +150,7 @@ export class SupplierPurchaseRequisitionsService {
       scope.tenantId,
       requisitionId,
       visibleProjectIds,
+      canReadWarehouseProcurement(auth),
     );
     return this.repository.listItems({
       tenant_id: scope.tenantId,
@@ -395,11 +401,13 @@ export class SupplierPurchaseRequisitionsService {
     tenantId: string,
     requisitionId: string,
     visibleProjectIds: string[] | null,
+    includeWarehouse = false,
   ): Promise<SupplierPurchaseRequisitionScope> {
     const requisition = await this.repository.findRequisitionScope({
       tenant_id: tenantId,
       requisition_id: requisitionId,
       visible_project_ids: visibleProjectIds,
+      ...(includeWarehouse ? { include_warehouse: true } : {}),
     });
     if (requisition) return requisition;
     throw Errors.business(
