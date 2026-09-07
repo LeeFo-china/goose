@@ -205,7 +205,8 @@ bun scripts/verify-warehouse-stage-b-database.ts \
 - 默认采购审批图的预算分支是 `budget_status != over_budget`，已通过 `not_applicable` 的真实仓库审批；未修改已发布审批图。
 - 收货 wrapper、历史项目收货、库存/应付原子事务及同单并发/回滚已通过上述隔离测试；同价同仓同 SKU 的跨订单并发与不同价格顺序收货的加权成本已补证。不同价格并发、完整租户隔离矩阵、性能及真实接口 smoke 仍需最终验收；旧短码 SKU 改价兼容问题见上文。
 - 付款查询及命令已完成上述隔离验证和双阶段复审；追加测试覆盖上述同 AP 并发申请/付款、同键重放、冻结发票限制及失败回滚。真实 API 联调与完整最终验收仍待完成，第二步不能视为已发布。
-- 库存列表已取得 1 万余额/10 万流水合成读负载的[性能诊断基线](./2026-09-07-warehouse-stage-b-inventory-read-performance.md)。后续[流水分页优化](./2026-09-07-warehouse-stage-b-inventory-read-optimization.md)将计数/分页候选与宽字段关联分开，14 组计划中流水临时写块均为 0、旧新完整 JSON 一致，全部 15 份采购领域夹具及独立规格/质量审查通过；仍待 generic plan/大来源/跨租户规模及真实联调，不能视为完整性能验收。
+- 库存列表已取得 1 万余额/10 万流水合成读负载的[性能诊断基线](./2026-09-07-warehouse-stage-b-inventory-read-performance.md)。后续[流水分页优化](./2026-09-07-warehouse-stage-b-inventory-read-optimization.md)将计数/分页候选与宽字段关联分开，提交时 14 组计划中流水临时写块均为 0、旧新完整 JSON 一致，全部 15 份采购领域夹具及独立规格/质量审查通过；该单元当时尚未完成 generic plan 验收。
+- [计划缓存补验](./2026-09-07-warehouse-stage-b-inventory-plan-modes.md)已提交 `364dea57`：30 组函数外计划证明 generic 选择性退化。进一步[真实 RPC 计划稳定性修复](./2026-09-07-warehouse-stage-b-inventory-rpc-plans.md)在特定宽查询预热后复现默认 auto 退化，并以函数级专用规划修复；当前验收状态及扫描证据见该记录。大来源/跨租户规模、规划 CPU/并发负载及真实联调仍未完成，不能视为整体性能放行。
 
 ## 合并门槛
 

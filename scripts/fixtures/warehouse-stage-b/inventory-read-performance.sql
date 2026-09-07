@@ -51,6 +51,70 @@ ANALYZE public.supplier_purchase_order_receipts;
 ANALYZE public.supplier_purchase_orders;
 ANALYZE public.supplier_purchase_order_items;
 
+-- Observe the REAL PL/pgSQL statement before any other read can warm its cache.
+-- This deliberately starts with broad requests, not an asserted traffic mix.
+LOAD 'auto_explain';
+SET LOCAL auto_explain.log_min_duration=-1;
+SET LOCAL auto_explain.log_nested_statements=on;
+SET LOCAL auto_explain.log_analyze=on;
+SET LOCAL auto_explain.log_buffers=on;
+SET LOCAL auto_explain.log_verbose=on;
+SET LOCAL auto_explain.log_settings=on;
+SET LOCAL auto_explain.log_timing=off;
+SET LOCAL auto_explain.log_format=json;
+SET LOCAL auto_explain.log_level=notice;
+SET LOCAL auto_explain.log_parameter_max_length=0;
+SET LOCAL auto_explain.sample_rate=1;
+SET LOCAL client_min_messages=notice;
+CREATE TEMP TABLE stage_b_rpc_plan_meta(ordinal integer PRIMARY KEY,payload jsonb);
+DO $rpc_plans$
+DECLARE
+  tenant uuid; warehouse uuid; sku uuid; warehouse_filter uuid; sku_filter uuid;
+  transaction_filter text; page_number integer; page_size integer; expected_total integer;
+  mode text; label text; result jsonb; reference jsonb;
+  previous_mode text:=current_setting('plan_cache_mode');
+  labels text[]:=ARRAY['auto-1','auto-2','auto-3','auto-4','auto-5','auto-6','auto-7',
+    'custom-sku','custom-warehouse-sku','generic-sku','generic-warehouse-sku'];
+  function_oid regprocedure:='public.list_inventory_transactions(uuid,uuid,uuid,text,integer,integer)'::regprocedure;
+BEGIN
+  SELECT tenant_id INTO STRICT tenant FROM public.stage_b_weighted_cost_fixture WHERE ordinal=1;
+  SELECT id INTO STRICT warehouse FROM stage_b_perf_warehouses WHERE ordinal=1;
+  SELECT id INTO STRICT sku FROM stage_b_perf_skus WHERE ordinal=1;
+  FOR iteration IN 1..11 LOOP
+    label:=labels[iteration];
+    mode:=CASE WHEN iteration<=7 THEN 'auto' WHEN iteration<=9 THEN 'force_custom_plan' ELSE 'force_generic_plan' END;
+    warehouse_filter:=CASE WHEN iteration IN (7,9,11) THEN warehouse END;
+    sku_filter:=CASE WHEN iteration>=6 THEN sku END;
+    transaction_filter:=CASE WHEN iteration IN (4,5) THEN 'purchase_receipt' END;
+    page_number:=CASE WHEN iteration=2 THEN 400 WHEN iteration IN (3,5) THEN 10000 ELSE 1 END;
+    page_size:=CASE WHEN iteration IN (6,8,10) THEN 100 ELSE 20 END;
+    expected_total:=CASE WHEN iteration<=5 THEN 100003 WHEN warehouse_filter IS NULL THEN 100 ELSE 10 END;
+    PERFORM set_config('plan_cache_mode',mode,true);
+    PERFORM set_config('auto_explain.log_min_duration','0',true);
+    RAISE NOTICE 'STAGE_B_RPC_PLAN_CASE %',label;
+    result:=public.list_inventory_transactions(tenant,warehouse_filter,sku_filter,transaction_filter,page_number,page_size);
+    RAISE NOTICE 'STAGE_B_RPC_PLAN_END %',label;
+    PERFORM set_config('auto_explain.log_min_duration','-1',true);
+    IF current_setting('plan_cache_mode')<>mode THEN
+      RAISE EXCEPTION 'Inventory RPC changed caller plan mode: %',label;
+    END IF;
+    reference:=public.stage_b_reference_list_inventory_transactions(tenant,warehouse_filter,sku_filter,transaction_filter,page_number,page_size);
+    IF result IS DISTINCT FROM reference OR (result->>'total')::integer IS DISTINCT FROM expected_total
+      OR jsonb_array_length(result->'items') IS DISTINCT FROM least(page_size,greatest(expected_total-(page_number-1)*page_size,0)) THEN
+      RAISE EXCEPTION 'Real inventory RPC plan probe changed response: %',label;
+    END IF;
+    INSERT INTO stage_b_rpc_plan_meta VALUES(iteration,jsonb_build_object(
+      'label',label,'requested_mode',mode,'ordinal',iteration,'function',function_oid::text,
+      'function_md5',(SELECT md5(prosrc) FROM pg_proc WHERE oid=function_oid),
+      'function_configuration',(SELECT proconfig FROM pg_proc WHERE oid=function_oid),
+      'warehouse_filter',warehouse_filter,'sku_filter',sku_filter,'transaction_filter',transaction_filter,
+      'page',page_number,'page_size',page_size,'total',expected_total,'items',jsonb_array_length(result->'items')));
+  END LOOP;
+  PERFORM set_config('plan_cache_mode',previous_mode,true);
+END;
+$rpc_plans$;
+SELECT 'RPC_META '||payload::text FROM stage_b_rpc_plan_meta ORDER BY ordinal;
+
 CREATE TEMP TABLE stage_b_perf_evidence(label text PRIMARY KEY,payload jsonb);
 CREATE FUNCTION pg_temp.stage_b_probe_inventory(
   probe_label text,kind text,warehouse_filter uuid,sku_filter uuid,keyword_filter text,

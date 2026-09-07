@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
+import { assertInventoryScanBound, parseInventoryPlanNotices } from "./warehouse-inventory-plan-notices";
 
 const image = "public.ecr.aws/supabase/postgres:17.6.1.106";
 const sourceContainer = "supabase_db_gooes";
@@ -16,11 +17,25 @@ function docker(args: string[], input?: string, timeout = 30_000): string {
   }).trim();
 }
 
-function sql(input: string): string {
-  return docker([
+function sql(input: string, captureInventoryPlans = false): string {
+  const args = [
     "exec", "-i", container, "psql", "-h", "/tmp", "-U", "postgres",
     "-d", "postgres", "-X", "-qAt", "-v", "ON_ERROR_STOP=1",
-  ], input, 60_000);
+  ];
+  if (!captureInventoryPlans) return docker(args, input, 60_000);
+  const result = spawnSync("docker", args, {
+    input, encoding: "utf8", timeout: 60_000, maxBuffer: 64 * 1024 * 1024,
+  });
+  assert.equal(result.error, undefined, "Isolated inventory plan capture failed");
+  assert.equal(result.status, 0, result.stderr);
+  const cases = ["auto-1", "auto-2", "auto-3", "auto-4", "auto-5", "auto-6", "auto-7",
+    "custom-sku", "custom-warehouse-sku", "generic-sku", "generic-warehouse-sku"];
+  const plans = parseInventoryPlanNotices(result.stderr, cases);
+  for (const entry of plans) console.log(`RPC_PLAN ${JSON.stringify(entry)}`);
+  // Synthetic SKU has exactly 100 facts across ten warehouses. Count, page and
+  // bounded display must not scan the other 99,903 tenant facts for this filter.
+  for (const entry of plans.slice(5)) assertInventoryScanBound(entry, 100);
+  return result.stdout;
 }
 
 // Only metadata/schema is read from the existing LOCAL database. No rows,
@@ -100,11 +115,12 @@ try {
   for (const fixture of fixtures) {
     assert.match(fixture, /^scripts\/fixtures\/warehouse-stage-b\/[a-z0-9-]+\.sql$/,
       "Only scoped Stage B SQL fixtures are accepted");
-    const output = sql(readFileSync(fixture, "utf8"));
+    const output = sql(readFileSync(fixture, "utf8"),
+      fixture === "scripts/fixtures/warehouse-stage-b/inventory-read-performance.sql");
     // Fixtures contain only synthetic data. Explicit evidence rows retain query
     // plans; ordinary psql result rows stay quiet, as before.
     for (const line of output.split("\n")) {
-      if (line.startsWith("EVIDENCE ")) console.log(line);
+      if (line.startsWith("EVIDENCE ") || line.startsWith("RPC_META ")) console.log(line);
     }
     console.log(`PASS ${fixture}`);
   }
