@@ -31,9 +31,26 @@ bun scripts/verify-warehouse-stage-b-database.ts \
   scripts/fixtures/warehouse-stage-b/receipt-weighted-cost.sql
 ```
 
+## 追加边界测试（独立规格与质量审查完成）
+
+- `sku-legacy-guards.sql` 接续上述旧码兼容夹具，根代理独立运行三份依赖夹具 exit 0。不改生产代码或 migration。
+- 完全空 SKU 字段且价格不变的保存返回 saved，不改 SKU 全部字段或版本、不新增价目表；同键换价格明确抛出 `SUPPLIER_IDEMPOTENCY_CONFLICT`。
+- 在一次性测试事务中用 DML 创建草稿价目表、复制目标项，再将该测试价目表置为已发布，构造同 SKU 两条有效价格的异常历史。所有表约束/触发器保持启用；这不是公共发布命令允许重叠的证明。
+- 精确 UUID helper 返回 total=2、分页仅一条；实际保存仍返回 `catalog_result_not_exact`，此前尝试的 SKU 改名和子命令事件均回滚。整个追加测试最终 ROLLBACK，不留下异常价格事实。
+- 首次运行因夹具未限定 `supplier_id` 列别名报歧义；限定别名后通过，此错误不是业务缺陷 RED。
+- 独立规格和质量审查均通过，分别重跑三份依赖夹具 exit 0；根代理在提交前再次重跑上述三份夹具 exit 0。此前整组复跑包含本夹具共 17 份 SQL，输出 30 组函数外计划、11 组真实 RPC 内部计划与 11 条元数据，计数断言及全部计划 JSON 解析通过。上述证据仍不替代开发库升级或真实 API 验收。
+
+复跑追加测试：
+
+```bash
+bun scripts/verify-warehouse-stage-b-database.ts \
+  scripts/fixtures/warehouse-stage-b/receipt-cross-order-concurrency.sql \
+  scripts/fixtures/warehouse-stage-b/sku-legacy-compatibility.sql \
+  scripts/fixtures/warehouse-stage-b/sku-legacy-guards.sql
+```
+
 ## 尚未证明的范围
 
-- 当前新增测试覆盖的是「改名且价格不变」，不是完全无字段变化的纯 no-op；同 SKU 多条有效价格仍拒绝，由未变的查询与唯一性校验证明，尚无新增执行用例。
 - 公共关键词查询兼容只执行了上述碰撞与分页案例，未做全部生产数据规模性能验收。
 - 没有执行开发库完整升级、真实 API 联调、生产数据影响统计或发布；隔离 runner 只回放采购领域 migration，不等于完整历史升级。
 - 如需撤销修复，应新增前向 migration 恢复旧函数后移除无引用的 helper；这会重新引入历史短码保存问题。不得改写旧编码、删除价格/命令历史。
