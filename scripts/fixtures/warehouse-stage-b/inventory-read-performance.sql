@@ -1,7 +1,10 @@
 -- Offline read-load probe. Run AFTER receipt-weighted-cost.sql in the same
--- disposable runner. Its real v2 product/receipt is the sole seed dependency.
+-- disposable runner. Also load inventory-transactions-legacy-reference.sql
+-- before this file for exact frozen old/new response comparisons.
 -- Bulk inventory below is synthetic READ load, not proof of receipt writes.
 BEGIN;
+-- Fix the probe memory budget explicitly; production work_mem is not changed.
+SET LOCAL work_mem='4MB';
 CREATE TEMP TABLE stage_b_perf_skus AS
   SELECT gen_random_uuid() AS id, ordinal
   FROM generate_series(1,1000) AS ordinal;
@@ -51,10 +54,10 @@ ANALYZE public.supplier_purchase_order_items;
 CREATE TEMP TABLE stage_b_perf_evidence(label text PRIMARY KEY,payload jsonb);
 CREATE FUNCTION pg_temp.stage_b_probe_inventory(
   probe_label text,kind text,warehouse_filter uuid,sku_filter uuid,keyword_filter text,
-  page_number integer,page_size integer,expected_total integer
+  page_number integer,page_size integer,expected_total integer,transaction_filter text DEFAULT NULL
 ) RETURNS void LANGUAGE plpgsql AS $probe$
 DECLARE
-  tenant uuid; definition text; query_text text; rpc_result jsonb;
+  tenant uuid; definition text; query_text text; rpc_result jsonb; legacy_result jsonb;
   query_total integer; query_items jsonb; plan jsonb; function_name regprocedure;
   replacements text[]; token text; offset_value integer:=(greatest(page_number,1)-1)*least(greatest(page_size,1),100);
   started timestamptz; rpc_ms numeric;
@@ -68,12 +71,12 @@ BEGIN
     RAISE EXCEPTION 'Unknown inventory probe kind';
   END IF;
   SELECT prosrc INTO STRICT definition FROM pg_proc WHERE oid=function_name;
-  IF (length(definition)-length(replace(definition,'WITH filtered AS MATERIALIZED','')))/length('WITH filtered AS MATERIALIZED')<>1
+  IF regexp_count(definition,'WITH filtered AS (NOT )?MATERIALIZED')<>1
     OR (length(definition)-length(replace(definition,'GROUP BY counted.total;','')))/length('GROUP BY counted.total;')<>1
     OR (length(definition)-length(replace(definition,'INTO v_total, v_items','')))/length('INTO v_total, v_items')<>1 THEN
     RAISE EXCEPTION 'Inventory query extraction anchors drifted';
   END IF;
-  query_text:=substring(definition FROM 'WITH filtered AS MATERIALIZED[\s\S]*GROUP BY counted.total;');
+  query_text:=substring(definition FROM 'WITH filtered AS (?:NOT )?MATERIALIZED[\s\S]*GROUP BY counted.total;');
   query_text:=replace(query_text,'INTO v_total, v_items','');
   -- Substitute only complete PL/pgSQL identifiers, retaining the exact active
   -- CTE/JOIN/order/source SQL. Bind all values, never interpolate query values.
@@ -86,11 +89,18 @@ BEGIN
   IF kind='balances' THEN
     rpc_result:=public.list_inventory_balances(tenant,warehouse_filter,keyword_filter,page_number,page_size);
   ELSE
-    rpc_result:=public.list_inventory_transactions(tenant,warehouse_filter,sku_filter,NULL,page_number,page_size);
+    rpc_result:=public.list_inventory_transactions(tenant,warehouse_filter,sku_filter,transaction_filter,page_number,page_size);
   END IF;
   rpc_ms:=extract(epoch FROM clock_timestamp()-started)*1000;
+  IF kind='transactions' THEN
+    legacy_result:=public.stage_b_reference_list_inventory_transactions(
+      tenant,warehouse_filter,sku_filter,transaction_filter,page_number,page_size);
+    IF rpc_result IS DISTINCT FROM legacy_result THEN
+      RAISE EXCEPTION 'Inventory optimized/reference JSON mismatch: %',probe_label;
+    END IF;
+  END IF;
   EXECUTE query_text INTO query_total,query_items USING tenant,warehouse_filter,sku_filter,
-    NULLIF(btrim(keyword_filter),''),offset_value,least(greatest(page_size,1),100),NULL::text;
+    NULLIF(btrim(keyword_filter),''),offset_value,least(greatest(page_size,1),100),transaction_filter;
   IF (rpc_result->>'total')::integer IS DISTINCT FROM expected_total
     OR query_total IS DISTINCT FROM expected_total
     OR query_items IS DISTINCT FROM rpc_result->'items'
@@ -99,11 +109,15 @@ BEGIN
   END IF;
   EXECUTE 'EXPLAIN (ANALYZE,BUFFERS,VERBOSE,SETTINGS,FORMAT JSON) '||query_text INTO plan
     USING tenant,warehouse_filter,sku_filter,NULLIF(btrim(keyword_filter),''),offset_value,
-      least(greatest(page_size,1),100),NULL::text;
+      least(greatest(page_size,1),100),transaction_filter;
+  IF kind='transactions' AND (plan #>> '{0,Plan,Temp Written Blocks}')::integer>0 THEN
+    RAISE EXCEPTION 'Inventory transaction query spills before bounded display: % (% temporary blocks)',
+      probe_label,plan #>> '{0,Plan,Temp Written Blocks}';
+  END IF;
   INSERT INTO stage_b_perf_evidence VALUES(probe_label,jsonb_build_object(
     'kind',kind,'function_md5',md5(definition),'page',page_number,'page_size',page_size,
     'warehouse_filter',warehouse_filter IS NOT NULL,'sku_filter',sku_filter IS NOT NULL,
-    'keyword',keyword_filter,'expected_total',expected_total,'rpc_ms',rpc_ms,
+    'keyword',keyword_filter,'transaction_filter',transaction_filter,'expected_total',expected_total,'rpc_ms',rpc_ms,
     'plan',plan,'scope','synthetic read load; not full source-table scale or production SLA'));
 END;
 $probe$;
@@ -119,6 +133,9 @@ SELECT pg_temp.stage_b_probe_inventory('transactions-warehouse','transactions',(
 SELECT pg_temp.stage_b_probe_inventory('transactions-sku','transactions',NULL,(SELECT id FROM stage_b_perf_skus WHERE ordinal=1),NULL,1,100,100);
 SELECT pg_temp.stage_b_probe_inventory('transactions-warehouse-sku','transactions',(SELECT id FROM stage_b_perf_warehouses WHERE ordinal=1),(SELECT id FROM stage_b_perf_skus WHERE ordinal=1),NULL,1,20,10);
 SELECT pg_temp.stage_b_probe_inventory('transactions-out-of-range','transactions',NULL,NULL,NULL,10000,20,100003);
+SELECT pg_temp.stage_b_probe_inventory('transactions-type','transactions',NULL,NULL,NULL,1,20,100003,'purchase_receipt');
+SELECT pg_temp.stage_b_probe_inventory('transactions-type-empty','transactions',NULL,NULL,NULL,1,20,0,'project_issue');
+SELECT pg_temp.stage_b_probe_inventory('transactions-deep-page','transactions',NULL,NULL,NULL,400,20,100003);
 -- Prefix is deliberately machine-readable; only synthetic probe data is emitted.
 SELECT 'EVIDENCE '||jsonb_build_object('label',label,'result',payload)::text
 FROM stage_b_perf_evidence ORDER BY label;

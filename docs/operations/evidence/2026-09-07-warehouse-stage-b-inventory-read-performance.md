@@ -1,6 +1,6 @@
 # Stage B 库存读取性能诊断基线
 
-状态：已取得隔离数据库查询计划，存在待优化项；**不是性能验收通过或发布放行单**。
+状态：本文保留优化前的历史诊断；后续变更见[流水分页优化记录](./2026-09-07-warehouse-stage-b-inventory-read-optimization.md)。**不是完整性能验收通过或发布放行单**。
 生产 SQL 基线为 `cf14ead1`。未修改已有数据库、生产配置或生产查询。
 
 ## 数据与方法
@@ -36,6 +36,8 @@
 ## 复跑与原始证据
 
 在 Stage B worktree 根目录运行：
+
+以下为基线版本命令；当前分支已加入旧函数对照夹具，完整最新命令和结果数量见上方优化记录。
 
 ```bash
 bun scripts/verify-warehouse-stage-b-database.ts \

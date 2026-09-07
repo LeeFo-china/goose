@@ -205,7 +205,7 @@ bun scripts/verify-warehouse-stage-b-database.ts \
 - 默认采购审批图的预算分支是 `budget_status != over_budget`，已通过 `not_applicable` 的真实仓库审批；未修改已发布审批图。
 - 收货 wrapper、历史项目收货、库存/应付原子事务及同单并发/回滚已通过上述隔离测试；同价同仓同 SKU 的跨订单并发与不同价格顺序收货的加权成本已补证。不同价格并发、完整租户隔离矩阵、性能及真实接口 smoke 仍需最终验收；旧短码 SKU 改价兼容问题见上文。
 - 付款查询及命令已完成上述隔离验证和双阶段复审；追加测试覆盖上述同 AP 并发申请/付款、同键重放、冻结发票限制及失败回滚。真实 API 联调与完整最终验收仍待完成，第二步不能视为已发布。
-- 库存列表已取得 1 万余额/10 万流水合成读负载的 11 组真实 EXPLAIN，发现流水宽字段物化落临时数据、深空页外部排序；性能优化和完整验收仍未完成。数据、方法、原始计划位置及后续门禁见[性能诊断基线](./2026-09-07-warehouse-stage-b-inventory-read-performance.md)。
+- 库存列表已取得 1 万余额/10 万流水合成读负载的[性能诊断基线](./2026-09-07-warehouse-stage-b-inventory-read-performance.md)。后续[流水分页优化](./2026-09-07-warehouse-stage-b-inventory-read-optimization.md)将计数/分页候选与宽字段关联分开，14 组计划中流水临时写块均为 0、旧新完整 JSON 一致，全部 15 份采购领域夹具及独立规格/质量审查通过；仍待 generic plan/大来源/跨租户规模及真实联调，不能视为完整性能验收。
 
 ## 合并门槛
 
