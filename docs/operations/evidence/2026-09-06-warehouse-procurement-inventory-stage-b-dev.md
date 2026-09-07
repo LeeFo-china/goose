@@ -342,6 +342,59 @@ UTC `13:53:43.513407+00:00` 开发库只读事务独立复核：指定租户采�
 正式平台开关入口及完整真实采购/收货/付款、隔离与回归验收仍待完成；严格写入审计的
 17 个上游候选也仍未关闭。功能分支与工作树保留，不合回 main、不操作生产。
 
+### 2026-09-07 追加真实读取边界验收：50 通过、2 失败
+
+在已发布候选上，以用户指定账号经正式开发登录入口执行一次顺序 HTTP GET 检查。
+登录身份精确匹配；凭据仅留进程内。检查器完成 **52 项，50 通过、2 失败，exit 3**，
+没有采购/财务写入。不能把此前首页读取成功扩展为完整分页已通过。
+
+五个列表为 `/warehouses`、`/inventory/balances`、`/inventory/transactions`、
+`/supplier-purchase-batches`、`/supplier-purchase-orders`：
+
+- 五组默认 page=1/pageSize=20、最大 pageSize=100、分页总数及返回行租户匹配均通过。
+- 五组 pageSize=101、page=0、pageSize=1.5、额外 `tenant_id` 查询参数均返回 400
+  `VALIDATION_ERROR`；未登录 GET 均返回 401 `TOKEN_MISSING`。
+- 两个库存列表及采购单的 page=999/pageSize=1 正常返回空页并保留真实总数。
+- 采购批次及采购单 pageSize=2 的前两页无重复 ID、总数相等；只是这两页的检查，
+  不代表并发变更下的游标稳定性或完整跨租户矩阵。
+- 四个接受仓库筛选的列表均拒绝非法 warehouseId；项目/仓库目的地筛选正常，
+  项目结果保持非空 project_id、空 warehouse_id；采购开关关闭时仓库历史读取返回空页。
+
+**两个失败及独立复现：**
+
+| 请求 | 初次请求 ID | 重复请求 ID | 底层错误 |
+| --- | --- | --- | --- |
+| `/warehouses?page=999&pageSize=1` | `req-28` | `req-4h` | `PGRST103`：偏移 998，但总数为 1 |
+| `/supplier-purchase-batches?page=999&pageSize=1` | `req-2w` | `req-4i` | `PGRST103`：偏移 998，但总数为 16 |
+
+两次均为 HTTP 500 / `DB_ERROR`。追加对照：仓库 page=2/pageSize=1、批次
+page=17/pageSize=1（偏移恰好等于总数）均 HTTP 200；因此不是所有空页都会失败。
+
+Root Cause：`repositories/warehouses.ts:list` 与
+`repositories/supplier-purchase-batches.ts:listBatches` 使用 exact count + `.range()`，
+随后将任意数据库 error 包装为 500，未处理超出范围的 `PGRST103`。已安装
+`@supabase/postgrest-js@2.101.1` 的 `PostgrestBuilder.ts` 只在 `res.ok` 分支解析
+`content-range` 的 count；错误结果 count 保留 null，不能简单忽略错误并伪造 total=0。
+邻近 `project-logs.ts:listByProjectViaSupabase` 已有同错误下按原 scope 重查总数的实现。
+
+**待确认修复建议（未实施）：**
+
+1. 推荐在这两个 repository 仅对 `PGRST103` 做精确处理：使用同一租户/授权目的地/
+   状态/关键词条件，追加有界总数查询，返回原请求页码、空列表和真实 total。
+   可用已安装 SDK 支持的 HEAD exact count + range(0,0)，不返回业务行；正常页仍只查询一次。
+   补查失败、count 缺失或非预期数据库错误必须继续由 error-factory 报错，不吞掉异常。
+2. 备选是每次先计数再读取：正常请求也增加一次查询，且仍需处理并发数据变化，暂不推荐。
+3. 改成统一分页 RPC 能实现单语句读取，但需要新 migration 和更大的 SQL/API 改动，
+   不宜仅为这两个已定位的列表边界引入。
+
+修复前须补可失败的 repository 回归，检查补查 scope 一致、正常页不增加查询、错误不被
+误吞及真实总数；修复后运行 API 类型/构建、相关测试及上述真实 HTTP 重测。
+本轮按 brainstorming 的设计确认门禁暂停实现；仅记录诊断，不改 SDK、SQL、认证或列表代码。
+
+浏览器方面，按 Browser 技能初始化后返回 `No browser is available`，再按其排障文档
+只读查询可用浏览器得到空列表。没有用旁路控制浏览器，真实页面点击/视觉验收仍未执行。
+独立审批账号、合法财务权限、平台开关入口与完整闭环验收也仍未完成。
+
 ### 前次本地证据与最终门槛
 
 本地的采购领域隔离 PostgreSQL 12 组夹具、库存 Admin 18 项单元/组件测试、8 项浏览器测试及
