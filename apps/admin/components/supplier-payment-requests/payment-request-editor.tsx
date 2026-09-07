@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { StatusAlert } from "@/components/admin/status-alert";
-import { resolveSupplierCommandAttempt, type SupplierCommandAttempt } from "@/components/supplier-products/supplier-command-attempt";
 import type { SupplierPayable } from "@/components/supplier-payables/payable-types";
+import { payableDestination, payableDestinationLabel, canManagePayableDestination } from "../supplier-payables/payable-destination";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -27,15 +27,11 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 
-import {
-  createSupplierPaymentRequestDraft,
-  updateSupplierPaymentRequestDraft,
-} from "./payment-request-api";
+import { usePaymentRequestCommand } from "./use-payment-request-command";
+import type { runPaymentRequestCommand } from "./payment-request-command";
 import {
   decimalFromCents,
-  errorCode,
   errorMessage,
-  errorStatus,
   formatPaymentMoney,
   mergePaymentRequestDraftLines,
   moneyCents,
@@ -53,20 +49,19 @@ export function PaymentRequestEditor({
   open,
   payables,
   detail,
-  projectName,
+  canManageWarehouses,
   supplierName,
   pending,
   onOpenChange,
   onPendingChange,
   onSaved,
   onReloadFacts,
-  onAbandonCreate,
   onInvalidated,
 }: {
   open: boolean;
   payables: SupplierPayable[];
   detail: SupplierPaymentRequestDetail | null;
-  projectName?: string;
+  canManageWarehouses: boolean;
   supplierName?: string;
   pending: boolean;
   onOpenChange: (open: boolean) => void;
@@ -79,22 +74,24 @@ export function PaymentRequestEditor({
     detail: SupplierPaymentRequestDetail | null;
     payables: SupplierPayable[];
   }>;
-  onAbandonCreate: () => void;
   onInvalidated: (message: string) => void;
 }) {
   const [draftId, setDraftId] = useState("");
   const [reason, setReason] = useState("");
   const [remark, setRemark] = useState("");
   const [lines, setLines] = useState<PaymentRequestDraftLine[]>([]);
-  const [attempt, setAttempt] = useState<SupplierCommandAttempt | null>(null);
-  const [saving, setSaving] = useState(false);
+  const command = usePaymentRequestCommand("draft");
+  const attempt = command.pending?.command.attempt ?? null;
+  const saving = command.busy;
   const [refreshingFacts, setRefreshingFacts] = useState(false);
   const [recovery, setRecovery] = useState<
     "reload_facts" | "retry_same_attempt" | null
   >(null);
   const [error, setError] = useState<string | null>(null);
   const request = detail?.payment_request ?? null;
-  const projectId = request?.project_id ?? payables[0]?.project_id ?? "";
+  const destinationFacts = request ?? payables[0];
+  const destination = destinationFacts ? payableDestination(destinationFacts) : null;
+  const canManageDestination = destinationFacts && canManagePayableDestination(destinationFacts, true, canManageWarehouses);
   const tenantSupplierId = request?.tenant_supplier_id ??
     payables[0]?.tenant_supplier_id ?? "";
 
@@ -116,8 +113,6 @@ export function PaymentRequestEditor({
 
   useEffect(() => {
     if (!open) return;
-    setAttempt(null);
-    setSaving(false);
     setRefreshingFacts(false);
     setRecovery(null);
     setError(null);
@@ -133,10 +128,16 @@ export function PaymentRequestEditor({
       return "-";
     }
   }, [lines]);
-  const frozen = saving || refreshingFacts || pending || attempt !== null;
+  const frozen = saving || refreshingFacts || pending || attempt !== null || recovery === "reload_facts";
 
   async function saveDraft(retrySameAttempt = false) {
-    if (!draftId || saving || refreshingFacts) return;
+    if (retrySameAttempt) {
+      if (!command.pending || saving || !canManagePayableDestination(command.pending.destination, true, canManageWarehouses)) return;
+      await handleSaveOutcome(await command.retry());
+      return;
+    }
+    if (!destination || !canManageDestination) return;
+    if (!draftId || saving || refreshingFacts || recovery === "reload_facts" || !command.ready) return;
     if (retrySameAttempt ? !attempt : pending || attempt !== null) return;
     const trimmedReason = reason.trim();
     if (!trimmedReason) {
@@ -162,7 +163,7 @@ export function PaymentRequestEditor({
       return;
     }
     const basePayload = {
-      project_id: projectId,
+      ...destination,
       tenant_supplier_id: tenantSupplierId,
       reason: trimmedReason,
       remark: remark.trim() || null,
@@ -171,39 +172,32 @@ export function PaymentRequestEditor({
         requested_amount: line.amount,
       })),
     };
-    const nextAttempt = resolveSupplierCommandAttempt(attempt, {
-      scope: request ? "payment-request:update" : "payment-request:create",
-      resourcePath: draftId,
-      payload: { ...basePayload, expected_version: request?.version ?? 0 },
-      keyFormat: "uuid",
-    });
-    setAttempt(nextAttempt);
-    setSaving(true);
     setError(null);
     onPendingChange(draftId);
-    let saved = false;
-    try {
-      const result = request
-        ? await updateSupplierPaymentRequestDraft(request.id, {
-          id: request.id,
-          expected_version: request.version,
-          ...basePayload,
-        }, nextAttempt.idempotencyKey)
-        : await createSupplierPaymentRequestDraft({
-          id: draftId,
-          expected_version: 0,
-          ...basePayload,
-        }, nextAttempt.idempotencyKey);
-      setAttempt(null);
-      saved = true;
-      onSaved(result.payment_request);
+    const outcome = await command.execute(request ? "update" : "create", draftId,
+      { id: draftId, expected_version: request?.version ?? 0, ...basePayload }, destination);
+    await handleSaveOutcome(outcome);
+  }
+
+  async function handleSaveOutcome(outcome: Awaited<ReturnType<typeof runPaymentRequestCommand>> | null) {
+    if (!outcome) return;
+    if (outcome.type === "accepted") {
+      onPendingChange(null);
+      onSaved(outcome.result.payment_request);
       onOpenChange(false);
-    } catch (caught) {
-      const code = errorCode(caught);
+      return;
+    }
+    if (outcome.type === "uncertain") {
+      setRecovery("retry_same_attempt");
+      setError("保存结果暂未确认。请使用相同请求身份重试保存，避免产生重复申请。");
+      return;
+    }
+    onPendingChange(null);
+      const code = outcome.code;
       const conflict = paymentRequestConflictMessage(code);
       const nextRecovery = paymentRequestSaveFailureKind(
         code,
-        errorStatus(caught),
+        outcome.status,
       );
       if (nextRecovery === "reload_facts") {
         setRecovery(nextRecovery);
@@ -216,15 +210,9 @@ export function PaymentRequestEditor({
           "保存结果暂未确认。请使用相同请求身份重试保存，避免产生重复申请。",
         );
       } else {
-        setAttempt(null);
         setRecovery(null);
-        onPendingChange(null);
-        setError(errorMessage(caught, "付款申请草稿保存失败"));
+        setError(outcome.message);
       }
-    } finally {
-      setSaving(false);
-      if (saved) onPendingChange(null);
-    }
   }
 
   async function reloadFacts(message: string) {
@@ -238,7 +226,6 @@ export function PaymentRequestEditor({
         throw new RangeError("付款申请详情未返回");
       }
       if (next.detail && next.detail.payment_request.status !== "draft") {
-        setAttempt(null);
         setRecovery(null);
         onPendingChange(null);
         onInvalidated(
@@ -259,7 +246,6 @@ export function PaymentRequestEditor({
         setReason(next.detail.payment_request.reason);
         setRemark(next.detail.payment_request.remark ?? "");
       }
-      setAttempt(null);
       setRecovery(null);
       onPendingChange(null);
       setError(`${message} 已刷新最新事实，请重新确认金额后保存。`);
@@ -278,7 +264,12 @@ export function PaymentRequestEditor({
     onOpenChange(nextOpen);
   }
 
-  return (
+  return (<>
+    {command.pending && !open ? <StatusAlert tone="warning">
+      有一笔付款申请保存结果未确认，原申请和请求身份已保留。
+      <Button variant="outline" disabled={saving} onClick={() => void saveDraft(true)}>使用相同请求身份重试保存</Button>
+      {command.error}
+    </StatusAlert> : null}
     <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent className="w-[min(96vw,68rem)] max-w-none gap-0 overflow-hidden p-0 sm:max-w-5xl">
         <SheetHeader className="shrink-0 border-b p-4 pr-12">
@@ -289,8 +280,8 @@ export function PaymentRequestEditor({
         </SheetHeader>
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
           <FieldGroup>
-            {error ? <StatusAlert>{error}</StatusAlert> : null}
-            {attempt && recovery === "retry_same_attempt" ? (
+            {error || command.error ? <StatusAlert>{error || command.error}</StatusAlert> : null}
+            {attempt ? (
               <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
@@ -301,25 +292,9 @@ export function PaymentRequestEditor({
                   {saving ? <Spinner data-icon="inline-start" /> : null}
                   使用相同请求身份重试保存
                 </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  disabled={saving}
-                  onClick={() => {
-                    if (request) void reloadFacts("已放弃未确认的保存请求。");
-                    else {
-                      setAttempt(null);
-                      setRecovery(null);
-                      onPendingChange(null);
-                      onAbandonCreate();
-                    }
-                  }}
-                >
-                  {request ? "放弃保存并重新加载" : "放弃保存并查看列表"}
-                </Button>
               </div>
             ) : null}
-            {attempt && recovery === "reload_facts" ? (
+            {recovery === "reload_facts" ? (
               <Button
                 type="button"
                 variant="outline"
@@ -331,7 +306,7 @@ export function PaymentRequestEditor({
               </Button>
             ) : null}
             <FieldGroup className="grid gap-4 md:grid-cols-2">
-              <ReadOnlyField label="项目" value={projectName ?? shortPaymentId(projectId)} />
+              <ReadOnlyField label="采购去向" value={destinationFacts ? payableDestinationLabel(destinationFacts) : "采购去向不可用"} />
               <ReadOnlyField label="供应商" value={supplierName ?? shortPaymentId(tenantSupplierId)} />
               <Field data-invalid={!reason.trim()}>
                 <FieldLabel htmlFor="payment-request-reason">申请原因</FieldLabel>
@@ -403,13 +378,13 @@ export function PaymentRequestEditor({
           <Button type="button" variant="outline" disabled={frozen} onClick={() => handleOpenChange(false)}>
             取消
           </Button>
-          <Button type="button" disabled={frozen} onClick={() => void saveDraft()}>
+          <Button type="button" disabled={frozen || !canManageDestination} onClick={() => void saveDraft()}>
             {saving ? <Spinner data-icon="inline-start" /> : null}
             保存草稿
           </Button>
         </SheetFooter>
       </SheetContent>
-    </Sheet>
+    </Sheet></>
   );
 }
 

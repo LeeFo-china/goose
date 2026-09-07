@@ -1,4 +1,6 @@
 import { createServer } from "node:http";
+import { currentServiceAccessSummary } from "./supplier-purchase-order-mock-fixture.mjs";
+import { financialWarehouses } from "./supplier-payment-warehouse-fixture.mjs";
 
 import {
   ids,
@@ -22,6 +24,9 @@ import {
   recordMutation,
   requestDetail,
   submitRequest,
+  updateDraft,
+  endRequest,
+  canAccessFinancial,
 } from "./supplier-payment-mock-state.mjs";
 
 const port = Number.parseInt(
@@ -123,7 +128,29 @@ async function runCommand(request, response, url, execute) {
       "付款幂等键必须是 UUID");
   }
   recordMutation(state, request, url.pathname, payload);
-  commandResponse(response, execute(payload));
+  const action = url.pathname.split("/").at(-1);
+  const permission = action === "payments" ? "pay" : action === "approve" || action === "reject" ? "approve" : "manage";
+  const target = state.requests.find((record) => url.pathname.includes(record.id)) ?? payload;
+  if (!canAccessFinancial(state, target, `supplier.payment-request.${permission}`, true)) return sendError(response, 403, "FORBIDDEN", "缺少付款申请或仓库操作权限");
+  const key = request.headers["idempotency-key"];
+  const fingerprint = JSON.stringify([request.method, url.pathname, payload]);
+  const previous = state.replays.get(key);
+  if (previous) {
+    if (previous.fingerprint !== fingerprint) return sendError(response, 409, "IDEMPOTENCY_CONFLICT", "原请求内容已变化");
+    return commandResponse(response, { ...previous.result, idempotent: true });
+  }
+  const result = structuredClone(execute(payload, key));
+  state.replays.set(key, { fingerprint, result });
+  if (!result.error && state.fault && url.pathname.endsWith(state.fault.action)) {
+    const fault = state.fault;
+    state.fault = null;
+    if (fault.kind === "truncated") {
+      response.writeHead(200, { "content-type": "application/json" });
+      return response.end('{"success":true,"data":');
+    }
+    return response.destroy();
+  }
+  commandResponse(response, result);
 }
 
 function filterOptions(url) {
@@ -167,13 +194,16 @@ const server = createServer(async (request, response) => {
       return sendData(response, {});
     }
     if (request.method === "POST" && url.pathname === "/__test/reset") {
-      await readBody(request);
-      state = createState();
+      state = createState(await readBody(request));
+      return sendData(response, {});
+    }
+    if (request.method === "POST" && url.pathname === "/__test/fault") {
+      state.fault = await readBody(request);
       return sendData(response, {});
     }
     if (request.method === "POST" && url.pathname === "/__test/role") {
       const body = await readBody(request);
-      if (!["applicant", "approver", "finance"].includes(body.role)) {
+      if (!["applicant", "approver", "finance", "warehouse-applicant", "warehouse-approver", "warehouse-finance", "warehouse-readonly", "warehouse-no-manage", "warehouse-manage-no-payables"].includes(body.role)) {
         return sendError(response, 400, "VALIDATION_ERROR",
           "未知供应商付款测试角色");
       }
@@ -183,6 +213,8 @@ const server = createServer(async (request, response) => {
     if (request.method === "GET" && url.pathname === "/__test/journal") {
       return sendJson(response, 200, {
         journal: structuredClone(state.journal),
+        httpGets: state.httpGets,
+        payments: [...state.payments.values()].flat(),
       });
     }
     if (request.method === "GET" && url.pathname === "/__test/list-gets") {
@@ -196,19 +228,27 @@ const server = createServer(async (request, response) => {
         payables: structuredClone(state.payables),
         requests: structuredClone(state.requests),
         journal: structuredClone(state.journal),
+        httpGets: state.httpGets,
+        payments: [...state.payments.values()].flat(),
       });
     }
     if (request.method === "POST" && url.pathname === "/admin/auth/login") {
       await readBody(request);
       return sendData(response, currentSession(state));
     }
+    if (request.method === "GET") state.httpGets.push(url.pathname + url.search);
     if (request.method === "GET" && url.pathname === "/admin/auth/me") {
       return sendData(response, currentSession(state));
     }
+    if (request.method === "GET" && url.pathname === "/employee/service-access") {
+      return sendData(response, currentServiceAccessSummary());
+    }
     if (request.method === "GET" && url.pathname === "/supplier-settings") {
+      if (!currentSession(state).permissions.some(({ code }) => code === "supplier.view")) return sendError(response, 403, "FORBIDDEN", "缺少供应商查看权限");
       return sendData(response, {
         tenant_id: ids.tenant,
         module_enabled: true,
+        warehouse_procurement_enabled: false,
         require_active_contract_for_new_order: false,
         enabled_by_employee_id: ids.applicant,
         enabled_at: now,
@@ -217,8 +257,14 @@ const server = createServer(async (request, response) => {
         updated_at: now,
       });
     }
+    if (request.method === "GET" && url.pathname === "/warehouses") {
+      if (!currentSession(state).permissions.some(({ code }) => code === "inventory.warehouse.view")) return sendError(response, 403, "FORBIDDEN", "缺少仓库查看权限");
+      const keyword = url.searchParams.get("keyword") ?? "";
+      return sendPage(response, url, financialWarehouses.filter((warehouse) => warehouse.name.includes(keyword)));
+    }
     if (request.method === "GET" &&
       url.pathname === "/supplier-payable-filter-options") {
+      if (!currentSession(state).permissions.some(({ code }) => code === "supplier.payable.view")) return sendError(response, 403, "FORBIDDEN", "缺少应付查看权限");
       const records = filterOptions(url);
       if (!records) {
         return sendError(response, 400, "VALIDATION_ERROR",
@@ -259,23 +305,28 @@ const server = createServer(async (request, response) => {
     if (request.method === "POST" && requestPayments) {
       const id = decodeURIComponent(requestPayments[1]);
       return runCommand(request, response, url,
-        (payload) => confirmPayment(state, id, payload));
+        (payload, key) => confirmPayment(state, id, payload, key));
     }
     const requestCommand = url.pathname.match(
-      /^\/supplier-payment-requests\/([^/]+)\/(submit|approve)$/,
+      /^\/supplier-payment-requests\/([^/]+)\/(submit|approve|cancel|close|reject)$/,
     );
     if (request.method === "POST" && requestCommand) {
       const id = decodeURIComponent(requestCommand[1]);
       return runCommand(request, response, url, (payload) =>
         requestCommand[2] === "submit"
           ? submitRequest(state, id, payload)
-          : approveRequest(state, id, payload));
+          : requestCommand[2] === "approve" ? approveRequest(state, id, payload)
+          : endRequest(state, id, payload, requestCommand[2]));
     }
     const requestItem = url.pathname.match(
       /^\/supplier-payment-requests\/([^/]+)$/,
     );
+    if (request.method === "PUT" && requestItem) {
+      return runCommand(request, response, url, (payload) => updateDraft(state, decodeURIComponent(requestItem[1]), payload));
+    }
     if (request.method === "GET" && requestItem) {
       const detail = requestDetail(state, decodeURIComponent(requestItem[1]));
+      if (detail && !canAccessFinancial(state, detail.payment_request, "supplier.payment-request.view")) return sendError(response, 403, "FORBIDDEN", "缺少付款申请或仓库查看权限");
       return detail
         ? sendData(response, detail)
         : sendError(response, 404, "PAYMENT_REQUEST_NOT_FOUND",

@@ -67,7 +67,8 @@ const roleFacts = {
 };
 
 export function sessionFor(role) {
-  const facts = roleFacts[role];
+  const baseRole = role.replace(/^warehouse-/, "");
+  const facts = roleFacts[baseRole === "readonly" || baseRole === "no-manage" || baseRole === "manage-no-payables" ? "applicant" : baseRole];
   if (!facts) throw new TypeError(`Unknown supplier payment role: ${role}`);
   return {
     user_id: facts.userId,
@@ -90,7 +91,13 @@ export function sessionFor(role) {
       status: "active",
     },
     roles: ["tenant_admin"],
-    permissions: facts.permissions.map((code) => ({ code, scope: "all" })),
+    permissions: (role.startsWith("warehouse-") ? [
+      ...facts.permissions.filter((code) => code !== "supplier.view" &&
+        (baseRole !== "readonly" || !code.endsWith(".manage")) &&
+        (baseRole !== "manage-no-payables" || code !== "supplier.payable.view")),
+      "inventory.warehouse.view",
+      ...(baseRole === "readonly" || baseRole === "no-manage" ? [] : ["inventory.warehouse.manage"]),
+    ] : facts.permissions).map((code) => ({ code, scope: "all" })),
     token: `supplier-payment-${role}-token`,
     expires_at: "2099-12-31T23:59:59+08:00",
   };

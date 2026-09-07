@@ -1,4 +1,5 @@
 import type { SupplierPayable, SupplierPayableFacts } from "./payable-types";
+import { samePayableDestination, type PayableDestinationFields } from "./payable-destination";
 
 const MONEY_PATTERN = /^(?:0|[1-9]\d{0,15})\.\d{2}$/;
 const ZERO_MINOR = BigInt(0);
@@ -18,17 +19,17 @@ export function canSelectPayable(
 }
 
 export function canMergePayables(
-  selected: Pick<
+  selected: PayableDestinationFields & Pick<
     SupplierPayable,
     "project_id" | "tenant_supplier_id" | "currency"
   >,
-  candidate: Pick<
+  candidate: PayableDestinationFields & Pick<
     SupplierPayable,
     "project_id" | "tenant_supplier_id" | "currency"
   >,
 ): boolean {
-  return selected.project_id === candidate.project_id &&
-    selected.tenant_supplier_id === candidate.tenant_supplier_id &&
+  return samePayableDestination(selected, candidate) &&
+    selected.tenant_supplier_id.toLowerCase() === candidate.tenant_supplier_id.toLowerCase() &&
     selected.currency === candidate.currency;
 }
 

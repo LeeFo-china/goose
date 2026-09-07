@@ -3,6 +3,7 @@
 import { RotateCcw } from "lucide-react";
 
 import { FormSelect } from "@/components/admin/form-select";
+import { InventoryWarehouseFilter } from "@/components/inventory/inventory-warehouse-filter";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -19,6 +20,7 @@ const statusOptions = [
 ] as const;
 
 type PayableFiltersProps = {
+  canViewWarehouses: boolean;
   filters: PayableFiltersState;
   projectOptions: Array<{ value: string; label: string }>;
   supplierOptions: Array<{ value: string; label: string }>;
@@ -38,6 +40,7 @@ type PayableFiltersProps = {
 };
 
 export function PayableFilters({
+  canViewWarehouses,
   filters,
   projectOptions,
   supplierOptions,
@@ -57,6 +60,21 @@ export function PayableFilters({
     <div className="flex flex-col gap-3">
       <FieldGroup className="grid gap-3 md:grid-cols-2 xl:grid-cols-7">
         <Field>
+          <FieldLabel htmlFor="payable-destination">采购去向</FieldLabel>
+          <FormSelect id="payable-destination" value={filters.destinationType}
+            options={[{ value: "all", label: "全部去向" }, { value: "project", label: "项目采购" },
+              ...(canViewWarehouses ? [{ value: "warehouse", label: "仓库补货" }] : [])]}
+            onChange={(destinationType) => {
+              if (destinationType === "all" || destinationType === "project" || (destinationType === "warehouse" && canViewWarehouses)) onChange({ destinationType });
+            }} />
+        </Field>
+        {filters.destinationType === "warehouse" && canViewWarehouses ? (
+          <div className="min-w-0 md:col-span-2 xl:col-span-3">
+          <InventoryWarehouseFilter canViewWarehouses value={filters.warehouseId === "all" ? null : { id: filters.warehouseId, name: filters.warehouseName || "已选仓库" }}
+            onChange={(warehouse) => onChange({ warehouseId: warehouse?.id ?? "all", warehouseName: warehouse?.name ?? "", projectId: "all" })} />
+          </div>
+        ) : (
+        <Field>
           <FieldLabel htmlFor="payable-project-filter">项目</FieldLabel>
           <FormSelect
             id="payable-project-filter"
@@ -66,6 +84,7 @@ export function PayableFilters({
             onChange={(projectId) => onChange({ projectId })}
           />
         </Field>
+        )}
         <Field>
           <FieldLabel htmlFor="payable-supplier-filter">供应商</FieldLabel>
           <FormSelect

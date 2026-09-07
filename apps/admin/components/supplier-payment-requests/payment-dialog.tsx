@@ -61,6 +61,7 @@ import {
   paymentRequestStatusMeta,
   shortPaymentId,
 } from "./payment-request-ui";
+import { payableDestinationLabel } from "../supplier-payables/payable-destination";
 
 type PaymentLine = {
   allocationId: string;
@@ -76,6 +77,8 @@ export function PaymentDialog({
   projectName,
   supplierName,
   pending,
+  retryBusy = false,
+  onRetry,
   onOpenChange,
   onAbandon,
   onConfirm,
@@ -85,6 +88,8 @@ export function PaymentDialog({
   projectName?: string;
   supplierName?: string;
   pending: boolean;
+  retryBusy?: boolean;
+  onRetry?: () => Promise<SupplierPaymentCommandResult | null>;
   onOpenChange: (open: boolean) => void;
   onAbandon: () => void;
   onConfirm: (
@@ -217,7 +222,7 @@ export function PaymentDialog({
           <DialogDescription>
             {request
               ? `${request.payment_request.request_no} · ${
-                projectName ?? shortPaymentId(request.payment_request.project_id)
+                payableDestinationLabel({ ...request.payment_request, project_name: projectName ?? request.payment_request.project_name })
               } · ${
                 supplierName ?? shortPaymentId(
                   request.payment_request.tenant_supplier_id,
@@ -383,9 +388,15 @@ export function PaymentDialog({
           </FieldGroup>
         ) : null}
         <DialogFooter>
+          {onRetry && !submitting && !paymentNo ? (
+            <Button type="button" disabled={retryBusy} onClick={async () => {
+              const result = await onRetry();
+              if (result && "payment" in result) { setPaymentNo(result.payment.payment_no); setError(null); }
+            }}>使用原请求重试付款</Button>
+          ) : null}
           {pending && !submitting ? (
             <Button type="button" variant="outline" onClick={onAbandon}>
-              放弃本次重试并刷新
+              刷新最新数据（保留原请求）
             </Button>
           ) : null}
           <Button type="button" variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>

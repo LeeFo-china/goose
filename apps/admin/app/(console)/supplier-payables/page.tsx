@@ -13,6 +13,8 @@ export default async function SupplierPayablesPage() {
       canView={permissions.has("supplier.payable.view")}
       canCreate={permissions.has("supplier.payment-request.manage")}
       canReadSettings={permissions.has("supplier.view")}
+      canViewWarehouses={permissions.has("inventory.warehouse.view")}
+      canManageWarehouses={permissions.has("inventory.warehouse.manage")}
     />
   );
 }

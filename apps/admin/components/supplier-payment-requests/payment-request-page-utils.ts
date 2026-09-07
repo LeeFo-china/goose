@@ -1,6 +1,7 @@
 import { SUPPLIER_PAYMENT_REQUEST_STATUS_VALUES } from "@gooes/domain";
 
 import { normalizeSupplierPayableIds } from "../supplier-payables/payable-id-batch";
+import { canMergePayables } from "../supplier-payables/payable-rules";
 import type { SupplierPayable } from "../supplier-payables/payable-types";
 import { supplierPaymentCommandRefresh } from "./payment-request-command-refresh";
 import type {
@@ -32,6 +33,9 @@ export type PaymentRequestDraftLine = {
 
 export type PaymentRequestWorkspaceState = {
   page: number;
+  destinationType: "all" | "project" | "warehouse";
+  warehouseId: string;
+  warehouseName: string;
   keyword: string;
   status: SupplierPaymentRequestStatus | "all";
   projectId: string;
@@ -47,6 +51,7 @@ export function readPaymentRequestWorkspaceState(
 ): PaymentRequestWorkspaceState {
   const rawPage = Number(searchParams.get("page") ?? "1");
   const rawStatus = searchParams.get("status");
+  const rawDestination = searchParams.get("destination_type");
   const create = searchParams.get("create") === "1";
   const payableIdsValue = searchParams.get("payableIds");
   const payableIds = create
@@ -54,11 +59,14 @@ export function readPaymentRequestWorkspaceState(
     : [];
   return {
     page: Number.isSafeInteger(rawPage) && rawPage > 0 ? rawPage : 1,
+    destinationType: rawDestination === "warehouse" || rawDestination === "project" ? rawDestination : "all",
+    warehouseId: rawDestination === "project" ? "all" : searchParams.get("warehouse_id")?.trim() || "all",
+    warehouseName: "",
     keyword: searchParams.get("keyword")?.trim() ?? "",
     status: rawStatus && REQUEST_STATUSES.has(rawStatus)
       ? rawStatus as SupplierPaymentRequestStatus
       : "all",
-    projectId: searchParams.get("project_id")?.trim() || "all",
+    projectId: rawDestination === "warehouse" ? "all" : searchParams.get("project_id")?.trim() || "all",
     tenantSupplierId:
       searchParams.get("tenant_supplier_id")?.trim() || "all",
     createdFrom: searchParams.get("created_from")?.trim() ?? "",
@@ -72,10 +80,12 @@ export function buildPaymentRequestWorkspaceHref(
   state: PaymentRequestWorkspaceState,
 ): string {
   const query = new URLSearchParams();
+  if (state.destinationType !== "all") query.set("destination_type", state.destinationType);
+  if (state.destinationType !== "project" && state.warehouseId !== "all") query.set("warehouse_id", state.warehouseId);
   if (state.page > 1) query.set("page", String(state.page));
   if (state.keyword.trim()) query.set("keyword", state.keyword.trim());
   if (state.status !== "all") query.set("status", state.status);
-  if (state.projectId !== "all") query.set("project_id", state.projectId);
+  if (state.destinationType !== "warehouse" && state.projectId !== "all") query.set("project_id", state.projectId);
   if (state.tenantSupplierId !== "all") {
     query.set("tenant_supplier_id", state.tenantSupplierId);
   }
@@ -100,12 +110,8 @@ export function validateDraftPayables(
   }
   const payables = ordered as SupplierPayable[];
   const first = payables[0]!;
-  if (payables.some((fact) =>
-    fact.project_id !== first.project_id ||
-    fact.tenant_supplier_id !== first.tenant_supplier_id ||
-    fact.currency !== first.currency
-  )) {
-    throw new RangeError("付款申请只能包含同一项目、供应商和币种的应付");
+  if (payables.some((fact) => !canMergePayables(first, fact))) {
+    throw new RangeError("付款申请只能包含同一项目或仓库、供应商和币种的应付");
   }
   if (payables.some((fact) =>
     moneyCents(fact.available_to_request_amount) <= BigInt(0)
@@ -124,11 +130,7 @@ export function mergePaymentRequestDraftLines(
   );
   const payables = validateDraftPayables(ids, freshFacts);
   const request = detail.payment_request;
-  if (payables.some((payable) =>
-    payable.project_id !== request.project_id ||
-    payable.tenant_supplier_id !== request.tenant_supplier_id ||
-    payable.currency !== request.currency
-  )) {
+  if (payables.some((payable) => !canMergePayables(request, payable))) {
     throw new RangeError("应付事实与付款申请范围不一致，请重新加载");
   }
   return detail.allocations.map((allocation, index) => {
@@ -170,7 +172,7 @@ export function applyPaymentRequestCommand<
       ? { ...record, ...next }
       : record),
     detail: detail?.id === next.id ? next : detail,
-    refresh: supplierPaymentCommandRefresh(),
+    refresh: supplierPaymentCommandRefresh(next),
   };
 }
 

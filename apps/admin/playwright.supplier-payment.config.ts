@@ -6,7 +6,7 @@ if (process.env.FORCE_COLOR && process.env.NO_COLOR) {
 
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: "supplier-payment-workflow.spec.ts",
+  testMatch: ["supplier-payment-workflow.spec.ts", "supplier-payment-warehouse.spec.ts", "supplier-payment-recovery.spec.ts"],
   timeout: 60_000,
   fullyParallel: false,
   workers: 1,

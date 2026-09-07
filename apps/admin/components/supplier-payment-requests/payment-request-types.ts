@@ -4,12 +4,12 @@ import type {
 } from "@gooes/domain";
 
 import type { PageData } from "@/components/suppliers/supplier-types";
+import type { PayableDestinationFields } from "../supplier-payables/payable-destination";
 
 export type { SupplierPaymentMethod, SupplierPaymentRequestStatus };
 
-export type SupplierPaymentRequestListItem = {
+export type SupplierPaymentRequestListItem = PayableDestinationFields & {
   id: string;
-  project_id: string;
   tenant_supplier_id: string;
   supplier_id: string;
   supplier_name: string;
@@ -24,10 +24,9 @@ export type SupplierPaymentRequestListItem = {
   updated_at: string;
 };
 
-export type SupplierPaymentRequest = {
+export type SupplierPaymentRequest = PayableDestinationFields & {
   id: string;
   tenant_id: string;
-  project_id: string;
   tenant_supplier_id: string;
   supplier_id: string;
   request_no: string;
@@ -73,7 +72,7 @@ export type SupplierPaymentRequestDetail = {
   allocations: SupplierPaymentRequestDetailAllocation[];
 };
 
-export type SupplierPaymentListItem = {
+export type SupplierPaymentListItem = PayableDestinationFields & {
   id: string;
   payment_no: string;
   amount: string;
@@ -95,6 +94,8 @@ export type SupplierPaymentRequestListQuery = {
   page: number;
   pageSize: number;
   project_id?: string;
+  destination_type?: "project" | "warehouse";
+  warehouse_id?: string;
   tenant_supplier_id?: string;
   status?: SupplierPaymentRequestStatus;
   keyword?: string;
@@ -107,9 +108,8 @@ export type SupplierPaymentRequestDraftAllocationInput = {
   requested_amount: string;
 };
 
-type SupplierPaymentRequestDraftFields = {
+type SupplierPaymentRequestDraftFields = PayableDestinationFields & {
   id: string;
-  project_id: string;
   tenant_supplier_id: string;
   reason: string;
   remark?: string | null;
@@ -159,10 +159,9 @@ export type SupplierPaymentConfirmInput = {
   allocations: SupplierPaymentAllocationInput[];
 };
 
-export type SupplierPayment = {
+export type SupplierPayment = PayableDestinationFields & {
   id: string;
   tenant_id: string;
-  project_id: string;
   tenant_supplier_id: string;
   supplier_id: string;
   payment_request_id: string;
@@ -211,9 +210,11 @@ export type PaymentRequestPermissions = {
   canManage: boolean;
   canApprove: boolean;
   canPay: boolean;
+  canManageWarehouses?: boolean;
+  canViewWarehouses?: boolean;
 };
 
-export type PaymentRequestActionContext = {
+export type PaymentRequestActionContext = PayableDestinationFields & {
   status: SupplierPaymentRequestStatus;
   invoiceBlocked: boolean | null;
 };

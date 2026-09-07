@@ -42,6 +42,8 @@ export async function listSupplierPayables(
     pageSize: String(normalizePageSize(input.pageSize)),
   });
   const filterKeys = [
+    "destination_type",
+    "warehouse_id",
     "project_id",
     "tenant_supplier_id",
     "purchase_order_id",
@@ -72,6 +74,8 @@ export function listSupplierPayableFilterOptions(input: {
   page: number;
   pageSize: number;
   keyword?: string;
+  destination_type?: "project" | "warehouse";
+  warehouse_id?: string;
 }) {
   const query = new URLSearchParams({
     type: input.type,
@@ -79,6 +83,8 @@ export function listSupplierPayableFilterOptions(input: {
     pageSize: String(normalizePageSize(input.pageSize)),
   });
   if (input.keyword?.trim()) query.set("keyword", input.keyword.trim());
+  if (input.destination_type) query.set("destination_type", input.destination_type);
+  if (input.warehouse_id) query.set("warehouse_id", input.warehouse_id);
   return requestBackendJson<SupplierPayableFilterOptionPage>(
     `/supplier-payable-filter-options?${query}`,
     { fallbackMessage: "供应商应付筛选项加载失败" },

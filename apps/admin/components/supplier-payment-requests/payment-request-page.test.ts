@@ -175,10 +175,9 @@ describe("供应商付款申请页面边界", () => {
     expect(workspace).toContain("openEditorFromDetail");
     expect(workspace).toContain("reloadEditorFacts");
     expect(workspace).toContain("getSupplierPaymentRequest");
-    expect(workspace).toContain("supplierPaymentCommandRefresh()");
+    expect(workspace).toContain("supplierPaymentCommandRefresh(request)");
     expect(editor).toContain("expected_version");
-    expect(editor).toContain("resolveSupplierCommandAttempt");
-    expect(editor).toContain('keyFormat: "uuid"');
+    expect(editor).toContain("usePaymentRequestCommand");
     expect(editor).toContain("amount > moneyCents(line.available)");
     expect(editor).toContain("mergePaymentRequestDraftLines");
     expect(editor).not.toContain("available: allocation.payable_amount");
@@ -195,10 +194,10 @@ describe("供应商付款申请页面边界", () => {
     const batchIndex = reloadSource.indexOf("listSupplierPayablesByIds(ids)");
     expect(statusGuardIndex).toBeGreaterThan(-1);
     expect(batchIndex).toBeGreaterThan(statusGuardIndex);
-    expect(editor).toContain("if (saved) onPendingChange(null)");
+    expect(editor).toContain("onPendingChange(null)");
     expect(detail).toContain("pendingRequestId");
-    expect(detail).toContain('keyFormat: "uuid"');
-    expect(detail).toContain("supplierPaymentCommandRefresh()");
+    expect(detail).toContain("usePaymentRequestCommand");
+    expect(detail).toContain("supplierPaymentCommandRefresh(result.payment_request)");
     expect(detail).toContain("刷新最新数据");
     expect(review).toContain("驳回原因");
     expect(review).toContain("取消原因");
@@ -246,7 +245,7 @@ describe("供应商付款申请页面边界", () => {
   test("payment history page changes reload without resetting back to page one", () => {
     const detail = readSource("./payment-request-detail.tsx");
     expect(detail).toContain("}, [open, recordId]);");
-    expect(detail).toContain("}, [open, reload]);");
+    expect(detail).toContain("}, [open, paymentPage, recordId, reload]);");
     expect(detail).not.toContain("}, [open, recordId, reload]);");
   });
 

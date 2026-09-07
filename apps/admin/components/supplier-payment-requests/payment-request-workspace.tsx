@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { listSupplierPayablesByIds } from "@/components/supplier-payables/payable-api";
 import type { SupplierPayable } from "@/components/supplier-payables/payable-types";
+import { canManagePayableDestination } from "../supplier-payables/payable-destination";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,6 +33,7 @@ import {
   readPaymentRequestWorkspaceState,
   type PaymentRequestWorkspaceState,
   validateDraftPayables,
+  mergePaymentRequestDraftLines,
 } from "./payment-request-page-utils";
 import { supplierPaymentCommandRefresh } from "./payment-request-command-refresh";
 import { usePaymentRequestFilterOptions } from "./use-payment-request-filter-options";
@@ -46,6 +48,9 @@ import type {
 
 const initialState: PaymentRequestWorkspaceState = {
   page: 1,
+  destinationType: "all",
+  warehouseId: "all",
+  warehouseName: "",
   keyword: "",
   status: "all",
   projectId: "all",
@@ -66,12 +71,16 @@ export function PaymentRequestWorkspace({
   canApprove,
   canPay,
   canViewPayables,
+  canViewWarehouses,
+  canManageWarehouses,
 }: {
   canView: boolean;
   canManage: boolean;
   canApprove: boolean;
   canPay: boolean;
   canViewPayables: boolean;
+  canViewWarehouses: boolean;
+  canManageWarehouses: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -111,7 +120,9 @@ export function PaymentRequestWorkspace({
     canManage,
     canApprove,
     canPay,
-  }), [canApprove, canManage, canPay]);
+    canViewWarehouses,
+    canManageWarehouses,
+  }), [canApprove, canManage, canPay, canViewWarehouses, canManageWarehouses]);
   const filterOptions = usePaymentRequestFilterOptions(
     canView && canViewPayables,
     setWorkspaceError,
@@ -126,11 +137,14 @@ export function PaymentRequestWorkspace({
     if (!canView) return;
     const version = ++listRequestVersion.current;
     setLoading(true);
+    setRecords(emptyPage);
     setListError(null);
     try {
       const next = await listSupplierPaymentRequests({
         page: state.page,
         pageSize: 20,
+        ...(state.destinationType !== "all" ? { destination_type: state.destinationType } : {}),
+        ...(state.destinationType !== "project" && state.warehouseId !== "all" ? { warehouse_id: state.warehouseId } : {}),
         ...(state.keyword ? { keyword: state.keyword } : {}),
         ...(state.status !== "all" ? { status: state.status } : {}),
         ...(state.projectId !== "all" ? { project_id: state.projectId } : {}),
@@ -171,6 +185,7 @@ export function PaymentRequestWorkspace({
     void listSupplierPayablesByIds(state.payableIds).then((facts) => {
       if (deepLinkVersion.current !== version) return;
       const verified = validateDraftPayables(state.payableIds, facts);
+      if (!verified.every((fact) => canManagePayableDestination(fact, canManage, canManageWarehouses))) throw new RangeError("当前账号没有该采购去向的付款申请管理权限。");
       setCreatePayables(verified);
       setEditorDetail(null);
       setEditorOpen(true);
@@ -186,7 +201,7 @@ export function PaymentRequestWorkspace({
     return () => {
       deepLinkVersion.current += 1;
     };
-  }, [canManage, canView, parsed.error, router, state.create, state.payableIds]);
+  }, [canManage, canManageWarehouses, canView, parsed.error, router, state.create, state.payableIds]);
 
   function navigate(
     patch: Partial<PaymentRequestWorkspaceState>,
@@ -227,6 +242,7 @@ export function PaymentRequestWorkspace({
   }
 
   async function openEditorFromDetail(nextDetail: PaymentRequestDetailData) {
+    if (!canManagePayableDestination(nextDetail.payment_request, canManage, canManageWarehouses)) return;
     setWorkspaceError(null);
     try {
       const ids = nextDetail.allocations.map(({ payable_event_id }) =>
@@ -234,6 +250,7 @@ export function PaymentRequestWorkspace({
       );
       const facts = await listSupplierPayablesByIds(ids);
       const verified = validateDraftPayables(ids, facts);
+      mergePaymentRequestDraftLines(nextDetail, verified);
       setCreatePayables(verified);
       setEditorDetail(nextDetail);
       setDetailOpen(false);
@@ -266,9 +283,9 @@ export function PaymentRequestWorkspace({
     return { detail: nextDetail, payables: verified };
   }
 
-  function dispatchPaymentRefresh(requestId: string) {
+  function dispatchPaymentRefresh(request: SupplierPaymentRequest) {
     window.dispatchEvent(new CustomEvent("supplier-payment-command", {
-      detail: { requestId, ...supplierPaymentCommandRefresh() },
+      detail: { requestId: request.id, ...supplierPaymentCommandRefresh(request) },
     }));
     router.refresh();
   }
@@ -294,10 +311,13 @@ export function PaymentRequestWorkspace({
         <StatusAlert tone="warning">当前账号仅可查看付款申请，所有命令操作已隐藏。</StatusAlert>
       ) : null}
       {parsed.error || workspaceError || listError ? (
-        <StatusAlert>{parsed.error ?? workspaceError ?? listError}</StatusAlert>
+        <StatusAlert>
+          <span>{parsed.error ?? workspaceError ?? listError}</span>
+          {listError ? <Button variant="outline" size="sm" disabled={loading} onClick={() => void loadRecords()}>重试加载付款申请</Button> : null}
+        </StatusAlert>
       ) : null}
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
-        <CardHeader className="shrink-0 border-b bg-muted/20 p-4">
+        <CardHeader className="max-h-[45vh] shrink-0 overflow-y-auto border-b bg-muted/20 p-4 md:max-h-none md:overflow-visible">
           <div className="flex items-start justify-between gap-3">
             <div>
               <CardTitle>付款申请列表</CardTitle>
@@ -306,6 +326,7 @@ export function PaymentRequestWorkspace({
             <Badge variant="outline">共 {records.pagination.total} 条</Badge>
           </div>
           <PaymentRequestFilters
+            canViewWarehouses={canViewWarehouses}
             state={filterDraft}
             keyword={keyword}
             loading={loading}
@@ -318,7 +339,8 @@ export function PaymentRequestWorkspace({
             onLoadMoreProjects={() => void filterOptions.loadMore("project")}
             onLoadMoreSuppliers={() => void filterOptions.loadMore("supplier")}
             onKeywordChange={setKeyword}
-            onChange={(patch) => setFilterDraft((current) => ({ ...current, ...patch }))}
+            onChange={(patch) => setFilterDraft((current) => ({ ...current, ...patch,
+              ...(patch.destinationType !== undefined && patch.destinationType !== current.destinationType ? { projectId: "all", warehouseId: "all", warehouseName: "" } : {}) }))}
             onSearch={() => navigate({ ...filterDraft, keyword: keyword.trim() })}
             onReset={() => {
               setFilterDraft(initialState);
@@ -377,16 +399,12 @@ export function PaymentRequestWorkspace({
           open={editorOpen}
           payables={createPayables}
           detail={editorDetail}
-          projectName={createPayables[0]?.project_name}
+          canManageWarehouses={canManageWarehouses}
           supplierName={createPayables[0]?.supplier_name ?? detailRecord?.supplier_name}
           pending={pendingRequestId !== null}
           onOpenChange={setEditorOpen}
           onPendingChange={setPendingRequestId}
           onReloadFacts={reloadEditorFacts}
-          onAbandonCreate={() => {
-            setEditorOpen(false);
-            void loadRecords();
-          }}
           onInvalidated={(message) => {
             setWorkspaceError(message);
             setEditorOpen(false);
@@ -394,7 +412,7 @@ export function PaymentRequestWorkspace({
           }}
           onSaved={(next) => {
             applyCommandResult(next);
-            dispatchPaymentRefresh(next.id);
+            dispatchPaymentRefresh(next);
             void loadRecords();
           }}
         />

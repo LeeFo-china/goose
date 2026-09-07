@@ -28,11 +28,11 @@ import { listSupplierPayableFilterOptions } from "./payable-api";
 import { PayableFilters } from "./payable-filters";
 import { PayableList } from "./payable-list";
 import { canMergePayables, canSelectPayable } from "./payable-rules";
+import { canManagePayableDestination } from "./payable-destination";
 import { PayableSummary } from "./payable-summary";
 import type {
   SupplierPayable,
   SupplierPayableFilterOption,
-  SupplierPayableFilterOptionType,
 } from "./payable-types";
 import {
   buildPaymentRequestHref,
@@ -45,16 +45,21 @@ import {
 } from "./use-payable-list";
 
 const FILTER_TYPES = ["project", "supplier", "purchase_order"] as const;
+type PayableOptionType = typeof FILTER_TYPES[number];
 type OptionPagination = { page: number; totalPages: number };
 
 export function PayableWorkspace({
   canView,
   canCreate,
   canReadSettings,
+  canViewWarehouses,
+  canManageWarehouses,
 }: {
   canView: boolean;
   canCreate: boolean;
   canReadSettings: boolean;
+  canViewWarehouses: boolean;
+  canManageWarehouses: boolean;
 }) {
   const router = useRouter();
   const [modulePreflight, setModulePreflight] =
@@ -116,14 +121,14 @@ export function PayableWorkspace({
       setOptions(Object.fromEntries(results.map((result, index) => [
         FILTER_TYPES[index],
         result.list,
-      ])) as Record<SupplierPayableFilterOptionType, SupplierPayableFilterOption[]>);
+      ])) as Record<PayableOptionType, SupplierPayableFilterOption[]>);
       setOptionPages(Object.fromEntries(results.map((result, index) => [
         FILTER_TYPES[index],
         {
           page: result.pagination.page,
           totalPages: pageCount(result.pagination.totalPages),
         },
-      ])) as Record<SupplierPayableFilterOptionType, OptionPagination>);
+      ])) as Record<PayableOptionType, OptionPagination>);
       setOptionsReady(true);
     }).catch((caught) => {
       if (active) {
@@ -155,7 +160,7 @@ export function PayableWorkspace({
     [options.purchase_order],
   );
 
-  async function loadMoreFilterOptions(type: SupplierPayableFilterOptionType) {
+  async function loadMoreFilterOptions(type: PayableOptionType) {
     const currentPage = optionPages[type];
     if (loadingMoreOptions || currentPage.page >= currentPage.totalPages) return;
     setLoadingMoreOptions(true);
@@ -207,15 +212,11 @@ export function PayableWorkspace({
     const hasAvailableAmount = canSelectPayable({
       available_to_request_amount: record.available_to_request_amount,
     });
-    const selectionScope = {
-      project_id: record.project_id,
-      tenant_supplier_id: record.tenant_supplier_id,
-      currency: record.currency,
-    };
+    const selectionScope = record;
     setSelectedIds((current) => {
       const next = new Set(current);
       if (next.delete(record.id)) return next;
-      if (!canCreate || !hasAvailableAmount || next.size >= 100) return current;
+      if (!canManagePayableDestination(record, canCreate, canManageWarehouses) || !hasAvailableAmount || next.size >= 100) return current;
       const first = records.list.find(({ id }) => next.has(id));
       if (first && !canMergePayables(first, selectionScope)) return current;
       next.add(record.id);
@@ -245,7 +246,7 @@ export function PayableWorkspace({
     <PageContainer>
       <PageHeader
         title="供应商应付"
-        description="按项目、供应商和到期日跟踪采购应付。"
+        description="按采购去向、供应商和到期日跟踪采购应付。"
         action={canCreate ? (
           <Button
             type="button"
@@ -293,6 +294,7 @@ export function PayableWorkspace({
             <Badge variant="outline">已选 {selectedIds.size} 条</Badge>
           </div>
           <PayableFilters
+            canViewWarehouses={canViewWarehouses}
             filters={filters}
             projectOptions={projectOptions}
             supplierOptions={supplierOptions}
@@ -312,6 +314,7 @@ export function PayableWorkspace({
         </CardHeader>
         <CardContent className="p-0">
           <PayableList
+            canManageWarehouses={canManageWarehouses}
             records={records.list}
             loading={loading}
             canCreate={canCreate}
@@ -408,7 +411,7 @@ function PayableWorkspaceSkeleton() {
 
 function emptyOptionState() {
   return { project: [], supplier: [], purchase_order: [] } as Record<
-    SupplierPayableFilterOptionType,
+    PayableOptionType,
     SupplierPayableFilterOption[]
   >;
 }
@@ -419,7 +422,7 @@ function emptyOptionPages() {
     project: initial,
     supplier: initial,
     purchase_order: initial,
-  } as Record<SupplierPayableFilterOptionType, OptionPagination>;
+  } as Record<PayableOptionType, OptionPagination>;
 }
 
 function withAllOption(label: string, items: SupplierPayableFilterOption[]) {

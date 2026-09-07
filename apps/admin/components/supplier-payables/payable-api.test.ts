@@ -13,6 +13,14 @@ afterEach(() => {
 });
 
 describe("供应商应付 API 契约", () => {
+  test("warehouse filters use financial snake_case and remain bounded", async () => {
+    const calls = installSuccessFetch();
+    await listSupplierPayables({ page: 1, pageSize: 500, destination_type: "warehouse", warehouse_id: "warehouse-id" });
+    const query = new URL(String(calls[0]?.input), "http://admin.local").searchParams;
+    expect(query.get("destination_type")).toBe("warehouse");
+    expect(query.get("warehouse_id")).toBe("warehouse-id");
+    expect(query.get("pageSize")).toBe("100");
+  });
   test("付款申请草稿事实查询只发送受限应付 ID", async () => {
     const calls = installSuccessFetch([]);
     const ids = [

@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/table";
 
 import { canMergePayables, canSelectPayable } from "./payable-rules";
+import { canManagePayableDestination, payableDestinationLabel } from "./payable-destination";
 import type { SupplierPayable, SupplierPayableStatus } from "./payable-types";
 
 const statusMeta: Record<SupplierPayableStatus, {
@@ -40,6 +41,7 @@ export function PayableList({
   records,
   loading,
   canCreate,
+  canManageWarehouses = false,
   selectedIds,
   onToggle,
   onCreateOne,
@@ -47,6 +49,7 @@ export function PayableList({
   records: SupplierPayable[];
   loading: boolean;
   canCreate: boolean;
+  canManageWarehouses?: boolean;
   selectedIds: Set<string>;
   onToggle: (record: SupplierPayable) => void;
   onCreateOne: (record: SupplierPayable) => void;
@@ -85,7 +88,7 @@ export function PayableList({
       <TableHeader className="sticky top-0 bg-card">
         <TableRow>
           <TableHead className="w-12"><span className="sr-only">选择</span></TableHead>
-          <TableHead>项目</TableHead>
+          <TableHead>采购去向</TableHead>
           <TableHead>供应商</TableHead>
           <TableHead>采购/收货单</TableHead>
           <TableHead>发生/到期</TableHead>
@@ -100,7 +103,8 @@ export function PayableList({
       <TableBody>
         {records.map((record) => {
           const checked = selectedIds.has(record.id);
-          const selectable = canCreate && canSelectPayable(record) &&
+          const allowed = canManagePayableDestination(record, canCreate, canManageWarehouses);
+          const selectable = allowed && canSelectPayable(record) &&
             (!selected || checked || canMergePayables(selected, record));
           return (
             <TableRow key={record.id} data-state={checked ? "selected" : undefined}>
@@ -113,7 +117,7 @@ export function PayableList({
                 />
               </TableCell>
               <TableCell className="max-w-44 truncate">
-                {record.project_name}
+                {payableDestinationLabel(record)}
               </TableCell>
               <TableCell className="max-w-48 truncate">
                 {record.supplier_name}
@@ -149,7 +153,7 @@ export function PayableList({
                 </div>
               </TableCell>
               <TableCell className="text-right">
-                {canCreate && canSelectPayable(record) ? (
+                {allowed && canSelectPayable(record) ? (
                   <Button
                     type="button"
                     size="sm"

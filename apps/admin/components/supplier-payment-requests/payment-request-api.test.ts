@@ -27,6 +27,17 @@ afterEach(() => {
 });
 
 describe("供应商付款申请 API 契约", () => {
+  test("warehouse draft and list preserve exact destination without cost facts", async () => {
+    const calls = installSuccessFetch();
+    await listSupplierPaymentRequests({ page: 1, pageSize: 20, destination_type: "warehouse", warehouse_id: "warehouse-id" });
+    await createSupplierPaymentRequestDraft({ id: "00000000-0000-4000-8000-000000000001", expected_version: 0,
+      destination_type: "warehouse", project_id: null, warehouse_id: "00000000-0000-4000-8000-000000000002",
+      tenant_supplier_id: "supplier-id", reason: "历史应付结算", allocations: [{ payable_event_id: "payable-id", requested_amount: "10.00" }] }, "original-key");
+    const query = new URL(String(calls[0]?.input), "http://admin.local").searchParams;
+    expect(query.get("destination_type")).toBe("warehouse");
+    expect(query.get("warehouse_id")).toBe("warehouse-id");
+    expect(JSON.parse(String(calls[1]?.init?.body))).toMatchObject({ destination_type: "warehouse", project_id: null, warehouse_id: "00000000-0000-4000-8000-000000000002" });
+  });
   test("列表、详情和付款记录都使用分页 backend client", async () => {
     const calls = installSuccessFetch();
 

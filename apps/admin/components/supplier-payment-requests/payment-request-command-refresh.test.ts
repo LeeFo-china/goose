@@ -6,6 +6,10 @@ import {
 } from "./payment-request-command-refresh";
 
 describe("付款命令刷新范围", () => {
+  test("仓库结算不宣称刷新项目财务", () => {
+    expect(supplierPaymentCommandRefresh({ destination_type: "warehouse", project_id: null,
+      warehouse_id: "00000000-0000-4000-8000-000000000001" }).refreshProjectFinance).toBe(false);
+  });
   test("成功命令使全部相关读模型失效", () => {
     expect(supplierPaymentCommandRefresh()).toEqual({
       refreshPayables: true,

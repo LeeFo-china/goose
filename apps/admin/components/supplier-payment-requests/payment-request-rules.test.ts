@@ -13,6 +13,17 @@ const permissions: PaymentRequestPermissions = {
 };
 
 describe("供应商付款申请动作规则", () => {
+  test("warehouse commands require warehouse manage but reviewers and payers need no financial manage", () => {
+    const warehouse = { destination_type: "warehouse" as const, project_id: null, warehouse_id: "00000000-0000-4000-8000-000000000001" };
+    expect(paymentRequestActions({ ...context("draft"), ...warehouse }, permissions)).toEqual([]);
+    expect(paymentRequestActions({ ...context("pending_approval"), ...warehouse }, {
+      canManage: false, canApprove: true, canPay: false, canManageWarehouses: true,
+    })).toEqual(["approve", "reject"]);
+    expect(paymentRequestActions({ ...context("approved"), ...warehouse }, {
+      canManage: false, canApprove: false, canPay: true, canManageWarehouses: true,
+    })).toEqual(["pay"]);
+    expect(paymentRequestActions({ ...context("approved"), project_id: null }, permissions)).toEqual([]);
+  });
   test("草稿可编辑、提交和取消", () => {
     expect(paymentRequestActions(context("draft"), permissions)).toEqual([
       "edit",
@@ -77,5 +88,5 @@ function context(
   status: PaymentRequestActionContext["status"],
   overrides: Partial<PaymentRequestActionContext> = {},
 ): PaymentRequestActionContext {
-  return { status, invoiceBlocked: false, ...overrides };
+  return { status, project_id: "00000000-0000-4000-8000-000000000001", invoiceBlocked: false, ...overrides };
 }

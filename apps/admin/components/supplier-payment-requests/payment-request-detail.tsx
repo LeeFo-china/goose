@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { StatusAlert } from "@/components/admin/status-alert";
-import { resolveSupplierCommandAttempt, type SupplierCommandAttempt } from "@/components/supplier-products/supplier-command-attempt";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -19,15 +18,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 import { PaymentDialog } from "./payment-dialog";
 import {
-  approveSupplierPaymentRequest,
-  cancelSupplierPaymentRequest,
-  closeSupplierPaymentRequest,
-  confirmSupplierPayment,
   getSupplierPaymentRequest,
   listSupplierPaymentRequestPayments,
-  rejectSupplierPaymentRequest,
-  submitSupplierPaymentRequest,
 } from "./payment-request-api";
+import { usePaymentRequestCommand } from "./use-payment-request-command";
+import { canManagePayableDestination } from "../supplier-payables/payable-destination";
 import {
   PaymentRecords,
   PaymentRequestAllocations,
@@ -93,7 +88,8 @@ export function PaymentRequestDetail({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshRequired, setRefreshRequired] = useState(false);
-  const [attempt, setAttempt] = useState<SupplierCommandAttempt | null>(null);
+  const command = usePaymentRequestCommand("actions");
+  const attempt = command.pending?.command.attempt ?? null;
   const [reviewAction, setReviewAction] =
     useState<PaymentRequestReviewAction>("submit");
   const [reviewValue, setReviewValue] = useState("");
@@ -101,41 +97,46 @@ export function PaymentRequestDetail({
   const [paymentOpen, setPaymentOpen] = useState(false);
   const requestVersion = useRef(0);
   const recordId = record?.id ?? null;
+  const visibleView = useRef({ open, recordId, paymentPage });
+  visibleView.current = { open, recordId, paymentPage };
 
   const reload = useCallback(async () => {
-    if (!recordId) return null;
+    // Callers can outlive their render while an uncertain command is replaying.
+    const target = visibleView.current;
+    if (!target.open || !target.recordId) return null;
     const version = ++requestVersion.current;
+    const isCurrent = () => requestVersion.current === version && visibleView.current.open &&
+      visibleView.current.recordId === target.recordId && visibleView.current.paymentPage === target.paymentPage;
     setLoading(true);
     setError(null);
     try {
       const [nextDetail, nextPayments] = await Promise.all([
-        getSupplierPaymentRequest(recordId),
-        listSupplierPaymentRequestPayments(recordId, {
-          page: paymentPage,
+        getSupplierPaymentRequest(target.recordId),
+        listSupplierPaymentRequestPayments(target.recordId, {
+          page: target.paymentPage,
           pageSize: 20,
         }),
       ]);
-      if (requestVersion.current !== version) return null;
+      if (!isCurrent()) return null;
       setDetail(nextDetail);
       setPayments(nextPayments);
       setRefreshRequired(false);
       return nextDetail;
     } catch (caught) {
-      if (requestVersion.current === version) {
+      if (isCurrent()) {
         setError(errorMessage(caught, "付款申请详情加载失败"));
       }
       return null;
     } finally {
-      if (requestVersion.current === version) setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
-  }, [paymentPage, recordId]);
+  }, []);
 
   useEffect(() => {
     requestVersion.current += 1;
     setDetail(null);
     setPayments(emptyPayments);
     setPaymentPage(1);
-    setAttempt(null);
     setError(null);
     setRefreshRequired(false);
     setReviewOpen(false);
@@ -148,14 +149,14 @@ export function PaymentRequestDetail({
     return () => {
       requestVersion.current += 1;
     };
-  }, [open, reload]);
+  }, [open, paymentPage, recordId, reload]);
 
   const current = detail?.payment_request ?? null;
   const invoiceBlocked = detail?.allocations.some(
     ({ invoice_required_before_payment }) => invoice_required_before_payment,
   ) ?? false;
   const actions = current
-    ? paymentRequestActions({ status: current.status, invoiceBlocked }, permissions)
+    ? paymentRequestActions({ ...current, invoiceBlocked }, permissions)
     : [];
   const resourcePending = pendingRequestId === recordId || attempt !== null;
 
@@ -190,11 +191,10 @@ export function PaymentRequestDetail({
       setError(failureMessage);
       return null;
     }
-    if (outcome.releaseAttempt) {
-      setAttempt(null);
+    if (outcome.releaseAttempt && !command.pending) {
       onPendingChange(null);
     }
-    if (outcome.closeDialogs) {
+    if (outcome.closeDialogs && !command.pending) {
       setReviewOpen(false);
       setPaymentOpen(false);
     }
@@ -220,25 +220,32 @@ export function PaymentRequestDetail({
   }
 
   async function applySuccess(result: SupplierPaymentCommandResult) {
-    setDetail((currentDetail) => currentDetail
-      ? { ...currentDetail, payment_request: result.payment_request }
-      : currentDetail);
-    setRefreshRequired(true);
     onChanged(result.payment_request);
-    const latest = await reload();
-    if (latest) onChanged(latest.payment_request);
-    else setError("操作已成功，但最新详情刷新失败，请手动刷新最新数据。");
+    // Compare the live view, not the request captured when replay began.
+    const isCurrent = () => visibleView.current.open && visibleView.current.recordId === result.payment_request.id;
+    if (isCurrent()) {
+      setDetail((currentDetail) => isCurrent() && currentDetail?.payment_request.id === result.payment_request.id
+        ? { ...currentDetail, payment_request: result.payment_request }
+        : currentDetail);
+      setRefreshRequired(true);
+      const latest = await reload();
+      if (isCurrent()) {
+        if (latest) onChanged(latest.payment_request);
+        else setError("操作已成功，但最新详情刷新失败，请手动刷新最新数据。");
+      }
+    }
     window.dispatchEvent(new CustomEvent("supplier-payment-command", {
       detail: {
         requestId: result.payment_request.id,
-        ...supplierPaymentCommandRefresh(),
+        ...supplierPaymentCommandRefresh(result.payment_request),
       },
     }));
     router.refresh();
   }
 
   async function runReviewCommand() {
-    if (!current || resourcePending) return;
+    if (command.pending) { await retryCommand(); return; }
+    if (!current || resourcePending || !actions.includes(reviewAction)) return;
     const value = reviewValue.trim();
     if (
       (reviewAction === "reject" || reviewAction === "cancel" ||
@@ -254,83 +261,70 @@ export function PaymentRequestDetail({
       : reviewAction === "approve"
       ? { expected_version: current.version, remark: value || null }
       : { expected_version: current.version };
-    const nextAttempt = resolveSupplierCommandAttempt(attempt, {
-      scope: `payment-request:${reviewAction}`,
-      resourcePath: current.id,
-      payload: commandPayload,
-      keyFormat: "uuid",
-    });
-    setAttempt(nextAttempt);
     onPendingChange(current.id);
     setError(null);
-    try {
-      let result: SupplierPaymentCommandResult;
-      if (reviewAction === "submit") {
-        result = await submitSupplierPaymentRequest(current.id, {
-          expected_version: current.version,
-        }, nextAttempt.idempotencyKey);
-      } else if (reviewAction === "approve") {
-        result = await approveSupplierPaymentRequest(current.id, {
-          expected_version: current.version,
-          remark: value || null,
-        }, nextAttempt.idempotencyKey);
-      } else if (reviewAction === "reject") {
-        result = await rejectSupplierPaymentRequest(current.id, {
-          expected_version: current.version,
-          remark: value,
-        }, nextAttempt.idempotencyKey);
-      } else if (reviewAction === "cancel") {
-        result = await cancelSupplierPaymentRequest(current.id, {
-          expected_version: current.version,
-          reason: value,
-        }, nextAttempt.idempotencyKey);
-      } else {
-        result = await closeSupplierPaymentRequest(current.id, {
-          expected_version: current.version,
-          reason: value,
-        }, nextAttempt.idempotencyKey);
-      }
+    const outcome = await command.execute(reviewAction, current.id, commandPayload, current);
+    if (outcome?.type === "accepted") {
       setReviewOpen(false);
-      setAttempt(null);
-      await applySuccess(result);
       onPendingChange(null);
+      await applySuccess(outcome.result);
       toast.success(commandSuccess[reviewAction]);
-    } catch (caught) {
-      await handleCommandError(caught);
+    } else if (outcome?.type === "rejected") {
+      onPendingChange(null);
+      await handleCommandError(Object.assign(new Error(outcome.message), { code: outcome.code }));
     }
+  }
+
+  async function retryCommand(): Promise<SupplierPaymentCommandResult | null> {
+    if (!command.pending) return null;
+    const kind = command.pending.kind;
+    const allowed = kind === "pay" ? permissions.canPay : kind === "approve" || kind === "reject" ? permissions.canApprove : permissions.canManage;
+    if (!canManagePayableDestination(command.pending.destination, allowed, permissions.canManageWarehouses ?? false)) {
+      command.setError("当前账号没有原采购去向的操作权限；原请求仍保留。");
+      return null;
+    }
+    const outcome = await command.retry();
+    if (outcome?.type === "accepted") {
+      onPendingChange(null);
+      setReviewOpen(false);
+      await applySuccess(outcome.result);
+      toast.success("原请求结果已确认");
+      return outcome.result;
+    }
+    if (outcome?.type === "rejected") {
+      onPendingChange(null);
+      await handleCommandError(Object.assign(new Error(outcome.message), { code: outcome.code }));
+    }
+    return null;
   }
 
   async function runPayment(
     payload: SupplierPaymentConfirmInput,
   ): Promise<SupplierPaymentCommandResult> {
-    if (!current || resourcePending) throw new RangeError("付款申请正在处理");
-    const nextAttempt = resolveSupplierCommandAttempt(attempt, {
-      scope: "payment-request:payment",
-      resourcePath: current.id,
-      payload,
-      keyFormat: "uuid",
-    });
-    setAttempt(nextAttempt);
+    if (!current || resourcePending || !actions.includes("pay")) throw new RangeError("付款申请正在处理或当前不可付款");
     onPendingChange(current.id);
-    try {
-      const result = await confirmSupplierPayment(
-        current.id,
-        payload,
-        nextAttempt.idempotencyKey,
-      );
-      setAttempt(null);
-      await applySuccess(result);
+    const outcome = await command.execute("pay", current.id, payload, current);
+    if (outcome?.type === "accepted") {
       onPendingChange(null);
-      return result;
-    } catch (caught) {
-      throw await handleCommandError(caught);
+      await applySuccess(outcome.result);
+      return outcome.result;
     }
+    if (outcome?.type === "rejected") {
+      onPendingChange(null);
+      throw await handleCommandError(Object.assign(new Error(outcome.message), { code: outcome.code }));
+    }
+    throw new RangeError("付款结果尚未确认，请使用原请求重试，不要重新登记。");
   }
 
   return (
     <>
+      {command.pending && !open ? <StatusAlert tone="warning">
+        原付款申请 {command.pending.requestNo ?? "（历史本地请求）"} 的操作结果未确认，原请求身份已保留。
+        <Button variant="outline" disabled={command.busy} onClick={() => void retryCommand()}>使用原请求重试操作</Button>
+        {command.error}
+      </StatusAlert> : null}
       <Sheet open={open} onOpenChange={(nextOpen) => {
-        if (!nextOpen && resourcePending) return;
+        if (!nextOpen && command.busy) return;
         onOpenChange(nextOpen);
       }}>
         <SheetContent className="w-[min(96vw,72rem)] max-w-none gap-0 overflow-hidden p-0 sm:max-w-6xl">
@@ -340,7 +334,11 @@ export function PaymentRequestDetail({
           </SheetHeader>
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
             <div className="flex flex-col gap-4">
-              {error ? <StatusAlert>{error}</StatusAlert> : null}
+              {command.pending ? <StatusAlert tone="warning">
+                原付款申请 {command.pending.requestNo ?? "（历史本地请求）"} 的操作尚未确认。
+                可关闭当前详情，再使用列表提示中的原请求重试；读取详情不会确认该操作。
+              </StatusAlert> : null}
+              {error || command.error ? <StatusAlert>{error || command.error}</StatusAlert> : null}
               {refreshRequired || attempt ? (
                 <Button type="button" variant="outline" disabled={loading} onClick={() => void refreshLatest()}>
                   刷新最新数据
@@ -365,7 +363,7 @@ export function PaymentRequestDetail({
             </div>
           </div>
           <SheetFooter className="shrink-0 border-t p-4">
-            <Button type="button" variant="outline" disabled={resourcePending} onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="outline" disabled={command.busy} onClick={() => onOpenChange(false)}>
               关闭
             </Button>
             {actions.map((action) => action === "edit" ? (
@@ -373,7 +371,7 @@ export function PaymentRequestDetail({
                 key={action}
                 type="button"
                 variant="outline"
-                disabled={resourcePending}
+                disabled={resourcePending || loading || refreshRequired || !command.ready}
                 onClick={() => detail && onEdit(detail)}
               >
                 编辑草稿
@@ -383,7 +381,7 @@ export function PaymentRequestDetail({
                 key={action}
                 type="button"
                 variant={action === "reject" || action === "cancel" || action === "close" ? "destructive" : "default"}
-                disabled={resourcePending}
+                disabled={resourcePending || loading || refreshRequired || !command.ready}
                 onClick={() => openAction(action)}
               >
                 {actionLabel(action)}
@@ -399,9 +397,9 @@ export function PaymentRequestDetail({
         allocations={detail?.allocations ?? []}
         supplierName={record?.supplier_name}
         value={reviewValue}
-        busy={pendingRequestId === recordId && attempt === null}
+        busy={command.busy}
         frozen={attempt !== null}
-        error={error}
+        error={error || command.error}
         onValueChange={setReviewValue}
         onOpenChange={(nextOpen) => {
           if (!nextOpen && resourcePending) return;
@@ -415,6 +413,8 @@ export function PaymentRequestDetail({
         request={detail}
         supplierName={record?.supplier_name}
         pending={resourcePending}
+        retryBusy={command.busy}
+        onRetry={command.pending?.kind === "pay" ? retryCommand : undefined}
         onOpenChange={setPaymentOpen}
         onAbandon={() => void refreshLatest()}
         onConfirm={runPayment}

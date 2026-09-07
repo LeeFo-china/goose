@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/table";
 
 import { formatPaymentMoney } from "./payment-request-page-utils";
+import { payableDestinationLabel } from "../supplier-payables/payable-destination";
 import { paymentRequestActions } from "./payment-request-rules";
 import type {
   PaymentRequestAction,
@@ -38,7 +39,6 @@ import type {
 import {
   formatPaymentDateTime,
   paymentRequestStatusMeta,
-  shortPaymentId,
 } from "./payment-request-ui";
 
 const actionLabels: Record<PaymentRequestAction, string> = {
@@ -95,7 +95,7 @@ export function PaymentRequestList({
       <TableHeader className="sticky top-0 bg-card">
         <TableRow>
           <TableHead>申请号</TableHead>
-          <TableHead>项目</TableHead>
+          <TableHead>采购去向</TableHead>
           <TableHead>供应商</TableHead>
           <TableHead>状态</TableHead>
           <TableHead className="text-right">申请金额</TableHead>
@@ -108,6 +108,7 @@ export function PaymentRequestList({
       <TableBody>
         {records.map((record) => {
           const actions = paymentRequestActions({
+            ...record,
             status: record.status,
             invoiceBlocked: null,
           }, permissions);
@@ -116,7 +117,7 @@ export function PaymentRequestList({
             <TableRow key={record.id}>
               <TableCell className="font-mono font-medium">{record.request_no}</TableCell>
               <TableCell className="font-mono text-xs">
-                {shortPaymentId(record.project_id)}
+                {payableDestinationLabel(record)}
               </TableCell>
               <TableCell className="max-w-48 truncate">{record.supplier_name}</TableCell>
               <TableCell>

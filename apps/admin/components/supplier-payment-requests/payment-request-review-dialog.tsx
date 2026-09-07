@@ -20,6 +20,7 @@ import type {
   SupplierPaymentRequestDetailAllocation,
 } from "./payment-request-types";
 import { paymentRequestStatusMeta, shortPaymentId } from "./payment-request-ui";
+import { payableDestinationLabel } from "../supplier-payables/payable-destination";
 
 export type PaymentRequestReviewAction =
   | "submit"
@@ -115,7 +116,7 @@ export function PaymentRequestReviewDialog({
           <dl className="grid gap-2 rounded-md border bg-muted/20 p-3 text-sm sm:grid-cols-2">
             <Fact label="申请号" value={request.request_no} />
             <Fact label="状态版本" value={`${paymentRequestStatusMeta[request.status].label} · v${request.version}`} />
-            <Fact label="项目" value={projectName ?? shortPaymentId(request.project_id)} />
+            <Fact label="采购去向" value={payableDestinationLabel({ ...request, project_name: projectName ?? request.project_name })} />
             <Fact label="供应商" value={supplierName ?? shortPaymentId(request.tenant_supplier_id)} />
             <Fact label="申请金额" value={formatPaymentMoney(request.requested_amount)} />
           </dl>
@@ -165,13 +166,13 @@ export function PaymentRequestReviewDialog({
         <DialogFooter>
           {frozen ? (
             <Button type="button" variant="outline" disabled={busy} onClick={onAbandon}>
-              放弃本次重试并刷新
+              刷新最新数据（保留原请求）
             </Button>
           ) : null}
           <Button
             type="button"
             variant="outline"
-            disabled={busy || frozen}
+            disabled={busy}
             onClick={() => onOpenChange(false)}
           >
             返回
@@ -183,7 +184,7 @@ export function PaymentRequestReviewDialog({
             onClick={onConfirm}
           >
             {busy ? <Spinner data-icon="inline-start" /> : null}
-            {copy.confirm}
+            {frozen ? "使用原请求重试操作" : copy.confirm}
           </Button>
         </DialogFooter>
       </DialogContent>

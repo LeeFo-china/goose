@@ -1,9 +1,11 @@
+import { payableDestination, type PayableDestinationFields } from "../supplier-payables/payable-destination";
+
 export type SupplierPaymentCommandRefresh = {
   refreshPayables: true;
   refreshRequests: true;
   refreshRequestDetail: true;
   refreshPurchaseOrderSummary: true;
-  refreshProjectFinance: true;
+  refreshProjectFinance: boolean;
 };
 
 export type PaymentRequestRefreshOutcome<Latest> =
@@ -24,13 +26,13 @@ export type PaymentRequestRefreshOutcome<Latest> =
     refreshRequired: true;
   };
 
-export function supplierPaymentCommandRefresh(): SupplierPaymentCommandRefresh {
+export function supplierPaymentCommandRefresh(destination?: PayableDestinationFields): SupplierPaymentCommandRefresh {
   return {
     refreshPayables: true,
     refreshRequests: true,
     refreshRequestDetail: true,
     refreshPurchaseOrderSummary: true,
-    refreshProjectFinance: true,
+    refreshProjectFinance: destination === undefined || payableDestination(destination)?.destination_type === "project",
   };
 }
 

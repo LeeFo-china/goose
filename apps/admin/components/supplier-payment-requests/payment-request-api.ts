@@ -206,6 +206,8 @@ function listQuery(input: SupplierPaymentRequestListQuery) {
     pageSize: String(normalizePageSize(input.pageSize)),
   });
   const filterKeys = [
+    "destination_type",
+    "warehouse_id",
     "project_id",
     "tenant_supplier_id",
     "status",
@@ -236,6 +238,8 @@ function draftPayload(
   return {
     id: payload.id,
     project_id: payload.project_id,
+    ...(payload.destination_type ? { destination_type: payload.destination_type } : {}),
+    ...(payload.warehouse_id !== undefined ? { warehouse_id: payload.warehouse_id } : {}),
     tenant_supplier_id: payload.tenant_supplier_id,
     expected_version: payload.expected_version,
     reason: payload.reason,

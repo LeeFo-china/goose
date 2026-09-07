@@ -28,7 +28,7 @@ describe("供应商应付选择规则", () => {
     expect(canMergePayables(selected, payable({ id: "payable-2" }))).toBe(true);
     expect(canMergePayables(
       selected,
-      payable({ id: "payable-2", project_id: "project-2" }),
+      payable({ id: "payable-2", project_id: "00000000-0000-4000-8000-000000000002" }),
     )).toBe(false);
     expect(canMergePayables(
       selected,
@@ -58,7 +58,7 @@ describe("供应商应付选择规则", () => {
 function payable(overrides: Partial<SupplierPayable> = {}): SupplierPayable {
   return {
     id: "payable-1",
-    project_id: "project-1",
+    project_id: "00000000-0000-4000-8000-000000000001",
     tenant_supplier_id: "relationship-1",
     supplier_id: "supplier-1",
     supplier_purchase_order_id: "order-1",

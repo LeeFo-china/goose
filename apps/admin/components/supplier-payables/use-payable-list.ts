@@ -11,6 +11,9 @@ import type {
 
 export type PayableFiltersState = {
   page: number;
+  destinationType: "all" | "project" | "warehouse";
+  warehouseId: string;
+  warehouseName: string;
   projectId: string;
   tenantSupplierId: string;
   purchaseOrderId: string;
@@ -24,6 +27,9 @@ const UUID_PATTERN =
 
 export const initialPayableFilters: PayableFiltersState = {
   page: 1,
+  destinationType: "all",
+  warehouseId: "all",
+  warehouseName: "",
   projectId: "all",
   tenantSupplierId: "all",
   purchaseOrderId: "all",
@@ -62,7 +68,14 @@ export function resetPayableFilters(
   current: PayableFiltersState,
   patch: Partial<Omit<PayableFiltersState, "page">>,
 ): PayableFiltersState {
-  return { ...current, ...patch, page: 1 };
+  const next = { ...current, ...patch, page: 1 };
+  if (patch.destinationType !== undefined && patch.destinationType !== current.destinationType) {
+    next.projectId = "all";
+    next.warehouseId = "all";
+    next.warehouseName = "";
+    next.purchaseOrderId = "all";
+  }
+  return next;
 }
 
 export function appendPayablePage(
@@ -127,6 +140,8 @@ export function usePayableList(
   const queryFor = useCallback((page: number): SupplierPayableListQuery => ({
     page,
     pageSize: 20,
+    ...(filters.destinationType !== "all" ? { destination_type: filters.destinationType } : {}),
+    ...(filters.destinationType === "warehouse" && filters.warehouseId !== "all" ? { warehouse_id: filters.warehouseId } : {}),
     ...(filters.projectId !== "all"
       ? { project_id: filters.projectId }
       : {}),
@@ -140,6 +155,8 @@ export function usePayableList(
     ...payableDateRange(filters.dueFrom, filters.dueTo),
   }), [
     filters.dueFrom,
+    filters.destinationType,
+    filters.warehouseId,
     filters.dueTo,
     filters.projectId,
     filters.purchaseOrderId,

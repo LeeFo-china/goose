@@ -13,6 +13,7 @@ import {
 
 import { getEvidenceImagePreviewSrc } from "@/components/expenses/expense-mutation-shared";
 import { formatPaymentMoney } from "./payment-request-page-utils";
+import { payableDestinationLabel } from "../supplier-payables/payable-destination";
 import type {
   SupplierPaymentPage,
   SupplierPaymentRequestDetail,
@@ -76,7 +77,7 @@ export function PaymentRequestFacts({
         <Badge variant="outline">版本 {request.version}</Badge>
       </div>
       <dl className="grid gap-3 rounded-md border bg-muted/20 p-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Fact label="项目" value={projectName ?? shortPaymentId(request.project_id)} />
+        <Fact label="采购去向" value={payableDestinationLabel({ ...request, project_name: projectName ?? request.project_name })} />
         <Fact label="供应商" value={supplierName ?? shortPaymentId(request.tenant_supplier_id)} />
         <Fact label="申请金额" value={formatPaymentMoney(request.requested_amount)} />
         <Fact label="已付金额" value={formatPaymentMoney(request.paid_amount)} />

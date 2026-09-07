@@ -3,11 +3,14 @@ import type {
   PaymentRequestActionContext,
   PaymentRequestPermissions,
 } from "./payment-request-types";
+import { payableDestination } from "../supplier-payables/payable-destination";
 
 export function paymentRequestActions(
   context: PaymentRequestActionContext,
   permissions: PaymentRequestPermissions,
 ): PaymentRequestAction[] {
+  const destination = payableDestination(context);
+  if (!destination || (destination.destination_type === "warehouse" && !permissions.canManageWarehouses)) return [];
   if (context.status === "draft") {
     return permissions.canManage ? ["edit", "submit", "cancel"] : [];
   }

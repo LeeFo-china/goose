@@ -19,8 +19,14 @@ function readSource(path: string) {
 }
 
 describe("供应商应付页面规则", () => {
+  test("切换采购去向清空互斥筛选并回到第一页", () => {
+    const next = resetPayableFilters({ page: 3, destinationType: "project", warehouseId: "old-wh", warehouseName: "旧仓库", projectId: "old-project",
+      tenantSupplierId: "all", purchaseOrderId: "all", status: "all", dueFrom: "", dueTo: "" }, { destinationType: "warehouse" });
+    expect(next).toMatchObject({ page: 1, projectId: "all", warehouseId: "all", warehouseName: "" });
+  });
   test("筛选变化回到第一页", () => {
     expect(resetPayableFilters({
+      destinationType: "all", warehouseId: "all", warehouseName: "",
       page: 4,
       projectId: "all",
       tenantSupplierId: "all",
@@ -29,6 +35,7 @@ describe("供应商应付页面规则", () => {
       dueFrom: "",
       dueTo: "",
     }, { status: "overdue" })).toEqual({
+      destinationType: "all", warehouseId: "all", warehouseName: "",
       page: 1,
       projectId: "all",
       tenantSupplierId: "all",
@@ -160,13 +167,11 @@ describe("供应商应付页面边界", () => {
     const menu = readSource("../layout/menu-config.ts");
 
     expect(workspace).toContain("available_to_request_amount");
-    expect(workspace).toContain("project_id");
-    expect(workspace).toContain("tenant_supplier_id");
-    expect(workspace).toContain("currency");
+    expect(workspace).toContain("canManagePayableDestination");
     expect(workspace).not.toContain("localStorage");
     expect(list).toContain("可申请");
     expect(list).toContain("采购/收货单");
-    expect(list).toContain("record.project_name");
+    expect(list).toContain("payableDestinationLabel(record)");
     expect(list).toContain("record.supplier_name");
     expect(list).toContain('className="min-w-[1480px]"');
     expect(list).toContain(

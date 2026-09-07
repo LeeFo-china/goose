@@ -6,6 +6,7 @@ import {
   sessionFor,
   supplier,
 } from "./supplier-payment-mock-fixture.mjs";
+import { financialDestination, sameFinancialDestination, seedWarehousePaymentHistory, warehouseFinancialName, warehouseFinancialPayables } from "./supplier-payment-warehouse-fixture.mjs";
 
 function cents(value) {
   if (!/^(?:0|[1-9]\d{0,15})\.\d{2}$/.test(value)) {
@@ -21,22 +22,32 @@ function money(value) {
   return `${sign}${absolute / 100n}.${String(absolute % 100n).padStart(2, "0")}`;
 }
 
-export function createState() {
+export function createState(options = {}) {
   const invoice = initialInvoiceRequest();
-  return {
+  const state = {
     role: "applicant",
-    payables: initialPayables(),
+    payables: [...initialPayables(), ...(options.warehouse ? warehouseFinancialPayables() : [])],
     requests: [invoice.payment_request],
     allocations: new Map([[invoice.payment_request.id, invoice.allocations]]),
     payments: new Map([[invoice.payment_request.id, []]]),
     journal: [],
     listGets: [],
     paymentSequence: 0,
+    replays: new Map(),
+    fault: null,
+    httpGets: [],
   };
+  if (options.history) seedWarehousePaymentHistory(state);
+  return state;
 }
 
 export function currentSession(state) {
   return sessionFor(state.role);
+}
+export function canAccessFinancial(state, record, permission, write = false) {
+  const permissions = new Set(currentSession(state).permissions.map(({ code }) => code));
+  return permissions.has(permission) && (financialDestination(record).destination_type === "project" ||
+    permissions.has(write ? "inventory.warehouse.manage" : "inventory.warehouse.view"));
 }
 
 function actorId(state) {
@@ -48,6 +59,7 @@ export function recordListGet(state, path, url) {
     path,
     page: url.searchParams.get("page"),
     pageSize: url.searchParams.get("pageSize"),
+    query: Object.fromEntries(url.searchParams),
   });
 }
 
@@ -63,8 +75,10 @@ export function recordMutation(state, request, path, payload) {
 }
 
 export function listPayables(state, url) {
-  let records = state.payables.map(withAvailableAmount);
+  let records = state.payables.filter((record) => canAccessFinancial(state, record, "supplier.payable.view")).map((record) => structuredClone(record));
   const filters = {
+    destination_type: "destination_type",
+    warehouse_id: "warehouse_id",
     project_id: "project_id",
     tenant_supplier_id: "tenant_supplier_id",
     purchase_order_id: "supplier_purchase_order_id",
@@ -72,7 +86,7 @@ export function listPayables(state, url) {
   };
   for (const [parameter, field] of Object.entries(filters)) {
     const value = url.searchParams.get(parameter);
-    if (value) records = records.filter((record) => record[field] === value);
+    if (value) records = records.filter((record) => (field === "destination_type" ? record[field] ?? "project" : record[field]) === value);
   }
   return records.sort((left, right) =>
     left.due_at.localeCompare(right.due_at) || left.id.localeCompare(right.id)
@@ -81,7 +95,7 @@ export function listPayables(state, url) {
 
 export function payableFacts(state, idsToRead) {
   return idsToRead.map((id) => state.payables.find((item) => item.id === id))
-    .filter(Boolean).map(withAvailableAmount);
+    .filter((record) => record && canAccessFinancial(state, record, "supplier.payment-request.manage", true)).map((record) => structuredClone(record));
 }
 
 function withAvailableAmount(payable) {
@@ -94,8 +108,10 @@ function withAvailableAmount(payable) {
 }
 
 export function listRequests(state, url) {
-  let records = state.requests.map(toListItem);
+  let records = state.requests.filter((record) => canAccessFinancial(state, record, "supplier.payment-request.view")).map(toListItem);
   const filters = {
+    destination_type: "destination_type",
+    warehouse_id: "warehouse_id",
     project_id: "project_id",
     tenant_supplier_id: "tenant_supplier_id",
     status: "status",
@@ -121,6 +137,8 @@ function toListItem(request) {
   return {
     id: request.id,
     project_id: request.project_id,
+    ...financialDestination(request),
+    warehouse_name: warehouseFinancialName(request.warehouse_id),
     tenant_supplier_id: request.tenant_supplier_id,
     supplier_id: request.supplier_id,
     supplier_name: supplier.name,
@@ -146,14 +164,19 @@ export function requestDetail(state, requestId) {
 }
 
 export function paymentRecords(state, requestId) {
-  return structuredClone(state.payments.get(requestId) ?? []);
+  return (state.payments.get(requestId) ?? []).map((payment) => ({
+    id: payment.id, ...financialDestination(payment), warehouse_name: warehouseFinancialName(payment.warehouse_id),
+    payment_no: payment.payment_no, amount: payment.amount, currency: payment.currency, payment_method: payment.payment_method,
+    payment_reference: payment.payment_reference, paid_at: payment.paid_at, evidence_images: structuredClone(payment.evidence_images),
+    remark: payment.remark, confirmed_by_employee_id: payment.confirmed_by_employee_id, created_at: payment.created_at,
+  }));
 }
 
 export function createDraft(state, payload) {
   if (state.requests.some(({ id }) => id === payload.id)) {
     return failure("PAYMENT_REQUEST_CONFLICT", "付款申请已存在", 409);
   }
-  if (payload.project_id !== ids.project ||
+  if ((payload.destination_type === "warehouse" ? payload.project_id !== null || !payload.warehouse_id : payload.project_id !== ids.project) ||
     payload.tenant_supplier_id !== ids.relationship) {
     return failure("VALIDATION_ERROR", "付款申请范围无效", 400);
   }
@@ -164,6 +187,7 @@ export function createDraft(state, payload) {
       id === input.payable_event_id
     );
     if (!payable) return failure("PAYABLE_NOT_FOUND", "应付不存在", 404);
+    if (!sameFinancialDestination(payload, payable)) return failure("SUPPLIER_PAYMENT_SCOPE_MISMATCH", "采购去向不一致", 409);
     const amount = cents(input.requested_amount);
     const available = cents(withAvailableAmount(payable).available_to_request_amount);
     if (amount <= 0n || amount > available) {
@@ -188,10 +212,10 @@ export function createDraft(state, payload) {
   const request = {
     id: payload.id,
     tenant_id: ids.tenant,
-    project_id: ids.project,
+    ...financialDestination(payload),
     tenant_supplier_id: ids.relationship,
     supplier_id: ids.supplier,
-    request_no: "PAYREQ-E2E-0002",
+    request_no: `PAYREQ-E2E-${String(state.requests.length + 1).padStart(4, "0")}`,
     status: "draft",
     currency: "CNY",
     requested_amount: money(total),
@@ -232,6 +256,37 @@ export function submitRequest(state, requestId, payload) {
   return success("submitted", request);
 }
 
+export function updateDraft(state, requestId, payload) {
+  const old = mutableRequest(state, requestId, payload, "draft");
+  if (old.error) return old;
+  state.requests = state.requests.filter((request) => request.id !== requestId);
+  const result = createDraft(state, payload);
+  if (result.error) { state.requests.push(old); return result; }
+  Object.assign(result.payment_request, { request_no: old.request_no, version: old.version + 1,
+    created_at: old.created_at, created_by_employee_id: old.created_by_employee_id });
+  return success("saved", result.payment_request);
+}
+
+export function endRequest(state, requestId, payload, action) {
+  const statuses = action === "close" ? ["partially_paid"] : action === "reject" ? ["pending_approval"] : ["draft", "pending_approval", "approved"];
+  const request = mutableRequest(state, requestId, payload, statuses);
+  if (request.error) return request;
+  if (action === "reject" && request.submitted_by_employee_id === actorId(state)) return failure("SELF_APPROVAL_FORBIDDEN", "提交人不能审批", 403);
+  if (request.status !== "draft") {
+    for (const allocation of state.allocations.get(requestId) ?? []) {
+      const payable = state.payables.find(({ id }) => id === allocation.payable_event_id);
+      payable.reserved_amount = money(cents(payable.reserved_amount) - cents(allocation.requested_amount) + cents(allocation.paid_amount));
+      payable.status = cents(payable.paid_amount) > 0n ? "partially_paid" : "open";
+    }
+  }
+  const status = { cancel: "cancelled", close: "closed", reject: "rejected" }[action];
+  request.status = status;
+  if (action === "reject") Object.assign(request, { reviewed_at: now, reviewed_by_employee_id: actorId(state), review_remark: payload.remark });
+  else Object.assign(request, { [`${status}_at`]: now, [`${status}_by_employee_id`]: actorId(state), [`${action}_reason`]: payload.reason });
+  advance(request, state);
+  return success(status, request);
+}
+
 export function approveRequest(state, requestId, payload) {
   const request = mutableRequest(
     state,
@@ -251,7 +306,7 @@ export function approveRequest(state, requestId, payload) {
   return success("approved", request);
 }
 
-export function confirmPayment(state, requestId, payload) {
+export function confirmPayment(state, requestId, payload, idempotencyKey) {
   const request = mutableRequest(
     state,
     requestId,
@@ -298,7 +353,7 @@ export function confirmPayment(state, requestId, payload) {
   const payment = {
     id: payload.id,
     tenant_id: ids.tenant,
-    project_id: ids.project,
+    ...financialDestination(request),
     tenant_supplier_id: ids.relationship,
     supplier_id: ids.supplier,
     payment_request_id: request.id,
@@ -311,7 +366,7 @@ export function confirmPayment(state, requestId, payload) {
     evidence_images: structuredClone(payload.evidence_images),
     remark: payload.remark ?? null,
     confirmed_by_employee_id: actorId(state),
-    idempotency_key: `mock-payment-${state.paymentSequence}`,
+    idempotency_key: idempotencyKey,
     created_at: now,
   };
   state.payments.get(request.id).push(payment);

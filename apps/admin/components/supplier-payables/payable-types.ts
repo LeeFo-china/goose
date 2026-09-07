@@ -7,15 +7,16 @@ export type SupplierPayableStatus =
   | "paid"
   | "overdue";
 
-export type SupplierPayableFacts = {
+import type { PayableDestinationFields } from "./payable-destination";
+
+export type SupplierPayableFacts = PayableDestinationFields & {
   id: string;
-  project_id: string;
   tenant_supplier_id: string;
   supplier_id: string;
   supplier_purchase_order_id: string;
   receipt_id: string;
   receipt_item_id: string;
-  project_name: string;
+  project_name: string | null;
   supplier_name: string;
   purchase_order_no: string;
   receipt_no: string;
@@ -38,6 +39,7 @@ export type SupplierPayablePage = PageData<SupplierPayable>;
 
 export type SupplierPayableFilterOptionType =
   | "project"
+  | "warehouse"
   | "supplier"
   | "purchase_order";
 
@@ -53,6 +55,8 @@ export type SupplierPayableListQuery = {
   page: number;
   pageSize: number;
   project_id?: string;
+  destination_type?: "project" | "warehouse";
+  warehouse_id?: string;
   tenant_supplier_id?: string;
   purchase_order_id?: string;
   status?: SupplierPayableStatus;

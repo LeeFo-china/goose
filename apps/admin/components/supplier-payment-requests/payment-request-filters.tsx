@@ -3,6 +3,7 @@
 import { Search } from "lucide-react";
 
 import { FormSelect, type SelectOption } from "@/components/admin/form-select";
+import { InventoryWarehouseFilter } from "@/components/inventory/inventory-warehouse-filter";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -19,6 +20,7 @@ import { paymentRequestStatusMeta } from "./payment-request-ui";
 import type { PaymentRequestWorkspaceState } from "./payment-request-page-utils";
 
 export function PaymentRequestFilters({
+  canViewWarehouses,
   state,
   keyword,
   loading,
@@ -35,6 +37,7 @@ export function PaymentRequestFilters({
   onChange,
   onReset,
 }: {
+  canViewWarehouses: boolean;
   state: PaymentRequestWorkspaceState;
   keyword: string;
   loading: boolean;
@@ -54,6 +57,21 @@ export function PaymentRequestFilters({
   return (
     <div className="flex flex-col gap-2">
       <FieldGroup className="grid gap-3 lg:grid-cols-4 xl:grid-cols-6">
+        <Field>
+          <FieldLabel htmlFor="payment-request-destination">采购去向</FieldLabel>
+          <FormSelect id="payment-request-destination" value={state.destinationType}
+            options={[{ value: "all", label: "全部去向" }, { value: "project", label: "项目采购" },
+              ...(canViewWarehouses ? [{ value: "warehouse", label: "仓库补货" }] : [])]}
+            onChange={(destinationType) => {
+              if (destinationType === "all" || destinationType === "project" || (destinationType === "warehouse" && canViewWarehouses)) onChange({ destinationType });
+            }} />
+        </Field>
+        {state.destinationType === "warehouse" && canViewWarehouses ? (
+          <div className="min-w-0 lg:col-span-2">
+          <InventoryWarehouseFilter canViewWarehouses value={state.warehouseId === "all" ? null : { id: state.warehouseId, name: state.warehouseName || "已选仓库" }}
+            onChange={(warehouse) => onChange({ warehouseId: warehouse?.id ?? "all", warehouseName: warehouse?.name ?? "", projectId: "all" })} />
+          </div>
+        ) : null}
         <Field className="lg:col-span-2">
           <FieldLabel htmlFor="payment-request-keyword">申请号或供应商</FieldLabel>
           <div className="flex gap-2">
@@ -96,7 +114,7 @@ export function PaymentRequestFilters({
         </Field>
         {canUseStructuredOptions ? (
           <>
-            <Field>
+            {state.destinationType !== "warehouse" ? <Field>
               <FieldLabel htmlFor="payment-request-project">项目</FieldLabel>
               <FormSelect
                 id="payment-request-project"
@@ -105,7 +123,7 @@ export function PaymentRequestFilters({
                 disabled={loading || optionsLoading}
                 onChange={(projectId) => onChange({ projectId })}
               />
-            </Field>
+            </Field> : null}
             <Field>
               <FieldLabel htmlFor="payment-request-supplier">供应商</FieldLabel>
               <FormSelect
@@ -119,7 +137,7 @@ export function PaymentRequestFilters({
           </>
         ) : (
           <>
-            <Field>
+            {state.destinationType !== "warehouse" ? <Field>
               <FieldLabel htmlFor="payment-request-project">项目 ID</FieldLabel>
               <Input
                 id="payment-request-project"
@@ -130,7 +148,7 @@ export function PaymentRequestFilters({
                   projectId: event.target.value.trim() || "all",
                 })}
               />
-            </Field>
+            </Field> : null}
             <Field>
               <FieldLabel htmlFor="payment-request-supplier">
                 供应商关系 ID
