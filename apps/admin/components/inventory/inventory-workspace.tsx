@@ -101,13 +101,7 @@ export function InventoryWorkspace({
     );
 
   return (
-    <div className="flex h-[calc(100dvh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
-      <div className="shrink-0">
-        <h1 className="text-xl font-semibold">仓库库存</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          查看仓库库存余额与出入库记录。
-        </p>
-      </div>
+    <div className="flex h-[calc(100dvh-6.5625rem)] min-h-0 flex-col overflow-hidden">
       <Tabs
         value={state.tab}
         onValueChange={(tab) => {
@@ -132,8 +126,8 @@ export function InventoryWorkspace({
           className="mt-0 flex min-h-0 flex-1 flex-col"
         >
           <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
-            <CardHeader className="max-h-[45dvh] shrink-0 overflow-y-auto border-b">
-              <div className="grid items-start gap-3 md:grid-cols-[minmax(0,1fr)_minmax(15rem,20rem)_auto]">
+            <CardHeader className="max-h-[45dvh] shrink-0 overflow-y-auto border-b p-4">
+              <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(12rem,16rem)_auto]">
                 {state.tab === 'balances' ? (
                   <form
                     className="min-w-0"
@@ -147,12 +141,13 @@ export function InventoryWorkspace({
                         商品 / SKU
                       </FieldLabel>
                       <div className="flex gap-2">
-                        <InputGroup className="min-w-0">
+                        <InputGroup className="h-9 min-w-0">
                           <InputGroupAddon>
                             <Search aria-hidden="true" />
                           </InputGroupAddon>
                           <InputGroupInput
                             id="inventory-keyword"
+                            className="h-9"
                             placeholder="搜索商品名称或 SKU 编码"
                             maxLength={80}
                             value={keyword}
@@ -172,6 +167,7 @@ export function InventoryWorkspace({
                     </FieldLabel>
                     <FormSelect
                       id="inventory-transaction-type"
+                      triggerClassName="h-9"
                       value={state.transactionType}
                       options={transactionOptions}
                       onChange={(value) => {
@@ -211,7 +207,7 @@ export function InventoryWorkspace({
                     dispatch({ type: 'warehouse', warehouse })
                   }
                 />
-                <div className="flex gap-2 md:pt-7">
+                <div className="flex gap-2 lg:pt-6">
                   <Button variant="outline" onClick={reset}>
                     清除筛选
                   </Button>

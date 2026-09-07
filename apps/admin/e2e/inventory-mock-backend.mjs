@@ -90,11 +90,18 @@ const server = createServer(async (request, response) => {
       return error(response, 405, '库存验收后端仅支持只读业务');
     if (url.pathname === '/warehouses') {
       if (persona !== 'all') return error(response, 403, '无仓库目录权限');
+      if (scenario === 'warehouse-error-once' && failures++ === 0)
+        return error(response, 503, '仓库选项验收暂时不可用');
       const keyword = url.searchParams.get('keyword')?.trim() ?? '';
+      const source = scenario === 'warehouse-single' ? warehouses.slice(0, 1)
+        : scenario === 'warehouse-empty' ? []
+        : scenario === 'warehouse-long-name' ? warehouses.map((warehouse, index) =>
+          index === 0 ? { ...warehouse, name: '固始晴天装饰工程有限公司华东区域材料集中配送及售后备件周转仓库' } : warehouse)
+        : warehouses;
       return page(
         response,
         url,
-        warehouses.filter((row) => row.name.includes(keyword)),
+        source.filter((row) => row.name.includes(keyword)),
       );
     }
     if (

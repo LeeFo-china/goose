@@ -1,15 +1,19 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Search } from 'lucide-react';
-import { FormSelect } from '@/components/admin/form-select';
+import { ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
 import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupInput,
-} from '@/components/ui/input-group';
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
 import type { WarehousePage } from '@/components/warehouses/warehouse-types';
 import { loadInventoryWarehouses } from './inventory-api';
 import type { InventoryIdentity } from './inventory-types';
@@ -25,46 +29,32 @@ export function InventoryWarehouseFilter({
   value,
   onChange,
 }: Props) {
-  const [keyword, setKeyword] = useState('');
-  const [search, setSearch] = useState({ keyword: '', page: 1 });
+  const [page, setPage] = useState(1);
   const [result, setResult] = useState<WarehousePage | null>(null);
-  const [loadedKey, setLoadedKey] = useState('');
+  const [loadedPage, setLoadedPage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
-  const key = `${search.page}:${search.keyword}`;
-
-  useEffect(() => {
-    if (!canViewWarehouses) return;
-    const timer = window.setTimeout(
-      () =>
-        setSearch((current) =>
-          current.keyword === keyword.trim()
-            ? current
-            : { keyword: keyword.trim(), page: 1 },
-        ),
-      300,
-    );
-    return () => window.clearTimeout(timer);
-  }, [canViewWarehouses, keyword]);
 
   useEffect(() => {
     if (!canViewWarehouses) return;
     const controller = new AbortController();
     setLoading(true);
     setError('');
-    loadInventoryWarehouses(canViewWarehouses, search, controller.signal)
+    loadInventoryWarehouses(
+      canViewWarehouses,
+      { page, keyword: '' },
+      controller.signal,
+    )
       .then((data) => {
         if (controller.signal.aborted || !data) return;
-        if (search.page > Math.max(1, data.pagination.totalPages)) {
-          setSearch((current) => ({
-            ...current,
-            page: Math.max(1, data.pagination.totalPages),
-          }));
+        const lastPage = Math.max(1, data.pagination.totalPages);
+        if (page > lastPage) {
+          setPage(lastPage);
           return;
         }
         setResult(data);
-        setLoadedKey(key);
+        setLoadedPage(page);
       })
       .catch((caught: unknown) => {
         if (!controller.signal.aborted)
@@ -76,29 +66,24 @@ export function InventoryWarehouseFilter({
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [canViewWarehouses, search, key, retry]);
+  }, [canViewWarehouses, page, retry]);
 
-  const current =
-    !loading &&
-    !error &&
-    loadedKey === key &&
-    keyword.trim() === search.keyword;
+  const current = !loading && !error && loadedPage === page;
   const warehouses = current ? (result?.list ?? []) : [];
-  const options = [
-    { value: 'all', label: '全部仓库' },
-    ...warehouses.map((warehouse) => ({
-      value: warehouse.id,
-      label: `${warehouse.name}${warehouse.status === 'inactive' ? '（已停用）' : ''}`,
-    })),
-  ];
-  if (value && !options.some((option) => option.value === value.id))
-    options.push({ value: value.id, label: value.name });
+  const totalPages = Math.max(1, result?.pagination.totalPages ?? 0);
+  const options = warehouses.map((warehouse) => ({
+    id: warehouse.id,
+    name: warehouse.name,
+    label: `${warehouse.name}${warehouse.status === 'inactive' ? '（已停用）' : ''}`,
+  }));
+  if (value && !options.some((option) => option.id === value.id))
+    options.push({ ...value, label: value.name });
 
   if (!canViewWarehouses)
     return (
       <Field className="min-w-0">
         <FieldLabel>仓库</FieldLabel>
-        <p className="flex h-10 items-center text-sm">
+        <p className="flex h-9 items-center truncate text-sm" title={value?.name}>
           {value?.name ?? '全部仓库'}
         </p>
         <FieldDescription>可点击库存行中的仓库名称筛选。</FieldDescription>
@@ -108,82 +93,103 @@ export function InventoryWarehouseFilter({
   return (
     <Field className="min-w-0">
       <FieldLabel htmlFor="inventory-warehouse">仓库</FieldLabel>
-      <FormSelect
-        id="inventory-warehouse"
-        value={value?.id ?? 'all'}
-        options={options}
-        onChange={(id) => {
-          if (id === 'all') onChange(null);
-          else {
-            const warehouse = warehouses.find((row) => row.id === id);
-            if (warehouse) onChange({ id: warehouse.id, name: warehouse.name });
-          }
-        }}
-      />
-      <InputGroup>
-        <InputGroupAddon>
-          <Search aria-hidden="true" />
-        </InputGroupAddon>
-        <InputGroupInput
-          aria-label="搜索仓库选项"
-          placeholder="搜索仓库名称"
-          maxLength={80}
-          value={keyword}
-          onChange={(event) => setKeyword(event.target.value)}
-        />
-      </InputGroup>
-      {error ? (
-        <div
-          role="alert"
-          className="flex flex-wrap items-center gap-2 text-xs text-destructive"
-        >
-          {error}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
           <Button
-            variant="link"
-            size="sm"
-            onClick={() => setRetry((value) => value + 1)}
+            id="inventory-warehouse"
+            variant="outline"
+            className="w-full justify-between"
+            title={value?.name ?? '全部仓库'}
           >
-            重试
+            <span className="truncate">{value?.name ?? '全部仓库'}</span>
+            <ChevronDown aria-hidden="true" data-icon="inline-end" />
           </Button>
-        </div>
-      ) : (
-        <div
-          className="flex items-center justify-between gap-2 text-xs text-muted-foreground"
-          aria-live="polite"
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="start"
+          aria-label="仓库选项"
+          className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-56 max-w-[calc(100vw-2rem)]"
         >
-          <span>
-            {current
-              ? `第 ${search.page} / ${Math.max(1, result?.pagination.totalPages ?? 0)} 页仓库选项`
-              : '正在加载仓库选项…'}
-          </span>
-          <div className="flex gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={!current || search.page <= 1}
-              onClick={() =>
-                setSearch((value) => ({ ...value, page: value.page - 1 }))
+          <DropdownMenuRadioGroup
+            value={value?.id ?? 'all'}
+            onValueChange={(id) => {
+              if (id === 'all') onChange(null);
+              else {
+                const warehouse = options.find((option) => option.id === id);
+                if (warehouse)
+                  onChange({ id: warehouse.id, name: warehouse.name });
               }
-              aria-label="上一页仓库选项"
-            >
-              上一页
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={
-                !current || search.page >= (result?.pagination.totalPages ?? 0)
-              }
-              onClick={() =>
-                setSearch((value) => ({ ...value, page: value.page + 1 }))
-              }
-              aria-label="下一页仓库选项"
-            >
-              下一页
-            </Button>
-          </div>
-        </div>
-      )}
+            }}
+          >
+            <DropdownMenuRadioItem value="all">全部仓库</DropdownMenuRadioItem>
+            {options.map((option) => (
+              <DropdownMenuRadioItem
+                key={option.id}
+                value={option.id}
+                className="break-all"
+              >
+                {option.label}
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+          {error ? (
+            <DropdownMenuGroup>
+              <p role="alert" className="px-2 py-2 text-xs text-destructive">
+                {error}
+              </p>
+              <DropdownMenuItem
+                onSelect={(event) => {
+                  event.preventDefault();
+                  setRetry((value) => value + 1);
+                }}
+              >
+                重试
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          ) : !current ? (
+            <p role="status" className="px-2 py-2 text-xs text-muted-foreground">
+              正在加载仓库选项…
+            </p>
+          ) : warehouses.length === 0 ? (
+            <p role="status" className="px-2 py-2 text-xs text-muted-foreground">
+              暂无仓库选项
+            </p>
+          ) : null}
+          {totalPages > 1 && (
+            <>
+              <DropdownMenuSeparator />
+              <p
+                className="px-2 py-1 text-xs tabular-nums text-muted-foreground"
+                aria-live="polite"
+              >
+                第 {page} / {totalPages} 页仓库选项
+              </p>
+              <DropdownMenuGroup className="flex justify-between gap-2">
+                <DropdownMenuItem
+                  disabled={!current || page <= 1}
+                  aria-label="上一页仓库选项"
+                  onSelect={(event) => {
+                    event.preventDefault();
+                    setPage((value) => value - 1);
+                  }}
+                >
+                  上一页
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!current || page >= totalPages}
+                  aria-label="下一页仓库选项"
+                  onSelect={(event) => {
+                    event.preventDefault();
+                    setPage((value) => value + 1);
+                  }}
+                >
+                  下一页
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
     </Field>
   );
 }

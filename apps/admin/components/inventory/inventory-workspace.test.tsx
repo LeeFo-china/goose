@@ -56,3 +56,22 @@ test('stock-only warehouse drill selection shows a name without directory access
   expect(markup).not.toContain('warehouse-private-id');
   expect(markup).not.toContain('role="combobox"');
 });
+
+test('inventory starts with tabs without redundant title or description', () => {
+  const markup = renderToStaticMarkup(
+    <InventoryWorkspace canView canViewWarehouses canViewPurchaseOrders />,
+  );
+  expect(markup).toContain('库存余额');
+  expect(markup).not.toContain('<h1');
+  expect(markup).not.toContain('查看仓库库存余额与出入库记录');
+});
+
+test('collapsed warehouse filter has no search or option pagination controls', () => {
+  const markup = renderToStaticMarkup(
+    <InventoryWarehouseFilter canViewWarehouses value={null} onChange={() => undefined} />,
+  );
+  expect(markup).toContain('全部仓库');
+  expect(markup).not.toContain('搜索仓库');
+  expect(markup).not.toContain('下一页仓库选项');
+  expect(markup).not.toContain('正在加载仓库选项');
+});
