@@ -7,6 +7,8 @@ const eqCalls: EqCall[] = [];
 const inCalls: InCall[] = [];
 const orderCalls: Array<readonly [string, unknown]> = [];
 const selectCalls: string[] = [];
+const limitCalls: number[] = [];
+const orCalls: string[] = [];
 let runningSingleData: Record<string, unknown> | null = runtimeInstance("instance-running", "running");
 let completedSingleData: Record<string, unknown> | null = runtimeInstance(
   "instance-completed",
@@ -38,12 +40,18 @@ class WorkflowInstancesQuery {
     return this;
   }
 
+  or(filters: string) {
+    orCalls.push(filters);
+    return this;
+  }
+
   order(column: string, options: unknown) {
     orderCalls.push([column, options]);
     return this;
   }
 
-  limit() {
+  limit(value: number) {
+    limitCalls.push(value);
     return this;
   }
 
@@ -189,6 +197,48 @@ describe("workflowSubjectStateRepository", () => {
     expect(selectCalls.some((columns) => columns.includes("definition:")))
       .toBeFalse();
     expect(inCalls).toContainEqual(["subject_id", ["batch-1", "batch-2"]]);
+  });
+
+  test("loads public project states in exact bounded pair chunks", async () => {
+    eqCalls.length = 0;
+    inCalls.length = 0;
+    limitCalls.length = 0;
+    orCalls.length = 0;
+    selectCalls.length = 0;
+    const { publicProjectWorkflowStateRepository } = await import(
+      "./public-project-workflow-states"
+    );
+
+    const pairs = [
+      { tenantId: "tenant-2", projectId: "project-1" },
+      { tenantId: "tenant-1", projectId: "project-2" },
+      ...Array.from({ length: 99 }, (_, index) => ({
+        tenantId: "tenant-3",
+        projectId: `project-${index + 3}`,
+      })),
+    ];
+    await publicProjectWorkflowStateRepository.listByTenantProjectIds({
+      pairs: [...pairs, pairs[0]!],
+    });
+
+    expect(selectCalls).toContain([
+      "tenant_id",
+      "subject_id",
+      "instance_status",
+      "current_node_key",
+      "current_node_title",
+    ].join(", "));
+    expect(eqCalls).toContainEqual(["subject_type", "project"]);
+    expect(orCalls).toEqual(
+      Array.from({ length: 4 }, (_, chunkIndex) =>
+        pairs.slice(chunkIndex * 25, (chunkIndex + 1) * 25).map((pair) =>
+          `and(tenant_id.eq.${pair.tenantId},subject_id.eq.${pair.projectId})`
+        ).join(",")
+      ),
+    );
+    expect(inCalls.some(([column]) => column === "tenant_id")).toBeFalse();
+    expect(inCalls.some(([column]) => column === "subject_id")).toBeFalse();
+    expect(limitCalls).toEqual([25, 25, 25, 25]);
   });
 });
 

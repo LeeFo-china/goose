@@ -6,8 +6,8 @@ import { projectSer } from "@/services/projects";
 import { visitorProjectFollowService } from "@/services/visitor-project-follows";
 import { Get } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
-import { serializeProjectListItem } from "./list-serializer";
 import { serializePublicProjectDetailItem } from "./public-detail-serializer";
+import { serializePublicProjectListItem } from "./public-list-serializer";
 import { ProjectBaseController } from "./shared";
 
 const VISITOR_PROJECT_CONSULTATION_ENABLED_KEY =
@@ -44,7 +44,7 @@ class PublicProjectsController extends ProjectBaseController {
     });
 
     return ResponseHandler.success({
-      list: result.rows.map((item) => serializeProjectListItem(item)),
+      list: result.rows.map((item) => serializePublicProjectListItem(item)),
       pagination: result.pagination,
     });
   }
