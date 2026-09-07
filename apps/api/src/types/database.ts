@@ -2622,7 +2622,7 @@ export type Database = {
           create_idempotency_key: string
           create_request_hash: string
           created_at: string
-          douyin_measurement_appointment_id: string
+          douyin_measurement_appointment_id: string | null
           employee_id: string
           follow_up_type: string
           id: string
@@ -2637,7 +2637,7 @@ export type Database = {
           create_idempotency_key: string
           create_request_hash: string
           created_at?: string
-          douyin_measurement_appointment_id: string
+          douyin_measurement_appointment_id?: string | null
           employee_id: string
           follow_up_type: string
           id?: string
@@ -2652,7 +2652,7 @@ export type Database = {
           create_idempotency_key?: string
           create_request_hash?: string
           created_at?: string
-          douyin_measurement_appointment_id?: string
+          douyin_measurement_appointment_id?: string | null
           employee_id?: string
           follow_up_type?: string
           id?: string
@@ -3321,6 +3321,7 @@ export type Database = {
           authorization_event_occurred_at: string | null
           authorization_status: string
           authorizer_appid: string
+          clue_component_id: string | null
           component_appid: string
           created_at: string
           deployment_key: string | null
@@ -3355,6 +3356,7 @@ export type Database = {
           authorization_event_occurred_at?: string | null
           authorization_status?: string
           authorizer_appid: string
+          clue_component_id?: string | null
           component_appid: string
           created_at?: string
           deployment_key?: string | null
@@ -3389,6 +3391,7 @@ export type Database = {
           authorization_event_occurred_at?: string | null
           authorization_status?: string
           authorizer_appid?: string
+          clue_component_id?: string | null
           component_appid?: string
           created_at?: string
           deployment_key?: string | null
@@ -22943,6 +22946,23 @@ export type Database = {
         }
         Returns: Json
       }
+      append_customer_lead_follow_up: {
+        Args: {
+          p_actor_employee_id: string
+          p_appointment_id: string
+          p_appointment_status: string
+          p_confirmed_visit_at: string
+          p_expected_version: number
+          p_follow_up_type: string
+          p_idempotency_key: string
+          p_marketing_lead_id: string
+          p_next_follow_up_at: string
+          p_result: string
+          p_summary: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       append_douyin_lead_follow_up: {
         Args: {
           p_actor_employee_id: string
@@ -23148,6 +23168,18 @@ export type Database = {
           p_tenant_id: string
         }
         Returns: undefined
+      }
+      assign_customer_lead: {
+        Args: {
+          p_actor_employee_id: string
+          p_assigned_employee_id: string
+          p_expected_assignee_department_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_marketing_lead_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
       }
       assign_douyin_lead:
         | {
@@ -23559,6 +23591,7 @@ export type Database = {
           authorization_event_occurred_at: string | null
           authorization_status: string
           authorizer_appid: string
+          clue_component_id: string | null
           component_appid: string
           created_at: string
           deployment_key: string | null
@@ -25553,6 +25586,18 @@ export type Database = {
         }
         Returns: string
       }
+      convert_customer_lead_to_customer: {
+        Args: {
+          p_actor_employee_id: string
+          p_allow_customer_create: boolean
+          p_expected_customer_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_marketing_lead_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       convert_douyin_lead_to_customer:
         | {
             Args: {
@@ -25775,6 +25820,7 @@ export type Database = {
           authorization_event_occurred_at: string | null
           authorization_status: string
           authorizer_appid: string
+          clue_component_id: string | null
           component_appid: string
           created_at: string
           deployment_key: string | null
@@ -26435,6 +26481,10 @@ export type Database = {
         }
         Returns: Json
       }
+      customer_lead_source_metadata: {
+        Args: { p_lead: Database["public"]["Tables"]["marketing_leads"]["Row"] }
+        Returns: Json
+      }
       delete_supplier_price_list_item: {
         Args: {
           p_actor_employee_id: string
@@ -26523,6 +26573,7 @@ export type Database = {
           authorization_event_occurred_at: string | null
           authorization_status: string
           authorizer_appid: string
+          clue_component_id: string | null
           component_appid: string
           created_at: string
           deployment_key: string | null
@@ -27516,6 +27567,22 @@ export type Database = {
         }
         Returns: Json
       }
+      list_tenant_customer_leads: {
+        Args: {
+          p_assignee_id: string
+          p_assignment?: string
+          p_date_from: string
+          p_date_to_exclusive: string
+          p_keyword: string
+          p_page?: number
+          p_page_size?: number
+          p_source?: string
+          p_status: string
+          p_tenant_id: string
+          p_visible_assignee_ids: string[]
+        }
+        Returns: Json
+      }
       list_tenant_douyin_lead_assignee_filter_options: {
         Args: {
           p_keyword: string
@@ -27707,6 +27774,17 @@ export type Database = {
       lock_tenant_onboarding_employee_phones: {
         Args: { p_phones: string[] }
         Returns: undefined
+      }
+      mark_customer_lead_invalid: {
+        Args: {
+          p_actor_employee_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_marketing_lead_id: string
+          p_reason: string
+          p_tenant_id: string
+        }
+        Returns: Json
       }
       mark_douyin_lead_invalid: {
         Args: {
@@ -29817,6 +29895,17 @@ export type Database = {
           p_expected_updated_at: string
           p_factor_payload: Json
           p_pricing_version_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      update_douyin_miniapp_lead_capture_config: {
+        Args: {
+          p_authorizer_appid: string
+          p_clue_component_id: string
+          p_enabled: boolean
+          p_expected_updated_at: string
+          p_installation_id: string
           p_tenant_id: string
         }
         Returns: Json

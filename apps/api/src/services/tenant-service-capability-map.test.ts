@@ -118,6 +118,36 @@ describe("tenant service capability map", () => {
       .toEqual({ kind: "excluded", reason: "not_trial_capability" });
   });
 
+  test.each([
+    ["GET", "/warehouses", "read"],
+    ["HEAD", "/warehouses", "read"],
+    ["GET", "/warehouses/:id", "read"],
+    ["HEAD", "/warehouses/:id", "read"],
+    ["POST", "/warehouses", "write"],
+    ["PATCH", "/warehouses/:id", "write"],
+  ] as const)("classifies warehouse route %s %s as an independent procurement surface", async (
+    method,
+    url,
+    access,
+  ) => {
+    const { resolveTenantServiceRouteCapability } = await import(
+      "./tenant-service-capability-map"
+    );
+
+    expect(resolveTenantServiceRouteCapability(route(method, url, access)))
+      .toEqual({ kind: "excluded", reason: "not_trial_capability" });
+  });
+
+  test("does not exclude unrelated warehouse-prefixed routes", async () => {
+    const { resolveTenantServiceRouteCapability } = await import(
+      "./tenant-service-capability-map"
+    );
+
+    expect(() => resolveTenantServiceRouteCapability(
+      route("GET", "/warehouses-unmapped", "read"),
+    )).toThrow("租户服务路由未映射能力");
+  });
+
   test("classifies every registered read/write route exactly once", async () => {
     const { default: routes } = await import("@/routes");
     const { matchTenantServiceRouteCapabilityRules } = await import(

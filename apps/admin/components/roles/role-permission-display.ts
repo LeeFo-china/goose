@@ -174,6 +174,7 @@ const permissionModuleGroupMap: Record<string, PermissionGroupKey> = {
   branding: "brand_service",
   billing: "finance",
   customer: "customer",
+  customer_lead: "customer",
   dashboard: "workspace",
   douyin_miniapp: "douyin_growth",
   employee: "organization",
@@ -230,6 +231,7 @@ const permissionModuleLabels: Record<string, string> = {
   billing: "积分充值",
   branding: "品牌技术支持",
   customer: "客户管理",
+  customer_lead: "客户线索",
   dashboard: "工作台",
   douyin_miniapp: "抖音小程序",
   employee: "员工管理",
@@ -292,6 +294,7 @@ const permissionResourceLabels: Record<string, string> = {
   config: "配置",
   contract: "供应商合同",
   customer: "客户",
+  customer_lead: "客户线索",
   customer_phone: "客户手机号",
   dashboard: "工作台",
   device_asset: "设备资产",
@@ -350,6 +353,7 @@ const permissionResourceLabels: Record<string, string> = {
 };
 
 const permissionActionLabels: Record<string, string> = {
+  assign: "分配",
   assign_owner: "分配负责人",
   approve_finance: "财务审批",
   approve_manager: "主管审批",

@@ -10,7 +10,13 @@ const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const temporaryRoot = await mkdtemp(join(tmpdir(), 'gooes-domain-consumer-'));
 
 try {
-  await execFileAsync('pnpm', ['pack', '--pack-destination', temporaryRoot], {
+  // Build explicitly: the legacy prepack clean also deletes previous tarballs.
+  // A consumer verification must preserve already delivered artifacts.
+  await execFileAsync('bun', ['run', 'build'], {
+    cwd: packageRoot,
+    maxBuffer: 10 * 1024 * 1024,
+  });
+  await execFileAsync('npm', ['pack', '--ignore-scripts', '--pack-destination', temporaryRoot], {
     cwd: packageRoot,
     maxBuffer: 10 * 1024 * 1024,
   });
@@ -57,6 +63,18 @@ try {
   await writeFile(
     join(consumerRoot, 'verify.ts'),
     `import {
+  CUSTOMER_LEAD_SOURCE_VALUES,
+  CUSTOMER_LEAD_ACTION_PERMISSIONS,
+  CustomerLeadListQuerySchema,
+  CustomerLeadFollowUpSchema,
+  CustomerLeadCommandResultSchema,
+  type CustomerLeadSource,
+  type CustomerLeadDetail,
+  type CustomerLeadPage,
+  type CustomerLeadSummary,
+  type CustomerLeadFollowUpInput,
+  type CustomerLeadFollowUpCommand,
+  type CustomerLeadCommandResult,
   EMPLOYEE_SERVICE_ACCESS_STATUS_VALUES,
   DOUYIN_DEFAULT_CONTACT_SLA_TEXT,
   DouyinRuntimeConfigSchema,
@@ -82,6 +100,35 @@ try {
 import { z } from 'zod';
 
 const schema: z.ZodType<SiteContentDraftBlock> = SiteContentDraftBlockSchema;
+const leadSource: CustomerLeadSource = 'h5';
+const getH5ActivityTitle = (detail: CustomerLeadDetail): string | null =>
+  detail.source_context?.h5?.page_title ?? null;
+void getH5ActivityTitle;
+const leadFollowUpInput: CustomerLeadFollowUpInput = {
+  expected_lead_version: 1,
+  idempotency_key: '11111111-1111-4111-8111-111111111111',
+  follow_up_type: 'wechat', summary: '已联系', result: '下周沟通',
+};
+const leadFollowUp: CustomerLeadFollowUpCommand =
+  CustomerLeadFollowUpSchema.parse(leadFollowUpInput);
+const leadCommand: CustomerLeadCommandResult = CustomerLeadCommandResultSchema.parse({
+  action: 'convert', result: 'converted',
+  lead_id: '11111111-1111-4111-8111-111111111112', lead_version: 2,
+  idempotent: false, customer_id: null, can_view_customer: false,
+  created_customer: true, repeated_conversion: false, appointments_updated: 0,
+});
+const leadPage: CustomerLeadPage<CustomerLeadSummary> = {
+  list: [], pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+};
+const getCustomerLink = (detail: CustomerLeadDetail): string | null =>
+  detail.can_view_customer ? detail.customer_id : null;
+void leadSource;
+void leadFollowUp;
+void leadCommand;
+void leadPage;
+void getCustomerLink;
+void CUSTOMER_LEAD_ACTION_PERMISSIONS;
+void CustomerLeadListQuerySchema;
 const trialScopeSchema: z.ZodType<PlatformServiceTrialScopeV1> =
   PlatformServiceTrialScopeSchema;
 const trialStatus: PlatformServiceTrialStatus =
@@ -155,7 +202,14 @@ void DOUYIN_DEFAULT_CONTACT_SLA_TEXT;
 
   await writeFile(
     join(consumerRoot, 'verify.mjs'),
-    `import {
+    `import assert from 'node:assert/strict';
+import {
+  CUSTOMER_LEAD_SOURCE_VALUES,
+  CUSTOMER_LEAD_ACTION_PERMISSIONS,
+  CUSTOMER_LEAD_ERROR_CONFIG,
+  CustomerLeadListQuerySchema,
+  CustomerLeadFollowUpSchema,
+  CustomerLeadCommandResultSchema,
   EMPLOYEE_SERVICE_ACCESS_STATUS_VALUES,
   DOUYIN_DEFAULT_CONTACT_SLA_TEXT,
   DouyinRuntimeConfigSchema,
@@ -180,6 +234,35 @@ const expectedTrialStatuses = [
   'revoked',
   'converted',
 ];
+assert.deepEqual(CUSTOMER_LEAD_SOURCE_VALUES, ['douyin_miniapp', 'h5']);
+assert.equal(CustomerLeadListQuerySchema.parse({ source: 'h5' }, { jitless: true }).source, 'h5');
+assert.equal(Object.hasOwn(CustomerLeadListQuerySchema.parse({}), 'source'), false);
+assert.equal(CustomerLeadListQuerySchema.safeParse({ source: 'h5_campaign' }).success, false);
+assert.equal(CUSTOMER_LEAD_ACTION_PERMISSIONS.mark_invalid, 'customer_lead.convert');
+assert.equal(CUSTOMER_LEAD_ERROR_CONFIG.CUSTOMER_LEAD_VERSION_CONFLICT.statusCode, 409);
+assert.ok(CustomerLeadFollowUpSchema instanceof z.ZodType);
+assert.equal(CustomerLeadListQuerySchema.parse({}).pageSize, 20);
+assert.equal(CustomerLeadListQuerySchema.safeParse({ pageSize: 101 }).success, false);
+assert.equal(CustomerLeadListQuerySchema.safeParse({ source: 'xiaohongshu' }).success, false);
+const ordinaryFollowUp = {
+  expected_lead_version: 1,
+  idempotency_key: '11111111-1111-4111-8111-111111111111',
+  follow_up_type: 'wechat', summary: '已联系', result: '下周沟通',
+};
+assert.equal(CustomerLeadFollowUpSchema.parse(ordinaryFollowUp).appointment_id, null);
+assert.equal(CustomerLeadFollowUpSchema.safeParse({
+  ...ordinaryFollowUp, appointment_status: 'completed',
+}).success, false);
+const hiddenCustomer = {
+  action: 'convert', result: 'converted',
+  lead_id: '11111111-1111-4111-8111-111111111112', lead_version: 2,
+  idempotent: false, customer_id: null, can_view_customer: false,
+  created_customer: true, repeated_conversion: false, appointments_updated: 0,
+};
+assert.equal(CustomerLeadCommandResultSchema.safeParse(hiddenCustomer).success, true);
+assert.equal(CustomerLeadCommandResultSchema.safeParse({
+  ...hiddenCustomer, customer_id: '11111111-1111-4111-8111-111111111113',
+}).success, false);
 const expectedFollowUpTypes = ['phone', 'wechat', 'online_meeting', 'onsite', 'other'];
 const expectedFollowUpStatuses = ['pending', 'completed', 'canceled'];
 const expectedNotificationEvents = [

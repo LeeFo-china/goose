@@ -3,11 +3,16 @@ import { Errors } from "@/errors/error-factory";
 import {
   TenantDouyinAuthorizationCallbackSchema,
   TenantDouyinAuthorizationLinkSchema,
+  TenantDouyinLeadCaptureConfigUpdateSchema,
   TenantDouyinReleaseEmptyObjectSchema,
   TenantDouyinReleaseListQuerySchema,
   TenantDouyinReleaseParamsSchema,
   TenantDouyinSubmitReleaseAuditSchema,
 } from "@/schema/tenant-douyin-miniapp";
+import {
+  tenantDouyinMiniappLeadCaptureConfigService,
+  type TenantDouyinMiniappLeadCaptureConfigService,
+} from "@/services/tenant-douyin-miniapp/lead-capture-config";
 import {
   getTenantDouyinMiniappAuthorizationService,
   type TenantDouyinMiniappAuthorizationService,
@@ -20,7 +25,7 @@ import {
   tenantDouyinMiniappWorkspaceService,
   type TenantDouyinMiniappWorkspaceService,
 } from "@/services/tenant-douyin-miniapp/workspace";
-import { Get, Post } from "@/utils/decorators/route";
+import { Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyRequest } from "fastify";
 
@@ -44,6 +49,10 @@ type ReleaseServicePort = Pick<
   | "publish"
 >;
 type ReleaseServiceProvider = () => Promise<ReleaseServicePort>;
+type LeadCaptureServicePort = Pick<
+  TenantDouyinMiniappLeadCaptureConfigService,
+  "update"
+>;
 
 export class TenantDouyinMiniappController extends TenantBaseController {
   constructor(
@@ -53,8 +62,22 @@ export class TenantDouyinMiniappController extends TenantBaseController {
       getTenantDouyinMiniappAuthorizationService,
     private readonly releaseProvider: ReleaseServiceProvider =
       getTenantDouyinMiniappReleasesService,
+    private readonly leadCapture: LeadCaptureServicePort =
+      tenantDouyinMiniappLeadCaptureConfigService,
   ) {
     super("tenant-douyin-miniapp");
+  }
+
+  @Patch("/tenant/douyin-miniapp/lead-capture-config")
+  async updateLeadCaptureConfig(request: FastifyRequest) {
+    const bodyResult = TenantDouyinLeadCaptureConfigUpdateSchema.safeParse(
+      request.body,
+    );
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+    const authContext = await this.getRequiredTenantContext(request);
+    return ResponseHandler.success(
+      await this.leadCapture.update(authContext, bodyResult.data),
+    );
   }
 
   @Get("/tenant/douyin-miniapp/workspace")

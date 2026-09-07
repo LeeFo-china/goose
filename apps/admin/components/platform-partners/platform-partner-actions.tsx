@@ -9,7 +9,7 @@ import {
   RefreshCw,
   WalletCards,
 } from "lucide-react";
-import { type FormEvent, type ReactNode, useState, useTransition } from "react";
+import { type FormEvent, type ReactNode, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Button } from "@/components/ui/button";
@@ -324,11 +324,14 @@ export function MutationDialogButton({
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
+  const submittingRef = useRef(false);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submittingRef.current || pending || submitDisabled) return;
     setError("");
     const formData = new FormData(event.currentTarget);
+    submittingRef.current = true;
     startTransition(async () => {
       try {
         await requestBackendJson(
@@ -344,6 +347,8 @@ export function MutationDialogButton({
         refreshAfterDialogClose(router);
       } catch (submitError) {
         setError(submitError instanceof Error ? submitError.message : fallbackMessage);
+      } finally {
+        submittingRef.current = false;
       }
     });
   }
@@ -398,7 +403,7 @@ function DialogField({ field }: { field: FieldConfig }) {
     <Field className={field.type === "textarea" ? "md:col-span-2" : undefined}>
       <FieldLabel htmlFor={id}>{field.label}</FieldLabel>
       {field.type === "textarea" ? (
-        <Textarea id={id} name={field.name} placeholder={field.placeholder} required={field.required} defaultValue={field.defaultValue} />
+        <Textarea id={id} name={field.name} placeholder={field.placeholder} required={field.required} defaultValue={field.defaultValue} maxLength={field.maxLength} />
       ) : (
         <Input id={id} name={field.name} type={field.type ?? "text"} placeholder={field.placeholder} required={field.required} defaultValue={field.defaultValue} step={field.type === "number" ? "0.01" : undefined} inputMode={field.inputMode} maxLength={field.maxLength} pattern={field.pattern} />
       )}

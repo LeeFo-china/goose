@@ -156,6 +156,9 @@ export default async function PlatformPartnersPage({
 
   const params = await searchParams;
   const hasPlatformAccess = session.roles.includes("platform_admin");
+  const canManagePartners = session.permissions.some(
+    (permission) => permission.code === "platform.partner.manage",
+  );
   const tab = normalizePartnerTab(params.tab);
   const applicationPage = readPositiveInteger(params.applicationPage, 1);
   const applicationPageSize = normalizePlatformListPageSize(params.applicationPageSize);
@@ -393,7 +396,7 @@ export default async function PlatformPartnersPage({
             />
           </TabsContent>
           <TabsContent value="partners" className="m-0 min-h-full">
-            <PlatformPartnersTable list={partnersWithRegions} />
+            <PlatformPartnersTable list={partnersWithRegions} canManagePartners={canManagePartners} />
           </TabsContent>
           <TabsContent value="members" className="m-0 min-h-full">
             <PlatformPartnerMembersTable list={memberResult.data.list} />

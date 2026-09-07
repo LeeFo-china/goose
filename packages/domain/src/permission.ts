@@ -33,6 +33,10 @@ export const PERMISSION_CODE_VALUES = [
   'customer.phone.view',
   'customer.phone.call',
   'customer.phone.copy',
+  'customer_lead.read',
+  'customer_lead.assign',
+  'customer_lead.follow_up',
+  'customer_lead.convert',
   'project.read',
   'project.create',
   'project.update',
@@ -295,6 +299,18 @@ export const PermissionCodeConfig: Record<
   'task_center.read': { label: '查看待办中心', module: 'task_center' },
   'customer.read': { label: '查看客户', module: 'customer' },
   'customer.create': { label: '新建客户', module: 'customer' },
+  'customer_lead.read': {
+    label: '查看客户线索', module: 'customer_lead', resource: 'customer_lead', action: 'read',
+  },
+  'customer_lead.assign': {
+    label: '分配客户线索', module: 'customer_lead', resource: 'customer_lead', action: 'assign',
+  },
+  'customer_lead.follow_up': {
+    label: '跟进客户线索', module: 'customer_lead', resource: 'customer_lead', action: 'follow_up',
+  },
+  'customer_lead.convert': {
+    label: '转化客户线索', module: 'customer_lead', resource: 'customer_lead', action: 'convert',
+  },
   'customer.update': { label: '编辑客户', module: 'customer' },
   'customer.assign_owner': {
     label: '分配客户负责人',

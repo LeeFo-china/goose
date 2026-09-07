@@ -1,0 +1,212 @@
+{
+  "list": {
+    "method": "GET",
+    "path": "/tenant/customer-leads?page=1&pageSize=20&source=douyin_miniapp&assignment=unassigned",
+    "status": 200,
+    "response": {
+      "message": "success",
+      "data": {
+        "list": [{
+          "id": "11111111-1111-4111-8111-111111111111",
+          "source": "douyin_miniapp", "source_label": "抖音小程序",
+          "name": "示例客户", "phone_masked": "138****0000", "community": "示例小区",
+          "status": "new", "version": 1,
+          "assigned_employee_id": null, "assignee": null,
+          "customer_id": null, "can_view_customer": false,
+          "created_at": "2026-09-06T02:00:00.000Z", "followed_at": null, "follow_remark": null
+        }],
+        "pagination": { "page": 1, "pageSize": 20, "total": 1, "totalPages": 1 }
+      }
+    }
+  },
+  "empty": {
+    "method": "GET", "path": "/tenant/customer-leads?page=1&pageSize=20&keyword=无匹配示例",
+    "status": 200,
+    "response": {
+      "message": "success",
+      "data": { "list": [], "pagination": { "page": 1, "pageSize": 20, "total": 0, "totalPages": 0 } }
+    }
+  },
+  "detail": {
+    "method": "GET", "path": "/tenant/customer-leads/11111111-1111-4111-8111-111111111111",
+    "status": 200,
+    "response": {
+      "message": "success",
+      "data": {
+        "id": "11111111-1111-4111-8111-111111111111",
+        "source": "douyin_miniapp", "source_label": "抖音小程序",
+        "name": "示例客户", "phone_masked": "138****0000", "community": "示例小区",
+        "status": "new", "version": 1,
+        "assigned_employee_id": null, "assignee": null,
+        "customer_id": null, "can_view_customer": false,
+        "created_at": "2026-09-06T02:00:00.000Z", "followed_at": null, "follow_remark": null,
+        "source_context": {
+          "demand": "希望了解整装方案",
+          "attribution": { "source_type": "direct", "entry_path": "pages/home/index" },
+          "budget": null, "ai": null
+        },
+        "latest_appointment": null,
+        "appointments": { "list": [], "pagination": { "page": 1, "pageSize": 20, "total": 0, "totalPages": 0 } },
+        "follow_ups": { "list": [], "pagination": { "page": 1, "pageSize": 20, "total": 0, "totalPages": 0 } },
+        "actions": {
+          "assign": { "enabled": true, "reason": null },
+          "follow_up": { "enabled": true, "reason": null },
+          "convert": { "enabled": false, "reason": "无创建客户权限" },
+          "mark_invalid": { "enabled": true, "reason": null }
+        }
+      }
+    }
+  },
+  "assignee_candidates": {
+    "method": "GET", "path": "/tenant/customer-leads/assignee-candidates?page=1&pageSize=20&keyword=示例",
+    "status": 200,
+    "response": { "message": "success", "data": {
+      "list": [{ "id": "22222222-2222-4222-8222-222222222222", "name": "示例员工" }],
+      "pagination": { "page": 1, "pageSize": 20, "total": 1, "totalPages": 1 }
+    } }
+  },
+  "assignee_filter_options": {
+    "method": "GET", "path": "/tenant/customer-leads/assignee-filter-options?page=1&pageSize=20&includeEmployeeId=22222222-2222-4222-8222-222222222222",
+    "status": 200,
+    "response": { "message": "success", "data": {
+      "list": [{ "id": "22222222-2222-4222-8222-222222222222", "name": "示例员工" }],
+      "pagination": { "page": 1, "pageSize": 20, "total": 1, "totalPages": 1 }
+    } }
+  },
+  "assign": {
+    "method": "POST", "path": "/tenant/customer-leads/11111111-1111-4111-8111-111111111111/assign",
+    "body": {
+      "expected_lead_version": 1,
+      "idempotency_key": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+      "assigned_employee_id": "22222222-2222-4222-8222-222222222222"
+    },
+    "status": 200,
+    "response": { "message": "success", "data": {
+      "action": "assign", "result": "assigned",
+      "lead_id": "11111111-1111-4111-8111-111111111111", "lead_version": 2,
+      "idempotent": false, "assigned_employee_id": "22222222-2222-4222-8222-222222222222",
+      "appointments_updated": 0
+    } }
+  },
+  "ordinary_follow_up": {
+    "method": "POST", "path": "/tenant/customer-leads/11111111-1111-4111-8111-111111111111/follow-ups",
+    "body": {
+      "expected_lead_version": 2, "idempotency_key": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2",
+      "appointment_id": null, "follow_up_type": "wechat", "summary": "已联系客户",
+      "result": "约定下周沟通", "next_follow_up_at": null,
+      "appointment_status": null, "confirmed_visit_at": null
+    },
+    "status": 200,
+    "response": { "message": "success", "data": {
+      "action": "follow_up", "result": "followed_up",
+      "lead_id": "11111111-1111-4111-8111-111111111111", "lead_version": 3,
+      "idempotent": false, "follow_up_id": "33333333-3333-4333-8333-333333333333",
+      "appointment_id": null, "appointment_version": null, "appointment_status": null
+    } }
+  },
+  "appointment_follow_up": {
+    "method": "POST", "path": "/tenant/customer-leads/11111111-1111-4111-8111-111111111111/follow-ups",
+    "body": {
+      "expected_lead_version": 3, "idempotency_key": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3",
+      "appointment_id": "44444444-4444-4444-8444-444444444444", "follow_up_type": "phone",
+      "summary": "确认上门量房", "result": "客户确认时间", "next_follow_up_at": null,
+      "appointment_status": "confirmed", "confirmed_visit_at": "2026-09-08T10:00:00+08:00"
+    },
+    "status": 200,
+    "response": { "message": "success", "data": {
+      "action": "follow_up", "result": "followed_up",
+      "lead_id": "11111111-1111-4111-8111-111111111111", "lead_version": 4,
+      "idempotent": false, "follow_up_id": "33333333-3333-4333-8333-333333333334",
+      "appointment_id": "44444444-4444-4444-8444-444444444444", "appointment_version": 2,
+      "appointment_status": "confirmed"
+    } }
+  },
+  "appointments": {
+    "method": "GET", "path": "/tenant/customer-leads/11111111-1111-4111-8111-111111111111/appointments?page=1&pageSize=20",
+    "status": 200,
+    "response": { "message": "success", "data": {
+      "list": [{
+        "id": "44444444-4444-4444-8444-444444444444", "appointment_no": "EXAMPLE-001",
+        "preferred_visit_date": "2026-09-08", "preferred_visit_period": "morning", "community": "示例小区",
+        "status": "confirmed", "confirmed_visit_at": "2026-09-08T02:00:00.000Z",
+        "created_at": "2026-09-06T03:00:00.000Z", "updated_at": "2026-09-06T04:00:00.000Z",
+        "version": 2, "source_context": null
+      }],
+      "pagination": { "page": 1, "pageSize": 20, "total": 1, "totalPages": 1 }
+    } }
+  },
+  "follow_ups": {
+    "method": "GET", "path": "/tenant/customer-leads/11111111-1111-4111-8111-111111111111/follow-ups?page=1&pageSize=20",
+    "status": 200,
+    "response": { "message": "success", "data": {
+      "list": [{
+        "id": "33333333-3333-4333-8333-333333333333", "appointment_id": null,
+        "follow_up_type": "wechat", "summary": "已联系客户", "result": "约定下周沟通",
+        "next_follow_up_at": null, "created_at": "2026-09-06T03:00:00.000Z", "employee_name": "示例员工"
+      }],
+      "pagination": { "page": 1, "pageSize": 20, "total": 1, "totalPages": 1 }
+    } }
+  },
+  "convert_created": {
+    "method": "POST", "path": "/tenant/customer-leads/11111111-1111-4111-8111-111111111111/convert-customer",
+    "body": { "expected_lead_version": 4, "idempotency_key": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4" },
+    "status": 200,
+    "response": { "message": "success", "data": {
+      "action": "convert", "result": "converted",
+      "lead_id": "11111111-1111-4111-8111-111111111111", "lead_version": 5, "idempotent": false,
+      "customer_id": "55555555-5555-4555-8555-555555555555", "can_view_customer": true,
+      "created_customer": true, "repeated_conversion": false, "appointments_updated": 1
+    } }
+  },
+  "convert_existing_hidden": {
+    "method": "POST", "path": "/tenant/customer-leads/11111111-1111-4111-8111-111111111111/convert-customer",
+    "body": { "expected_lead_version": 4, "idempotency_key": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa5" },
+    "status": 200,
+    "response": { "message": "success", "data": {
+      "action": "convert", "result": "converted",
+      "lead_id": "11111111-1111-4111-8111-111111111111", "lead_version": 5, "idempotent": false,
+      "customer_id": null, "can_view_customer": false,
+      "created_customer": false, "repeated_conversion": false, "appointments_updated": 0
+    } }
+  },
+  "convert_already_linked": {
+    "method": "POST", "path": "/tenant/customer-leads/11111111-1111-4111-8111-111111111111/convert-customer",
+    "body": { "expected_lead_version": 5, "idempotency_key": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa6" },
+    "status": 200,
+    "response": { "message": "success", "data": {
+      "action": "convert", "result": "converted",
+      "lead_id": "11111111-1111-4111-8111-111111111111", "lead_version": 5, "idempotent": false,
+      "customer_id": "55555555-5555-4555-8555-555555555555", "can_view_customer": true,
+      "created_customer": false, "repeated_conversion": true, "appointments_updated": 0
+    } }
+  },
+  "mark_invalid": {
+    "method": "POST", "path": "/tenant/customer-leads/11111111-1111-4111-8111-111111111111/mark-invalid",
+    "body": {
+      "expected_lead_version": 3, "idempotency_key": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa7",
+      "reason": "客户明确表示暂无装修需求"
+    },
+    "status": 200,
+    "response": { "message": "success", "data": {
+      "action": "mark_invalid", "result": "invalid",
+      "lead_id": "11111111-1111-4111-8111-111111111111", "lead_version": 4, "idempotent": false,
+      "appointments_updated": 0, "repeated_invalidation": false
+    } }
+  },
+  "version_conflict": {
+    "status": 409,
+    "response": { "success": false, "code": "CUSTOMER_LEAD_VERSION_CONFLICT", "message": "线索已更新，请刷新后重试", "requestId": "example-request-409" }
+  },
+  "idempotency_conflict": {
+    "status": 409,
+    "response": { "success": false, "code": "CUSTOMER_LEAD_IDEMPOTENCY_CONFLICT", "message": "幂等键已用于其他请求", "requestId": "example-request-idempotency" }
+  },
+  "forbidden": {
+    "status": 403,
+    "response": { "success": false, "code": "FORBIDDEN", "message": "无权限", "requestId": "example-request-403" }
+  },
+  "not_found": {
+    "status": 404,
+    "response": { "success": false, "code": "CUSTOMER_LEAD_NOT_FOUND", "message": "客户线索不存在", "requestId": "example-request-404" }
+  }
+}

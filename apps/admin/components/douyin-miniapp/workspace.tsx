@@ -9,7 +9,6 @@ import {
   MapPin,
   ShieldAlert,
 } from "lucide-react";
-
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -29,7 +28,6 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Separator } from "@/components/ui/separator";
-
 import {
   authorizationLabel,
   authorizationTone,
@@ -39,9 +37,8 @@ import {
   releaseLabel,
   releaseTone,
 } from "./workspace-display";
-import {
-  TenantDouyinMiniappWorkspaceActions,
-} from "./workspace-actions";
+import { TenantDouyinMiniappWorkspaceActions } from "./workspace-actions";
+import { TenantDouyinLeadCaptureConfig } from "./workspace-lead-capture-config";
 import { ReleaseReadinessPanel } from "./release-readiness-panel";
 import type { TenantDouyinWorkspace } from "./workspace-types";
 
@@ -205,6 +202,11 @@ function WorkspaceOverview({
         </CardHeader>
 
         <CardContent className="flex flex-col gap-6 pt-5">
+          <TenantDouyinLeadCaptureConfig
+            canManage={canManage}
+            installation={workspace.installation}
+          />
+          <Separator />
           <section
             className="flex flex-col gap-4"
             aria-labelledby="douyin-brand-heading"

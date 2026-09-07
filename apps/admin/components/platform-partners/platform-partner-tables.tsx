@@ -1,6 +1,7 @@
 "use client";
 
 import { type ColumnDef } from "@tanstack/react-table";
+import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/admin/data-table";
 import { PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME } from "@/components/platform/platform-list-page-size";
@@ -9,6 +10,7 @@ import {
   MarkSettlementPaidButton,
 } from "@/components/platform-partners/platform-partner-actions";
 import { CreateInviteCodeButton } from "@/components/platform-partners/platform-partner-invite-actions";
+import { ApprovePartnerButton } from "@/components/platform-partners/platform-partner-approval-action";
 import { UpdatePartnerMemberStatusButton } from "@/components/platform-partners/platform-partner-member-actions";
 import {
   commissionStatusOptions,
@@ -27,7 +29,7 @@ import {
   type TenantPartnerBindingRecord,
 } from "@/components/platform-partners/platform-partner-types";
 
-const partnerColumns: ColumnDef<PlatformPartnerRecord>[] = [
+const partnerColumns = (canManagePartners: boolean): ColumnDef<PlatformPartnerRecord>[] => [
   {
     accessorKey: "name",
     header: "合伙人",
@@ -78,6 +80,7 @@ const partnerColumns: ColumnDef<PlatformPartnerRecord>[] = [
     header: "操作",
     cell: ({ row }) => (
       <div className="flex justify-end gap-1">
+        <ApprovePartnerButton partner={row.original} canManagePartners={canManagePartners} />
         <EditPartnerRegionsButton partner={row.original} />
         <CreateInviteCodeButton partner={row.original} />
       </div>
@@ -350,8 +353,12 @@ const settlementColumns: ColumnDef<PartnerSettlementBatchRecord>[] = [
   },
 ];
 
-export function PlatformPartnersTable({ list }: { list: PlatformPartnerRecord[] }) {
-  return <PartnerDataTable columns={partnerColumns} data={list} emptyText="还没有城市合伙人" minWidth="min-w-[1080px]" />;
+export function PlatformPartnersTable({ list, canManagePartners }: {
+  list: PlatformPartnerRecord[];
+  canManagePartners: boolean;
+}) {
+  const columns = useMemo(() => partnerColumns(canManagePartners), [canManagePartners]);
+  return <PartnerDataTable columns={columns} data={list} emptyText="还没有城市合伙人" minWidth="min-w-[1080px]" />;
 }
 
 export function TenantPartnerBindingsTable({ list }: { list: TenantPartnerBindingRecord[] }) {

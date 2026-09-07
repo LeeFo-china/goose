@@ -21,6 +21,7 @@ function approvedWorkspace(): TenantDouyinWorkspace {
       authorizer_appid: "ttd033a68e4e56ccd301",
       installation_kind: "merchant",
       authorization_status: "active",
+      clue_component_id: null,
       permission_snapshot: [{ id: 1 }],
       runtime_config: {
         brand: { logo_url: null, qualifications: [] },

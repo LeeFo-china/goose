@@ -18,11 +18,13 @@ const EnvelopeSchema = z.strictObject({ data: z.strictObject({
   total: z.number().int().min(0),
 }) });
 
-type Client = { rpc(name: "list_tenant_douyin_leads",
+type Client = { rpc(name: "list_tenant_douyin_leads" | "list_tenant_customer_leads",
   args: Readonly<Record<string, Json | undefined>>): Promise<{
     readonly data: unknown; readonly error: unknown;
   }> };
 export type ScopedLeadListInput = TenantDouyinLeadListQuery & {
+  readonly source?: "douyin_miniapp" | "h5";
+  readonly assignment?: "all" | "assigned" | "unassigned";
   readonly tenantId: string;
   readonly visibleAssigneeIds: readonly string[] | null;
 };
@@ -30,6 +32,7 @@ export type ScopedLeadListInput = TenantDouyinLeadListQuery & {
 export async function listTenantDouyinLeads(
   client: Client,
   input: ScopedLeadListInput,
+  mode: "douyin_lead" | "customer_lead" = "douyin_lead",
 ) {
   if (input.visibleAssigneeIds !== null
     && (input.visibleAssigneeIds.length === 0
@@ -39,7 +42,10 @@ export async function listTenantDouyinLeads(
   }
   let result: Awaited<ReturnType<Client["rpc"]>>;
   try {
-    result = await client.rpc("list_tenant_douyin_leads", {
+    result = await client.rpc(mode === "customer_lead"
+      ? "list_tenant_customer_leads" : "list_tenant_douyin_leads", {
+      ...(mode === "customer_lead" ? { p_source: input.source ?? null,
+        p_assignment: input.assignment ?? "all" } : {}),
       p_tenant_id: input.tenantId,
       p_visible_assignee_ids: input.visibleAssigneeIds
         ? [...input.visibleAssigneeIds] : null,
@@ -64,12 +70,12 @@ export async function listTenantDouyinLeads(
       && offset + parsed.data.data.list.length > parsed.data.data.total)) {
     throw Errors.dbError("解析抖音线索失败");
   }
-  assertScope(parsed.data.data.list, input);
+  assertScope(parsed.data.data.list, input, mode);
   return { rows: parsed.data.data.list, total: parsed.data.data.total };
 }
 
 function assertScope(rows: readonly z.infer<typeof TenantDouyinLeadRowSchema>[],
-  input: ScopedLeadListInput): void {
+  input: ScopedLeadListInput, mode: "douyin_lead" | "customer_lead"): void {
   const visible = input.visibleAssigneeIds === null
     ? null : new Set(input.visibleAssigneeIds);
   const seen = new Set<string>();
@@ -84,11 +90,16 @@ function assertScope(rows: readonly z.infer<typeof TenantDouyinLeadRowSchema>[],
       row.name, row.phone, row.community,
     ].some((value) => value?.toLocaleLowerCase().includes(keyword));
     if (row.tenant_id !== input.tenantId || seen.has(row.id)
+      || (mode === "customer_lead" && row.source === undefined)
+      || (mode === "douyin_lead" && row.source !== undefined && row.source !== "douyin_miniapp")
+      || (input.source !== undefined && row.source !== input.source)
       || (visible !== null && (row.assigned_employee_id === null
         || !visible.has(row.assigned_employee_id)))
       || (input.assigneeId !== undefined
         && row.assigned_employee_id !== input.assigneeId)
       || (input.status !== undefined && row.lead_status !== input.status)
+      || (input.assignment === "assigned" && row.assigned_employee_id === null)
+      || (input.assignment === "unassigned" && row.assigned_employee_id !== null)
       || (from !== null && created < from) || (to !== null && created >= to)
       || !matchesKeyword) {
       throw Errors.dbError("解析抖音线索失败");

@@ -1,0 +1,96 @@
+import { CUSTOMER_LEAD_PROFILE } from "@/components/customer-leads/leads-workbench-profile";
+import { redirect } from "next/navigation";
+import { z } from "zod";
+
+import { StatusAlert } from "@/components/admin/status-alert";
+import type { AssigneeFilterOptionsState } from "@/components/customer-leads/leads-assignee-options";
+import { loadInitialAssigneeFilterOptions } from "@/components/customer-leads/leads-page-loaders";
+import { LeadsWorkbench } from "@/components/customer-leads/leads-workbench";
+import {
+  buildLeadApiQuery,
+  parseLeadFilters,
+  type LeadFilters,
+  type LeadPage,
+} from "@/components/customer-leads/leads-workbench-logic";
+import { getAdminSession, getAdminToken } from "@/lib/auth";
+import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
+
+type PageSearchParams = Partial<Record<
+  "leadId" | "source" | "assignment" | "page" | "pageSize" | "status" | "assigneeId" | "dateFrom" | "dateTo" | "keyword",
+  string
+>>;
+
+export default async function TenantCustomerLeadsPage({ searchParams }: {
+  searchParams: Promise<PageSearchParams>;
+}) {
+  const [session, token, rawParams] = await Promise.all([
+    getAdminSession(), getAdminToken(), searchParams,
+  ]);
+  if (!session) redirect("/login");
+
+  const permissions = session.permissions.map((permission) => permission.code);
+  const canRead = session.tenant !== null && permissions.includes("customer_lead.read");
+  if (!canRead) {
+    return <StatusAlert><p>当前账号缺少客户线索查看权限</p>
+      <p>请联系管理员配置 customer_lead.read 权限。</p></StatusAlert>;
+  }
+
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(rawParams)) {
+    if (value && key !== "leadId") params.set(key, value);
+  }
+  const filters = parseLeadFilters(params, "customer");
+  let data = emptyPage(filters);
+  let error: string | null = null;
+  let initialFilterAssigneeOptions: AssigneeFilterOptionsState = {
+    options: [], hasMore: false,
+  };
+
+  if (!token) {
+    error = "缺少登录凭证，请重新登录后重试";
+  } else {
+    const [leadResult, filterOptions] = await Promise.all([
+      loadLeads(token, filters),
+      loadInitialAssigneeFilterOptions(token, filters, CUSTOMER_LEAD_PROFILE.apiPath),
+    ]);
+    data = leadResult.data;
+    error = leadResult.error;
+    initialFilterAssigneeOptions = filterOptions;
+  }
+
+  return <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col overflow-hidden">
+    <LeadsWorkbench
+      profileId="customer"
+      initialLeadId={z.uuid().safeParse(rawParams.leadId).data}
+      initialData={data}
+      initialError={error}
+      initialFilters={filters}
+      initialFilterAssigneeOptions={initialFilterAssigneeOptions}
+      permissions={permissions}
+    />
+  </div>;
+}
+
+async function loadLeads(token: string, filters: LeadFilters): Promise<{
+  data: LeadPage; error: string | null;
+}> {
+  try {
+    const response = await fetch(
+      buildBackendUrl(`${CUSTOMER_LEAD_PROFILE.apiPath}?${buildLeadApiQuery(filters, "customer")}`),
+      { headers: { authorization: `Bearer ${token}` }, cache: "no-store" },
+    );
+    const payload = await parseBackendJson<unknown>(response);
+    const parsed = CUSTOMER_LEAD_PROFILE.normalizePage(payload.data, filters);
+    return parsed
+      ? { data: parsed, error: null }
+      : { data: emptyPage(filters), error: "线索列表响应无效，请重试" };
+  } catch {
+    return { data: emptyPage(filters), error: "客户线索列表加载失败，请重试" };
+  }
+}
+
+function emptyPage(filters: LeadFilters): LeadPage {
+  return { list: [], pagination: {
+    page: filters.page, pageSize: filters.pageSize, total: 0, totalPages: 0,
+  } };
+}

@@ -36,6 +36,7 @@ import {
 } from "@/repositories/tenant-douyin-lead-list";
 import type { Json } from "@/types/database";
 import { SupabaseDB } from "@/utils/supabase";
+import { scopedLeadQuery, findH5LeadPage } from "./tenant-customer-lead-source";
 
 const LEAD_DETAIL_FIELDS = `${TENANT_DOUYIN_LEAD_FIELDS},form_data`;
 const APPOINTMENT_FIELDS = [
@@ -78,6 +79,9 @@ export interface TenantDouyinLeadsQuery extends PromiseLike<DatabaseResult> {
   maybeSingle(): Promise<DatabaseResult>;
 }
 type CommandName =
+  | "assign_customer_lead" | "append_customer_lead_follow_up"
+  | "convert_customer_lead_to_customer" | "mark_customer_lead_invalid"
+  | "list_tenant_customer_leads"
   | "assign_douyin_lead"
   | "append_douyin_lead_follow_up"
   | "convert_douyin_lead_to_customer"
@@ -106,7 +110,8 @@ type ConvertCommandInput = CommandBaseInput & {
 };
 
 export class TenantDouyinLeadsRepository {
-  constructor(private readonly configuredClient?: TenantDouyinLeadsDatabaseClient) {}
+  constructor(private readonly configuredClient?: TenantDouyinLeadsDatabaseClient,
+    private readonly mode: "douyin_lead" | "customer_lead" = "douyin_lead") {}
 
   private get client(): TenantDouyinLeadsDatabaseClient {
     return this.configuredClient ?? SupabaseDB.getAdminClient() as unknown as
@@ -115,12 +120,13 @@ export class TenantDouyinLeadsRepository {
 
   async listLeads(input: ScopedLeadListInput) {
     const { rows: leads, total } = await listTenantDouyinLeads(
-      this.client, input,
+      this.client, input, this.mode,
     );
     if (leads.length === 0) return { rows: [], total };
 
     const [appointments, customers, employees] = await Promise.all([
-      this.loadLatestAppointments(input.tenantId, leads.map((lead) => lead.id)),
+      this.loadLatestAppointments(input.tenantId,
+        leads.filter((lead) => lead.source !== "h5").map((lead) => lead.id)),
       this.loadCustomers(input.tenantId, compactIds(leads, "customer_id")),
       this.loadEmployees(
         input.tenantId,
@@ -151,9 +157,9 @@ export class TenantDouyinLeadsRepository {
 
   async getLeadDetail(input: { tenantId: string; leadId: string }) {
     const leadResult = await executeDatabase(
-      () => this.client.from("marketing_leads").select(LEAD_DETAIL_FIELDS)
-        .eq("tenant_id", input.tenantId).eq("source", "douyin_miniapp")
-        .eq("id", input.leadId).maybeSingle(),
+      () => scopedLeadQuery(this.client, this.mode,
+        this.mode === "customer_lead" ? `${LEAD_DETAIL_FIELDS},source,page_id,page_version_id`
+          : LEAD_DETAIL_FIELDS, input).maybeSingle(),
       "查询抖音线索详情失败",
     );
     assertDatabaseSuccess(leadResult, "查询抖音线索详情失败");
@@ -161,7 +167,8 @@ export class TenantDouyinLeadsRepository {
     const lead = parseData(TenantDouyinLeadRowSchema, leadResult.data,
       "解析抖音线索详情失败");
     const [appointmentPage, customers, employees, followUps] = await Promise.all([
-      this.listAppointments({ ...input, page: 1, pageSize: 20 }),
+      lead.source === "h5" ? { rows: [], total: 0 }
+        : this.listAppointments({ ...input, page: 1, pageSize: 20 }),
       this.loadCustomers(input.tenantId, compactIds([lead], "customer_id")),
       this.loadEmployees(input.tenantId,
         compactIds([lead], "assigned_employee_id")),
@@ -171,17 +178,15 @@ export class TenantDouyinLeadsRepository {
       appointments: appointmentPage.rows,
       customers, employees })[0];
     if (!bundle) throw Errors.dbError("解析抖音线索详情失败");
-    return { ...bundle, appointmentTotal: appointmentPage.total,
+    return { ...bundle, appointments: appointmentPage.rows, appointmentTotal: appointmentPage.total,
       followUps: followUps.rows,
       followUpTotal: followUps.total };
   }
 
   async findLeadAccess(input: { tenantId: string; leadId: string }) {
     const result = await executeDatabase(
-      () => this.client.from("marketing_leads")
-        .select("id,tenant_id,assigned_employee_id")
-        .eq("tenant_id", input.tenantId).eq("source", "douyin_miniapp")
-        .eq("id", input.leadId).maybeSingle(),
+      () => scopedLeadQuery(this.client, this.mode,
+        "id,tenant_id,assigned_employee_id", input).maybeSingle(),
       "查询抖音线索访问范围失败",
     );
     assertDatabaseSuccess(result, "查询抖音线索访问范围失败");
@@ -234,14 +239,19 @@ export class TenantDouyinLeadsRepository {
 
   async findConversionPreflight(input: { tenantId: string; leadId: string }) {
     const leadResult = await executeDatabase(
-      () => this.client.from("marketing_leads")
-        .select(`${PRE_FLIGHT_FIELDS},assigned_employee_id`)
-        .eq("tenant_id", input.tenantId).eq("source", "douyin_miniapp")
-        .eq("id", input.leadId).maybeSingle(),
+      () => scopedLeadQuery(this.client, this.mode,
+        `${PRE_FLIGHT_FIELDS},assigned_employee_id`, input).maybeSingle(),
       "查询抖音线索转化条件失败",
     );
     assertDatabaseSuccess(leadResult, "查询抖音线索转化条件失败");
     if (leadResult.data === null) return null;
+    if (this.mode === "customer_lead") {
+      const phone = PreflightLeadSchema.extend({ phone: z.string().nullable() })
+        .safeParse(leadResult.data);
+      if (phone.success && !/^1[3-9]\d{9}$/.test(phone.data.phone ?? "")) {
+        throw Errors.business(409, "转客户前需要有效手机号", "CUSTOMER_LEAD_PHONE_REQUIRED");
+      }
+    }
     const lead = parseData(PreflightLeadSchema, leadResult.data,
       "解析抖音线索转化条件失败");
     const customerResult = await executeDatabase(
@@ -261,6 +271,19 @@ export class TenantDouyinLeadsRepository {
       customerId: customer?.id ?? null };
   }
 
+  findH5Page(tenantId: string, pageId: string) {
+    return findH5LeadPage(this.client, tenantId, pageId);
+  }
+
+  async findCustomerAccess(tenantId: string, customerId: string) {
+    const result = await executeDatabase(() => this.client.from("customers")
+      .select(CUSTOMER_FIELDS).eq("tenant_id", tenantId).eq("id", customerId).maybeSingle(),
+    "查询线索关联客户失败");
+    assertDatabaseSuccess(result, "查询线索关联客户失败");
+    return result.data === null ? null : parseData(TenantDouyinCustomerRowSchema,
+      result.data, "解析线索关联客户失败");
+  }
+
   assign(input: CommandBaseInput & { assignedEmployeeId: string;
     expectedAssigneeDepartmentId: string | null }) {
     return this.runCommand("assign_douyin_lead", "assign", {
@@ -274,7 +297,7 @@ export class TenantDouyinLeadsRepository {
   }
 
   appendFollowUp(input: CommandBaseInput & {
-    appointmentId: string; followUpType: string; summary: string; result: string;
+    appointmentId: string | null; followUpType: string; summary: string; result: string;
     nextFollowUpAt: string | null; appointmentStatus: string | null;
     confirmedVisitAt: string | null;
   }) {
@@ -316,7 +339,14 @@ export class TenantDouyinLeadsRepository {
     expectedAction: TenantDouyinLeadCommandData["action"],
     args: Readonly<Record<string, Json | undefined>>,
   ): Promise<TenantDouyinLeadCommandResult> {
-    const result = await executeDatabase(() => this.client.rpc(name, args),
+    const genericNames: Partial<Record<CommandName, CommandName>> = {
+      assign_douyin_lead: "assign_customer_lead",
+      append_douyin_lead_follow_up: "append_customer_lead_follow_up",
+      convert_douyin_lead_to_customer: "convert_customer_lead_to_customer",
+      mark_douyin_lead_invalid: "mark_customer_lead_invalid",
+    };
+    const rpcName = this.mode === "customer_lead" ? genericNames[name] ?? name : name;
+    const result = await executeDatabase(() => this.client.rpc(rpcName, args),
       "执行抖音线索命令失败");
     assertDatabaseSuccess(result, "执行抖音线索命令失败");
     const envelope = parseData(TenantDouyinLeadCommandEnvelopeSchema,
@@ -330,6 +360,7 @@ export class TenantDouyinLeadsRepository {
 
   private async loadLatestAppointments(tenantId: string,
     leadIds: readonly string[]) {
+    if (leadIds.length === 0) return [];
     const result = await executeDatabase(
       () => this.client.rpc("list_tenant_douyin_lead_latest_appointments", {
         p_tenant_id: tenantId, p_marketing_lead_ids: [...leadIds],

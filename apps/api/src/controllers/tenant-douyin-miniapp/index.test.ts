@@ -75,15 +75,25 @@ function createController() {
       id: "release-id", status: "released",
     })),
   };
+  const leadCapture = {
+    update: mock(async () => ({
+      installation_id: "22222222-2222-4222-8222-222222222222",
+      authorizer_appid: "ttd033a68e4e56ccd301",
+      enabled: true,
+      clue_component_id: "5785490b6443ad9def6f88e69c57920c",
+      updated_at: "2026-09-06T00:00:01.000Z",
+    })),
+  };
   const controller = new Controller(
     workspace as never,
     () => authorization as never,
     async () => releases as never,
+    leadCapture as never,
   );
   (
     controller as unknown as Record<string, unknown>
   ).getRequiredTenantContext = mock(async () => authContext);
-  return { controller, workspace, authorization, releases };
+  return { controller, workspace, authorization, releases, leadCapture };
 }
 
 describe("TenantDouyinMiniappController", () => {
@@ -106,11 +116,16 @@ describe("TenantDouyinMiniappController", () => {
     const fastify = {
       get: (path: string) => routes.push({ method: "GET", path }),
       post: (path: string) => routes.push({ method: "POST", path }),
+      patch: (path: string) => routes.push({ method: "PATCH", path }),
     };
 
     controller.registerExtraRoutes(fastify as never);
 
     expect(routes).toEqual([
+      {
+        method: "PATCH",
+        path: "/tenant/douyin-miniapp/lead-capture-config",
+      },
       { method: "GET", path: "/tenant/douyin-miniapp/workspace" },
       { method: "GET", path: "/tenant/douyin-miniapp/release-readiness" },
       {
@@ -147,6 +162,40 @@ describe("TenantDouyinMiniappController", () => {
         path: "/tenant/douyin-miniapp/releases/:releaseId/publish",
       },
     ]);
+  });
+
+  test("validates lead capture config before auth and wraps the result", async () => {
+    const { controller, leadCapture } = createController();
+    const requiredContext = (
+      controller as unknown as {
+        getRequiredTenantContext: ReturnType<typeof mock>;
+      }
+    ).getRequiredTenantContext;
+    const body = {
+      authorizer_appid: "ttd033a68e4e56ccd301",
+      enabled: true,
+      clue_component_id: "5785490b6443ad9def6f88e69c57920c",
+      expected_updated_at: "2026-09-06T00:00:00.000Z",
+    };
+
+    await expect(controller.updateLeadCaptureConfig({ body } as never))
+      .resolves.toEqual({
+        data: {
+          installation_id: "22222222-2222-4222-8222-222222222222",
+          authorizer_appid: "ttd033a68e4e56ccd301",
+          enabled: true,
+          clue_component_id: "5785490b6443ad9def6f88e69c57920c",
+          updated_at: "2026-09-06T00:00:01.000Z",
+        },
+        message: "success",
+      });
+    expect(leadCapture.update).toHaveBeenCalledWith(authContext, body);
+
+    requiredContext.mockClear();
+    await expect(controller.updateLeadCaptureConfig({
+      body: { ...body, clue_component_id: null },
+    } as never)).rejects.toMatchObject({ statusCode: 400 });
+    expect(requiredContext).not.toHaveBeenCalled();
   });
 
   test("uses the authenticated tenant context and ResponseHandler.success", async () => {

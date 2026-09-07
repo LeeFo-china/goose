@@ -17,6 +17,7 @@ const workspace: TenantDouyinWorkspace = {
     authorizer_appid: "ttd033a68e4e56ccd301",
     installation_kind: "merchant",
     authorization_status: "active",
+    clue_component_id: null,
     permission_snapshot: [],
     runtime_config: {
       brand: { logo_url: null, qualifications: [] },
@@ -130,6 +131,8 @@ describe("TenantDouyinMiniappWorkspace", () => {
     expect(html).toContain("2 个");
     expect(html).toContain('href="/settings/service-provider"');
     expect(html).toContain('href="/projects"');
+    expect(html).toContain("手机号留资");
+    expect(html).toContain("ttd033a68e4e56ccd301");
   });
 
   test("renders authorization and release states without exposing credentials", () => {

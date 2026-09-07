@@ -10,6 +10,9 @@ const LeadStatusSchema = z.enum(["new", "contacted", "converted", "invalid"]);
 export const TenantDouyinLeadRowSchema = z.strictObject({
   id: z.uuid(),
   tenant_id: z.uuid(),
+  source: z.enum(["douyin_miniapp", "h5"]).optional(),
+  page_id: NullableUuidSchema.optional(),
+  page_version_id: NullableUuidSchema.optional(),
   douyin_miniapp_installation_id: NullableUuidSchema,
   customer_id: NullableUuidSchema,
   assigned_employee_id: NullableUuidSchema,
@@ -69,7 +72,7 @@ export const TenantDouyinFollowUpRowSchema = z.strictObject({
   id: z.uuid(),
   tenant_id: z.uuid(),
   marketing_lead_id: z.uuid(),
-  douyin_measurement_appointment_id: z.uuid(),
+  douyin_measurement_appointment_id: z.uuid().nullable(),
   employee_id: z.uuid(),
   follow_up_type: z.enum([
     "phone", "wechat", "online_meeting", "onsite", "other",
@@ -156,11 +159,13 @@ export const TenantDouyinLeadCommandDataSchema = z.discriminatedUnion("action", 
   }),
   z.strictObject({
     action: z.literal("follow_up"), result: z.literal("followed_up"),
-    follow_up_id: z.uuid(), appointment_id: z.uuid(),
-    appointment_version: z.int().min(1),
-    appointment_status: z.enum(DOUYIN_APPOINTMENT_STATUS_VALUES),
+    follow_up_id: z.uuid(), appointment_id: z.uuid().nullable(),
+    appointment_version: z.int().min(1).nullable(),
+    appointment_status: z.enum(DOUYIN_APPOINTMENT_STATUS_VALUES).nullable(),
     ...CommandBaseShape,
-  }),
+  }).refine((value) => value.appointment_id === null
+    ? value.appointment_version === null && value.appointment_status === null
+    : value.appointment_version !== null && value.appointment_status !== null),
   z.strictObject({
     action: z.literal("convert"), result: z.literal("converted"),
     customer_id: z.uuid(), created_customer: z.boolean(),
