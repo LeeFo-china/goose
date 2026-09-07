@@ -54,14 +54,24 @@ ANALYZE public.supplier_purchase_order_items;
 CREATE TEMP TABLE stage_b_perf_evidence(label text PRIMARY KEY,payload jsonb);
 CREATE FUNCTION pg_temp.stage_b_probe_inventory(
   probe_label text,kind text,warehouse_filter uuid,sku_filter uuid,keyword_filter text,
-  page_number integer,page_size integer,expected_total integer,transaction_filter text DEFAULT NULL
+  page_number integer,page_size integer,expected_total integer,transaction_filter text DEFAULT NULL,
+  probe_plan_mode text DEFAULT NULL
 ) RETURNS void LANGUAGE plpgsql AS $probe$
 DECLARE
   tenant uuid; definition text; query_text text; rpc_result jsonb; legacy_result jsonb;
   query_total integer; query_items jsonb; plan jsonb; function_name regprocedure;
   replacements text[]; token text; offset_value integer:=(greatest(page_number,1)-1)*least(greatest(page_size,1),100);
   started timestamptz; rpc_ms numeric;
+  previous_plan_mode text:=current_setting('plan_cache_mode');
+  execute_query text;
+  generic_count bigint; custom_count bigint;
 BEGIN
+  IF probe_plan_mode IS NOT NULL THEN
+    IF probe_plan_mode NOT IN ('force_custom_plan','force_generic_plan') THEN
+      RAISE EXCEPTION 'Unknown probe plan mode';
+    END IF;
+    PERFORM set_config('plan_cache_mode',probe_plan_mode,true);
+  END IF;
   SELECT tenant_id INTO STRICT tenant FROM public.stage_b_weighted_cost_fixture WHERE ordinal=1;
   IF kind='balances' THEN
     function_name:='public.list_inventory_balances(uuid,uuid,text,integer,integer)'::regprocedure;
@@ -79,7 +89,8 @@ BEGIN
   query_text:=substring(definition FROM 'WITH filtered AS (?:NOT )?MATERIALIZED[\s\S]*GROUP BY counted.total;');
   query_text:=replace(query_text,'INTO v_total, v_items','');
   -- Substitute only complete PL/pgSQL identifiers, retaining the exact active
-  -- CTE/JOIN/order/source SQL. Bind all values, never interpolate query values.
+  -- CTE/JOIN/order/source SQL. Parameters remain bound; prepared EXECUTE below
+  -- supplies synthetic argument expressions using PostgreSQL literal quoting.
   replacements:=ARRAY['p_tenant_id','p_warehouse_id','p_supplier_sku_id','v_keyword','v_offset','v_page_size','p_transaction_type'];
   FOR index IN 1..array_length(replacements,1) LOOP
     token:=replacements[index];
@@ -99,26 +110,47 @@ BEGIN
       RAISE EXCEPTION 'Inventory optimized/reference JSON mismatch: %',probe_label;
     END IF;
   END IF;
-  EXECUTE query_text INTO query_total,query_items USING tenant,warehouse_filter,sku_filter,
-    NULLIF(btrim(keyword_filter),''),offset_value,least(greatest(page_size,1),100),transaction_filter;
+  IF probe_plan_mode IS NULL THEN
+    EXECUTE query_text INTO query_total,query_items USING tenant,warehouse_filter,sku_filter,
+      NULLIF(btrim(keyword_filter),''),offset_value,least(greatest(page_size,1),100),transaction_filter;
+  ELSE
+    EXECUTE 'PREPARE stage_b_inventory_probe(uuid,uuid,uuid,text,integer,integer,text) AS '||query_text;
+    execute_query:=format('EXECUTE stage_b_inventory_probe(%L::uuid,%L::uuid,%L::uuid,%L::text,%L::integer,%L::integer,%L::text)',
+      tenant,warehouse_filter,sku_filter,NULLIF(btrim(keyword_filter),''),offset_value,
+      least(greatest(page_size,1),100),transaction_filter);
+    EXECUTE execute_query INTO query_total,query_items;
+  END IF;
   IF (rpc_result->>'total')::integer IS DISTINCT FROM expected_total
     OR query_total IS DISTINCT FROM expected_total
     OR query_items IS DISTINCT FROM rpc_result->'items'
     OR jsonb_array_length(query_items) IS DISTINCT FROM least(least(greatest(page_size,1),100),greatest(expected_total-offset_value,0)) THEN
     RAISE EXCEPTION 'Inventory read/extracted query mismatch: %',probe_label;
   END IF;
-  EXECUTE 'EXPLAIN (ANALYZE,BUFFERS,VERBOSE,SETTINGS,FORMAT JSON) '||query_text INTO plan
-    USING tenant,warehouse_filter,sku_filter,NULLIF(btrim(keyword_filter),''),offset_value,
-      least(greatest(page_size,1),100),transaction_filter;
+  IF probe_plan_mode IS NULL THEN
+    EXECUTE 'EXPLAIN (ANALYZE,BUFFERS,VERBOSE,SETTINGS,FORMAT JSON) '||query_text INTO plan
+      USING tenant,warehouse_filter,sku_filter,NULLIF(btrim(keyword_filter),''),offset_value,
+        least(greatest(page_size,1),100),transaction_filter;
+  ELSE
+    EXECUTE 'EXPLAIN (ANALYZE,BUFFERS,VERBOSE,SETTINGS,FORMAT JSON) '||execute_query INTO plan;
+    SELECT generic_plans,custom_plans INTO STRICT generic_count,custom_count
+      FROM pg_prepared_statements WHERE name='stage_b_inventory_probe';
+    IF (probe_plan_mode='force_generic_plan' AND (generic_count<2 OR custom_count<>0))
+      OR (probe_plan_mode='force_custom_plan' AND (custom_count<2 OR generic_count<>0)) THEN
+      RAISE EXCEPTION 'Prepared probe did not exercise the requested plan mode: %',probe_label;
+    END IF;
+    DEALLOCATE stage_b_inventory_probe;
+  END IF;
   IF kind='transactions' AND (plan #>> '{0,Plan,Temp Written Blocks}')::integer>0 THEN
     RAISE EXCEPTION 'Inventory transaction query spills before bounded display: % (% temporary blocks)',
       probe_label,plan #>> '{0,Plan,Temp Written Blocks}';
   END IF;
   INSERT INTO stage_b_perf_evidence VALUES(probe_label,jsonb_build_object(
-    'kind',kind,'function_md5',md5(definition),'page',page_number,'page_size',page_size,
+    'kind',kind,'plan_mode',COALESCE(probe_plan_mode,'dynamic'),'function_md5',md5(definition),'page',page_number,'page_size',page_size,
+    'generic_plans',generic_count,'custom_plans',custom_count,
     'warehouse_filter',warehouse_filter IS NOT NULL,'sku_filter',sku_filter IS NOT NULL,
     'keyword',keyword_filter,'transaction_filter',transaction_filter,'expected_total',expected_total,'rpc_ms',rpc_ms,
     'plan',plan,'scope','synthetic read load; not full source-table scale or production SLA'));
+  PERFORM set_config('plan_cache_mode',previous_plan_mode,true);
 END;
 $probe$;
 
@@ -136,6 +168,23 @@ SELECT pg_temp.stage_b_probe_inventory('transactions-out-of-range','transactions
 SELECT pg_temp.stage_b_probe_inventory('transactions-type','transactions',NULL,NULL,NULL,1,20,100003,'purchase_receipt');
 SELECT pg_temp.stage_b_probe_inventory('transactions-type-empty','transactions',NULL,NULL,NULL,1,20,0,'project_issue');
 SELECT pg_temp.stage_b_probe_inventory('transactions-deep-page','transactions',NULL,NULL,NULL,400,20,100003);
+DO $plan_modes$
+DECLARE mode text; warehouse_id uuid; sku_id uuid;
+BEGIN
+  SELECT id INTO warehouse_id FROM stage_b_perf_warehouses WHERE ordinal=1;
+  SELECT id INTO sku_id FROM stage_b_perf_skus WHERE ordinal=1;
+  FOREACH mode IN ARRAY ARRAY['force_custom_plan','force_generic_plan'] LOOP
+    PERFORM pg_temp.stage_b_probe_inventory(mode||'-tenant','transactions',NULL,NULL,NULL,1,20,100003,NULL,mode);
+    PERFORM pg_temp.stage_b_probe_inventory(mode||'-warehouse','transactions',warehouse_id,NULL,NULL,1,100,10000,NULL,mode);
+    PERFORM pg_temp.stage_b_probe_inventory(mode||'-sku','transactions',NULL,sku_id,NULL,1,100,100,NULL,mode);
+    PERFORM pg_temp.stage_b_probe_inventory(mode||'-warehouse-sku','transactions',warehouse_id,sku_id,NULL,1,20,10,NULL,mode);
+    PERFORM pg_temp.stage_b_probe_inventory(mode||'-out-of-range','transactions',NULL,NULL,NULL,10000,20,100003,NULL,mode);
+    PERFORM pg_temp.stage_b_probe_inventory(mode||'-type','transactions',NULL,NULL,NULL,1,20,100003,'purchase_receipt',mode);
+    PERFORM pg_temp.stage_b_probe_inventory(mode||'-type-empty','transactions',NULL,NULL,NULL,1,20,0,'project_issue',mode);
+    PERFORM pg_temp.stage_b_probe_inventory(mode||'-deep-page','transactions',NULL,NULL,NULL,400,20,100003,NULL,mode);
+  END LOOP;
+END;
+$plan_modes$;
 -- Prefix is deliberately machine-readable; only synthetic probe data is emitted.
 SELECT 'EVIDENCE '||jsonb_build_object('label',label,'result',payload)::text
 FROM stage_b_perf_evidence ORDER BY label;
