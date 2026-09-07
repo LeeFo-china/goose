@@ -9,6 +9,7 @@ const rolloutNames = [
   "私有目录写入",
   "采购单快照 V1",
   "采购批次 Workflow",
+  "仓库采购",
 ] as const;
 
 type RolloutName = typeof rolloutNames[number];
@@ -30,6 +31,7 @@ type MockState = {
     private_catalog_writes_enabled: boolean;
     procurement_snapshot_v1_enabled: boolean;
     purchase_batch_workflow_enabled: boolean;
+    warehouse_procurement_enabled: boolean;
   };
   mutations: MutationJournalEntry[];
   settingsReadCount: number;
@@ -83,7 +85,7 @@ test.describe("租户供应商灰度确定性交互", () => {
     await loginAsPlatformAdmin(page);
   });
 
-  test("按相邻顺序启停并发送完整带版本的幂等请求", async ({ page, request }) => {
+  test("按相邻顺序启停并发送完整带版本的幂等请求", async ({ page, request }, testInfo) => {
     await page.goto("/e2e-harness/supplier-rollout?level=0", {
       waitUntil: "networkidle",
     });
@@ -139,24 +141,38 @@ test.describe("租户供应商灰度确定性交互", () => {
     await controls["采购批次 Workflow"].click();
     await expect(controls["采购批次 Workflow"]).toBeChecked();
     await expectVersion(request, 6);
-    await expectToggleWindow(controls, ["采购批次 Workflow"]);
+    await expectToggleWindow(controls, ["采购批次 Workflow", "仓库采购"]);
+    await controls["仓库采购"].click();
+    await expect(controls["仓库采购"]).toBeChecked();
+    await expectVersion(request, 7);
+    await expectToggleWindow(controls, ["仓库采购"]);
+    // Sonner pauses dismissal while its stack is hovered; leave the stack
+    // before waiting for the existing timers to finish.
+    await page.mouse.move(0, 0);
+    await expect(page.locator("[data-sonner-toast]")).toHaveCount(0, { timeout: 10_000 });
+    await controls["仓库采购"].scrollIntoViewIfNeeded();
+    await page.screenshot({ path: testInfo.outputPath("warehouse-enabled.png"), fullPage: true });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await controls["仓库采购"].click();
+    await expect(controls["仓库采购"]).not.toBeChecked();
+    await expectVersion(request, 8);
 
     await controls["采购批次 Workflow"].click();
     await expect(controls["采购批次 Workflow"]).not.toBeChecked();
-    await expectVersion(request, 7);
+    await expectVersion(request, 9);
 
     await controls["采购单快照 V1"].click();
     await expect(controls["采购单快照 V1"]).not.toBeChecked();
-    await expectVersion(request, 8);
+    await expectVersion(request, 10);
     await controls["私有目录写入"].click();
     await expect(controls["私有目录写入"]).not.toBeChecked();
-    await expectVersion(request, 9);
+    await expectVersion(request, 11);
     await controls["私有供应商写入"].click();
     await expect(controls["私有供应商写入"]).not.toBeChecked();
-    await expectVersion(request, 10);
+    await expectVersion(request, 12);
     await controls["所有权读取"].click();
     await expect(controls["所有权读取"]).not.toBeChecked();
-    await expectVersion(request, 11);
+    await expectVersion(request, 13);
     await expectToggleWindow(controls, ["所有权读取"]);
 
     const beforeReasonValidation = (await readState(request)).mutations.length;
@@ -168,14 +184,14 @@ test.describe("租户供应商灰度确定性交互", () => {
 
     await page.getByLabel("停用原因").fill("E2E 验证灰度逆序停用");
     await stopButton.click();
-    await expectVersion(request, 12);
+    await expectVersion(request, 14);
     await expect(page.getByRole("button", { name: "启用供应商模块" }))
       .toBeVisible();
 
     const state = await readState(request);
-    expect(state.mutations).toHaveLength(12);
+    expect(state.mutations).toHaveLength(14);
     expect(state.mutations.map(({ payload }) => payload.expected_version))
-      .toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+      .toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
     for (const mutation of state.mutations) {
       expect(mutation).toMatchObject({
         method: "PATCH",
@@ -191,6 +207,7 @@ test.describe("租户供应商灰度确定性交互", () => {
         "private_catalog_writes_enabled",
         "procurement_snapshot_v1_enabled",
         "purchase_batch_workflow_enabled",
+        "warehouse_procurement_enabled",
         "expected_version",
       ]) {
         expect(mutation.payload).toHaveProperty(field);
@@ -199,11 +216,11 @@ test.describe("租户供应商灰度确定性交互", () => {
     expect(state.mutations.at(-1)?.payload).toMatchObject({
       module_enabled: false,
       reason: "E2E 验证灰度逆序停用",
-      expected_version: 11,
+      expected_version: 13,
     });
   });
 
-  test("pending 时锁定控件且 409 刷新后可用同一幂等键重试", async ({ page, request }) => {
+  test("pending 时锁定控件且明确版本冲突后新操作使用新幂等键", async ({ page, request }) => {
     await page.goto("/e2e-harness/supplier-rollout?level=0", {
       waitUntil: "networkidle",
     });
@@ -233,7 +250,9 @@ test.describe("租户供应商灰度确定性交互", () => {
       .toBeGreaterThanOrEqual(1);
     await expect(controls["私有供应商写入"]).not.toBeChecked();
 
-    await page.getByRole("button", { name: "重试本次操作" }).click();
+    await expect(page.getByRole("button", { name: "重试本次操作" })).toHaveCount(0);
+    await page.getByRole("button", { name: "刷新最新数据" }).click();
+    await controls["私有供应商写入"].click();
     await expect(controls["私有供应商写入"]).toBeChecked();
     await expectVersion(request, 4);
 
@@ -254,13 +273,13 @@ test.describe("租户供应商灰度确定性交互", () => {
         responseStatus: 200,
       },
     ]);
-    expect(mutations.at(-1)?.idempotencyKey).toBe(
+    expect(mutations.at(-1)?.idempotencyKey).not.toBe(
       mutations.at(-2)?.idempotencyKey,
     );
   });
 
-  test("只读账号能查看六个开关但不能操作", async ({ page, request }) => {
-    await page.goto("/e2e-harness/supplier-rollout?level=6&readonly=1", {
+  test("只读账号能查看全部开关但不能操作", async ({ page, request }) => {
+    await page.goto("/e2e-harness/supplier-rollout?level=7&readonly=1", {
       waitUntil: "networkidle",
     });
     const controls = switches(page);
@@ -274,5 +293,57 @@ test.describe("租户供应商灰度确定性交互", () => {
     ).toBeVisible();
     await expect(page.getByRole("button", { name: /供应商模块/ })).toHaveCount(0);
     expect((await readState(request)).mutations).toHaveLength(0);
+  });
+
+  for (const status of [503, 408, 429]) {
+    test(`未知结果 ${status} 刷新后仍保留原请求并重放历史结果`, async ({ page, request }) => {
+      await request.post(`${mockBackendBaseUrl}/__test/reset`, { data: { level: 6, version: 6 } });
+      await page.goto("/e2e-harness/supplier-rollout?level=6", { waitUntil: "networkidle" });
+      if (status === 408) {
+        // Chromium automatically retries native 408 responses. Fulfill at the
+        // browser boundary so this case exercises an observed unknown outcome.
+        let firstPatch = true;
+        await page.route("**/api/backend/platform/tenant-supplier-settings/**", async (route) => {
+          if (route.request().method() !== "PATCH" || !firstPatch) return route.continue();
+          firstPatch = false;
+          const response = await route.fetch();
+          await route.fulfill({ response, status: 408 });
+        });
+      }
+      await request.post(`${mockBackendBaseUrl}/__test/failure-next`, { data: { status, commit: true } });
+      await page.getByRole("switch", { name: "仓库采购", exact: true }).click();
+      await expect(page.getByText("操作结果尚未确认", { exact: true })).toBeVisible();
+      await request.post(`${mockBackendBaseUrl}/__test/advance-policy`);
+      await page.getByRole("button", { name: "重新加载" }).click();
+      await expect(page.getByRole("switch", { name: "仓库采购", exact: true })).toBeDisabled();
+      // A retry permission rejection must retain the unknown original command.
+      await request.post(`${mockBackendBaseUrl}/__test/failure-next`, { data: { status: 403, commit: false } });
+      await page.getByRole("button", { name: "重试本次操作" }).click();
+      await expect(page.getByText("测试请求失败", { exact: true }).first()).toBeVisible();
+      await expect(page.getByText("操作结果尚未确认", { exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "重试本次操作" }).click();
+      await expect.poll(async () => (await readState(request)).mutations.length).toBe(3);
+      await expect(page.getByRole("button", { name: "正在保存", exact: true })).toHaveCount(0);
+      await expect(page.getByText("操作结果尚未确认", { exact: true })).toHaveCount(0);
+      await expectVersion(request, 8);
+      const state = await readState(request);
+      expect(state.mutations).toHaveLength(3);
+      expect(state.mutations.map((entry) => entry.payload)).toEqual(Array(3).fill(state.mutations[0]!.payload));
+      expect(new Set(state.mutations.map((entry) => entry.idempotencyKey)).size).toBe(1);
+      expect(state.mutations[0]!.payload).toMatchObject({ warehouse_procurement_enabled: true, expected_version: 6,
+        require_active_contract_for_new_order: false });
+    });
+  }
+
+  test("保存成功后读取失败仅重新读取，不再提交命令", async ({ page, request }) => {
+    await request.post(`${mockBackendBaseUrl}/__test/reset`, { data: { level: 6, version: 6 } });
+    await page.goto("/e2e-harness/supplier-rollout?level=6", { waitUntil: "networkidle" });
+    await request.post(`${mockBackendBaseUrl}/__test/fail-reads`);
+    await page.getByRole("switch", { name: "仓库采购", exact: true }).click();
+    await expect(page.getByText("配置读取失败", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "重试本次操作" })).toHaveCount(0);
+    await page.getByRole("button", { name: "重新加载" }).click();
+    await expect(page.getByRole("switch", { name: "仓库采购", exact: true })).toBeChecked();
+    expect((await readState(request)).mutations).toHaveLength(1);
   });
 });

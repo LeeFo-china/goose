@@ -17,6 +17,7 @@ const setting = {
   private_catalog_writes_enabled: false,
   procurement_snapshot_v1_enabled: false,
   purchase_batch_workflow_enabled: false,
+  warehouse_procurement_enabled: false,
   enabled_by_employee_id: null,
   enabled_at: null,
   version: 2,
@@ -50,6 +51,7 @@ describe("PlatformSuppliersRepository settings command", () => {
       "private_catalog_writes_enabled",
       "procurement_snapshot_v1_enabled",
       "purchase_batch_workflow_enabled",
+      "warehouse_procurement_enabled",
     ]) {
       expect(selectedColumns).toContain(flag);
     }
@@ -113,6 +115,7 @@ describe("PlatformSuppliersRepository settings command", () => {
       private_catalog_writes_enabled: false,
       procurement_snapshot_v1_enabled: false,
       purchase_batch_workflow_enabled: false,
+      warehouse_procurement_enabled: false,
       expected_version: 2,
       actor_user_id: ACTOR_USER_ID,
       actor_employee_id: ACTOR_EMPLOYEE_ID,
@@ -129,6 +132,7 @@ describe("PlatformSuppliersRepository settings command", () => {
       p_procurement_snapshot_v1_enabled: false,
       p_purchase_batch_workflow_enabled: false,
       p_expected_version: 2,
+      p_warehouse_procurement_enabled: false,
       p_actor_user_id: ACTOR_USER_ID,
       p_actor_employee_id: ACTOR_EMPLOYEE_ID,
       p_idempotency_key: "settings-enable-1",

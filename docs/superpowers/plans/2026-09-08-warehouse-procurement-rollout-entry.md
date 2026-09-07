@@ -32,7 +32,7 @@
 
 ### API 测试先行
 
-- [ ] 新增并运行 RED：HTTP 接受显式 true/false，省略保留为 undefined、拒绝 null/字符串。
+- [x] 新增并运行 RED：HTTP 接受显式 true/false，省略保留为 undefined、拒绝 null/字符串。
 
 ```ts
 const validInput = {
@@ -52,13 +52,13 @@ expect(PlatformTenantSupplierSettingsCommandSchema.parse(validInput)
   .warehouse_procurement_enabled).toBeUndefined();
 ```
 
-- [ ] 实现可选输入，不添加 false 默认值；读取 select/DTO 包含真实字段。依赖计算将仓库采购置于 Workflow 之后。
+- [x] 实现可选输入，不添加 false 默认值；读取 select/DTO 包含真实字段。依赖计算将仓库采购置于 Workflow 之后。
 
 ```ts
 warehouse_procurement_enabled: z.boolean().optional()
 ```
 
-- [ ] repository 仅在客户端显式提供时传递新增 RPC 参数；旧请求保持旧载荷指纹。数据库锁内解析省略字段，不以服务层预读替代原子保留。
+- [x] repository 仅在客户端显式提供时传递新增 RPC 参数；旧请求保持旧载荷指纹。数据库锁内解析省略字段，不以服务层预读替代原子保留。
 
 ```ts
 ...(input.warehouse_procurement_enabled === undefined ? {} : {
@@ -66,18 +66,18 @@ warehouse_procurement_enabled: z.boolean().optional()
 })
 ```
 
-- [ ] 新增权限/版本/依赖/重放测试后实现：仅平台 `platform.supplier.manage`，不修改租户权限；旧成功回执在后续状态变化后仍能重放；异载荷同 key 拒绝；每次实际写入仅递增一次版本并记录真实前后值。
+- [x] 新增权限/版本/依赖/重放测试后实现：仅平台 `platform.supplier.manage`，不修改租户权限；旧成功回执在后续状态变化后仍能重放；异载荷同 key 拒绝；每次实际写入仅递增一次版本并记录真实前后值。
 
 ### 数据库测试先行
 
-- [ ] 合成 fixture 使用真实新旧签名断言开启/关闭、旧省略保留、历史命令重放、跨签名 key 冲突、依赖拒绝及版本冲突，先记录新增行为 RED。
-- [ ] 新 migration 事务内新增仓库参数及旧签名兼容逻辑；固定 `search_path`，所有入口仅 service_role 执行；不修改历史事件，不自动启用租户。保持 actor/key 锁与 tenant 锁的既有顺序。
-- [ ] 增加 ACL、默认值、并发与失败回滚断言；在临时数据库运行 fixture，确认 GREEN。
+- [x] 合成 fixture 使用真实新旧签名断言开启/关闭、旧省略保留、历史命令重放、跨签名 key 冲突、依赖拒绝及版本冲突，先记录新增行为 RED。
+- [x] 新 migration 事务内新增仓库参数及旧签名兼容逻辑；固定 `search_path`，所有入口仅 service_role 执行；不修改历史事件，不自动启用租户。保持 actor/key 锁与 tenant 锁的既有顺序。
+- [x] 增加 ACL、默认值、并发与失败回滚断言；在临时数据库运行 fixture，确认 GREEN。另补齐迁移 COMMIT 前故障注入，验证函数/ACL/数据/历史完整回滚后正常应用。
 
 ### Admin 测试先行
 
-- [ ] RED：依赖全开时可启用仓库；仓库开启时父级不可关闭；无权限只读；缺失字段视为关闭。
-- [ ] 复用 `rolloutFields` 增加字段：
+- [x] RED：依赖全开时可启用仓库；仓库开启时父级不可关闭；无权限只读；缺失字段视为关闭。
+- [x] 复用 `rolloutFields` 增加字段：
 
 ```ts
 {
@@ -88,15 +88,15 @@ warehouse_procurement_enabled: z.boolean().optional()
 }
 ```
 
-- [ ] RED：超时后刷新不能改变待重试 body/version/key；成功后读取失败只重读；明确版本冲突经重新确认使用新 key。实现不可变命令快照并保留明确失败恢复提示，不新建通用状态框架。
-- [ ] GREEN 后先静态检查，再运行既有 rollout Playwright harness，覆盖桌面、375px、权限、依赖和失败恢复。
+- [x] RED：超时后刷新不能改变待重试 body/version/key；成功后读取失败只重读；明确版本冲突经重新确认使用新 key。实现不可变命令快照并保留明确失败恢复提示，不新建通用状态框架。
+- [x] GREEN 后先静态检查，再运行既有 rollout Playwright harness，覆盖桌面、375px、权限、依赖和失败恢复。最终 14/14 通过。
 
 ## Task 3：独立审查与最终验证
 
-- [ ] 独立规格审查，逐项对照已确认设计；修复后复核。
-- [ ] 规格通过后独立质量审查，重点检查历史指纹兼容、锁与 ACL、前端未知结果恢复。
-- [ ] 主代理重跑必要测试及 API/Admin 静态检查、构建；报告真实通过数量及环境限制。
-- [ ] 更新设计状态与实现证据，列出新增 migration 和部署顺序；只报告本开关实现，不将 Stage B 整体验收标为完成。
+- [x] 独立规格审查，逐项对照已确认设计；修复后复核。SPEC COMPLIANT。
+- [x] 规格通过后独立质量审查，重点检查历史指纹兼容、锁与 ACL、前端未知结果恢复。PASS，无遗留发现。
+- [x] 主代理重跑必要测试及 API/Admin 静态检查、构建；API 46、Admin 18、浏览器 14 项通过，隔离数据库验证通过。
+- [x] 更新设计状态与实现证据，列出新增 migration 和部署顺序；只报告本开关实现，不将 Stage B 整体验收标为完成。见 `../../operations/evidence/2026-09-08-warehouse-procurement-rollout-entry.md`。
 
 ## 发布与权限边界
 

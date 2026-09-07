@@ -16,6 +16,9 @@ let mutations = [];
 let conflictNext = false;
 let delayNextMs = 0;
 let settingsReadCount = 0;
+let failureNext = null;
+let failReads = 0;
+let commandEvents = new Map();
 
 function sendJson(response, statusCode, payload) {
   response.writeHead(statusCode, {
@@ -43,6 +46,7 @@ function idempotencyKey(request) {
 
 function rolloutLevel(value) {
   if (!value.module_enabled) return 0;
+  if (value.warehouse_procurement_enabled) return 7;
   if (value.purchase_batch_workflow_enabled) return 6;
   if (value.procurement_snapshot_v1_enabled) return 5;
   if (value.private_catalog_writes_enabled) return 4;
@@ -60,6 +64,7 @@ function isCompletePayload(payload) {
     "private_catalog_writes_enabled",
     "procurement_snapshot_v1_enabled",
     "purchase_batch_workflow_enabled",
+    "warehouse_procurement_enabled",
     "expected_version",
   ].every((field) => Object.hasOwn(payload, field));
 }
@@ -75,6 +80,21 @@ async function patchSettings(request, response, url) {
     responseStatus: null,
   };
   mutations.push(mutation);
+  const failure = failureNext;
+  failureNext = null;
+  if (failure && !failure.commit) {
+    mutation.responseStatus = failure.status;
+    sendJson(response, failure.status, { success: false, code: "TEST_REJECTION", message: "测试请求失败" });
+    return;
+  }
+  const historical = commandEvents.get(key);
+  if (historical) {
+    const matches = JSON.stringify(historical.payload) === JSON.stringify(payload);
+    mutation.responseStatus = matches ? 200 : 409;
+    sendJson(response, mutation.responseStatus, matches ? { success: true, data: historical.settings }
+      : { success: false, code: "SUPPLIER_IDEMPOTENCY_CONFLICT", message: "幂等键对应不同请求" });
+    return;
+  }
 
   if (!key?.trim() || !isCompletePayload(payload)) {
     mutation.responseStatus = 400;
@@ -153,6 +173,7 @@ async function patchSettings(request, response, url) {
       payload.procurement_snapshot_v1_enabled,
     purchase_batch_workflow_enabled:
       payload.purchase_batch_workflow_enabled,
+    warehouse_procurement_enabled: payload.warehouse_procurement_enabled,
     enabled_by_employee_id: payload.module_enabled
       ? settings.enabled_by_employee_id ?? mockSupplierRolloutSession.employee.id
       : null,
@@ -166,6 +187,12 @@ async function patchSettings(request, response, url) {
     settings.enabled_at = new Date().toISOString();
   }
   mutation.responseStatus = 200;
+  commandEvents.set(key, { payload: structuredClone(payload), settings: structuredClone(settings) });
+  if (failure) {
+    mutation.responseStatus = failure.status;
+    sendJson(response, failure.status, { success: false, code: "TEST_UNKNOWN_OUTCOME", message: "操作结果未知" });
+    return;
+  }
   sendJson(response, 200, { success: true, data: settings });
 }
 
@@ -186,12 +213,30 @@ const server = createServer(async (request, response) => {
     conflictNext = false;
     delayNextMs = 0;
     settingsReadCount = 0;
+    failureNext = null;
+    failReads = 0;
+    commandEvents = new Map();
     sendJson(response, 200, { success: true });
     return;
   }
   if (request.method === "POST" && url.pathname === "/__test/conflict-next") {
     await readBody(request);
     conflictNext = true;
+    sendJson(response, 200, { success: true });
+    return;
+  }
+  if (request.method === "POST" && url.pathname === "/__test/failure-next") {
+    failureNext = JSON.parse(await readBody(request));
+    sendJson(response, 200, { success: true });
+    return;
+  }
+  if (request.method === "POST" && url.pathname === "/__test/fail-reads") {
+    failReads = 1;
+    sendJson(response, 200, { success: true });
+    return;
+  }
+  if (request.method === "POST" && url.pathname === "/__test/advance-policy") {
+    settings = { ...settings, require_active_contract_for_new_order: true, version: settings.version + 1 };
     sendJson(response, 200, { success: true });
     return;
   }
@@ -231,6 +276,11 @@ const server = createServer(async (request, response) => {
   if (settingsMatch && decodeURIComponent(settingsMatch[1]) === mockTenantId) {
     if (request.method === "GET") {
       settingsReadCount += 1;
+      if (failReads > 0) {
+        failReads -= 1;
+        sendJson(response, 503, { success: false, message: "配置读取失败" });
+        return;
+      }
       sendJson(response, 200, { success: true, data: settings });
       return;
     }

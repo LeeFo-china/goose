@@ -7,6 +7,7 @@ export type SupplierRolloutState = {
   private_catalog_writes_enabled: boolean;
   procurement_snapshot_v1_enabled: boolean;
   purchase_batch_workflow_enabled: boolean;
+  warehouse_procurement_enabled?: boolean;
 };
 
 const DISABLED_FLAGS = {
@@ -15,6 +16,7 @@ const DISABLED_FLAGS = {
   private_catalog_writes_enabled: false,
   procurement_snapshot_v1_enabled: false,
   purchase_batch_workflow_enabled: false,
+  warehouse_procurement_enabled: false,
 } as const;
 
 export function effectiveSupplierRolloutSettings<
@@ -40,6 +42,8 @@ export function effectiveSupplierRolloutSettings<
       private_catalog_writes_enabled: privateCatalogWritesEnabled,
       procurement_snapshot_v1_enabled: procurementSnapshotEnabled,
       purchase_batch_workflow_enabled: purchaseBatchWorkflowEnabled,
+      warehouse_procurement_enabled: purchaseBatchWorkflowEnabled &&
+        settings.warehouse_procurement_enabled === true,
     }),
   };
 }
@@ -76,7 +80,7 @@ export function assertSupplierRolloutDependencies(
 ): void {
   const effectiveTarget = effectiveSupplierRolloutSettings(target);
   const hasInvalidDependency = Object.keys(DISABLED_FLAGS).some((key) =>
-    target[key as keyof typeof DISABLED_FLAGS] !==
+    (target[key as keyof typeof DISABLED_FLAGS] ?? false) !==
       effectiveTarget[key as keyof typeof DISABLED_FLAGS]
   );
 
@@ -93,6 +97,7 @@ function throwSupplierRolloutOrderInvalid(): never {
 
 function rolloutLevel(settings: SupplierRolloutState): number {
   if (!settings.module_enabled) return 0;
+  if (settings.warehouse_procurement_enabled) return 7;
   if (settings.purchase_batch_workflow_enabled) return 6;
   if (settings.procurement_snapshot_v1_enabled) return 5;
   if (settings.private_catalog_writes_enabled) return 4;

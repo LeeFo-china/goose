@@ -31,6 +31,8 @@ import {
 } from "../suppliers/supplier-types";
 import {
   loadPlatformTenantSupplierSettings,
+  createPlatformSupplierSettingsRequest,
+  type PlatformSupplierSettingsRequest,
   type PlatformModuleIntent,
   updatePlatformTenantSupplierModule,
 } from "../suppliers/supplier-settings-api";
@@ -41,7 +43,7 @@ import {
 } from "./tenant-supplier-settings-rules";
 
 type PendingModuleIntent = PlatformModuleIntent & {
-  idempotencyKey: string;
+  request: PlatformSupplierSettingsRequest;
   successMessage: string;
 };
 
@@ -54,7 +56,8 @@ const rolloutFields: ReadonlyArray<{
     | "privateSupplierWritesEnabled"
     | "privateCatalogWritesEnabled"
     | "procurementSnapshotV1Enabled"
-    | "purchaseBatchWorkflowEnabled";
+    | "purchaseBatchWorkflowEnabled"
+    | "warehouseProcurementEnabled";
 }> = [
   {
     flag: "ownership_reads_enabled",
@@ -86,6 +89,12 @@ const rolloutFields: ReadonlyArray<{
     description: "开启后采购批次提交进入统一任务中心审批；需先启用采购单快照 V1。",
     intentKey: "purchaseBatchWorkflowEnabled",
   },
+  {
+    flag: "warehouse_procurement_enabled",
+    label: "仓库采购",
+    description: "需先启用采购批次 Workflow 及全部前置开关，允许采购到仓库并衔接入库。",
+    intentKey: "warehouseProcurementEnabled",
+  },
 ];
 
 const defaultSettings = (tenantId: string): TenantSupplierSettings => ({
@@ -97,6 +106,7 @@ const defaultSettings = (tenantId: string): TenantSupplierSettings => ({
   private_catalog_writes_enabled: false,
   procurement_snapshot_v1_enabled: false,
   purchase_batch_workflow_enabled: false,
+  warehouse_procurement_enabled: false,
   enabled_by_employee_id: null,
   enabled_at: null,
   version: 0,
@@ -144,29 +154,35 @@ export function TenantSupplierSettingsCard({
 
   async function save(
     intent: PendingModuleIntent,
-    current = settings,
+    isRetry = false,
   ) {
+    if (!canManage) return;
     setPending(true);
     setPendingIntent(intent);
     setConflict(false);
     try {
-      const updated = await updatePlatformTenantSupplierModule({
-        tenantId,
-        current,
-        intent,
-        idempotencyKey: intent.idempotencyKey,
-      });
+      const updated = await updatePlatformTenantSupplierModule(intent.request);
       setSettings(updated);
       setDisableReason("");
       setReasonError(false);
       setPendingIntent(null);
       setError(null);
       toast.success(intent.successMessage);
+      // A confirmed success consumes the command even if this subsequent read fails.
+      await loadLatest();
     } catch (requestError) {
-      if ((requestError as { status?: number }).status === 409) {
+      const failure = requestError as { status?: number; code?: string };
+      if (failure.status === 409 && failure.code === "SUPPLIER_VERSION_CONFLICT") {
+        setPendingIntent(null);
         setConflict(true);
         await loadLatest();
       } else {
+        // A permission rejection on a retry says nothing about the original attempt.
+        const definiteRejection = failure.status !== undefined &&
+          failure.status >= 400 && failure.status < 500 &&
+          failure.status !== 408 && failure.status !== 429 &&
+          !(isRetry && [401, 403, 404].includes(failure.status));
+        if (definiteRejection) setPendingIntent(null);
         const message = requestError instanceof Error
           ? requestError.message
           : "供应商模块配置保存失败";
@@ -178,6 +194,14 @@ export function TenantSupplierSettingsCard({
     }
   }
 
+  function startMutation(intent: PlatformModuleIntent, successMessage: string, keyPrefix: string) {
+    if (controlsLocked) return;
+    void save({ ...intent, successMessage,
+      request: createPlatformSupplierSettingsRequest({ tenantId, current: settings, intent,
+        idempotencyKey: newIdempotencyKey(keyPrefix) }),
+    });
+  }
+
   function startModuleMutation() {
     const moduleEnabled = !settings.module_enabled;
     const reason = disableReason.trim();
@@ -185,12 +209,10 @@ export function TenantSupplierSettingsCard({
       setReasonError(true);
       return;
     }
-    void save({
+    startMutation({
       moduleEnabled,
       ...(reason ? { reason } : {}),
-      idempotencyKey: newIdempotencyKey("tenant-supplier-settings"),
-      successMessage: moduleEnabled ? "供应商模块已启用" : "供应商模块已停用",
-    });
+    }, moduleEnabled ? "供应商模块已启用" : "供应商模块已停用", "tenant-supplier-settings");
   }
 
   function startRolloutMutation(
@@ -199,29 +221,25 @@ export function TenantSupplierSettingsCard({
   ) {
     const field = rolloutFields.find((candidate) => candidate.flag === flag);
     if (!field || !canToggleSupplierRolloutFlag(settings, flag)) return;
-    void save({
+    startMutation({
       moduleEnabled: settings.module_enabled,
       [field.intentKey]: checked,
-      idempotencyKey: newIdempotencyKey(`tenant-supplier-${flag}`),
-      successMessage: `${field.label}已${checked ? "启用" : "停用"}`,
-    });
+    }, `${field.label}已${checked ? "启用" : "停用"}`, `tenant-supplier-${flag}`);
   }
 
   async function retry() {
     if (!pendingIntent) return;
-    const latest = await loadLatest();
-    if (latest) await save(pendingIntent, latest);
+    await save(pendingIntent, true);
   }
 
   async function refreshAfterConflict() {
     const latest = await loadLatest();
     if (!latest) return;
     setConflict(false);
-    setPendingIntent(null);
   }
 
   const hasEnabledChildFlags = hasEnabledSupplierRolloutFlags(settings);
-  const controlsLocked = pending || Boolean(error) || conflict || !canManage;
+  const controlsLocked = pending || Boolean(pendingIntent) || Boolean(error) || conflict || !canManage;
 
   return (
     <Card className="shadow-none">
@@ -292,7 +310,7 @@ export function TenantSupplierSettingsCard({
           <Alert>
             <AlertTitle>请先逆序关闭子开关</AlertTitle>
             <AlertDescription>
-              必须依次关闭采购批次 Workflow、采购单快照、私有目录、私有供应商和所有权读取，
+              必须依次关闭仓库采购、采购批次 Workflow、采购单快照、私有目录、私有供应商和所有权读取，
               才能停用供应商模块。
             </AlertDescription>
           </Alert>
@@ -319,11 +337,18 @@ export function TenantSupplierSettingsCard({
                 <div className="flex flex-col gap-1">
                   <FieldLabel htmlFor={id}>{field.label}</FieldLabel>
                   <FieldDescription>{field.description}</FieldDescription>
+                  {disabled ? <FieldDescription id={`${id}-disabled`}>
+                    {!canManage ? "当前账号仅可查看。" : pending ? "正在保存，请稍候。"
+                      : pendingIntent ? "上次操作结果尚未确认，请先重试原请求。"
+                      : error || conflict ? "请先刷新配置并处理提示。"
+                      : "请先启用全部前置开关；停用时需先关闭后续开关。"}
+                  </FieldDescription> : null}
                 </div>
                 <Switch
                   id={id}
                   aria-label={field.label}
-                  checked={settings[field.flag]}
+                  checked={settings[field.flag] === true}
+                  aria-describedby={disabled ? `${id}-disabled` : undefined}
                   disabled={disabled}
                   onCheckedChange={(checked) =>
                     startRolloutMutation(field.flag, checked)}
@@ -366,10 +391,17 @@ export function TenantSupplierSettingsCard({
                 <Button type="button" size="sm" variant="outline" onClick={() => void refreshAfterConflict()}>
                   刷新最新数据
                 </Button>
-                <Button type="button" size="sm" disabled={pending} onClick={() => void retry()}>
-                  重试本次操作
-                </Button>
               </div>
+            </AlertDescription>
+          </Alert>
+        ) : null}
+        {pendingIntent && !pending ? (
+          <Alert>
+            <AlertTitle>操作结果尚未确认</AlertTitle>
+            <AlertDescription className="flex flex-col gap-3">
+              <p>已保留原请求。重新加载仅更新显示；重试会使用原版本和幂等键确认结果。</p>
+              <Button type="button" size="sm" className="self-start" disabled={!canManage}
+                onClick={() => void retry()}>重试本次操作</Button>
             </AlertDescription>
           </Alert>
         ) : null}

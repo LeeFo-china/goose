@@ -13,6 +13,7 @@ const settings = {
   private_catalog_writes_enabled: false,
   procurement_snapshot_v1_enabled: false,
   purchase_batch_workflow_enabled: false,
+  warehouse_procurement_enabled: false,
 };
 
 describe("tenant supplier settings UI rollout rules", () => {
@@ -23,6 +24,7 @@ describe("tenant supplier settings UI rollout rules", () => {
       "private_catalog_writes_enabled",
       "procurement_snapshot_v1_enabled",
       "purchase_batch_workflow_enabled",
+      "warehouse_procurement_enabled",
     ]);
     expect(canToggleSupplierRolloutFlag(
       settings,
@@ -81,6 +83,9 @@ describe("tenant supplier settings UI rollout rules", () => {
       levelSix,
       "purchase_batch_workflow_enabled",
     )).toBe(true);
+    expect(canToggleSupplierRolloutFlag(levelSix, "warehouse_procurement_enabled")).toBe(true);
+    expect(canToggleSupplierRolloutFlag({ ...levelSix, warehouse_procurement_enabled: true },
+      "purchase_batch_workflow_enabled")).toBe(false);
   });
 
   test("disables all child switches while the module is off", () => {

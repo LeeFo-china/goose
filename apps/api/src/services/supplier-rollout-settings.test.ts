@@ -14,9 +14,27 @@ const disabled = {
   private_catalog_writes_enabled: false,
   procurement_snapshot_v1_enabled: false,
   purchase_batch_workflow_enabled: false,
+  warehouse_procurement_enabled: false,
 };
 
 describe("supplier rollout settings", () => {
+  test("warehouse requires the entire chain and is the seventh adjacent step", () => {
+    const workflow = { ...disabled, module_enabled: true,
+      ownership_reads_enabled: true, private_supplier_writes_enabled: true,
+      private_catalog_writes_enabled: true, procurement_snapshot_v1_enabled: true,
+      purchase_batch_workflow_enabled: true, warehouse_procurement_enabled: false };
+    const warehouse = { ...workflow, warehouse_procurement_enabled: true };
+    expect(() => assertSupplierRolloutDependencies(warehouse)).not.toThrow();
+    expect(() => assertSupplierRolloutTransition(workflow, warehouse)).not.toThrow();
+    expect(() => assertSupplierRolloutTransition(warehouse, workflow)).not.toThrow();
+    expect(() => assertSupplierRolloutTransition({ ...workflow,
+      purchase_batch_workflow_enabled: false }, warehouse)).toThrow();
+    for (const flag of Object.keys(workflow).filter((key) => key !== "warehouse_procurement_enabled")) {
+      const invalid = { ...warehouse, [flag]: false };
+      expect(() => assertSupplierRolloutDependencies(invalid)).toThrow();
+      expect(effectiveSupplierRolloutSettings(invalid).warehouse_procurement_enabled).toBe(false);
+    }
+  });
   test("allows every adjacent enable and reverse disable step", () => {
     const states = [
       disabled,

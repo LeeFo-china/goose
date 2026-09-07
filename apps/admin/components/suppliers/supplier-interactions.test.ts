@@ -22,20 +22,13 @@ import {
 
 const originalFetch = globalThis.fetch;
 
-afterEach(() => {
-  globalThis.fetch = originalFetch;
-});
+afterEach(() => { globalThis.fetch = originalFetch; });
 
 function jsonResponse(payload: unknown, status = 200) {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: { "content-type": "application/json" },
-  });
+  return Response.json(payload, { status });
 }
 
-function settings(
-  overrides: Partial<TenantSupplierSettings> = {},
-): TenantSupplierSettings {
+function settings(overrides: Partial<TenantSupplierSettings> = {}): TenantSupplierSettings {
   return {
     tenant_id: "tenant-1",
     module_enabled: false,
@@ -45,6 +38,7 @@ function settings(
     private_catalog_writes_enabled: false,
     procurement_snapshot_v1_enabled: false,
     purchase_batch_workflow_enabled: false,
+    warehouse_procurement_enabled: false,
     enabled_by_employee_id: null,
     enabled_at: null,
     version: 0,
@@ -182,6 +176,7 @@ describe("供应商设置运行时交互", () => {
       private_catalog_writes_enabled: false,
       procurement_snapshot_v1_enabled: false,
       purchase_batch_workflow_enabled: false,
+      warehouse_procurement_enabled: false,
       expected_version: 0,
     });
     expect(new Headers(calls[0]?.init?.headers).get("Idempotency-Key")).toBe(
@@ -218,6 +213,7 @@ describe("供应商设置运行时交互", () => {
       private_catalog_writes_enabled: false,
       procurement_snapshot_v1_enabled: false,
       purchase_batch_workflow_enabled: false,
+      warehouse_procurement_enabled: false,
       expected_version: 4,
       reason: "合同结清后停用",
     });
@@ -281,6 +277,7 @@ describe("供应商设置运行时交互", () => {
       private_catalog_writes_enabled: false,
       procurement_snapshot_v1_enabled: false,
       purchase_batch_workflow_enabled: false,
+      warehouse_procurement_enabled: false,
       expected_version: 2,
     });
     expect(new Headers(calls[0]?.init?.headers).get("Idempotency-Key")).toBe(
@@ -348,7 +345,7 @@ describe("供应商设置运行时交互", () => {
     );
   });
 
-  test("平台 409 刷新后仍重试原停用意图", async () => {
+  test("明确版本冲突后可使用新版本和新幂等键提交停用意图", async () => {
     const patchBodies: unknown[] = [];
     let patchAttempts = 0;
     globalThis.fetch = (async (input, init) => {
@@ -380,14 +377,14 @@ describe("供应商设置运行时交互", () => {
       tenantId: "tenant-1",
       current: settings({ module_enabled: true, version: 2 }),
       intent,
-      idempotencyKey: "same-operation-key",
+      idempotencyKey: "rejected-operation-key",
     })).rejects.toThrow("数据版本已变化");
     const latest = await loadPlatformTenantSupplierSettings("tenant-1");
     await updatePlatformTenantSupplierModule({
       tenantId: "tenant-1",
       current: latest!,
       intent,
-      idempotencyKey: "same-operation-key",
+      idempotencyKey: "new-operation-key",
     });
 
     expect(patchBodies).toEqual([
@@ -399,6 +396,7 @@ describe("供应商设置运行时交互", () => {
         private_catalog_writes_enabled: false,
         procurement_snapshot_v1_enabled: false,
         purchase_batch_workflow_enabled: false,
+      warehouse_procurement_enabled: false,
         expected_version: 2,
         reason: "停止供应商采购",
       },
@@ -410,6 +408,7 @@ describe("供应商设置运行时交互", () => {
         private_catalog_writes_enabled: false,
         procurement_snapshot_v1_enabled: false,
         purchase_batch_workflow_enabled: false,
+      warehouse_procurement_enabled: false,
         expected_version: 3,
         reason: "停止供应商采购",
       },

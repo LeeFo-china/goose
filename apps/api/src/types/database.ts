@@ -23361,6 +23361,14 @@ export type Database = {
         }
         Returns: Json
       }
+      __gooes_set_supplier_rollout_settings_v2: {
+        Args: {
+          p_actor_user_id: string
+          p_idempotency_key: string
+          p_request: Json
+        }
+        Returns: Json
+      }
       __gooes_save_supplier_purchase_batch_draft_v1: {
         Args: {
           p_actor_employee_id: string
@@ -30144,6 +30152,25 @@ export type Database = {
               p_reason?: string
               p_require_active_contract_for_new_order: boolean
               p_tenant_id: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_actor_employee_id: string
+              p_actor_user_id: string
+              p_expected_version: number
+              p_idempotency_key: string
+              p_module_enabled: boolean
+              p_ownership_reads_enabled: boolean
+              p_private_catalog_writes_enabled: boolean
+              p_private_supplier_writes_enabled: boolean
+              p_procurement_snapshot_v1_enabled: boolean
+              p_purchase_batch_workflow_enabled: boolean
+              p_reason?: string
+              p_require_active_contract_for_new_order: boolean
+              p_tenant_id: string
+              p_warehouse_procurement_enabled: boolean
             }
             Returns: Json
           }

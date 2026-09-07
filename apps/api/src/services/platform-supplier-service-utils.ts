@@ -138,6 +138,7 @@ export function settingsState(input: {
   private_catalog_writes_enabled: boolean;
   procurement_snapshot_v1_enabled: boolean;
   purchase_batch_workflow_enabled: boolean;
+  warehouse_procurement_enabled?: boolean;
   version: number;
 }) {
   return {
@@ -149,6 +150,7 @@ export function settingsState(input: {
     private_catalog_writes_enabled: input.private_catalog_writes_enabled,
     procurement_snapshot_v1_enabled: input.procurement_snapshot_v1_enabled,
     purchase_batch_workflow_enabled: input.purchase_batch_workflow_enabled,
+    warehouse_procurement_enabled: input.warehouse_procurement_enabled ?? false,
     version: input.version,
   };
 }

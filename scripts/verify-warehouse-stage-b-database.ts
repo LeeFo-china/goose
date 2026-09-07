@@ -47,6 +47,48 @@ function sourceSql(query: string): string {
   ]);
 }
 
+function verifyWarehouseRolloutMigrationRollback(migration: string): void {
+  const snapshotQuery = `SELECT jsonb_build_object(
+    'functions', (SELECT jsonb_agg(jsonb_build_object(
+      'signature',p.oid::regprocedure::text,'definition',pg_get_functiondef(p.oid),
+      'acl',p.proacl::text,'owner',p.proowner,'config',p.proconfig) ORDER BY p.oid)
+      FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+      WHERE n.nspname='public' AND p.proname IN
+        ('set_tenant_supplier_rollout_settings','__gooes_set_supplier_rollout_settings_v2')),
+    'settings',(SELECT jsonb_agg(to_jsonb(s) ORDER BY s.tenant_id) FROM public.tenant_supplier_settings s),
+    'events',(SELECT jsonb_agg(to_jsonb(e) ORDER BY e.id) FROM public.supplier_command_events e),
+    'migration_history',(SELECT jsonb_agg(to_jsonb(m) ORDER BY m.version) FROM supabase_migrations.schema_migrations m)
+  )`;
+  const assertNoLeakedFunctions = `DO $$ BEGIN
+    IF to_regprocedure('public.__gooes_set_supplier_rollout_settings_v2(jsonb,uuid,text)') IS NOT NULL
+      OR to_regprocedure('public.set_tenant_supplier_rollout_settings(uuid,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,integer,uuid,uuid,text,text)') IS NOT NULL
+    THEN RAISE EXCEPTION 'warehouse migration leaked a function across rollback'; END IF;
+  END $$;`;
+  sql(assertNoLeakedFunctions);
+  const before = JSON.parse(sql(snapshotQuery));
+  assert.equal((migration.match(/^COMMIT;\s*$/gm) ?? []).length, 1,
+    "Warehouse migration must contain one final COMMIT for failure injection");
+  assert.match(migration, /COMMIT;\s*$/);
+  const failureMarker = "STAGE_B_ROLLOUT_MIGRATION_INJECTED_FAILURE";
+  const failingMigration = migration.replace(/^COMMIT;\s*$/m,
+    () => `DO $$ BEGIN RAISE EXCEPTION '${failureMarker}'; END $$;\nCOMMIT;`);
+  // This is the only expected-error path. ON_ERROR_STOP terminates the session
+  // before COMMIT, so disconnect rolls back all DDL and ACL changes together.
+  const failure = spawnSync("docker", ["exec", "-i", container, "psql",
+    "-h", "/tmp", "-U", "postgres", "-d", "postgres", "-X", "-qAt", "-v", "ON_ERROR_STOP=1"], {
+    input: failingMigration, encoding: "utf8", timeout: 60_000, maxBuffer: 64 * 1024 * 1024,
+  });
+  assert.equal(failure.error, undefined, "Warehouse migration failure probe could not execute");
+  assert.equal(failure.status, 3, "Injected migration failure must stop psql before COMMIT");
+  assert.match(failure.stderr, new RegExp(`ERROR:  ${failureMarker}`));
+  sql(assertNoLeakedFunctions);
+  assert.deepEqual(JSON.parse(sql(snapshotQuery)), before,
+    "Failed warehouse migration changed definitions, ACLs, settings, events or migration history");
+  sql("CREATE TABLE public.stage_b_rollout_migration_rollback_evidence (verified boolean NOT NULL CHECK (verified)); " +
+    "INSERT INTO public.stage_b_rollout_migration_rollback_evidence VALUES (true)");
+  console.log("PASS injected warehouse migration failure rolled back definitions/ACLs/config/history; no new overload/core leaked");
+}
+
 let launchAttempted = false;
 try {
   docker(["image", "inspect", image]);
@@ -107,11 +149,17 @@ try {
   sql(schema);
   sql(functionAcls);
   console.log(`PASS restored schema-only baseline ${baseline} (${versions.size} migrations)`);
+  const fixtures = process.argv.slice(2);
   for (const name of pending) {
+    if (name === "20260908010000_extend_warehouse_procurement_rollout_command.sql" &&
+      fixtures.includes("scripts/fixtures/warehouse-stage-b/rollout-command.sql")) {
+      sql(readFileSync("scripts/fixtures/warehouse-stage-b/rollout-command-before.sql", "utf8"));
+      console.log("PASS synthetic historical rollout commands created before migration");
+      verifyWarehouseRolloutMigrationRollback(readFileSync(`${migrationDirectory}/${name}`, "utf8"));
+    }
     sql(readFileSync(`${migrationDirectory}/${name}`, "utf8"));
     console.log(`PASS isolated migration ${name}`);
   }
-  const fixtures = process.argv.slice(2);
   for (const fixture of fixtures) {
     assert.match(fixture, /^scripts\/fixtures\/warehouse-stage-b\/[a-z0-9-]+\.sql$/,
       "Only scoped Stage B SQL fixtures are accepted");

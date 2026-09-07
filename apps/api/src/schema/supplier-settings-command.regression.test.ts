@@ -18,6 +18,20 @@ const initialSettings = {
 };
 
 describe("platform tenant supplier settings command", () => {
+  test("accepts explicit warehouse booleans while preserving omission", () => {
+    for (const warehouse_procurement_enabled of [true, false]) {
+      expect(PlatformTenantSupplierSettingsCommandSchema.parse({
+        ...initialSettings, warehouse_procurement_enabled,
+      }).warehouse_procurement_enabled).toBe(warehouse_procurement_enabled);
+    }
+    expect(PlatformTenantSupplierSettingsCommandSchema.parse(initialSettings))
+      .not.toHaveProperty("warehouse_procurement_enabled");
+    for (const warehouse_procurement_enabled of [null, "true", 1]) {
+      expect(PlatformTenantSupplierSettingsCommandSchema.safeParse({
+        ...initialSettings, warehouse_procurement_enabled,
+      }).success).toBe(false);
+    }
+  });
   test("accepts version zero only for the initial settings command", () => {
     expect(PlatformTenantSupplierSettingsCommandSchema.parse(initialSettings))
       .toEqual(initialSettings);

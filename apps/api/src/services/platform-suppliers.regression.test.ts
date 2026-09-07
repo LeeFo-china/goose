@@ -80,6 +80,52 @@ function auth(permissionCodes: string[], isPlatformAdmin = true): AuthContext {
 }
 
 describe("PlatformSuppliersService regression boundaries", () => {
+  test("warehouse command preserves omission and audits the RPC before and after", async () => {
+    const { service, repository, audit } = await createHarness();
+    const workflow = { ...settings, module_enabled: true, ownership_reads_enabled: true,
+      private_supplier_writes_enabled: true, private_catalog_writes_enabled: true,
+      procurement_snapshot_v1_enabled: true, purchase_batch_workflow_enabled: true,
+      warehouse_procurement_enabled: false };
+    repository.getTenantSupplierSettings.mockImplementation(async () => workflow);
+    repository.setTenantSupplierSettings.mockImplementation(async (input) => ({
+      status: "updated", idempotent: false, previous_setting: workflow,
+      setting: { ...workflow, ...input, version: 2 }, version: 2,
+    }));
+    const input = { ...workflow, tenantId: TENANT_ID, expected_version: 1,
+      warehouse_procurement_enabled: true, idempotencyKey: "warehouse-enable" };
+    for (const context of [auth([]), { ...auth(["platform.supplier.manage"]), tenantId: TENANT_ID },
+      auth(["platform.supplier.manage"], false)]) {
+      await expect(service.setTenantSupplierSettings(context, input)).rejects.toMatchObject({ statusCode: 403 });
+    }
+    await service.setTenantSupplierSettings(auth(["platform.supplier.manage"]), input);
+    expect(repository.setTenantSupplierSettings).toHaveBeenCalledWith(expect.objectContaining({ warehouse_procurement_enabled: true }));
+    expect(audit.recordBestEffort).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({ from: expect.objectContaining({ warehouse_procurement_enabled: false }),
+        to: expect.objectContaining({ warehouse_procurement_enabled: true }) }),
+    }));
+    const { warehouse_procurement_enabled: _omitted, ...legacy } = input;
+    await service.setTenantSupplierSettings(auth(["platform.supplier.manage"]), legacy);
+    expect(repository.setTenantSupplierSettings.mock.calls.at(-1)?.[0])
+      .not.toHaveProperty("warehouse_procurement_enabled");
+  });
+
+  test("legacy retry reaches historical replay despite current warehouse state", async () => {
+    const { service, repository, audit } = await createHarness();
+    repository.getTenantSupplierSettings.mockImplementation(async () => ({ ...settings, version: 8,
+      module_enabled: true, ownership_reads_enabled: true, private_supplier_writes_enabled: true,
+      private_catalog_writes_enabled: true, procurement_snapshot_v1_enabled: true,
+      purchase_batch_workflow_enabled: true, warehouse_procurement_enabled: true }));
+    repository.setTenantSupplierSettings.mockImplementation(async () => ({
+      status: "updated", idempotent: true, setting: { ...settings, module_enabled: true },
+      previous_setting: null, version: 1,
+    }));
+    await service.setTenantSupplierSettings(auth(["platform.supplier.manage"]), {
+      ...settings, tenantId: TENANT_ID, module_enabled: true, expected_version: 0,
+      idempotencyKey: "historical-module-enable",
+    });
+    expect(repository.setTenantSupplierSettings).toHaveBeenCalledTimes(1);
+    expect(audit.recordBestEffort).not.toHaveBeenCalled();
+  });
   test("delegates approval completely to the atomic supplier RPC", async () => {
     const { service, repository } = await createHarness();
 

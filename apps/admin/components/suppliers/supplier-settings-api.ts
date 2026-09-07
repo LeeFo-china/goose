@@ -9,6 +9,7 @@ export type PlatformModuleIntent = {
   privateCatalogWritesEnabled?: boolean;
   procurementSnapshotV1Enabled?: boolean;
   purchaseBatchWorkflowEnabled?: boolean;
+  warehouseProcurementEnabled?: boolean;
   reason?: string;
 };
 
@@ -19,7 +20,13 @@ export async function loadPlatformTenantSupplierSettings(tenantId: string) {
   );
 }
 
-export async function updatePlatformTenantSupplierModule({
+export type PlatformSupplierSettingsRequest = Readonly<{
+  tenantId: string;
+  idempotencyKey: string;
+  body: string;
+}>;
+
+export function createPlatformSupplierSettingsRequest({
   tenantId,
   current,
   intent,
@@ -29,12 +36,10 @@ export async function updatePlatformTenantSupplierModule({
   current: TenantSupplierSettings;
   intent: PlatformModuleIntent;
   idempotencyKey: string;
-}) {
-  return requestBackendJson<TenantSupplierSettings>(
-    `/platform/tenant-supplier-settings/${tenantId}`,
-    {
-      method: "PATCH",
-      headers: { "Idempotency-Key": idempotencyKey },
+}): PlatformSupplierSettingsRequest {
+  return Object.freeze({
+      tenantId,
+      idempotencyKey,
       body: JSON.stringify({
         module_enabled: intent.moduleEnabled,
         require_active_contract_for_new_order:
@@ -51,11 +56,22 @@ export async function updatePlatformTenantSupplierModule({
         purchase_batch_workflow_enabled:
           intent.purchaseBatchWorkflowEnabled ??
           current.purchase_batch_workflow_enabled,
+        warehouse_procurement_enabled:
+          intent.warehouseProcurementEnabled ??
+          current.warehouse_procurement_enabled ?? false,
         expected_version: current.version,
         ...(intent.reason ? { reason: intent.reason } : {}),
       }),
-      fallbackMessage: "供应商模块配置保存失败",
-    },
+  });
+}
+
+export async function updatePlatformTenantSupplierModule(input:
+  PlatformSupplierSettingsRequest | Parameters<typeof createPlatformSupplierSettingsRequest>[0]) {
+  const request = "body" in input ? input : createPlatformSupplierSettingsRequest(input);
+  return requestBackendJson<TenantSupplierSettings>(
+    `/platform/tenant-supplier-settings/${request.tenantId}`,
+    { method: "PATCH", headers: { "Idempotency-Key": request.idempotencyKey },
+      body: request.body, fallbackMessage: "供应商模块配置保存失败" },
   );
 }
 

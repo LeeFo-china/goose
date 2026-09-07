@@ -74,6 +74,7 @@ type SettingsRequest = {
   private_catalog_writes_enabled: boolean;
   procurement_snapshot_v1_enabled: boolean;
   purchase_batch_workflow_enabled: boolean;
+  warehouse_procurement_enabled?: boolean;
   expected_version: number; reason?: string; idempotencyKey: string;
 };
 export class PlatformSuppliersService {
@@ -313,6 +314,9 @@ export class PlatformSuppliersService {
     assertSupplierRolloutDependencies(input);
     const current = await this.repository.getTenantSupplierSettings(input.tenantId);
     if ((current?.version ?? 0) === input.expected_version) {
+      const target = { ...input, warehouse_procurement_enabled:
+        input.warehouse_procurement_enabled ?? current?.warehouse_procurement_enabled ?? false };
+      assertSupplierRolloutDependencies(target);
       assertSupplierRolloutTransition(current ?? {
         module_enabled: false,
         ownership_reads_enabled: false,
@@ -320,7 +324,7 @@ export class PlatformSuppliersService {
         private_catalog_writes_enabled: false,
         procurement_snapshot_v1_enabled: false,
         purchase_batch_workflow_enabled: false,
-      }, input);
+      }, target);
     }
     const result = await this.mapIdempotencyError(() =>
       this.repository.setTenantSupplierSettings({
@@ -333,6 +337,9 @@ export class PlatformSuppliersService {
         procurement_snapshot_v1_enabled: input.procurement_snapshot_v1_enabled,
         purchase_batch_workflow_enabled:
           input.purchase_batch_workflow_enabled,
+        ...(input.warehouse_procurement_enabled === undefined ? {} : {
+          warehouse_procurement_enabled: input.warehouse_procurement_enabled,
+        }),
         expected_version: input.expected_version, actor_user_id: actor.authUserId,
         actor_employee_id: actor.employeeId,
         idempotency_key: input.idempotencyKey,
@@ -343,7 +350,7 @@ export class PlatformSuppliersService {
     await this.audit.recordBestEffort({
       action: !input.module_enabled
         ? "tenant_supplier_module_disable"
-        : current?.module_enabled
+        : result.previous_setting?.module_enabled
           ? "tenant_supplier_rollout_update"
           : "tenant_supplier_module_enable",
       actorEmployeeId: actor.employeeId, actorUserId: actor.authUserId,
@@ -351,7 +358,7 @@ export class PlatformSuppliersService {
       resourceId: input.tenantId,
       resourceLabel: `租户 ${input.tenantId}`,
       status: "success",
-      summary: current?.module_enabled === input.module_enabled
+      summary: result.previous_setting?.module_enabled === input.module_enabled
         ? "调整租户供应商灰度开关"
         : `${input.module_enabled ? "启用" : "停用"}租户供应商模块`,
       metadata: {
