@@ -4993,6 +4993,175 @@ export type Database = {
           },
         ]
       }
+      inventory_balances: {
+        Row: {
+          average_unit_cost: number
+          id: string
+          inventory_value: number
+          quantity_on_hand: number
+          supplier_sku_id: string
+          tenant_id: string
+          updated_at: string
+          version: number
+          warehouse_id: string
+        }
+        Insert: {
+          average_unit_cost?: number
+          id?: string
+          inventory_value?: number
+          quantity_on_hand?: number
+          supplier_sku_id: string
+          tenant_id: string
+          updated_at?: string
+          version?: number
+          warehouse_id: string
+        }
+        Update: {
+          average_unit_cost?: number
+          id?: string
+          inventory_value?: number
+          quantity_on_hand?: number
+          supplier_sku_id?: string
+          tenant_id?: string
+          updated_at?: string
+          version?: number
+          warehouse_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_balances_supplier_sku_id_fkey"
+            columns: ["supplier_sku_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_skus"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_balances_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "inventory_balances_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_balances_warehouse_tenant_fkey"
+            columns: ["warehouse_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "warehouses"
+            referencedColumns: ["id", "tenant_id"]
+          },
+        ]
+      }
+      inventory_transactions: {
+        Row: {
+          cost_category_id: string | null
+          created_at: string
+          created_by_employee_id: string
+          id: string
+          occurred_at: string
+          project_id: string | null
+          quantity_delta: number
+          source_id: string
+          source_type: string
+          supplier_sku_id: string
+          tenant_id: string
+          transaction_type: string
+          unit_cost: number
+          value_delta: number
+          warehouse_id: string
+        }
+        Insert: {
+          cost_category_id?: string | null
+          created_at?: string
+          created_by_employee_id: string
+          id?: string
+          occurred_at: string
+          project_id?: string | null
+          quantity_delta: number
+          source_id: string
+          source_type: string
+          supplier_sku_id: string
+          tenant_id: string
+          transaction_type: string
+          unit_cost: number
+          value_delta: number
+          warehouse_id: string
+        }
+        Update: {
+          cost_category_id?: string | null
+          created_at?: string
+          created_by_employee_id?: string
+          id?: string
+          occurred_at?: string
+          project_id?: string | null
+          quantity_delta?: number
+          source_id?: string
+          source_type?: string
+          supplier_sku_id?: string
+          tenant_id?: string
+          transaction_type?: string
+          unit_cost?: number
+          value_delta?: number
+          warehouse_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_transactions_category_tenant_fkey"
+            columns: ["cost_category_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "finance_cost_categories"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "inventory_transactions_employee_tenant_fkey"
+            columns: ["created_by_employee_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "inventory_transactions_project_tenant_fkey"
+            columns: ["project_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "inventory_transactions_supplier_sku_id_fkey"
+            columns: ["supplier_sku_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_skus"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_transactions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "inventory_transactions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_transactions_warehouse_tenant_fkey"
+            columns: ["warehouse_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "warehouses"
+            referencedColumns: ["id", "tenant_id"]
+          },
+        ]
+      }
       marketing_assets: {
         Row: {
           created_at: string
@@ -11993,11 +12162,12 @@ export type Database = {
           created_at: string
           created_by_employee_id: string
           currency: string
+          destination_type: string
           due_at: string
           id: string
           invoice_required_before_payment: boolean
           occurred_at: string
-          project_id: string
+          project_id: string | null
           purchase_requisition_id: string | null
           source_id: string
           source_type: string
@@ -12008,6 +12178,7 @@ export type Database = {
           supplier_purchase_order_receipt_item_id: string
           tenant_id: string
           tenant_supplier_id: string
+          warehouse_id: string | null
         }
         Insert: {
           accepted_quantity: number
@@ -12016,11 +12187,12 @@ export type Database = {
           created_at?: string
           created_by_employee_id: string
           currency?: string
+          destination_type?: string
           due_at: string
           id?: string
           invoice_required_before_payment: boolean
           occurred_at: string
-          project_id: string
+          project_id?: string | null
           purchase_requisition_id?: string | null
           source_id: string
           source_type?: string
@@ -12031,6 +12203,7 @@ export type Database = {
           supplier_purchase_order_receipt_item_id: string
           tenant_id: string
           tenant_supplier_id: string
+          warehouse_id?: string | null
         }
         Update: {
           accepted_quantity?: number
@@ -12039,11 +12212,12 @@ export type Database = {
           created_at?: string
           created_by_employee_id?: string
           currency?: string
+          destination_type?: string
           due_at?: string
           id?: string
           invoice_required_before_payment?: boolean
           occurred_at?: string
-          project_id?: string
+          project_id?: string | null
           purchase_requisition_id?: string | null
           source_id?: string
           source_type?: string
@@ -12054,6 +12228,7 @@ export type Database = {
           supplier_purchase_order_receipt_item_id?: string
           tenant_id?: string
           tenant_supplier_id?: string
+          warehouse_id?: string | null
         }
         Relationships: [
           {
@@ -12166,6 +12341,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_payable_events_warehouse_tenant_fkey"
+            columns: ["warehouse_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "warehouses"
+            referencedColumns: ["id", "tenant_id"]
           },
         ]
       }
@@ -12321,9 +12503,10 @@ export type Database = {
           created_at: string
           created_by_employee_id: string
           currency: string
+          destination_type: string
           id: string
           paid_amount: number
-          project_id: string
+          project_id: string | null
           reason: string
           remark: string | null
           request_no: string
@@ -12340,6 +12523,7 @@ export type Database = {
           updated_at: string
           updated_by_employee_id: string
           version: number
+          warehouse_id: string | null
         }
         Insert: {
           cancel_reason?: string | null
@@ -12351,9 +12535,10 @@ export type Database = {
           created_at?: string
           created_by_employee_id: string
           currency?: string
+          destination_type?: string
           id?: string
           paid_amount?: number
-          project_id: string
+          project_id?: string | null
           reason: string
           remark?: string | null
           request_no?: string
@@ -12370,6 +12555,7 @@ export type Database = {
           updated_at?: string
           updated_by_employee_id: string
           version?: number
+          warehouse_id?: string | null
         }
         Update: {
           cancel_reason?: string | null
@@ -12381,9 +12567,10 @@ export type Database = {
           created_at?: string
           created_by_employee_id?: string
           currency?: string
+          destination_type?: string
           id?: string
           paid_amount?: number
-          project_id?: string
+          project_id?: string | null
           reason?: string
           remark?: string | null
           request_no?: string
@@ -12400,6 +12587,7 @@ export type Database = {
           updated_at?: string
           updated_by_employee_id?: string
           version?: number
+          warehouse_id?: string | null
         }
         Relationships: [
           {
@@ -12486,6 +12674,13 @@ export type Database = {
             referencedRelation: "employees"
             referencedColumns: ["id", "tenant_id"]
           },
+          {
+            foreignKeyName: "supplier_payment_requests_warehouse_tenant_fkey"
+            columns: ["warehouse_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "warehouses"
+            referencedColumns: ["id", "tenant_id"]
+          },
         ]
       }
       supplier_payments: {
@@ -12494,6 +12689,7 @@ export type Database = {
           confirmed_by_employee_id: string
           created_at: string
           currency: string
+          destination_type: string
           evidence_images: Json
           id: string
           idempotency_key: string
@@ -12502,17 +12698,19 @@ export type Database = {
           payment_no: string
           payment_reference: string
           payment_request_id: string
-          project_id: string
+          project_id: string | null
           remark: string | null
           supplier_id: string
           tenant_id: string
           tenant_supplier_id: string
+          warehouse_id: string | null
         }
         Insert: {
           amount: number
           confirmed_by_employee_id: string
           created_at?: string
           currency?: string
+          destination_type?: string
           evidence_images: Json
           id: string
           idempotency_key: string
@@ -12521,17 +12719,19 @@ export type Database = {
           payment_no?: string
           payment_reference: string
           payment_request_id: string
-          project_id: string
+          project_id?: string | null
           remark?: string | null
           supplier_id: string
           tenant_id: string
           tenant_supplier_id: string
+          warehouse_id?: string | null
         }
         Update: {
           amount?: number
           confirmed_by_employee_id?: string
           created_at?: string
           currency?: string
+          destination_type?: string
           evidence_images?: Json
           id?: string
           idempotency_key?: string
@@ -12540,11 +12740,12 @@ export type Database = {
           payment_no?: string
           payment_reference?: string
           payment_request_id?: string
-          project_id?: string
+          project_id?: string | null
           remark?: string | null
           supplier_id?: string
           tenant_id?: string
           tenant_supplier_id?: string
+          warehouse_id?: string | null
         }
         Relationships: [
           {
@@ -12590,6 +12791,27 @@ export type Database = {
             ]
           },
           {
+            foreignKeyName: "supplier_payments_request_warehouse_scope_fk"
+            columns: [
+              "payment_request_id",
+              "tenant_id",
+              "warehouse_id",
+              "tenant_supplier_id",
+              "supplier_id",
+              "currency",
+            ]
+            isOneToOne: false
+            referencedRelation: "supplier_payment_requests"
+            referencedColumns: [
+              "id",
+              "tenant_id",
+              "warehouse_id",
+              "tenant_supplier_id",
+              "supplier_id",
+              "currency",
+            ]
+          },
+          {
             foreignKeyName: "supplier_payments_supplier_id_fkey"
             columns: ["supplier_id"]
             isOneToOne: false
@@ -12616,6 +12838,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_payments_warehouse_tenant_fkey"
+            columns: ["warehouse_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "warehouses"
+            referencedColumns: ["id", "tenant_id"]
           },
         ]
       }
@@ -13440,6 +13669,7 @@ export type Database = {
       }
       supplier_purchase_batches: {
         Row: {
+          applicant_snapshot: Json | null
           approval_round: number
           batch_no: string
           budget_checked_at: string | null
@@ -13450,12 +13680,15 @@ export type Database = {
           cancelled_by_employee_id: string | null
           created_at: string
           created_by_employee_id: string
+          creator_snapshot: Json | null
           currency: string
+          destination_type: string
           expected_delivery_date: string | null
           id: string
           item_count: number
+          last_reviewer_snapshot: Json | null
           priced_at: string
-          project_id: string
+          project_id: string | null
           reason: string
           remark: string | null
           review_remark: string | null
@@ -13473,8 +13706,10 @@ export type Database = {
           updated_at: string
           updated_by_employee_id: string
           version: number
+          warehouse_id: string | null
         }
         Insert: {
+          applicant_snapshot?: Json | null
           approval_round?: number
           batch_no?: string
           budget_checked_at?: string | null
@@ -13485,12 +13720,15 @@ export type Database = {
           cancelled_by_employee_id?: string | null
           created_at?: string
           created_by_employee_id: string
+          creator_snapshot?: Json | null
           currency?: string
+          destination_type?: string
           expected_delivery_date?: string | null
           id?: string
           item_count?: number
+          last_reviewer_snapshot?: Json | null
           priced_at: string
-          project_id: string
+          project_id?: string | null
           reason: string
           remark?: string | null
           review_remark?: string | null
@@ -13508,8 +13746,10 @@ export type Database = {
           updated_at?: string
           updated_by_employee_id: string
           version?: number
+          warehouse_id?: string | null
         }
         Update: {
+          applicant_snapshot?: Json | null
           approval_round?: number
           batch_no?: string
           budget_checked_at?: string | null
@@ -13520,12 +13760,15 @@ export type Database = {
           cancelled_by_employee_id?: string | null
           created_at?: string
           created_by_employee_id?: string
+          creator_snapshot?: Json | null
           currency?: string
+          destination_type?: string
           expected_delivery_date?: string | null
           id?: string
           item_count?: number
+          last_reviewer_snapshot?: Json | null
           priced_at?: string
-          project_id?: string
+          project_id?: string | null
           reason?: string
           remark?: string | null
           review_remark?: string | null
@@ -13543,6 +13786,7 @@ export type Database = {
           updated_at?: string
           updated_by_employee_id?: string
           version?: number
+          warehouse_id?: string | null
         }
         Relationships: [
           {
@@ -13599,6 +13843,13 @@ export type Database = {
             columns: ["updated_by_employee_id", "tenant_id"]
             isOneToOne: false
             referencedRelation: "employees"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_batches_warehouse_tenant_fkey"
+            columns: ["warehouse_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "warehouses"
             referencedColumns: ["id", "tenant_id"]
           },
         ]
@@ -14329,19 +14580,22 @@ export type Database = {
       }
       supplier_purchase_orders: {
         Row: {
+          applicant_snapshot: Json | null
           cancel_reason: string | null
           cancelled_at: string | null
           cancelled_by_employee_id: string | null
           commercial_snapshot_source: string
           created_at: string
           created_by_employee_id: string
+          creator_snapshot: Json | null
           currency: string
+          destination_type: string
           expected_delivery_date: string | null
           id: string
           invoice_required_before_payment_snapshot: boolean
           order_no: string
           priced_at: string
-          project_id: string
+          project_id: string | null
           purchase_batch_id: string | null
           purchase_requisition_id: string | null
           remark: string | null
@@ -14358,21 +14612,25 @@ export type Database = {
           updated_at: string
           updated_by_employee_id: string
           version: number
+          warehouse_id: string | null
         }
         Insert: {
+          applicant_snapshot?: Json | null
           cancel_reason?: string | null
           cancelled_at?: string | null
           cancelled_by_employee_id?: string | null
           commercial_snapshot_source: string
           created_at?: string
           created_by_employee_id: string
+          creator_snapshot?: Json | null
           currency?: string
+          destination_type?: string
           expected_delivery_date?: string | null
           id: string
           invoice_required_before_payment_snapshot: boolean
           order_no: string
           priced_at: string
-          project_id: string
+          project_id?: string | null
           purchase_batch_id?: string | null
           purchase_requisition_id?: string | null
           remark?: string | null
@@ -14389,21 +14647,25 @@ export type Database = {
           updated_at?: string
           updated_by_employee_id: string
           version?: number
+          warehouse_id?: string | null
         }
         Update: {
+          applicant_snapshot?: Json | null
           cancel_reason?: string | null
           cancelled_at?: string | null
           cancelled_by_employee_id?: string | null
           commercial_snapshot_source?: string
           created_at?: string
           created_by_employee_id?: string
+          creator_snapshot?: Json | null
           currency?: string
+          destination_type?: string
           expected_delivery_date?: string | null
           id?: string
           invoice_required_before_payment_snapshot?: boolean
           order_no?: string
           priced_at?: string
-          project_id?: string
+          project_id?: string | null
           purchase_batch_id?: string | null
           purchase_requisition_id?: string | null
           remark?: string | null
@@ -14420,6 +14682,7 @@ export type Database = {
           updated_at?: string
           updated_by_employee_id?: string
           version?: number
+          warehouse_id?: string | null
         }
         Relationships: [
           {
@@ -14505,6 +14768,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "employees"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_orders_warehouse_tenant_fkey"
+            columns: ["warehouse_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "warehouses"
+            referencedColumns: ["id", "tenant_id"]
           },
         ]
       }
@@ -14705,10 +14975,11 @@ export type Database = {
           created_at: string
           created_by_employee_id: string
           currency: string
+          destination_type: string
           expected_delivery_date: string | null
           id: string
           priced_at: string
-          project_id: string
+          project_id: string | null
           purchase_batch_id: string | null
           purchase_order_id: string | null
           reason: string
@@ -14730,6 +15001,7 @@ export type Database = {
           updated_at: string
           updated_by_employee_id: string
           version: number
+          warehouse_id: string | null
         }
         Insert: {
           budget_status?: string
@@ -14739,10 +15011,11 @@ export type Database = {
           created_at?: string
           created_by_employee_id: string
           currency?: string
+          destination_type?: string
           expected_delivery_date?: string | null
           id?: string
           priced_at: string
-          project_id: string
+          project_id?: string | null
           purchase_batch_id?: string | null
           purchase_order_id?: string | null
           reason: string
@@ -14764,6 +15037,7 @@ export type Database = {
           updated_at?: string
           updated_by_employee_id: string
           version?: number
+          warehouse_id?: string | null
         }
         Update: {
           budget_status?: string
@@ -14773,10 +15047,11 @@ export type Database = {
           created_at?: string
           created_by_employee_id?: string
           currency?: string
+          destination_type?: string
           expected_delivery_date?: string | null
           id?: string
           priced_at?: string
-          project_id?: string
+          project_id?: string | null
           purchase_batch_id?: string | null
           purchase_order_id?: string | null
           reason?: string
@@ -14798,6 +15073,7 @@ export type Database = {
           updated_at?: string
           updated_by_employee_id?: string
           version?: number
+          warehouse_id?: string | null
         }
         Relationships: [
           {
@@ -14890,6 +15166,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "employees"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_requisitions_warehouse_tenant_fkey"
+            columns: ["warehouse_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "warehouses"
+            referencedColumns: ["id", "tenant_id"]
           },
         ]
       }
@@ -19720,6 +20003,7 @@ export type Database = {
           tenant_id: string
           updated_at: string
           version: number
+          warehouse_procurement_enabled: boolean
         }
         Insert: {
           created_at?: string
@@ -19735,6 +20019,7 @@ export type Database = {
           tenant_id: string
           updated_at?: string
           version?: number
+          warehouse_procurement_enabled?: boolean
         }
         Update: {
           created_at?: string
@@ -19750,6 +20035,7 @@ export type Database = {
           tenant_id?: string
           updated_at?: string
           version?: number
+          warehouse_procurement_enabled?: boolean
         }
         Relationships: [
           {
@@ -21229,6 +21515,170 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "projects"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      warehouse_command_events: {
+        Row: {
+          actor_employee_id: string
+          actor_user_id: string
+          command: string
+          created_at: string
+          from_state: Json
+          id: string
+          idempotency_key: string
+          request_fingerprint: string
+          result_version: number
+          tenant_id: string
+          to_state: Json
+          warehouse_id: string
+        }
+        Insert: {
+          actor_employee_id: string
+          actor_user_id: string
+          command: string
+          created_at?: string
+          from_state?: Json
+          id?: string
+          idempotency_key: string
+          request_fingerprint: string
+          result_version: number
+          tenant_id: string
+          to_state?: Json
+          warehouse_id: string
+        }
+        Update: {
+          actor_employee_id?: string
+          actor_user_id?: string
+          command?: string
+          created_at?: string
+          from_state?: Json
+          id?: string
+          idempotency_key?: string
+          request_fingerprint?: string
+          result_version?: number
+          tenant_id?: string
+          to_state?: Json
+          warehouse_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "warehouse_command_events_actor_tenant_fkey"
+            columns: ["actor_employee_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "warehouse_command_events_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "warehouse_command_events_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "warehouse_command_events_warehouse_tenant_fkey"
+            columns: ["warehouse_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "warehouses"
+            referencedColumns: ["id", "tenant_id"]
+          },
+        ]
+      }
+      warehouses: {
+        Row: {
+          address: string | null
+          contact_name: string | null
+          contact_phone: string | null
+          created_at: string
+          created_by_employee_id: string | null
+          id: string
+          is_default: boolean
+          manager_employee_id: string | null
+          name: string
+          status: string
+          tenant_id: string
+          updated_at: string
+          updated_by_employee_id: string | null
+          version: number
+          warehouse_code: string
+        }
+        Insert: {
+          address?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          created_by_employee_id?: string | null
+          id?: string
+          is_default?: boolean
+          manager_employee_id?: string | null
+          name: string
+          status?: string
+          tenant_id: string
+          updated_at?: string
+          updated_by_employee_id?: string | null
+          version?: number
+          warehouse_code?: string
+        }
+        Update: {
+          address?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          created_by_employee_id?: string | null
+          id?: string
+          is_default?: boolean
+          manager_employee_id?: string | null
+          name?: string
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+          updated_by_employee_id?: string | null
+          version?: number
+          warehouse_code?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "warehouses_created_by_tenant_fkey"
+            columns: ["created_by_employee_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "warehouses_manager_tenant_fkey"
+            columns: ["manager_employee_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "warehouses_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "warehouses_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "warehouses_updated_by_tenant_fkey"
+            columns: ["updated_by_employee_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id", "tenant_id"]
           },
         ]
       }
@@ -22818,6 +23268,16 @@ export type Database = {
       }
     }
     Functions: {
+      __gooes_assert_warehouse_workflow_actor: {
+        Args: {
+          p_actor_user_id: string
+          p_context: Json
+          p_employee_id: string
+          p_required_permission: string
+          p_tenant_id: string
+        }
+        Returns: undefined
+      }
       __gooes_cancel_supplier_purchase_batch_v1: {
         Args: {
           p_actor_employee_id: string
@@ -22857,6 +23317,14 @@ export type Database = {
         Args: { p_tenant_id: string }
         Returns: string
       }
+      __gooes_has_tenant_procurement_permission: {
+        Args: {
+          p_employee_id: string
+          p_permission_code: string
+          p_tenant_id: string
+        }
+        Returns: boolean
+      }
       __gooes_initialize_default_decoration_tenant_20260830: {
         Args: {
           p_admin_name: string
@@ -22866,11 +23334,39 @@ export type Database = {
         }
         Returns: Json
       }
+      __gooes_review_supplier_purchase_batch_destinations_v2: {
+        Args: {
+          p_action: string
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_allow_warehouse?: boolean
+          p_batch_id: string
+          p_can_override_budget: boolean
+          p_expected_version: number
+          p_idempotency_key: string
+          p_remark: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      __gooes_resolve_supplier_purchase_order_catalog_v1: {
+        Args: {
+          p_exact_sku_id: string
+          p_keyword: string
+          p_page: number
+          p_page_size: number
+          p_priced_at: string
+          p_tenant_id: string
+          p_tenant_supplier_id: string
+        }
+        Returns: Json
+      }
       __gooes_save_supplier_purchase_batch_draft_v1: {
         Args: {
           p_actor_employee_id: string
           p_actor_user_id: string
           p_batch_id: string
+          p_destination_type?: string
           p_expected_delivery_date: string
           p_expected_version: number
           p_idempotency_key: string
@@ -22878,6 +23374,19 @@ export type Database = {
           p_project_id: string
           p_reason: string
           p_remark: string
+          p_tenant_id: string
+          p_warehouse_id?: string
+        }
+        Returns: Json
+      }
+      __gooes_submit_supplier_purchase_batch_destinations_v2: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_allow_warehouse?: boolean
+          p_batch_id: string
+          p_expected_version: number
+          p_idempotency_key: string
           p_tenant_id: string
         }
         Returns: Json
@@ -23166,6 +23675,15 @@ export type Database = {
           p_actor_employee_id: string
           p_actor_user_id: string
           p_tenant_id: string
+        }
+        Returns: undefined
+      }
+      assert_warehouse_procurement_destination: {
+        Args: {
+          p_destination_type: string
+          p_project_id: string
+          p_tenant_id: string
+          p_warehouse_id: string
         }
         Returns: undefined
       }
@@ -26208,6 +26726,22 @@ export type Database = {
         }
         Returns: Json
       }
+      create_supplier_purchase_order_receipt_fulfillment_v2: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_fulfillment_version: number
+          p_idempotency_key: string
+          p_items: Json
+          p_order_id: string
+          p_receipt_id: string
+          p_receipt_no: string
+          p_received_at: string
+          p_remark: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       create_supplier_purchase_order_shipment: {
         Args: {
           p_actor_employee_id: string
@@ -26448,6 +26982,44 @@ export type Database = {
           p_tenant_supplier_id: string
         }
         Returns: Json
+      }
+      create_tenant_warehouse: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_address: string
+          p_contact_name: string
+          p_contact_phone: string
+          p_idempotency_key: string
+          p_is_default: boolean
+          p_manager_employee_id: string
+          p_name: string
+          p_tenant_id: string
+          p_warehouse_id: string
+        }
+        Returns: {
+          address: string | null
+          contact_name: string | null
+          contact_phone: string | null
+          created_at: string
+          created_by_employee_id: string | null
+          id: string
+          is_default: boolean
+          manager_employee_id: string | null
+          name: string
+          status: string
+          tenant_id: string
+          updated_at: string
+          updated_by_employee_id: string | null
+          version: number
+          warehouse_code: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "warehouses"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       create_tenant_wechat_pay_applyment: {
         Args: { p_applyment: Json; p_audit_metadata: Json }
@@ -26956,6 +27528,7 @@ export type Database = {
       }
       get_supplier_payables_by_ids: {
         Args: {
+          p_include_warehouse?: boolean
           p_payable_event_ids: string[]
           p_tenant_id: string
           p_visible_project_ids: string[]
@@ -27458,6 +28031,27 @@ export type Database = {
           wechat_openid_masked: string
         }[]
       }
+      list_inventory_balances: {
+        Args: {
+          p_keyword: string
+          p_page: number
+          p_page_size: number
+          p_tenant_id: string
+          p_warehouse_id: string
+        }
+        Returns: Json
+      }
+      list_inventory_transactions: {
+        Args: {
+          p_page: number
+          p_page_size: number
+          p_supplier_sku_id: string
+          p_tenant_id: string
+          p_transaction_type: string
+          p_warehouse_id: string
+        }
+        Returns: Json
+      }
       list_latest_finance_reconciliation_exception_actions: {
         Args: { p_fingerprints: string[]; p_tenant_id: string }
         Returns: {
@@ -27496,19 +28090,24 @@ export type Database = {
       }
       list_supplier_payable_filter_options: {
         Args: {
+          p_destination_type?: string
+          p_include_warehouse?: boolean
           p_keyword?: string
           p_page?: number
           p_page_size?: number
           p_tenant_id: string
           p_type?: string
           p_visible_project_ids?: string[]
+          p_warehouse_id?: string
         }
         Returns: Json
       }
       list_supplier_payables: {
         Args: {
+          p_destination_type?: string
           p_due_from?: string
           p_due_to?: string
+          p_include_warehouse?: boolean
           p_page?: number
           p_page_size?: number
           p_project_id?: string
@@ -27517,6 +28116,7 @@ export type Database = {
           p_tenant_id: string
           p_tenant_supplier_id?: string
           p_visible_project_ids?: string[]
+          p_warehouse_id?: string
         }
         Returns: Json
       }
@@ -27533,6 +28133,8 @@ export type Database = {
         Args: {
           p_created_from?: string
           p_created_to?: string
+          p_destination_type?: string
+          p_include_warehouse?: boolean
           p_keyword?: string
           p_page?: number
           p_page_size?: number
@@ -27541,6 +28143,7 @@ export type Database = {
           p_tenant_id: string
           p_tenant_supplier_id?: string
           p_visible_project_ids?: string[]
+          p_warehouse_id?: string
         }
         Returns: Json
       }
@@ -27564,6 +28167,23 @@ export type Database = {
           p_page?: number
           p_page_size?: number
           p_tenant_id: string
+        }
+        Returns: Json
+      }
+      list_supplier_purchase_orders: {
+        Args: {
+          p_destination_type?: string
+          p_fulfillment_status?: string
+          p_include_warehouse?: boolean
+          p_keyword?: string
+          p_page?: number
+          p_page_size?: number
+          p_project_id?: string
+          p_status?: string
+          p_tenant_id: string
+          p_tenant_supplier_id?: string
+          p_visible_project_ids?: string[]
+          p_warehouse_id?: string
         }
         Returns: Json
       }
@@ -29042,6 +29662,7 @@ export type Database = {
         Args: {
           p_brand_id?: string
           p_category_id?: string
+          p_destination_type?: string
           p_keyword?: string
           p_page?: number
           p_page_size?: number
@@ -29049,6 +29670,7 @@ export type Database = {
           p_project_id: string
           p_tenant_id: string
           p_tenant_supplier_id?: string
+          p_warehouse_id?: string
         }
         Returns: Json
       }
@@ -29375,6 +29997,7 @@ export type Database = {
           p_actor_employee_id: string
           p_actor_user_id: string
           p_allocations: Json
+          p_destination_type?: string
           p_expected_version: number
           p_idempotency_key: string
           p_payment_request_id: string
@@ -29383,6 +30006,7 @@ export type Database = {
           p_remark: string
           p_tenant_id: string
           p_tenant_supplier_id: string
+          p_warehouse_id?: string
         }
         Returns: Json
       }
@@ -29391,6 +30015,7 @@ export type Database = {
           p_actor_employee_id: string
           p_actor_user_id: string
           p_batch_id: string
+          p_destination_type?: string
           p_expected_delivery_date: string
           p_expected_version: number
           p_idempotency_key: string
@@ -29399,6 +30024,7 @@ export type Database = {
           p_reason: string
           p_remark: string
           p_tenant_id: string
+          p_warehouse_id?: string
         }
         Returns: Json
       }
@@ -30004,6 +30630,50 @@ export type Database = {
       update_tenant_service_provider_profile: {
         Args: { p_expected_version: number; p_patch: Json; p_tenant_id: string }
         Returns: Json
+      }
+      update_tenant_warehouse: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_address: string
+          p_address_set: boolean
+          p_contact_name: string
+          p_contact_name_set: boolean
+          p_contact_phone: string
+          p_contact_phone_set: boolean
+          p_expected_version: number
+          p_idempotency_key: string
+          p_is_default: boolean
+          p_manager_employee_id: string
+          p_manager_employee_id_set: boolean
+          p_name: string
+          p_status: string
+          p_tenant_id: string
+          p_warehouse_id: string
+        }
+        Returns: {
+          address: string | null
+          contact_name: string | null
+          contact_phone: string | null
+          created_at: string
+          created_by_employee_id: string | null
+          id: string
+          is_default: boolean
+          manager_employee_id: string | null
+          name: string
+          status: string
+          tenant_id: string
+          updated_at: string
+          updated_by_employee_id: string | null
+          version: number
+          warehouse_code: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "warehouses"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       update_tenant_wechat_pay_applyment_draft: {
         Args: {
