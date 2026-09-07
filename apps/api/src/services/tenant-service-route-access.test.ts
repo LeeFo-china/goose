@@ -52,6 +52,28 @@ describe("tenant service route access reader", () => {
     },
   );
 
+  test.each([
+    ["GET", "/warehouses", "read"],
+    ["HEAD", "/warehouses", "read"],
+    ["GET", "/warehouses/:id", "read"],
+    ["HEAD", "/warehouses/:id", "read"],
+    ["POST", "/warehouses", "write"],
+    ["PATCH", "/warehouses/:id", "write"],
+  ] as const)("preserves warehouse %s %s service access without a core trial capability", async (
+    method,
+    url,
+    access,
+  ) => {
+    const { getTenantServiceAuthOptions } = await import(
+      "./tenant-service-route-access"
+    );
+
+    expect(getTenantServiceAuthOptions({
+      method,
+      routeOptions: { url, config: { tenantServiceAccess: access } },
+    })).toEqual({ tenantServiceAccess: access, requiredCapability: null });
+  });
+
   test.each([null, "", "admin", "READ", 1])(
     "rejects invalid configured access value %# instead of falling back",
     async (tenantServiceAccess) => {
