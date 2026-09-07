@@ -116,9 +116,14 @@ bun test \
 ### Task 4: Build and integration verification
 
 **Files:**
+- Create: `apps/api/src/controllers/projects/public-list-serializer.ts`
+- Modify: `apps/api/src/controllers/projects/public-controller.ts`
 - Modify only if a verified type or build issue requires a scoped correction.
 
 - [x] **Step 1: Run API build**
+
+Add a dedicated public-list serializer and a regression test that injects
+workflow internals, proving they are removed at the HTTP response boundary.
 
 ```bash
 cd apps/api

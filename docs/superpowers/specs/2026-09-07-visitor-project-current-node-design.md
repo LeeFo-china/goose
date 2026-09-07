@@ -25,7 +25,8 @@ existing project status label.
 3. Query `workflow_subject_states` for those exact tenant/project pairs in
    chunks of 25, with at most four bounded queries running in parallel.
 4. Match results back by tenant and project ID.
-5. Build the public label from the current state and return a new row object.
+5. Build the public label from the current state and pass the result through a
+   dedicated public-list field allowlist.
 
 The workflow-state enrichment runs after every cache hit, cache miss, and
 in-flight request reuse. The base project page remains cached, but current node
@@ -51,6 +52,8 @@ on the next request even when `projects.status` remains `constructing`.
 - The repository filters by `subject_type=project` and an exact OR-of-AND set
   of requested tenant/project pairs, then the service verifies both IDs again
   while joining results.
+- The public controller uses a dedicated serializer so accidental upstream
+  workflow fields cannot cross the response boundary.
 - The existing workflow subject-state uniqueness/indexing is reused; no schema
   migration is required.
 
