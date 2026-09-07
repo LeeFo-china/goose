@@ -13,7 +13,7 @@
 - 使用仓库 `validate-dev-database-target.mjs` 导出的解析和校验函数，核对连接 host、端口、预期 project ref 与禁止目标清单。
 - project ref 采用既有阶段 A 记录与 development workflow 的明确配置；不是从凭据推断新环境。池化连接和直连目标校验均为 true。
 - 禁止目标仍包括 `api.goodcms.cn`、`1.13.20.39` 及生产 project ref；本次未连接生产。
-- 仅执行 `supabase migration list --db-url <已校验开发库直连>` 和 `supabase db push --dry-run --db-url <同一直连>`，两项 exit 0。
+- 首次仅执行 `supabase migration list --db-url <已校验开发库直连>` 和 `supabase db push --dry-run --db-url <同一直连>`，两项 exit 0；后续只读数据检查另见 19:20 更新。
 - 输出只保留版本/文件名、目标和退出码；连接超时受限，不打印原始错误中的潜在凭据。
 
 ## Local / Remote 检查快照
@@ -80,6 +80,28 @@ H5 migration 已存在于当前 Git 历史，但在本开发库尚未应用。�
 未应用 migration、未验证升级后的触发器和函数行为**。既有 H5 本地验收见
 [历史记录](./2026-09-06-h5-customer-leads.md)，不将其视作本开发库当前验收。
 后续需确认全部 13 个版本（包括 H5）及维护窗口，再执行升级前数据检查、获准升级和升级后完整验证。
+
+### 2026-09-07 19:20 更新：升级前实际数据只读检查
+
+在同一已校验开发库直连上使用本机已有 `psql`，以 `BEGIN TRANSACTION READ ONLY`
+执行汇总查询后 `ROLLBACK`，exit 0；服务端返回 `transaction_read_only = on`。
+连接超时 10 秒、语句超时 5 秒、锁等待 2 秒。没有 DDL/DML、原始业务行或凭据输出。
+
+| 检查 | 当时结果 | 证据边界 |
+| --- | --- | --- |
+| H5 扩展普通来源唯一索引的重复组 | 0 | 对 `douyin_measurement_appointment_id IS NULL`、`marketing_lead_id IS NOT NULL`、来源为 `douyin_miniapp/h5`，按 `customer_id, marketing_lead_id` 分组；仅证明此时无重复，应用前仍需复查 |
+| 原普通来源索引 / 库存流水表 | 原索引存在 / 库存流水表不存在 | 与尚未应用对应 migration 一致，不是升级后验证 |
+| 历史 `supplier_payable_events` | 共 4 行，项目归属异常 0 行 | 项目非空、项目存在且与事实同租户 |
+| 历史 `supplier_payment_requests` / `supplier_payments` | 均为 0 行 | 无可供此次升级验证的真实历史申请/付款数据，不能宣称其历史兼容已验收 |
+| SKU 两个函数体 MD5 前置条件 | 均与 `20260907102914` 的保护值一致 | 仅核对函数体，不替代权限、所有者及升级后行为验证 |
+
+函数体检查针对 `command_supplier_purchasable_sku_v1` 与六参数
+`resolve_supplier_purchase_order_catalog`，MD5 分别为
+`59afd4946de800213992c1b83dcb5825` 和 `bbf2a8489d95e75e904f738c869894a8`。
+19:30 根代理按上述完整真实列名再次执行相同只读重复组查询，exit 0；服务端时间
+`2026-09-07T11:30:38.795776+00:00`，`read_only = on`，重复组仍为 0。
+上述查询补上了 18:58 时尚缺的部分数据检查；**仍未应用任何 migration，未运行真实 H5
+或仓库业务 smoke，也未完成全部历史兼容验收**。正式升级仍需确认完整清单和维护窗口。
 
 ### 前次本地证据与最终门槛
 
