@@ -1,4 +1,54 @@
 BEGIN;
+CREATE FUNCTION pg_temp.reject_stage_b_payment_ledger() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION USING ERRCODE='P0001',MESSAGE='SUPPLIER_PAYMENT_LEDGER_CONFLICT';
+END;
+$$;
+CREATE FUNCTION pg_temp.verify_stage_b_invoice_requirement(t uuid,w uuid,r uuid,u uuid,e uuid,reviewer_u uuid,reviewer uuid,sku uuid,cost uuid)
+RETURNS void LANGUAGE plpgsql AS $$
+DECLARE b uuid:=gen_random_uuid(); request_id uuid:=gen_random_uuid(); receipt_id uuid:=gen_random_uuid();
+  order_id uuid; item_id uuid; payable_id uuid; allocation_id uuid; result jsonb;
+BEGIN
+  -- Start with a real supplier commercial term, freeze it through procurement,
+  -- then change the current term. Existing AP must retain its invoice rule.
+  UPDATE public.tenant_suppliers SET invoice_required_before_payment=true,version=version+1 WHERE id=r;
+  result:=public.save_supplier_purchase_batch_draft(b,t,NULL,0,'Invoice required',NULL,NULL,
+    jsonb_build_array(jsonb_build_object('supplier_sku_id',sku,'cost_category_id',cost,'quantity','1')),u,e,'invoice-save','warehouse',w);
+  IF result->>'status' IS DISTINCT FROM 'saved' THEN RAISE EXCEPTION 'Invoice batch save failed: %',result; END IF;
+  result:=public.__gooes_submit_supplier_purchase_batch_destinations_v2(b,t,1,u,e,'invoice-submit',true);
+  IF result->>'status' IS DISTINCT FROM 'submitted' THEN RAISE EXCEPTION 'Invoice batch submit failed: %',result; END IF;
+  result:=public.__gooes_review_supplier_purchase_batch_destinations_v2(b,t,2,'approve',NULL,false,reviewer_u,reviewer,'invoice-review',true);
+  IF result->>'status' IS DISTINCT FROM 'ordered' THEN RAISE EXCEPTION 'Invoice batch review failed: %',result; END IF;
+  order_id:=(result->'orders'->0->>'id')::uuid;
+  SELECT id INTO STRICT item_id FROM public.supplier_purchase_order_items WHERE supplier_purchase_order_id=order_id;
+  result:=public.confirm_supplier_purchase_order_fulfillment(order_id,t,2,now(),NULL,u,e,'invoice-confirm');
+  IF result->>'status' IS DISTINCT FROM 'confirmed' THEN RAISE EXCEPTION 'Invoice order confirm failed: %',result; END IF;
+  result:=public.create_supplier_purchase_order_receipt(receipt_id,order_id,t,1,'INVOICE-REQUIRED',now(),NULL,
+    jsonb_build_array(jsonb_build_object('purchase_order_item_id',item_id,'accepted_quantity',1,'rejected_quantity',0)),u,e,'invoice-receipt');
+  IF result->>'status' IS DISTINCT FROM 'receipt_created' THEN RAISE EXCEPTION 'Invoice receipt failed: %',result; END IF;
+  SELECT id INTO STRICT payable_id FROM public.supplier_payable_events
+    WHERE supplier_purchase_order_receipt_id=receipt_id AND invoice_required_before_payment=true AND amount=10;
+  UPDATE public.tenant_suppliers SET invoice_required_before_payment=false,version=version+1 WHERE id=r;
+  result:=public.save_supplier_payment_request_draft(request_id,t,NULL,r,0,'Invoice liability',NULL,
+    jsonb_build_array(jsonb_build_object('payable_event_id',payable_id,'requested_amount','10.00')),u,e,gen_random_uuid(),'warehouse',w);
+  IF result->>'status' IS DISTINCT FROM 'saved' THEN RAISE EXCEPTION 'Invoice payment draft failed: %',result; END IF;
+  result:=public.submit_supplier_payment_request(request_id,t,1,u,e,gen_random_uuid());
+  IF result->>'status' IS DISTINCT FROM 'submitted' THEN RAISE EXCEPTION 'Invoice payment submit failed: %',result; END IF;
+  result:=public.review_supplier_payment_request(request_id,t,2,'approve',NULL,reviewer_u,reviewer,gen_random_uuid());
+  IF result->>'status' IS DISTINCT FROM 'approved' THEN RAISE EXCEPTION 'Invoice payment review failed: %',result; END IF;
+  SELECT id INTO STRICT allocation_id FROM public.supplier_payment_request_allocations WHERE payment_request_id=request_id;
+  result:=public.confirm_supplier_payment(gen_random_uuid(),request_id,t,3,'bank_transfer','INVOICE-REQUIRED',now(),
+    '["https://smoke.invalid/proof"]',NULL,jsonb_build_array(jsonb_build_object(
+      'payment_request_allocation_id',allocation_id,'payable_event_id',payable_id,'amount','10.00')),u,e,gen_random_uuid());
+  IF result->>'status' IS DISTINCT FROM 'invoice_required'
+    OR (SELECT paid_amount FROM public.supplier_payment_requests WHERE id=request_id)<>0
+    OR (SELECT version FROM public.supplier_payment_requests WHERE id=request_id)<>3
+    OR EXISTS(SELECT 1 FROM public.supplier_payments WHERE payment_request_id=request_id)
+    OR EXISTS(SELECT 1 FROM public.supplier_payment_allocations WHERE payment_request_id=request_id) THEN
+    RAISE EXCEPTION 'Frozen invoice requirement bypassed or wrote payment: %',result;
+  END IF;
+END;
+$$;
 -- Synthetic malformed historical edge: valid B request/payment, but an A AP.
 -- Keep every production constraint active; paid=0 isolates reservations,
 -- paid>0 uses a closed request to isolate paid-amount aggregation.
@@ -93,6 +143,11 @@ BEGIN
     jsonb_build_array(jsonb_build_object('purchase_order_item_id',order_item,'accepted_quantity',10,'rejected_quantity',0)),u,e,'payment-receipt');
   IF result->>'status' IS DISTINCT FROM 'receipt_created' THEN RAISE EXCEPTION 'Receipt failed: %',result; END IF;
   SELECT id INTO STRICT payable_id FROM public.supplier_payable_events WHERE supplier_purchase_order_receipt_id=receipt_id;
+  BEGIN
+    PERFORM pg_temp.verify_stage_b_invoice_requirement(t,w,r,u,e,reviewer_user,reviewer,sku,cost);
+    RAISE EXCEPTION USING ERRCODE='P9001',MESSAGE='rollback invoice scenario';
+  EXCEPTION WHEN SQLSTATE 'P9001' THEN NULL;
+  END;
   allocations := jsonb_build_array(jsonb_build_object('payable_event_id',payable_id,'requested_amount','100.00'));
   UPDATE public.tenant_supplier_settings SET warehouse_procurement_enabled=false WHERE tenant_id=t;
   UPDATE public.warehouses SET status='inactive',version=version+1 WHERE id=w;
@@ -205,6 +260,28 @@ BEGIN
       '["https://smoke.invalid/proof"]',NULL,allocations,u,e,gen_random_uuid());
     IF result->>'status' IS DISTINCT FROM 'amount_unavailable' THEN RAISE EXCEPTION 'Valid prior payment was ignored: %',result; END IF;
     RAISE EXCEPTION USING ERRCODE='P9001',MESSAGE='rollback valid prior payment';
+  EXCEPTION WHEN SQLSTATE 'P9001' THEN NULL;
+  END;
+  BEGIN
+    CREATE TRIGGER stage_b_reject_cash_ledger BEFORE INSERT ON public.finance_ledger_entries
+      FOR EACH ROW EXECUTE FUNCTION pg_temp.reject_stage_b_payment_ledger();
+    BEGIN
+      PERFORM public.confirm_supplier_payment(payment_id,request_id,t,3,'bank_transfer','WAREHOUSE-30',paid_at,
+        '["https://smoke.invalid/proof"]',NULL,allocations,u,e,payment_key);
+      RAISE EXCEPTION 'Injected cash ledger failure unexpectedly succeeded';
+    EXCEPTION WHEN SQLSTATE 'P0001' THEN
+      IF SQLERRM IS DISTINCT FROM 'SUPPLIER_PAYMENT_LEDGER_CONFLICT' THEN RAISE; END IF;
+    END;
+    IF EXISTS(SELECT 1 FROM public.supplier_payments WHERE payment_request_id=request_id)
+      OR EXISTS(SELECT 1 FROM public.supplier_payment_allocations WHERE payment_request_id=request_id)
+      OR EXISTS(SELECT 1 FROM public.finance_ledger_entries WHERE tenant_id=t AND source_type='supplier_payment')
+      OR EXISTS(SELECT 1 FROM public.supplier_command_events WHERE actor_user_id=u AND idempotency_key=payment_key::text)
+      OR (SELECT paid_amount FROM public.supplier_payment_requests WHERE id=request_id)<>0
+      OR (SELECT version FROM public.supplier_payment_requests WHERE id=request_id)<>3
+      OR (SELECT paid_amount FROM public.supplier_payment_request_allocations WHERE id=allocation_id)<>0 THEN
+      RAISE EXCEPTION 'Cash ledger failure left partial payment facts or command result';
+    END IF;
+    RAISE EXCEPTION USING ERRCODE='P9001',MESSAGE='rollback injected cash failure';
   EXCEPTION WHEN SQLSTATE 'P9001' THEN NULL;
   END;
   result := public.confirm_supplier_payment(payment_id,request_id,t,3,'bank_transfer','WAREHOUSE-30',paid_at,
