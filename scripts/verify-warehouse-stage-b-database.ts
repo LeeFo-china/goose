@@ -100,7 +100,12 @@ try {
   for (const fixture of fixtures) {
     assert.match(fixture, /^scripts\/fixtures\/warehouse-stage-b\/[a-z0-9-]+\.sql$/,
       "Only scoped Stage B SQL fixtures are accepted");
-    sql(readFileSync(fixture, "utf8"));
+    const output = sql(readFileSync(fixture, "utf8"));
+    // Fixtures contain only synthetic data. Explicit evidence rows retain query
+    // plans; ordinary psql result rows stay quiet, as before.
+    for (const line of output.split("\n")) {
+      if (line.startsWith("EVIDENCE ")) console.log(line);
+    }
     console.log(`PASS ${fixture}`);
   }
   console.log("Procurement-domain schema replay passed; NOT full migration history/data or API acceptance.");
