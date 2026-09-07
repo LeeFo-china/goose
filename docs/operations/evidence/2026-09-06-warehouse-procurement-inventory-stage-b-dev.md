@@ -278,6 +278,70 @@ Stage B 合回 main。先 `merge --no-commit --no-ff`，无冲突；15 个上游
 7 个文件，**81 tests / 156 assertions，0 fail**。这些是本地整合检查，不代表新 API 已部署。
 独立功能分支及 `.artifacts/` 保留，不推送 main、不清理未完成的工作树，不操作生产。
 
+### 2026-09-07 开发候选发布前检查
+
+用户确认继续开发 API/Admin 候选发布；不包含生产、变更员工权限或开放仓库采购。
+功能分支已推送固定源码 `b3d25ce3dde5533a256659007697fa6846c6d2ed`，未推送 main。
+正式 `Release Dev` 于 UTC `13:34:11` 创建
+[run 34128116804](https://github.com/LeeFo-china/goose/actions/runs/34128116804)，
+选择 `service=api,admin`、`operation=release`；创建时仍排队，不能据此宣称部署完成。
+
+- Domain build（包含类型输出及 dist 验证）、Admin check（1,449 文件）和 build（95 页）
+  均 exit 0；权限边界检查与 `git diff --check` 通过。
+- 严格数据库写入审计 `bun scripts/audit-supabase-writes.ts --fail-on-candidates`
+  **exit 1，17 个候选**。涉及 10 个文件及审计脚本与 `origin/main=d424be4c` 字节一致，
+  本分支没有新增候选；其中 3 个来自测试字符串。未修改或绕过审计器，整体严格审计仍未通过，
+  不能把“没有增量候选”当作 SQL RPC、权限或整体财务安全放行。
+- 再次 `supabase migration list`：593 个本地文件、593 项全对齐、0 差异。
+  首次通过连接池 dry-run 报 `SQLSTATE 42P05 / prepared statement already exists`；
+  改用通过目标守卫的既有开发直连，`db push --include-all --dry-run` exit 0，
+  `Remote database is up to date`。仅更换这次只读检查的连接，未修改配置或应用任何迁移。
+- 发布前 API/Admin 均 healthy。API 源码 `d424be4c`，镜像
+  `useccr.ccs.tencentyun.com/america_goose/goose-api@sha256:88e8edeed38f31e59890fd95432505dc0839c13af091153607926748a6d0b4f9`；
+  Admin 源码 `176ba328`，镜像
+  `useccr.ccs.tencentyun.com/america_goose/goose-admin@sha256:e873432503a3eb7115d8e87de6fd1c6c229e567c25baaf49cd89ea9da7d1f4f8`。
+  保留旧镜像信息供恢复评估；没有执行回滚，亦未验证回滚。
+
+### 2026-09-07 开发候选发布完成与真实只读验收
+
+上述 run `34128116804` 已 **completed / success**：API/Admin 构建、开发迁移历史校验、
+API 部署与就绪屏障、Admin 部署及最终汇总均通过。未选中 Web/H5/worker 的镜像构建步骤
+跳过，生产镜像校验跳过。未重复触发或重跑发布。
+
+根代理 SSH 独立读取两个容器的白名单标签，均为源码
+`b3d25ce3dde5533a256659007697fa6846c6d2ed`、run `34128116804`、`healthy`：
+
+- API：`useccr.ccs.tencentyun.com/america_goose/goose-api@sha256:1a8643294d7f5b43c5147d150359e5b15858ace3d0af919d0d1e5bf537a2b18e`。
+- Admin：`useccr.ccs.tencentyun.com/america_goose/goose-admin@sha256:2a3dae3bdd4678ee9c212eb0e47d4418f45d7930886a93b7c477f609fd81742c`。
+
+通过正式开发登录入口，以用户指定 `132****5725` 核对登录及 `/admin/auth/me` 的
+tenant/employee 精确一致，token/cookie 仅留在进程内，没有输出或保存。首次脚本额外要求
+登录 `message=success` 而提前停止；按 controller 实际 `message=登录成功` 修正断言，
+重新执行完毕 exit 0。该断言错误不是业务故障，未修改任何认证代码。
+
+| 真实 API GET（列表均 page=1&pageSize=20） | HTTP | 结果 |
+| --- | --- | --- |
+| `/warehouses` | 200 | 1 条，分页正确、租户匹配；此前路由映射 500 已消失 |
+| `/inventory/balances`、`/inventory/transactions` | 200 | 各 0 条，分页正确 |
+| `/supplier-purchase-batches` | 200 | 16 条，租户匹配 |
+| `/supplier-purchase-orders` | 200 | 14 条，租户匹配 |
+| `/supplier-payables` | 403 | `FORBIDDEN`，`req-i`，现有会话缺少应付查看权限 |
+| `/supplier-payment-requests` | 403 | `FORBIDDEN`，`req-j`，现有会话缺少付款申请查看权限 |
+| `/project-health/risks` | 200 | 14 条；仅为原项目读取 smoke，不是财务回归 |
+
+另通过 `admin-dev.goodcms.cn/api/auth/login` 获取真实 Admin 会话，`/api/auth/me`
+身份一致；Admin `/api/backend/` 代理的仓库、库存余额、流水均 HTTP 200，分页结果同上。
+登录后 GET `/warehouses`、`/inventory`、`/supplier-purchase-batches` 页面均 200。
+这是 HTTP/SSR 可达验证，不是浏览器点击、渲染或完整写入流程验收。
+
+UTC `13:53:43.513407+00:00` 开发库只读事务独立复核：指定租户采购开关 false、
+原应付 4、付款申请 0、付款 0、库存余额 0、流水 0；事务回滚，无业务写入。
+未自行增权、登录其他员工、开放采购或支付既有应付。
+
+**开发候选已发布，但整体 Stage B 未放行。** 独立审批员工手机号、合法财务权限配置、
+正式平台开关入口及完整真实采购/收货/付款、隔离与回归验收仍待完成；严格写入审计的
+17 个上游候选也仍未关闭。功能分支与工作树保留，不合回 main、不操作生产。
+
 ### 前次本地证据与最终门槛
 
 本地的采购领域隔离 PostgreSQL 12 组夹具、库存 Admin 18 项单元/组件测试、8 项浏览器测试及
