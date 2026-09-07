@@ -24,7 +24,7 @@ const EVIDENCE_PATH = `tenants/${ID.tenant}/expense-request/evidence.png`;
 const auth = {
   authUserId: ID.user,
   employeeId: ID.employee,
-  tenantId: ID.tenant,
+  tenantId: ID.tenant, permissions: [],
 } as unknown as AuthContext;
 const detail = {
   payment_request: {

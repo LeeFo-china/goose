@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ProcurementDestinationRecordSchema } from "./procurement-destination-records";
 
 import {
   SupplierPaymentMethodSchema,
@@ -28,6 +29,8 @@ export const SUPPLIER_PAYABLE_EVENT_SELECT = [
   "tenant_supplier_id",
   "supplier_id",
   "project_id",
+  "destination_type",
+  "warehouse_id",
   "cost_category_id",
   "supplier_purchase_order_id",
   "supplier_purchase_order_item_id",
@@ -47,6 +50,8 @@ export const SUPPLIER_PAYMENT_REQUEST_SELECT = [
   "id",
   "tenant_id",
   "project_id",
+  "destination_type",
+  "warehouse_id",
   "tenant_supplier_id",
   "supplier_id",
   "request_no",
@@ -89,6 +94,8 @@ export const SUPPLIER_PAYMENT_SELECT = [
   "id",
   "tenant_id",
   "project_id",
+  "destination_type",
+  "warehouse_id",
   "tenant_supplier_id",
   "supplier_id",
   "payment_request_id",
@@ -139,12 +146,11 @@ export const ProjectCostEventSchema = z.object({
   created_at: dateTime,
 }).strict();
 
-export const SupplierPayableEventSchema = z.object({
+export const SupplierPayableEventSchema = ProcurementDestinationRecordSchema.safeExtend({
   id: uuid,
   tenant_id: uuid,
   tenant_supplier_id: uuid,
   supplier_id: uuid,
-  project_id: uuid,
   cost_category_id: uuid,
   supplier_purchase_order_id: uuid,
   supplier_purchase_order_item_id: uuid,
@@ -160,10 +166,9 @@ export const SupplierPayableEventSchema = z.object({
   created_at: dateTime,
 }).strict();
 
-export const SupplierPaymentRequestSchema = z.object({
+export const SupplierPaymentRequestSchema = ProcurementDestinationRecordSchema.safeExtend({
   id: uuid,
   tenant_id: uuid,
-  project_id: uuid,
   tenant_supplier_id: uuid,
   supplier_id: uuid,
   request_no: z.string().min(1),
@@ -202,10 +207,9 @@ export const SupplierPaymentRequestAllocationSchema = z.object({
   updated_at: dateTime,
 }).strict();
 
-export const SupplierPaymentSchema = z.object({
+export const SupplierPaymentSchema = ProcurementDestinationRecordSchema.safeExtend({
   id: uuid,
   tenant_id: uuid,
-  project_id: uuid,
   tenant_supplier_id: uuid,
   supplier_id: uuid,
   payment_request_id: uuid,
@@ -302,6 +306,10 @@ const SupplierPaymentCommandSuccessSchema = z.object({
     "付款记录与付款申请的项目不匹配",
     context,
   );
+  for (const field of ["destination_type", "warehouse_id"] as const) {
+    addMismatchIssue(input.payment[field], input.payment_request[field],
+      ["payment", field], "付款记录与付款申请的目的地不匹配", context);
+  }
   addMismatchIssue(
     input.payment.tenant_supplier_id,
     input.payment_request.tenant_supplier_id,
@@ -351,8 +359,8 @@ function validatePaymentRequestCommandSuccess(
 }
 
 function addMismatchIssue(
-  actual: string | number,
-  expected: string | number,
+  actual: string | number | null,
+  expected: string | number | null,
   path: PropertyKey[],
   message: string,
   context: z.RefinementCtx,

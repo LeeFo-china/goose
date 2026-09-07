@@ -10,6 +10,7 @@ import type { AuthContext } from "@/services/authorization";
 import {
   supplierPaymentAccessService,
 } from "@/services/supplier-payment-access";
+import { canReadWarehouseProcurement } from "./procurement-destination-access";
 
 type AccessPort = Pick<
   typeof supplierPaymentAccessService,
@@ -43,6 +44,7 @@ export class SupplierPayablesService {
     return this.repository.list({
       tenant_id: scope.tenantId,
       visible_project_ids: visibleProjectIds,
+      ...(canReadWarehouseProcurement(auth) ? { include_warehouse: true } : {}),
       ...query,
     });
   }
@@ -53,6 +55,7 @@ export class SupplierPayablesService {
     return this.repository.batch({
       tenant_id: scope.tenantId,
       visible_project_ids: visibleProjectIds,
+      ...(canReadWarehouseProcurement(auth) ? { include_warehouse: true } : {}),
       ids: query.ids,
     });
   }
@@ -66,6 +69,7 @@ export class SupplierPayablesService {
     return this.repository.batch({
       tenant_id: scope.tenantId,
       visible_project_ids: visibleProjectIds,
+      ...(auth.permissions.some(({ code }) => code === "inventory.warehouse.manage") ? { include_warehouse: true } : {}),
       ids: query.ids,
     });
   }
@@ -79,6 +83,7 @@ export class SupplierPayablesService {
     return this.repository.listFilterOptions({
       tenant_id: scope.tenantId,
       visible_project_ids: visibleProjectIds,
+      ...(canReadWarehouseProcurement(auth) ? { include_warehouse: true } : {}),
       ...query,
     });
   }

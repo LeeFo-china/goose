@@ -6,6 +6,7 @@ import {
 } from "@gooes/domain";
 
 import { PaginationQuerySchema } from "./request";
+import { SupplierPaymentDestinationFilterFields, validateSupplierPaymentDestination } from "./supplier-payment-destination";
 
 export const SUPPLIER_PAYABLE_STATUS_VALUES = [
   "open",
@@ -52,6 +53,7 @@ export const SupplierPaymentMethodSchema = z.enum(
 );
 
 export const SupplierPayableListQuerySchema = PaginationQuerySchema.extend({
+  ...SupplierPaymentDestinationFilterFields,
   project_id: uuid("无效的项目 ID").optional(),
   tenant_supplier_id: uuid("无效的租户供应商关系 ID").optional(),
   purchase_order_id: uuid("无效的供应商采购单 ID").optional(),
@@ -70,7 +72,8 @@ export const SupplierPayableListQuerySchema = PaginationQuerySchema.extend({
 
 export const SupplierPayableFilterOptionQuerySchema =
   PaginationQuerySchema.extend({
-    type: z.enum(["project", "supplier", "purchase_order"], {
+    ...SupplierPaymentDestinationFilterFields,
+    type: z.enum(["project", "warehouse", "supplier", "purchase_order"], {
       message: "无效的应付筛选项类型",
     }),
     keyword: z.string().trim()
@@ -104,6 +107,7 @@ export const SupplierPayableBatchQuerySchema = z.object({
 
 export const SupplierPaymentRequestListQuerySchema =
   PaginationQuerySchema.extend({
+    ...SupplierPaymentDestinationFilterFields,
     project_id: uuid("无效的项目 ID").optional(),
     tenant_supplier_id: uuid("无效的租户供应商关系 ID").optional(),
     status: SupplierPaymentRequestStatusSchema.optional(),
@@ -136,7 +140,9 @@ export const SupplierPaymentRequestDraftAllocationSchema = z.object({
 
 export const SupplierPaymentRequestDraftSchema = z.object({
   id: uuid("无效的供应商付款申请 ID"),
-  project_id: uuid("无效的项目 ID"),
+  destination_type: z.enum(["project", "warehouse"]).optional(),
+  warehouse_id: uuid("无效的仓库 ID").nullable().optional(),
+  project_id: uuid("无效的项目 ID").nullable(),
   tenant_supplier_id: uuid("无效的租户供应商关系 ID"),
   expected_version: z.number().int()
     .nonnegative("版本号不能为负数"),
@@ -146,6 +152,7 @@ export const SupplierPaymentRequestDraftSchema = z.object({
     .min(1, "付款申请至少需要一个应付分配")
     .max(100, "付款申请分配不能超过 100 行"),
 }).strict().superRefine((input, context) => {
+  validateSupplierPaymentDestination(input, context);
   addDuplicateIdIssues(
     input.allocations,
     "payable_event_id",

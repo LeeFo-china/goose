@@ -23,6 +23,7 @@ const ID = {
 };
 const timestamp = "2026-07-31T08:00:00.000Z";
 const requestRecord = {
+  destination_type: "project", warehouse_id: null,
   id: ID.request,
   tenant_id: ID.tenant,
   project_id: ID.project,
@@ -53,6 +54,7 @@ const requestRecord = {
   updated_at: timestamp,
 } as const;
 const listItem = {
+  destination_type: "project", warehouse_id: null,
   id: ID.request,
   project_id: ID.project,
   tenant_supplier_id: ID.relationship,
@@ -111,6 +113,7 @@ describe("SupplierPaymentRequestsRepository", () => {
       invoice_required_before_payment: true,
     };
     const payment = {
+      destination_type: "project", project_id: ID.project, warehouse_id: null,
       id: ID.payment,
       payment_no: "SP-001",
       amount: "100.00",

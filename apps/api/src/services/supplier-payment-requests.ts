@@ -1,4 +1,6 @@
 import { Errors } from "@/errors/error-factory";
+import { assertSupplierPaymentDestination } from "./supplier-payment-destination";
+import { canReadWarehouseProcurement } from "./procurement-destination-access";
 import {
   supplierPaymentRequestsRepository,
   type SupplierPaymentRequestDetail,
@@ -80,7 +82,7 @@ const ERROR_MESSAGES: Record<CommandErrorStatus, string> = {
   validation_error: "供应商付款参数校验失败",
   state_conflict: "付款申请当前状态不允许该操作",
   version_conflict: "付款申请版本已变化，请刷新后重试",
-  scope_mismatch: "付款申请的项目或供应商范围不匹配",
+  scope_mismatch: "付款申请的采购目的地或供应商范围不匹配",
   amount_unavailable: "可付款或可申请金额不足",
   allocation_invalid: "付款分配明细无效",
   evidence_required: "付款凭证不能为空",
@@ -121,6 +123,7 @@ export class SupplierPaymentRequestsService {
     return this.repository.list({
       tenant_id: scope.tenantId,
       visible_project_ids: visibleProjectIds,
+      ...(canReadWarehouseProcurement(auth) ? { include_warehouse: true } : {}),
       ...query,
     });
   }
@@ -128,10 +131,7 @@ export class SupplierPaymentRequestsService {
   async detail(auth: AuthContext, paymentRequestId: string) {
     const scope = await this.access.requireRequestRead(auth);
     const detail = await this.requireDetail(scope.tenantId, paymentRequestId);
-    await this.access.assertProjectRead(
-      auth,
-      detail.payment_request.project_id,
-    );
+    await assertSupplierPaymentDestination(auth, detail.payment_request, "read", this.access.assertProjectRead.bind(this.access));
     return detail;
   }
 
@@ -142,10 +142,7 @@ export class SupplierPaymentRequestsService {
   ) {
     const scope = await this.access.requireRequestRead(auth);
     const detail = await this.requireDetail(scope.tenantId, paymentRequestId);
-    await this.access.assertProjectRead(
-      auth,
-      detail.payment_request.project_id,
-    );
+    await assertSupplierPaymentDestination(auth, detail.payment_request, "read", this.access.assertProjectRead.bind(this.access));
     return this.repository.listPayments({
       tenant_id: scope.tenantId,
       payment_request_id: paymentRequestId,
@@ -173,16 +170,15 @@ export class SupplierPaymentRequestsService {
         scope.tenantId,
         paymentRequestId,
       );
-      await this.access.assertProjectUpdate(
-        auth,
-        detail.payment_request.project_id,
-      );
+      await assertSupplierPaymentDestination(auth, detail.payment_request, "manage", this.access.assertProjectUpdate.bind(this.access));
     }
-    await this.access.assertProjectUpdate(auth, input.project_id);
+    await assertSupplierPaymentDestination(auth, input, "manage", this.access.assertProjectUpdate.bind(this.access));
     return this.execute(
       this.repository.saveDraft({
         ...commandContext(scope, paymentRequestId, input, idempotencyKey),
         project_id: input.project_id,
+        ...(input.destination_type ? { destination_type: input.destination_type } : {}),
+        ...(input.warehouse_id ? { warehouse_id: input.warehouse_id } : {}),
         tenant_supplier_id: input.tenant_supplier_id,
         reason: input.reason,
         remark: normalizeOptionalRemark(input.remark),
@@ -379,10 +375,7 @@ export class SupplierPaymentRequestsService {
       ? await this.access.requireRequestApprove(auth)
       : await this.access.requirePayment(auth);
     const detail = await this.requireDetail(scope.tenantId, paymentRequestId);
-    await this.access.assertProjectUpdate(
-      auth,
-      detail.payment_request.project_id,
-    );
+    await assertSupplierPaymentDestination(auth, detail.payment_request, "manage", this.access.assertProjectUpdate.bind(this.access));
     return { scope, detail };
   }
 

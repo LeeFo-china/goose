@@ -40,6 +40,7 @@ async function repositoryFor(responder: (
 }
 
 const payable = {
+  destination_type: "project", warehouse_id: null,
   id: PAYABLE_ID,
   project_id: PROJECT_ID,
   tenant_supplier_id: RELATIONSHIP_ID,

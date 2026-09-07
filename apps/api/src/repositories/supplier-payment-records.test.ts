@@ -54,7 +54,7 @@ const projectCostEvent = {
 } as const;
 
 const payableEvent = {
-  id: PAYABLE_ID,
+  id: PAYABLE_ID, destination_type: "project", warehouse_id: null,
   tenant_id: TENANT_ID,
   tenant_supplier_id: RELATIONSHIP_ID,
   supplier_id: SUPPLIER_ID,
@@ -75,6 +75,7 @@ const payableEvent = {
 } as const;
 
 const paymentRequest = {
+  destination_type: "project", warehouse_id: null,
   id: REQUEST_ID,
   tenant_id: TENANT_ID,
   project_id: PROJECT_ID,
@@ -117,6 +118,7 @@ const requestAllocation = {
 } as const;
 
 const supplierPayment = {
+  destination_type: "project" as const, warehouse_id: null,
   id: PAYMENT_ID,
   tenant_id: TENANT_ID,
   project_id: PROJECT_ID,

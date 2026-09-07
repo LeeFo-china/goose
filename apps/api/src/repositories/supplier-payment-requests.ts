@@ -1,6 +1,9 @@
 import { z } from "zod";
 
 import { Errors } from "@/errors/error-factory";
+import { ProcurementDestinationRecordSchema } from "./procurement-destination-records";
+import type { ProcurementListScope } from "./procurement-destination-scope";
+import { supplierPaymentDestinationParams } from "./supplier-payment-destination-params";
 import {
   SupplierPaymentCommandEnvelopeSchema,
   SupplierPaymentRequestSchema,
@@ -25,7 +28,7 @@ type Client = {
 };
 type PageInput = { page: number; pageSize: number };
 
-export type SupplierPaymentRequestListInput = PageInput & {
+export type SupplierPaymentRequestListInput = PageInput & ProcurementListScope & {
   tenant_id: string;
   visible_project_ids: string[] | null;
   project_id?: string;
@@ -58,9 +61,9 @@ const pageFields = {
   page_size: z.number().int().min(1).max(100),
 };
 
-const SupplierPaymentRequestListItemSchema = z.object({
+const SupplierPaymentRequestListItemSchema = ProcurementDestinationRecordSchema.safeExtend({
   id: uuid,
-  project_id: uuid,
+  warehouse_name: z.string().min(1).nullable().optional(),
   tenant_supplier_id: uuid,
   supplier_id: uuid,
   supplier_name: z.string().min(1),
@@ -96,8 +99,9 @@ const SupplierPaymentRequestDetailSchema = z.object({
   allocations: z.array(SupplierPaymentRequestDetailAllocationSchema),
 }).strict().nullable();
 
-const SupplierPaymentListItemSchema = z.object({
+const SupplierPaymentListItemSchema = ProcurementDestinationRecordSchema.safeExtend({
   id: uuid,
+  warehouse_name: z.string().min(1).nullable().optional(),
   payment_no: z.string().min(1),
   amount: money,
   currency: z.literal("CNY"),
@@ -133,6 +137,7 @@ export class SupplierPaymentRequestsRepository {
 
   async list(input: SupplierPaymentRequestListInput) {
     const data = await this.rpc("list_supplier_payment_requests", {
+      ...supplierPaymentDestinationParams(input),
       p_tenant_id: input.tenant_id,
       p_visible_project_ids: input.visible_project_ids,
       p_project_id: input.project_id ?? null,
@@ -184,7 +189,9 @@ export class SupplierPaymentRequestsRepository {
 
   saveDraft(
     input: SupplierPaymentRequestCommandContext & {
-      project_id: string;
+      destination_type?: "project" | "warehouse";
+      project_id: string | null;
+      warehouse_id?: string | null;
       tenant_supplier_id: string;
       reason: string;
       remark: string | null;
@@ -194,6 +201,8 @@ export class SupplierPaymentRequestsRepository {
     return this.command("save_supplier_payment_request_draft", {
       ...baseParams(input),
       p_project_id: input.project_id,
+      ...(input.destination_type ? { p_destination_type: input.destination_type } : {}),
+      ...(input.warehouse_id ? { p_warehouse_id: input.warehouse_id } : {}),
       p_tenant_supplier_id: input.tenant_supplier_id,
       p_reason: input.reason,
       p_remark: input.remark,

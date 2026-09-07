@@ -11,7 +11,7 @@ const PROJECT_ID = "83000000-0000-4000-8000-000000000002";
 const auth = {
   authUserId: "83000000-0000-4000-8000-000000000004",
   employeeId: "83000000-0000-4000-8000-000000000005",
-  tenantId: TENANT_ID,
+  tenantId: TENANT_ID, permissions: [],
 } as unknown as AuthContext;
 
 function dependencies(visibleProjectIds: string[] | null = [PROJECT_ID]) {

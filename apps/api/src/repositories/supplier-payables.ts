@@ -1,6 +1,9 @@
 import { z } from "zod";
 
 import { Errors } from "@/errors/error-factory";
+import { ProcurementDestinationRecordSchema } from "./procurement-destination-records";
+import type { ProcurementListScope } from "./procurement-destination-scope";
+import { supplierPaymentDestinationParams } from "./supplier-payment-destination-params";
 import { SupplierPayableStatusSchema } from "@/schema/supplier-payments";
 import type {
   SupplierPayableFilterOptionQuery,
@@ -16,7 +19,7 @@ type Client = {
 };
 type PageInput = { page: number; pageSize: number };
 
-export type SupplierPayableListInput = PageInput & {
+export type SupplierPayableListInput = PageInput & ProcurementListScope & {
   tenant_id: string;
   visible_project_ids: string[] | null;
   project_id?: string;
@@ -26,13 +29,14 @@ export type SupplierPayableListInput = PageInput & {
   due_from?: string;
   due_to?: string;
 };
-export type SupplierPayableFilterOptionInput = PageInput & {
+export type SupplierPayableFilterOptionInput = PageInput & ProcurementListScope & {
   tenant_id: string;
   visible_project_ids: string[] | null;
   type: SupplierPayableFilterOptionQuery["type"];
   keyword?: string;
 };
 export type SupplierPayableBatchInput = {
+  include_warehouse?: boolean;
   tenant_id: string;
   visible_project_ids: string[] | null;
   ids: string[];
@@ -42,15 +46,15 @@ const uuid = z.uuid();
 const dateTime = z.iso.datetime({ offset: true });
 const money = z.string().regex(/^(?:0|[1-9]\d{0,15})\.\d{2}$/);
 
-const SupplierPayableListItemSchema = z.object({
+const SupplierPayableListItemSchema = ProcurementDestinationRecordSchema.safeExtend({
   id: uuid,
-  project_id: uuid,
   tenant_supplier_id: uuid,
   supplier_id: uuid,
   supplier_purchase_order_id: uuid,
   receipt_id: uuid,
   receipt_item_id: uuid,
-  project_name: z.string().min(1),
+  project_name: z.string().min(1).nullable(),
+  warehouse_name: z.string().min(1).nullable().optional(),
   supplier_name: z.string().min(1),
   purchase_order_no: z.string().min(1),
   receipt_no: z.string().min(1),
@@ -111,6 +115,7 @@ export class SupplierPayablesRepository {
 
   async list(input: SupplierPayableListInput) {
     const { data, error } = await this.client.rpc("list_supplier_payables", {
+      ...supplierPaymentDestinationParams(input),
       p_tenant_id: input.tenant_id,
       p_visible_project_ids: input.visible_project_ids,
       p_project_id: input.project_id ?? null,
@@ -139,6 +144,7 @@ export class SupplierPayablesRepository {
         p_tenant_id: input.tenant_id,
         p_visible_project_ids: input.visible_project_ids,
         p_payable_event_ids: input.ids,
+        ...(input.include_warehouse ? { p_include_warehouse: true } : {}),
       },
     );
     if (error) throw Errors.dbError("批量查询供应商应付失败", error);
@@ -153,6 +159,7 @@ export class SupplierPayablesRepository {
     const { data, error } = await this.client.rpc(
       "list_supplier_payable_filter_options",
       {
+        ...supplierPaymentDestinationParams(input),
         p_tenant_id: input.tenant_id,
         p_visible_project_ids: input.visible_project_ids,
         p_type: input.type,

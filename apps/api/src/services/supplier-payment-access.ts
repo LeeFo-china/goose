@@ -5,6 +5,7 @@ import {
 } from "@/repositories/tenant-suppliers";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import { hasWarehouseOnlyProjectScope } from "./procurement-destination-access";
 
 type AccessPolicyPort = Pick<
   typeof accessPolicyService,
@@ -73,10 +74,12 @@ export class SupplierPaymentAccessService {
   }
 
   getVisibleProjectIds(auth: AuthContext) {
+    if (hasWarehouseOnlyProjectScope(auth, "project.read")) return Promise.resolve([]);
     return this.accessPolicy.getVisibleProjectIds(auth, "project.read");
   }
 
   getUpdatableProjectIds(auth: AuthContext) {
+    if (hasWarehouseOnlyProjectScope(auth, "project.update")) return Promise.resolve([]);
     return this.accessPolicy.getVisibleProjectIds(auth, "project.update");
   }
 

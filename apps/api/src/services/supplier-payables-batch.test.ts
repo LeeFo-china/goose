@@ -9,7 +9,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 const TENANT_ID = "89000000-0000-4000-8000-000000000001";
 const PROJECT_ID = "89000000-0000-4000-8000-000000000002";
 const PAYABLE_ID = "89000000-0000-4000-8000-000000000003";
-const auth = { tenantId: TENANT_ID } as unknown as AuthContext;
+const auth = { tenantId: TENANT_ID, permissions: [] } as unknown as AuthContext;
 
 describe("SupplierPayablesService.batch", () => {
   test("requires payable read and applies visible project scope", async () => {
