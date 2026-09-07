@@ -176,6 +176,7 @@ bun scripts/verify-warehouse-stage-b-database.ts \
   scripts/fixtures/warehouse-stage-b/sku-legacy-compatibility.sql \
   scripts/fixtures/warehouse-stage-b/sku-legacy-guards.sql \
   scripts/fixtures/warehouse-stage-b/tenant-inventory-read-isolation.sql \
+  scripts/fixtures/warehouse-stage-b/tenant-payment-isolation.sql \
   scripts/fixtures/warehouse-stage-b/tenant-receipt-isolation.sql \
   scripts/fixtures/warehouse-stage-b/inventory-read-performance.sql \
   scripts/fixtures/warehouse-stage-b/receipt-weighted-race.sql
@@ -193,6 +194,7 @@ bun scripts/verify-warehouse-stage-b-database.ts \
 - 验证脚本 TypeScript 检查通过；未将这些局部证据等同于完整 Stage B 验收。
 - 新增[双租户收货命令隔离](./2026-09-07-warehouse-stage-b-tenant-receipt-isolation.md)：双方有效且开关打开，正式收货正向控制后，双方向 8 次外租户 order/item/receipt ID 混用精确拒绝，双方 16 张表完整事实不变，原键重放各自冻结结果。根代理当时全 19 个夹具通过，独立规格/质量审查均各自重跑 3 个夹具通过；金融写入、库存主列表和真实 HTTP 完整隔离矩阵仍不能据此勾选完成。
 - 随后补齐[双租户库存主列表隔离](./2026-09-07-warehouse-stage-b-tenant-inventory-reads.md)：余额/流水双向外仓、外 SKU 与混合筛选同时检查 items/total；每页 1 条直至末尾空页，补余额 RPC ACL。独立规格/质量审查通过，根代理当时已完成的全 20 个夹具通过；运行顺序明确早于新增第二仓的 weighted-race。此后金融写入及真实 HTTP 矩阵仍待完成。
+- 再补[财务跨租户写入隔离](./2026-09-07-warehouse-stage-b-tenant-payment-isolation.md)：双租户正式申请并部分付款后，双方向共 22 次 ID 混用拒绝，双方 10 张业务表及原命令历史不变，分别原键重放无重复付款。独立规格/质量审查通过，根代理当时全 21 个夹具通过。付款 ID 碰撞仅证明主键拒绝，不代表客户端冲突交互；同用户切租户、全部金融动作及真实 HTTP 矩阵仍未验收。
 - 新增会计核心 fixture：真实商品/价格下保存→提交→审批→已提交采购订单，检查仓库目的地、空项目预算占用、旧项目预算占用转换。
 - 同组覆盖开关关闭、仓库停用、禁止自审、驳回、提交/审批重试不重复拆单、legacy 入口不能执行或重放仓库命令、内部函数 ACL、项目不能使用仓库预算状态。
 - `workflow-lock-order.sql` 只在一次性容器提交合成数据，使用 dblink 经容器内 `/tmp` Unix socket 打开两个本地会话（无外网连接）。实际观察 review 进入 Lock wait 后并发调用真实 submit；重复提交按预期拒绝，review 完成且仅有一张已提交订单和一条已转换项目占用。额外检查两个有效 wrapper 的锁顺序。
