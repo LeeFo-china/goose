@@ -32,14 +32,6 @@ import {
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
@@ -70,20 +62,26 @@ import {
 } from "./purchase-order-fulfillment-ui-state";
 import {
   commandErrorMessage,
+  canManagePurchaseOrder,
+  purchaseOrderDestinationLabel,
   formatPurchaseMoney,
   purchaseOrderActions,
   purchaseOrderStatusMeta,
 } from "./purchase-order-rules";
 import type {
   PurchaseOrderItem,
+  PurchaseOrderItemPage,
   PurchaseOrderWithReferences,
 } from "./purchase-order-types";
+import { PurchaseOrderItemTable } from "./purchase-order-item-table";
 
 export function PurchaseOrderDetail({
   open,
   order,
   canViewPurchaseOrders,
   canManage,
+  canViewWarehouses = false,
+  canManageWarehouses = false,
   onOpenChange,
   onChanged,
 }: {
@@ -91,11 +89,20 @@ export function PurchaseOrderDetail({
   order: PurchaseOrderWithReferences | null;
   canViewPurchaseOrders: boolean;
   canManage: boolean;
+  canViewWarehouses?: boolean;
+  canManageWarehouses?: boolean;
   onOpenChange: (open: boolean) => void;
   onChanged: () => void;
 }) {
   const [current, setCurrent] = useState(order);
   const [items, setItems] = useState<PurchaseOrderItem[]>([]);
+  const [itemPagination, setItemPagination] = useState<PurchaseOrderItemPage['pagination']>({ page: 1, pageSize: 100, total: 0, totalPages: 0 });
+  const [loadingMoreItems, setLoadingMoreItems] = useState(false);
+  const [itemError, setItemError] = useState<string | null>(null);
+  const itemRequestGuard = useRef(createLatestRequestGuard());
+  // Coordinate full refresh and page appends synchronously, before React rerenders.
+  const itemRefreshInFlight = useRef(false);
+  const canRead = canViewPurchaseOrders && (order?.destination_type !== "warehouse" || canViewWarehouses);
   const [loading, setLoading] = useState(false);
   const [hasLoadedDetail, setHasLoadedDetail] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -113,7 +120,7 @@ export function PurchaseOrderDetail({
 
   const reloadFinancialSummary = useCallback(async () => {
     const isLatest = financialSummaryRequestGuard.current.start();
-    if (!order || !canViewPurchaseOrders) return;
+    if (!order || !canRead) return;
     setFinancialSummaryState(loadingFinancialSummaryState);
     try {
       const summary = await loadPurchaseOrderFinancialSummary(order.id);
@@ -127,11 +134,15 @@ export function PurchaseOrderDetail({
         ));
       }
     }
-  }, [canViewPurchaseOrders, order]);
+  }, [canRead, order]);
 
   const reload = useCallback(async () => {
     const isLatest = requestGuard.current.start();
-    if (!order) return null;
+    if (!order || !canRead) return null;
+    itemRefreshInFlight.current = true;
+    itemRequestGuard.current.invalidate();
+    setLoadingMoreItems(false);
+    setItemError(null);
     setLoading(true);
     setError(null);
     setFulfillmentState(unloadedFulfillmentState);
@@ -143,6 +154,7 @@ export function PurchaseOrderDetail({
       if (!isLatest()) return null;
       setCurrent(latest);
       setItems(itemPage.list);
+      setItemPagination(itemPage.pagination);
       setHasLoadedDetail(true);
       return latest.version;
     } catch (caught) {
@@ -150,12 +162,32 @@ export function PurchaseOrderDetail({
       setError(errorMessage(caught, "采购单详情加载失败"));
       return null;
     } finally {
-      if (isLatest()) setLoading(false);
+      if (isLatest()) {
+        itemRefreshInFlight.current = false;
+        setLoading(false);
+      }
     }
-  }, [order]);
+  }, [order, canRead]);
+
+  async function loadMoreItems() {
+    if (!order || !canRead || loading || itemRefreshInFlight.current || loadingMoreItems || itemPagination.page >= itemPagination.totalPages) return;
+    const isLatest = itemRequestGuard.current.start();
+    setLoadingMoreItems(true); setItemError(null);
+    try {
+      const next = await loadPurchaseOrderItems(order.id, itemPagination.page + 1);
+      if (!isLatest()) return;
+      setItems((previous) => Array.from(new Map([...previous, ...next.list].map((item) => [item.id, item])).values()));
+      setItemPagination(next.pagination);
+    } catch (caught) {
+      if (isLatest()) setItemError(errorMessage(caught, "更多采购明细加载失败"));
+    } finally {
+      if (isLatest()) setLoadingMoreItems(false);
+    }
+  }
 
   useEffect(() => {
     requestGuard.current.invalidate();
+    itemRequestGuard.current.invalidate();
     financialSummaryRequestGuard.current.invalidate();
     setCurrent(order);
     setItems([]);
@@ -164,16 +196,19 @@ export function PurchaseOrderDetail({
     setFulfillmentState(unloadedFulfillmentState);
     setCancelReason("");
     setCommandAttempt(null);
-    if (open) {
+    if (open && canRead) {
       void reload();
       if (canViewPurchaseOrders) void reloadFinancialSummary();
     }
     return () => {
       requestGuard.current.invalidate();
+      itemRequestGuard.current.invalidate();
+      itemRefreshInFlight.current = false;
       financialSummaryRequestGuard.current.invalidate();
     };
   }, [
     canViewPurchaseOrders,
+    canRead,
     open,
     order,
     reload,
@@ -188,7 +223,7 @@ export function PurchaseOrderDetail({
   }, [canViewPurchaseOrders, onChanged, reload, reloadFinancialSummary]);
 
   async function runCommand(action: "submit" | "cancel") {
-    if (!current || busy) return;
+    if (!current || busy || !canRead || !purchaseOrderActions(current.status, canManage, current.destination_type, canManageWarehouses).includes(action)) return;
     setBusy(true);
     setError(null);
     const payload = action === "submit"
@@ -239,7 +274,7 @@ export function PurchaseOrderDetail({
   }
 
   const actions = current
-    ? purchaseOrderActions(current.status, canManage)
+    ? purchaseOrderActions(current.status, canManage && canRead, current.destination_type, canManageWarehouses)
     : [];
   const visibleActions = actions.filter((action) =>
     action !== "cancel" || canCancelWithFulfillment(fulfillmentState)
@@ -251,11 +286,11 @@ export function PurchaseOrderDetail({
         <DialogHeader>
           <DialogTitle>采购单详情</DialogTitle>
           <DialogDescription>
-            查看项目、供应商、价格快照和采购明细。
+            查看采购去向、供应商、价格快照和采购明细。
           </DialogDescription>
         </DialogHeader>
         {error ? <StatusAlert>{error}</StatusAlert> : null}
-        {!current || !hasLoadedDetail ? (
+        {!canRead ? <StatusAlert>当前账号没有该采购去向的查看权限。</StatusAlert> : !current || !hasLoadedDetail ? (
           <div className="flex flex-col gap-3">
             <Skeleton className="h-24 w-full" />
             <Skeleton className="h-64 w-full" />
@@ -264,7 +299,7 @@ export function PurchaseOrderDetail({
           <>
             <div className="min-w-0 max-w-full grid gap-3 rounded-md border p-4 md:grid-cols-3">
               <Fact label="采购单号" value={current.order_no} mono />
-              <Fact label="项目" value={current.project.name} />
+              <Fact label="采购去向" value={purchaseOrderDestinationLabel(current)} />
               <Fact label="供应商" value={current.supplier.name} />
               <Fact
                 label="状态"
@@ -293,47 +328,8 @@ export function PurchaseOrderDetail({
                 mono
               />
             </div>
-            <div className="min-w-0 max-w-full rounded-md border">
-              <Table
-                containerClassName="min-w-0 max-w-full overflow-x-auto"
-              >
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>商品 / SKU</TableHead>
-                    <TableHead>单位</TableHead>
-                    <TableHead className="text-right">数量</TableHead>
-                    <TableHead className="text-right">单价</TableHead>
-                    <TableHead className="text-right">含税金额</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {items.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell>
-                        <div className="font-medium">
-                          {item.product_name_snapshot}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {item.sku_name_snapshot} · {item.sku_code_snapshot}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {item.purchase_unit_symbol_snapshot}
-                      </TableCell>
-                      <TableCell className="text-right font-mono tabular-nums">
-                        {item.quantity}
-                      </TableCell>
-                      <TableCell className="text-right font-mono tabular-nums">
-                        {formatPurchaseMoney(item.unit_price)}
-                      </TableCell>
-                      <TableCell className="text-right font-mono tabular-nums">
-                        {formatPurchaseMoney(item.total_amount)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+            {current.destination_type === "warehouse" && <p className="text-sm text-muted-foreground">仓库补货由审批后的采购申请生成，不计入项目预算或项目成本。</p>}
+            <PurchaseOrderItemTable items={items} pagination={itemPagination} loading={loading || loadingMoreItems} error={itemError} onLoadMore={() => void loadMoreItems()} />
             {canViewPurchaseOrders ? (
               <PurchaseOrderFinancialSummary
                 summary={financialSummaryState.summary}
@@ -344,7 +340,7 @@ export function PurchaseOrderDetail({
             <PurchaseOrderFulfillmentPanel
               order={current}
               purchaseOrderItems={items}
-              canManage={canManage}
+              canManage={canRead && canManagePurchaseOrder(current, canManage, canManageWarehouses)}
               onOrderChanged={handleFulfillmentChanged}
               onLoadStateChange={setFulfillmentState}
             />

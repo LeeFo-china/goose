@@ -23,6 +23,7 @@ import { ClipboardList } from "lucide-react";
 import {
   canEditPurchaseOrderDraft,
   formatPurchaseMoney,
+  purchaseOrderDestinationLabel,
   purchaseOrderPrimaryStatusMeta,
   purchaseOrderSecondaryStatusText,
 } from "./purchase-order-rules";
@@ -47,9 +48,10 @@ export function PurchaseOrderList({
   if (loading) {
     return (
       <div className="flex flex-col gap-2 p-4">
-        {Array.from({ length: 6 }, (_, index) => (
-          <Skeleton key={index} className="h-12 w-full" />
-        ))}
+        {Array.from(
+          { length: 6 },
+          (_, index) => <Skeleton key={index} className="h-12 w-full" />,
+        )}
       </div>
     );
   }
@@ -75,7 +77,7 @@ export function PurchaseOrderList({
       <TableHeader className="sticky top-0 bg-card">
         <TableRow>
           <TableHead>采购单号</TableHead>
-          <TableHead>项目</TableHead>
+          <TableHead>采购去向</TableHead>
           <TableHead>供应商</TableHead>
           <TableHead>状态</TableHead>
           <TableHead className="text-right">含税总额</TableHead>
@@ -98,7 +100,7 @@ export function PurchaseOrderList({
                 </div>
               </TableCell>
               <TableCell className="max-w-48 truncate">
-                {order.project.name}
+                {purchaseOrderDestinationLabel(order)}
               </TableCell>
               <TableCell className="max-w-52 truncate">
                 {order.supplier.name}
@@ -124,16 +126,18 @@ export function PurchaseOrderList({
                   >
                     查看
                   </Button>
-                  {canEdit ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => onEdit(order)}
-                    >
-                      编辑
-                    </Button>
-                  ) : null}
+                  {canEdit
+                    ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => onEdit(order)}
+                      >
+                        编辑
+                      </Button>
+                    )
+                    : null}
                 </div>
               </TableCell>
             </TableRow>

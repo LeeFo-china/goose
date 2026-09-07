@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { warehouseOptions, warehouseSession, seedWarehouse, warehouseOrderReferences } from "./supplier-purchase-order-warehouse-fixture.mjs";
 
 import {
   currentServiceAccessSummary,
@@ -84,8 +85,12 @@ function reset(scenario = "empty") {
     journal: [],
     idempotency: new Map(),
     priceChangeTriggered: false,
+    scenario,
+    readRequests: [],
+    pendingItemReads: 0,
   };
   if (scenario === "legacy-draft") seedLegacyDraft();
+  if (scenario.startsWith("warehouse")) { seedLegacyDraft(); seedWarehouse(state, scenario); }
 }
 
 function sendJson(response, status, payload) {
@@ -275,13 +280,13 @@ function orderWithReferences(order = state.order) {
     ? {
       ...structuredClone(order),
       fulfillment_status: orderListFulfillmentStatus(order),
-      project: {
+      project: order.destination_type === "warehouse" ? null : {
         id: project.id,
         name: project.name,
         status: project.status,
       },
       supplier: structuredClone(relationship.supplier),
-      purchase_requisition: null,
+      ...(order.destination_type === "warehouse" ? warehouseOrderReferences(order) : { warehouse: null, purchase_requisition: null }),
     }
     : null;
 }
@@ -1520,6 +1525,8 @@ const server = createServer(async (request, response) => {
         journal: structuredClone(state.journal),
       });
     }
+    if (request.method === "GET" && url.pathname === "/__test/read-requests") return sendJson(response, 200, state.readRequests);
+    if (request.method === "GET" && url.pathname === "/__test/pending-item-reads") return sendJson(response, 200, state.pendingItemReads);
     if (request.method === "GET" && url.pathname === "/__test/state") {
       return sendJson(response, 200, {
         order: orderWithReferences(),
@@ -1531,11 +1538,33 @@ const server = createServer(async (request, response) => {
       });
     }
     if (request.method === "POST" && url.pathname === "/admin/auth/login") {
-      await readBody(request);
-      return sendData(response, session);
+      const input = await readBody(request);
+      return sendData(response, typeof input.phone === "string" && input.phone.startsWith("warehouse-") ? warehouseSession(input.phone) : session);
     }
+    const role = request.headers.authorization?.replace("Bearer ", "").replace(/-token$/, "") ?? "";
+    const currentSession = role.startsWith("warehouse-") ? warehouseSession(role) : session;
     if (request.method === "GET" && url.pathname === "/admin/auth/me") {
-      return sendData(response, session);
+      return sendData(response, currentSession);
+    }
+    if (request.method === "GET") state.readRequests.push(`${url.pathname}${url.search}`);
+    if (url.pathname === "/warehouses" && request.method === "GET") {
+      if (!currentSession.permissions.some(({ code }) => code === "inventory.warehouse.view")) return sendError(response, 403, "FORBIDDEN", "无仓库查看权限");
+      return sendPage(response, url, warehouseOptions, ["name"]);
+    }
+    if (state.order?.destination_type === "warehouse" && /^\/supplier-purchase-orders\//.test(url.pathname)) {
+      const required = request.method === "GET" ? ["supplier.purchase-order.view", "inventory.warehouse.view"] : ["supplier.purchase-order.manage", "inventory.warehouse.manage"];
+      if (required.some((permission) => !currentSession.permissions.some(({ code }) => code === permission))) return sendError(response, 403, "FORBIDDEN", "无仓库采购单操作权限");
+      if (request.method === "POST" && /\/(save-draft|submit)$/.test(url.pathname)) return sendError(response, 409, "STATE_CONFLICT", "仓库采购单不可使用项目草稿命令");
+      if (state.scenario === "warehouse-gate-off" && request.method === "POST" && url.pathname.endsWith("/receipts")) {
+        const payload = await readBody(request);
+        recordCommand(request, url, payload, "WAREHOUSE_PROCUREMENT_NOT_ENABLED");
+        return sendError(response, 409, "WAREHOUSE_PROCUREMENT_NOT_ENABLED", "仓库采购尚未开放");
+      }
+    }
+    const financialSummary = url.pathname.match(/^\/supplier-purchase-orders\/([^/]+)\/financial-summary$/);
+    if (request.method === "GET" && financialSummary && state.order?.id === financialSummary[1]) {
+      const accepted = state.itemFulfillments.reduce((sum, item) => sum + Number(item.accepted_total_amount), 0).toFixed(2);
+      return sendData(response, { purchase_order_id: state.order.id, accepted_amount: accepted, payable_amount: accepted, reserved_request_amount: "0.00", paid_amount: "0.00", open_amount: accepted, available_to_request_amount: accepted });
     }
     if (
       request.method === "GET" &&
@@ -1598,6 +1627,12 @@ const server = createServer(async (request, response) => {
       url.pathname === "/supplier-purchase-orders"
     ) {
       let records = state.order ? [orderWithReferences()] : [];
+      if (!currentSession.permissions.some(({ code }) => code === "inventory.warehouse.view")) records = records.filter((order) => order.destination_type !== "warehouse");
+      const destinationType = url.searchParams.get("destinationType");
+      const warehouseId = url.searchParams.get("warehouseId");
+      if (state.scenario === "warehouse-race" && destinationType === "project") await new Promise((resolve) => setTimeout(resolve, 1200));
+      if (destinationType) records = records.filter((order) => (order.destination_type ?? "project") === destinationType);
+      if (warehouseId) records = records.filter((order) => order.warehouse_id === warehouseId);
       const status = url.searchParams.get("status");
       const fulfillmentStatus = url.searchParams.get("fulfillmentStatus");
       const projectId = url.searchParams.get("projectId");
@@ -1720,6 +1755,14 @@ const server = createServer(async (request, response) => {
           response,
           "SUPPLIER_PURCHASE_ORDER_NOT_FOUND",
         );
+      }
+      if (state.scenario === "warehouse-refresh-race" && state.fulfillment) {
+        const page = Number(url.searchParams.get("page"));
+        if (page === 1 || page === 3) {
+          state.pendingItemReads += 1;
+          await new Promise((resolve) => setTimeout(resolve, page === 1 ? 800 : 1400));
+          state.pendingItemReads -= 1;
+        }
       }
       return sendPage(response, url, state.items);
     }

@@ -18,6 +18,8 @@ export default async function SupplierPurchaseOrdersPage() {
       canViewPurchaseOrders={canViewPurchaseOrders}
       canManagePurchaseOrders={canManagePurchaseOrders}
       canManagePurchaseRequisitions={canManagePurchaseRequisitions}
+      canViewWarehouses={permissions.has("inventory.warehouse.view")}
+      canManageWarehouses={permissions.has("inventory.warehouse.manage")}
     />
   );
 }

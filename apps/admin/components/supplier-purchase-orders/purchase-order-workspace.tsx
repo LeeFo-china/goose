@@ -1,11 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ClipboardPlus, Search } from "lucide-react";
+import { ClipboardPlus } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import { FormSelect } from "@/components/admin/form-select";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,7 +12,6 @@ import {
   CardContent,
   CardHeader,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -29,6 +27,8 @@ import {
 import { PurchaseOrderDetail } from "./purchase-order-detail";
 import { PurchaseOrderEditor } from "./purchase-order-editor";
 import { PurchaseOrderList } from "./purchase-order-list";
+import { PurchaseOrderFilters } from "./purchase-order-filters";
+import { orderDestinationQuery, type OrderDestinationFilters } from "./purchase-order-destination-filters";
 import {
   requisitionCreationEntry,
 } from "./purchase-order-rules";
@@ -63,10 +63,14 @@ export function PurchaseOrderWorkspace({
   canViewPurchaseOrders,
   canManagePurchaseOrders,
   canManagePurchaseRequisitions,
+  canViewWarehouses = false,
+  canManageWarehouses = false,
 }: {
   canViewPurchaseOrders: boolean;
   canManagePurchaseOrders: boolean;
   canManagePurchaseRequisitions: boolean;
+  canViewWarehouses?: boolean;
+  canManageWarehouses?: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -89,7 +93,8 @@ export function PurchaseOrderWorkspace({
   const [fulfillmentStatus, setFulfillmentStatus] = useState<
     "all" | PurchaseOrderFulfillmentFilterStatus
   >("all");
-  const [projectId, setProjectId] = useState("all");
+  const [destination, setDestination] = useState<OrderDestinationFilters>({ destinationType: "all", projectId: "all", warehouse: null });
+  const listRequestGeneration = useRef(0);
   const [tenantSupplierId, setTenantSupplierId] = useState("all");
   const [loadingOptions, setLoadingOptions] = useState(true);
   const [loadingOrders, setLoadingOrders] = useState(false);
@@ -239,31 +244,34 @@ export function PurchaseOrderWorkspace({
 
   const loadOrders = useCallback(async () => {
     if (!canViewPurchaseOrders) return;
+    const generation = ++listRequestGeneration.current;
     setLoadingOrders(true);
     setError(null);
     try {
-      setOrders(await loadPurchaseOrders(page, {
+      const next = await loadPurchaseOrders(page, {
         ...(appliedKeyword ? { keyword: appliedKeyword } : {}),
         ...(fulfillmentStatus !== "all" ? { fulfillmentStatus } : {}),
-        ...(projectId !== "all" ? { projectId } : {}),
+        ...orderDestinationQuery(destination),
         ...(tenantSupplierId !== "all" ? { tenantSupplierId } : {}),
-      }));
+      });
+      if (generation === listRequestGeneration.current) setOrders(next);
     } catch (caught) {
-      setError(errorMessage(caught, "采购单加载失败"));
+      if (generation === listRequestGeneration.current) setError(errorMessage(caught, "采购单加载失败"));
     } finally {
-      setLoadingOrders(false);
+      if (generation === listRequestGeneration.current) setLoadingOrders(false);
     }
   }, [
     appliedKeyword,
     canViewPurchaseOrders,
     fulfillmentStatus,
     page,
-    projectId,
+    destination,
     tenantSupplierId,
   ]);
 
   useEffect(() => {
     void loadOrders();
+    return () => { listRequestGeneration.current += 1; };
   }, [loadOrders]);
 
   const projectOptions = useMemo(() => [
@@ -324,50 +332,14 @@ export function PurchaseOrderWorkspace({
       {error ? <StatusAlert>{error}</StatusAlert> : null}
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
         <CardHeader className="shrink-0 border-b bg-muted/20 p-4">
-          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-[minmax(14rem,1.2fr)_minmax(10rem,1fr)_minmax(10rem,1fr)_auto]">
-            <Input
-              aria-label="搜索采购单"
-              value={keyword}
-              placeholder="搜索采购单号"
-              onChange={(event) => setKeyword(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  setPage(1);
-                  setAppliedKeyword(keyword.trim());
-                }
-              }}
-            />
-            <FormSelect
-              id="purchase-order-project-filter"
-              value={projectId}
-              options={projectOptions}
-              onChange={(value) => {
-                setProjectId(value);
-                setPage(1);
-              }}
-            />
-            <FormSelect
-              id="purchase-order-supplier-filter"
-              value={tenantSupplierId}
-              options={relationshipOptions}
-              onChange={(value) => {
-                setTenantSupplierId(value);
-                setPage(1);
-              }}
-            />
-            <Button
-              type="button"
-              variant="outline"
-              disabled={loadingOrders}
-              onClick={() => {
-                setPage(1);
-                setAppliedKeyword(keyword.trim());
-              }}
-            >
-              <Search data-icon="inline-start" />
-              搜索
-            </Button>
-          </div>
+          <PurchaseOrderFilters keyword={keyword} onKeywordChange={setKeyword} loading={loadingOrders}
+            onSearch={() => { setPage(1); setAppliedKeyword(keyword.trim()); }}
+            onReset={() => { setKeyword(""); setAppliedKeyword(""); setTenantSupplierId("all"); setDestination({ destinationType: "all", projectId: "all", warehouse: null }); setFulfillmentStatus("all"); setPage(1); }}
+            destination={destination} onDestinationChange={(value) => { setDestination(value); setPage(1); }}
+            canViewWarehouses={canViewWarehouses} projectOptions={projectOptions} supplierOptions={relationshipOptions}
+            tenantSupplierId={tenantSupplierId} onSupplierChange={(value) => { setTenantSupplierId(value); setPage(1); }}
+            canLoadMoreProjects={projectOptionPage < projectOptionTotalPages} canLoadMoreSuppliers={supplierOptionPage < supplierOptionTotalPages}
+            loadingMoreOptions={loadingMoreOptions} onLoadMoreProjects={loadMoreProjects} onLoadMoreSuppliers={loadMoreSuppliers} />
           <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
             {fulfillmentStatusOptions.map((option) => {
               const active = fulfillmentStatus === option.value;
@@ -448,6 +420,8 @@ export function PurchaseOrderWorkspace({
         order={detailOrder}
         canViewPurchaseOrders={canViewPurchaseOrders}
         canManage={canManagePurchaseOrders}
+        canViewWarehouses={canViewWarehouses}
+        canManageWarehouses={canManageWarehouses}
         onOpenChange={handleDetailOpenChange}
         onChanged={loadOrders}
       />

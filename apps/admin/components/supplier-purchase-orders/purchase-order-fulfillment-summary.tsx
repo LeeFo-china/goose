@@ -101,10 +101,10 @@ export function PurchaseOrderFulfillmentSummary({
                     <div
                       className="max-w-64 truncate font-medium"
                       title={purchaseItem?.product_name_snapshot ??
-                        item.supplier_purchase_order_item_id}
+                        "请加载采购明细查看商品名称"}
                     >
                       {purchaseItem?.product_name_snapshot ??
-                        item.supplier_purchase_order_item_id}
+                        "请加载采购明细查看商品名称"}
                     </div>
                     {purchaseItem ? (
                       <div

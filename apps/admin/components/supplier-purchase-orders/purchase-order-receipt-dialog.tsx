@@ -310,7 +310,7 @@ export function PurchaseOrderReceiptDialog({
                         <TableRow key={itemId}>
                           <TableCell>
                             <div className="font-medium">
-                              {purchaseItem?.product_name_snapshot ?? itemId}
+                              {purchaseItem?.product_name_snapshot ?? "请先加载采购明细查看商品名称"}
                             </div>
                             <div className="text-xs text-muted-foreground">
                               {purchaseItem?.sku_name_snapshot ??
@@ -326,7 +326,7 @@ export function PurchaseOrderReceiptDialog({
                             path="accepted_quantity"
                             value={values.acceptedQuantity}
                             maximum={remaining_quantity}
-                            disabled={fieldsLocked}
+                            disabled={fieldsLocked || !purchaseItem}
                             errors={errors}
                             lines={enteredLines}
                             onChange={(value) =>
@@ -340,7 +340,7 @@ export function PurchaseOrderReceiptDialog({
                             path="rejected_quantity"
                             value={values.rejectedQuantity}
                             maximum={remaining_quantity}
-                            disabled={fieldsLocked}
+                            disabled={fieldsLocked || !purchaseItem}
                             errors={errors}
                             lines={enteredLines}
                             onChange={(value) =>
@@ -355,7 +355,7 @@ export function PurchaseOrderReceiptDialog({
                                 aria-describedby={`receipt-variance-error-${itemId}`}
                                 value={values.varianceReason}
                                 maxLength={500}
-                                disabled={fieldsLocked}
+                                disabled={fieldsLocked || !purchaseItem}
                                 aria-invalid={Boolean(varianceError)}
                                 onChange={(event) =>
                                   updateLine(setLineInputs, itemId, {

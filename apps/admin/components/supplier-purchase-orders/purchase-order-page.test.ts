@@ -106,7 +106,7 @@ describe("供应商采购单页面边界", () => {
 
     expect(editor).toContain("order: EditablePurchaseOrder;");
     expect(types).toMatch(
-      /export type EditablePurchaseOrder = PurchaseOrderWithReferences & \{\s+status: "draft";\s+\};/,
+      /export type EditablePurchaseOrder = PurchaseOrderWithReferences & \{\s+status: "draft";\s+destination_type\?: "project";\s+project_id: string;\s+\};/,
     );
     expect(editor).not.toContain('"新建采购单"');
     expect(editor).not.toContain("setExpectedVersion(0)");
@@ -289,7 +289,8 @@ describe("供应商采购单页面边界", () => {
 
     expect(detail).toContain("grid-cols-[minmax(0,1fr)]");
     expect(detail).toContain('<DialogFooter className="min-w-0 max-w-full">');
-    expect(detail).toContain(tableScroll);
+    expect(detail).toContain("<PurchaseOrderItemTable");
+    expect(readSource("./purchase-order-item-table.tsx")).toContain(tableScroll);
     expect(panel).toContain("min-w-0 max-w-full");
     expect(summary.split(tableScroll)).toHaveLength(3);
   });

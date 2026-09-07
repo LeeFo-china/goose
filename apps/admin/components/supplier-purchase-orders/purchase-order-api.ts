@@ -18,6 +18,8 @@ export type PurchaseOrderFilters = {
   status?: string;
   fulfillmentStatus?: PurchaseOrderFulfillmentFilterStatus;
   projectId?: string;
+  destinationType?: "project" | "warehouse";
+  warehouseId?: string;
   tenantSupplierId?: string;
 };
 
@@ -47,7 +49,9 @@ export function loadPurchaseOrder(orderId: string) {
 
 export function loadPurchaseOrderFinancialSummary(orderId: string) {
   return requestBackendJson<SupplierPurchaseOrderFinancialSummary>(
-    `/supplier-purchase-orders/${encodeURIComponent(orderId)}/financial-summary`,
+    `/supplier-purchase-orders/${
+      encodeURIComponent(orderId)
+    }/financial-summary`,
     { fallbackMessage: "采购单财务摘要加载失败" },
   );
 }

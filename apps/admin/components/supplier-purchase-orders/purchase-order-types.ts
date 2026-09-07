@@ -1,6 +1,4 @@
-import type {
-  PageData,
-} from "@/components/suppliers/supplier-types";
+import type { PageData } from "@/components/suppliers/supplier-types";
 
 import type {
   RequisitionBudgetStatus,
@@ -23,10 +21,13 @@ export type PurchaseOrderFulfillmentFilterStatus =
   | PurchaseOrderListFulfillmentStatus
   | "awaiting_receipt";
 
-export type PurchaseOrder = {
+export type PurchaseOrderDestination =
+  | { destination_type?: "project"; project_id: string; warehouse_id?: null }
+  | { destination_type: "warehouse"; project_id: null; warehouse_id: string };
+
+export type PurchaseOrder = PurchaseOrderDestination & {
   id: string;
   tenant_id: string;
-  project_id: string;
   tenant_supplier_id: string;
   supplier_id: string;
   order_no: string;
@@ -57,7 +58,13 @@ export type PurchaseOrderWithReferences = PurchaseOrder & {
     id: string;
     name: string;
     status: string;
-  };
+  } | null;
+  warehouse?: {
+    id: string;
+    name: string;
+    status?: string;
+    warehouse_code?: string;
+  } | null;
   supplier: {
     id: string;
     code: string;
@@ -70,12 +77,14 @@ export type PurchaseOrderWithReferences = PurchaseOrder & {
     id: string;
     request_no: string;
     status: RequisitionStatus;
-    budget_status: RequisitionBudgetStatus;
+    budget_status: RequisitionBudgetStatus | "not_applicable";
   } | null;
 };
 
 export type EditablePurchaseOrder = PurchaseOrderWithReferences & {
   status: "draft";
+  destination_type?: "project";
+  project_id: string;
 };
 
 export type PurchaseOrderItem = {

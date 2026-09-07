@@ -343,7 +343,7 @@ export function PurchaseOrderShipmentDialog({
                         <TableRow key={itemId}>
                           <TableCell>
                             <div className="font-medium">
-                              {purchaseItem?.product_name_snapshot ?? itemId}
+                              {purchaseItem?.product_name_snapshot ?? "请先加载采购明细查看商品名称"}
                             </div>
                             <div className="text-xs text-muted-foreground">
                               {purchaseItem?.sku_name_snapshot ??
@@ -365,7 +365,7 @@ export function PurchaseOrderShipmentDialog({
                                 step="0.0001"
                                 value={quantities[itemId] ?? ""}
                                 placeholder="0"
-                                disabled={fieldsLocked}
+                                disabled={fieldsLocked || !purchaseItem}
                                 aria-invalid={Boolean(quantityError)}
                                 onChange={(event) =>
                                   setQuantities((current) => ({

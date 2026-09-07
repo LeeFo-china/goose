@@ -36,6 +36,7 @@ import {
 } from "./purchase-order-api";
 import {
   addDraftLine,
+  canEditPurchaseOrderDraft,
   commandErrorMessage,
   removeDraftLine,
   replaceSavedFacts,
@@ -124,6 +125,10 @@ export function PurchaseOrderEditor({
         loadPurchaseOrder(existingOrderId),
         loadPurchaseOrderItems(existingOrderId),
       ]);
+      if (!canEditPurchaseOrderDraft(latest, true)) {
+        setError("该采购单不支持项目草稿编辑");
+        return;
+      }
       setProjectId(latest.project_id);
       setTenantSupplierId(latest.tenant_supplier_id);
       setExpectedVersion(latest.version);

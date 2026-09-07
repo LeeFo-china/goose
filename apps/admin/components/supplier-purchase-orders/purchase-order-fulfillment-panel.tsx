@@ -231,7 +231,7 @@ export function PurchaseOrderFulfillmentPanel({
   }
 
   async function handleConfirm() {
-    if (confirmBusy) return;
+    if (!canManage || confirmBusy) return;
     let activeCommand = confirmCommand?.phase === "uncertain"
       ? markFrozenCommandInFlight(confirmCommand)
       : null;
@@ -392,7 +392,7 @@ export function PurchaseOrderFulfillmentPanel({
           ) : null}
         </div>
       ) : null}
-      <AlertDialog open={confirmOpen} onOpenChange={handleConfirmOpen}>
+      <AlertDialog open={confirmOpen && canManage} onOpenChange={handleConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>记录供应商确认？</AlertDialogTitle>
@@ -445,7 +445,7 @@ export function PurchaseOrderFulfillmentPanel({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      {detail.fulfillment ? (
+      {detail.fulfillment && canManage ? (
         <>
           <PurchaseOrderShipmentDialog
             open={shipmentOpen}

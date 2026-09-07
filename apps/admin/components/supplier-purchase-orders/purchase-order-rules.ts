@@ -64,8 +64,13 @@ export function purchaseOrderSecondaryStatusText(status: PurchaseOrderStatus) {
 export function purchaseOrderActions(
   status: PurchaseOrderStatus,
   canManage: boolean,
+  destinationType: "project" | "warehouse" = "project",
+  canManageWarehouses = false,
 ): PurchaseOrderAction[] {
-  if (!canManage) return [];
+  if (!canManage || (destinationType === "warehouse" && !canManageWarehouses)) {
+    return [];
+  }
+  if (destinationType === "warehouse" && status === "draft") return [];
   if (status === "draft") return ["edit", "submit", "cancel"];
   if (status === "submitted") return ["cancel"];
   return [];
@@ -83,19 +88,44 @@ export function requisitionCreationEntry(
 }
 
 export function canEditPurchaseOrderDraft(
-  order: Pick<
-    PurchaseOrderWithReferences,
-    "status" | "purchase_requisition_id"
-  >,
+  order:
+    & Pick<
+      PurchaseOrderWithReferences,
+      "status" | "purchase_requisition_id"
+    >
+    & Partial<Pick<PurchaseOrder, "destination_type" | "project_id">>,
   canManage: boolean,
 ): order is EditablePurchaseOrder {
-  return canManage && order.status === "draft";
+  return canManage && order.status === "draft" &&
+    order.destination_type !== "warehouse" && order.project_id !== null;
 }
 
-export function validatePurchaseOrderDraft(input: Pick<
-  PurchaseOrderDraftState,
-  "projectId" | "tenantSupplierId" | "lines"
->) {
+export function purchaseOrderDestinationLabel(
+  order: Pick<
+    PurchaseOrderWithReferences,
+    "destination_type" | "project" | "warehouse"
+  >,
+): string {
+  return order.destination_type === "warehouse"
+    ? `仓库 · ${order.warehouse?.name ?? "仓库信息不可用"}`
+    : `项目 · ${order.project?.name ?? "项目信息不可用"}`;
+}
+
+export function canManagePurchaseOrder(
+  order: Pick<PurchaseOrder, "destination_type">,
+  canManage: boolean,
+  canManageWarehouses: boolean,
+): boolean {
+  return canManage &&
+    (order.destination_type !== "warehouse" || canManageWarehouses);
+}
+
+export function validatePurchaseOrderDraft(
+  input: Pick<
+    PurchaseOrderDraftState,
+    "projectId" | "tenantSupplierId" | "lines"
+  >,
+) {
   const errors: {
     projectId?: string;
     tenantSupplierId?: string;
@@ -109,9 +139,11 @@ export function validatePurchaseOrderDraft(input: Pick<
     errors.lines = "采购单至少需要一行商品";
   } else if (input.lines.length > 100) {
     errors.lines = "采购单明细不能超过 100 行";
-  } else if (input.lines.some(({ quantity }) =>
-    !Number.isFinite(quantity) || quantity <= 0
-  )) {
+  } else if (
+    input.lines.some(({ quantity }) =>
+      !Number.isFinite(quantity) || quantity <= 0
+    )
+  ) {
     errors.lines = "采购数量必须大于 0";
   }
   return errors;
@@ -161,18 +193,20 @@ export function toDraftPayload(input: PurchaseOrderDraftState) {
   };
 }
 
-export function replaceSavedFacts(
-  current: Partial<PurchaseOrder> | null,
-  saved: Partial<PurchaseOrder> & Pick<
-    PurchaseOrder,
-    | "id"
-    | "priced_at"
-    | "subtotal_amount"
-    | "tax_amount"
-    | "total_amount"
-    | "version"
-  >,
-) {
+export function replaceSavedFacts<SavedOrder extends Partial<PurchaseOrder>>(
+  current: SavedOrder | null,
+  saved:
+    & SavedOrder
+    & Pick<
+      PurchaseOrder,
+      | "id"
+      | "priced_at"
+      | "subtotal_amount"
+      | "tax_amount"
+      | "total_amount"
+      | "version"
+    >,
+): SavedOrder {
   return { ...(current ?? {}), ...saved };
 }
 
