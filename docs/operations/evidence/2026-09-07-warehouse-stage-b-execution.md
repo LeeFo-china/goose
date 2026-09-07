@@ -66,6 +66,15 @@
 
 以上不表示付款命令 RPC、API 联调或开发库升级已验收。
 
+### Admin 前置：库存来源单据
+
+- `20260907073222_add_inventory_source_document_reads.sql` 为库存流水增加可空的 `source_document`，包含收货单 ID/单号和采购单 ID/单号；不再要求 Admin 用内部收货明细 UUID 充当业务单号。
+- 仅对最多 100 条已分页结果做现有主键关联，逐层校验租户、仓库、SKU 和仓库订单归属；异常或缺失来源仍保留流水，来源返回 null，不借用其他租户的单据。
+- API 严格校验完整来源对象，兼容旧 RPC 未返回该字段时归一为 null；不增加逐行查询。库存权限和订单详情独立授权保持不变，不新增数据写入。
+- 真实 SQL RED 为收货流水缺少来源，API RED 为新增对象被拒绝/旧响应未归一。修复后 4 个 repository 测试通过；扩展 `receipt-accounting.sql` 验证真实单据、跨租户异常来源、来源缺失、空页总数、关闭开关/停用后读取及 service-only ACL。
+- 独立规格和质量复审均通过，分别重跑 repository 和完整收货 fixture。根代理提交前独立重跑库存 API 四个文件共 9 项测试、API typecheck/build（972 模块）及扩展收货 fixture，全部通过。
+- 此单元不代表 Admin 页面、库存大数据量 EXPLAIN 或全链路 API 验收完成。
+
 ## 隔离 PostgreSQL 证据
 
 运行：

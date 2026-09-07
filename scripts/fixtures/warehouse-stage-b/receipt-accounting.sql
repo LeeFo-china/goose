@@ -17,7 +17,9 @@ DECLARE
   received_at timestamptz := now(); fulfillment_version integer; receipt_items jsonb;
   second_receipt uuid := gen_random_uuid(); legacy_order uuid; legacy_item uuid;
   fractional_sku uuid := gen_random_uuid(); fractional_product uuid := gen_random_uuid(); fraction_index integer;
-  result jsonb; items jsonb;
+  result jsonb; items jsonb; source_document jsonb; source_item uuid;
+  foreign_tenant uuid := gen_random_uuid(); foreign_user uuid := gen_random_uuid();
+  foreign_employee uuid := gen_random_uuid(); foreign_warehouse uuid := gen_random_uuid();
 BEGIN
   INSERT INTO public.tenants(id,name,slug) VALUES (t,'Draft fixture','stage-b-draft');
   INSERT INTO auth.users(id,aud,role,email,encrypted_password,raw_app_meta_data,raw_user_meta_data)
@@ -140,9 +142,62 @@ BEGIN
       AND supplier_sku_id=sku AND quantity_on_hand=3 AND inventory_value=30 AND average_unit_cost=10)<>1 THEN
     RAISE EXCEPTION 'Partial receipt accounting mismatch: %',result;
   END IF;
+  result := public.list_inventory_transactions(t,w,sku,'purchase_receipt',1,20);
+  source_document := result->'items'->0->'source_document';
+  IF result->>'total' IS DISTINCT FROM '1'
+    OR source_document->>'receipt_id' IS DISTINCT FROM receipt_id::text
+    OR source_document->>'receipt_no' IS DISTINCT FROM 'STAGE-B-PARTIAL'
+    OR source_document->>'purchase_order_id' IS DISTINCT FROM order_id::text
+    OR source_document->>'order_no' IS DISTINCT FROM (SELECT order_no FROM public.supplier_purchase_orders WHERE id=order_id) THEN
+    RAISE EXCEPTION 'Inventory source document unavailable or wrong: %',result;
+  END IF;
+  source_item := (result->'items'->0->>'source_id')::uuid;
+  result := public.list_inventory_transactions(t,w,sku,'purchase_receipt',2,1);
+  IF result->>'total' IS DISTINCT FROM '1' OR result->'items' IS DISTINCT FROM '[]'::jsonb THEN
+    RAISE EXCEPTION 'Inventory source join changed out-of-range pagination: %',result;
+  END IF;
+  BEGIN
+    -- Simulate a malformed imported reference without changing or bypassing
+    -- the immutable source ledger, constraints, triggers, or grants.
+    INSERT INTO public.tenants(id,name,slug) VALUES(foreign_tenant,'Other inventory tenant','stage-b-other-inventory');
+    INSERT INTO auth.users(id,aud,role,email,encrypted_password,raw_app_meta_data,raw_user_meta_data)
+      VALUES(foreign_user,'authenticated','authenticated','other-inventory@smoke.invalid','','{}','{}');
+    INSERT INTO public.employees(id,tenant_id,user_id,name,status)
+      VALUES(foreign_employee,foreign_tenant,foreign_user,'Other operator','active');
+    INSERT INTO public.warehouses(id,tenant_id,name) VALUES(foreign_warehouse,foreign_tenant,'Other tenant warehouse');
+    INSERT INTO public.inventory_transactions(tenant_id,warehouse_id,supplier_sku_id,transaction_type,
+      quantity_delta,unit_cost,value_delta,source_type,source_id,occurred_at,created_by_employee_id)
+      VALUES(foreign_tenant,foreign_warehouse,sku,'purchase_receipt',1,10,10,
+        'supplier_purchase_receipt_item',source_item,received_at,foreign_employee);
+    result := public.list_inventory_transactions(foreign_tenant,foreign_warehouse,sku,'purchase_receipt',1,20);
+    IF result->>'total' IS DISTINCT FROM '1'
+      OR result->'items'->0->'source_document' IS DISTINCT FROM 'null'::jsonb THEN
+      RAISE EXCEPTION 'Inventory source exposed another tenant or hid its own ledger row: %',result;
+    END IF;
+    INSERT INTO public.inventory_transactions(tenant_id,warehouse_id,supplier_sku_id,transaction_type,
+      quantity_delta,unit_cost,value_delta,source_type,source_id,occurred_at,created_by_employee_id)
+      VALUES(foreign_tenant,foreign_warehouse,sku,'purchase_receipt',1,10,10,
+        'supplier_purchase_receipt_item',gen_random_uuid(),received_at,foreign_employee);
+    result := public.list_inventory_transactions(foreign_tenant,foreign_warehouse,sku,'purchase_receipt',1,20);
+    IF result->>'total' IS DISTINCT FROM '2' OR EXISTS(
+      SELECT 1 FROM jsonb_array_elements(result->'items') AS row_data
+      WHERE row_data->'source_document' IS DISTINCT FROM 'null'::jsonb
+    ) THEN RAISE EXCEPTION 'Unresolved source did not preserve ledger row: %',result; END IF;
+    RAISE EXCEPTION USING ERRCODE='P9001',MESSAGE='rollback source isolation fixture';
+  EXCEPTION WHEN SQLSTATE 'P9001' THEN NULL;
+  END;
+  IF has_function_privilege('anon','public.list_inventory_transactions(uuid,uuid,uuid,text,integer,integer)','EXECUTE')
+    OR has_function_privilege('authenticated','public.list_inventory_transactions(uuid,uuid,uuid,text,integer,integer)','EXECUTE')
+    OR NOT has_function_privilege('service_role','public.list_inventory_transactions(uuid,uuid,uuid,text,integer,integer)','EXECUTE') THEN
+    RAISE EXCEPTION 'Inventory source read changed service-only ACL';
+  END IF;
   BEGIN
     UPDATE public.tenant_supplier_settings SET warehouse_procurement_enabled=false WHERE tenant_id=t;
     UPDATE public.warehouses SET status='inactive',version=version+1 WHERE id=w;
+    result := public.list_inventory_transactions(t,w,sku,'purchase_receipt',1,20);
+    IF result->'items'->0->'source_document'->>'receipt_id' IS DISTINCT FROM receipt_id::text THEN
+      RAISE EXCEPTION 'Operational flags hid historical inventory source: %',result;
+    END IF;
     result := public.create_supplier_purchase_order_receipt(receipt_id,order_id,t,fulfillment_version,
       'STAGE-B-PARTIAL',received_at,NULL,receipt_items,u,e,'receipt-partial');
     IF result->>'idempotent' IS DISTINCT FROM 'true'

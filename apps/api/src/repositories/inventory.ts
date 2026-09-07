@@ -41,6 +41,12 @@ const InventoryTransactionRecordSchema = z.object({
   value_delta: decimal,
   source_type: z.string().min(1),
   source_id: uuid,
+  source_document: z.object({
+    receipt_id: uuid,
+    receipt_no: z.string().min(1),
+    purchase_order_id: uuid,
+    order_no: z.string().min(1),
+  }).strict().nullable().default(null),
   project_id: uuid.nullable(),
   cost_category_id: uuid.nullable(),
   occurred_at: z.string(),
