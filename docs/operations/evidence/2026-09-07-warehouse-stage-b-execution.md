@@ -56,7 +56,15 @@
    - `receipt-lock-order.sql` 在一次性容器提交合成种子，经两条本地 PostgreSQL 连接验证真实订单重提与收货不死锁；并发相同最终收货仅生成一次库存/应付，等待方返回幂等成功。
    - 独立规格和质量复审均重跑两个收货 fixture 并通过。根代理提交前重跑八组 fixture 全部通过；这不是全部跨订单并发、性能、完整历史升级或 API 联调验收。
 
-以上不表示付款 RPC、API 联调或开发库升级已验收。
+6. `20260907070346_enable_warehouse_supplier_payment_reads.sql`
+   - 应付列表、应付批量读取、筛选选项和付款申请列表显式增加仓库范围；旧调用默认仍只读项目，项目可见范围与仓库授权并集不放大隐藏项目权限。
+   - 详情和付款列表返回完整目的地，旧项目付款也返回 `project_id`。停用仓库或关闭补货不阻断既有财务事实读取；分页默认 20、最大 100，保留空页总数和 service-role-only ACL。
+   - 规格复核复现异常跨仓库申请分配被计入应付占用（15 变为 16）；进一步构造异常付款关联复现已付汇总污染。修复两个应付 RPC 的完整付款 → 申请分配 → 申请 → 应付关联，校验租户、目的地、空值安全的项目/仓库、供应商及币种。
+   - 回归断言放在异常记录插入之后，两仓库的已付 5、占用 15、未付 95 均保持正确，详情和付款列表不暴露异常关联。
+   - 独立规格和质量复审均通过，并分别重跑真实隔离数据库测试。根代理提交前重跑财务查询及采购/收货九组 fixture 全部通过。
+   - 此次 runner 也加载尚未提交的付款命令草稿 migration，但没有把付款命令 fixture 纳入九组通过项；付款命令的跨仓库提交测试已复现失败，仍须独立修复和验收。
+
+以上不表示付款命令 RPC、API 联调或开发库升级已验收。
 
 ## 隔离 PostgreSQL 证据
 
@@ -64,6 +72,7 @@
 
 ```bash
 bun scripts/verify-warehouse-stage-b-database.ts \
+  scripts/fixtures/warehouse-stage-b/payment-read.sql \
   scripts/fixtures/warehouse-stage-b/draft-destination.sql \
   scripts/fixtures/warehouse-stage-b/save-draft.sql \
   scripts/fixtures/warehouse-stage-b/order-list.sql \
@@ -114,7 +123,7 @@ bun scripts/verify-warehouse-stage-b-database.ts \
 - 工作流 submit/preflight/review/withdraw/task-list 已完成上述隔离验证与两轮审查，开发库联调待执行。
 - 默认采购审批图的预算分支是 `budget_status != over_budget`，已通过 `not_applicable` 的真实仓库审批；未修改已发布审批图。
 - 收货 wrapper、历史项目收货、库存/应付原子事务及同单并发/回滚已通过上述隔离测试；跨订单并发、租户隔离及真实接口 smoke 仍需最终验收。
-- 付款各查询和命令仍有项目非空/项目 JOIN 假设，须单独完成第二步。
+- 付款查询已完成上述隔离验证和双阶段复审；付款命令仍须补齐跨仓库关联校验、约束及真实回归，第二步尚未完成。
 - 库存列表 RPC 的扫描/排序边界及 EXPLAIN 尚待验证。
 
 ## 合并门槛
