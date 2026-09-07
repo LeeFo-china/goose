@@ -98,6 +98,16 @@
 - 独立规格、质量审查均通过，分别重跑本夹具 exit 0；根代理独立重跑本夹具，以及含它在内的全部 12 组采购领域夹具，均 exit 0。
 - 本项证明同价、同仓、同 SKU 的跨订单并发首次建账与累加；不代替不同价格的加权成本、所有并发组合、性能、历史数据升级或真实 API 联调验收。
 
+### 收货追加验收：价格版本与冻结成本
+
+- 新增 `receipt-weighted-cost.sql`，使用当前 API 同名商品创建 v2 和真实 SKU 改价命令，将目录价格从 10 调整为 20；先后生成同仓同 SKU 的两张冻结订单，分别为 10 件/100 元、3 件/60 元。
+- 旧订单在改价后才收货，仍按冻结价格 10 入账。新订单分 1 件、2 件收货，库存数量/价值/平均成本依次为 10/100/10、11/120/10.9091、13/160/12.3077。
+- 核对三条库存流水的数量/价值总额、两张订单的 AP 分别为 100/60，且没有项目成本或预算占用；最终收货后重放之前的部分收货，同键返回冻结响应，不新增流水/AP，也不重估余额。
+- 独立规格、质量审查均通过，各自重跑本夹具 exit 0；根代理单独重跑本夹具及包含它的全部 13 组采购领域夹具，均 exit 0。此测试走内部拆单核算入口和真实收货，不代替完整工作流、真实 API、历史升级、不同价格并发或性能验收。
+- 测试准备最初出现变量/别名歧义及旧商品创建 v1 与完整 SKU 编码不匹配；均修正为明确别名与当前 API 创建契约，不计作库存业务缺陷或库存修复证据。
+
+另行发现的旧 SKU 兼容风险（尚未修复）：旧 v1 生成的 16 位短码 SKU 在真实改价命令中返回 `catalog_result_not_exact`。有效 SQL `20260902110000_guard_supplier_purchasable_sku_noop_period_overlap.sql` 构造完整码用于目录搜索，但更新 payload 不改原短码；Repository 虽接受旧码响应，SQL 已先失败。独立源码/历史核查确认该逻辑早于 Stage B；尚未核对开发/生产库实际受影响行数。修正成本夹具不表示旧 SKU 改价问题已解决，最终历史兼容验收须保留此项跟踪。
+
 ### Admin 前置：库存来源单据
 
 - `20260907073222_add_inventory_source_document_reads.sql` 为库存流水增加可空的 `source_document`，包含收货单 ID/单号和采购单 ID/单号；不再要求 Admin 用内部收货明细 UUID 充当业务单号。
@@ -137,7 +147,8 @@ bun scripts/verify-warehouse-stage-b-database.ts \
   scripts/fixtures/warehouse-stage-b/warehouse-workflow.sql \
   scripts/fixtures/warehouse-stage-b/receipt-accounting.sql \
   scripts/fixtures/warehouse-stage-b/receipt-cross-order-concurrency.sql \
-  scripts/fixtures/warehouse-stage-b/receipt-lock-order.sql
+  scripts/fixtures/warehouse-stage-b/receipt-lock-order.sql \
+  scripts/fixtures/warehouse-stage-b/receipt-weighted-cost.sql
 ```
 
 - 已只读核对本地 `supabase_db_gooes`：迁移基线 `20260828160000`，527 条记录。
@@ -179,7 +190,7 @@ bun scripts/verify-warehouse-stage-b-database.ts \
 - 批次 submit/review、子申请单转订单和订单提交的会计核心及仓库工作流：已完成隔离测试和双阶段审查；真实 API 联调待执行。
 - 工作流 submit/preflight/review/withdraw/task-list 已完成上述隔离验证与两轮审查，开发库联调待执行。
 - 默认采购审批图的预算分支是 `budget_status != over_budget`，已通过 `not_applicable` 的真实仓库审批；未修改已发布审批图。
-- 收货 wrapper、历史项目收货、库存/应付原子事务及同单并发/回滚已通过上述隔离测试；同价同仓同 SKU 的跨订单并发已补证。不同价格加权成本、完整租户隔离矩阵、性能及真实接口 smoke 仍需最终验收。
+- 收货 wrapper、历史项目收货、库存/应付原子事务及同单并发/回滚已通过上述隔离测试；同价同仓同 SKU 的跨订单并发与不同价格顺序收货的加权成本已补证。不同价格并发、完整租户隔离矩阵、性能及真实接口 smoke 仍需最终验收；旧短码 SKU 改价兼容问题见上文。
 - 付款查询及命令已完成上述隔离验证和双阶段复审；追加测试覆盖上述同 AP 并发申请/付款、同键重放、冻结发票限制及失败回滚。真实 API 联调与完整最终验收仍待完成，第二步不能视为已发布。
 - 库存列表 RPC 的扫描/排序边界及 EXPLAIN 尚待验证。
 
