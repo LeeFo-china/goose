@@ -22,7 +22,7 @@ DECLARE
   batch_id uuid; order_id uuid; order_item uuid; receipt_id uuid; payable_id uuid;
   request_id uuid; allocation_id uuid; payment_id uuid; project_id uuid; warehouse_id uuid; destination text;
   payable_ids uuid[] := '{}'; request_ids uuid[] := '{}'; result jsonb; items jsonb; row_data jsonb;
-  i integer; rpc text; option_type text; signature text; size integer; scope_query text;
+  i integer; rpc text; option_type text; signature text; size integer; scope_query text; rejected_constraint text;
 BEGIN
   INSERT INTO public.tenants(id,name,slug) VALUES(t,'Financial read fixture','stage-b-payment-read'),(other_t,'Other','stage-b-payment-other');
   INSERT INTO auth.users(id,aud,role,email,encrypted_password,raw_app_meta_data,raw_user_meta_data)
@@ -229,9 +229,16 @@ BEGIN
   allocation_id := gen_random_uuid(); payment_id := gen_random_uuid();
   INSERT INTO public.supplier_payment_request_allocations(id,tenant_id,payment_request_id,payable_event_id,requested_amount,paid_amount)
     VALUES(allocation_id,t,request_ids[1],payable_ids[2],1,0);
-  INSERT INTO public.supplier_payments(id,tenant_id,destination_type,project_id,warehouse_id,tenant_supplier_id,supplier_id,payment_request_id,
-    amount,payment_method,payment_reference,paid_at,evidence_images,confirmed_by_employee_id,idempotency_key)
-    VALUES(payment_id,t,'warehouse',NULL,w2,r,s,request_ids[1],999,'bank_transfer','hidden-warehouse-payment',now(),'["secret"]',e,gen_random_uuid());
+  BEGIN
+    INSERT INTO public.supplier_payments(id,tenant_id,destination_type,project_id,warehouse_id,tenant_supplier_id,supplier_id,payment_request_id,
+      amount,payment_method,payment_reference,paid_at,evidence_images,confirmed_by_employee_id,idempotency_key)
+      VALUES(payment_id,t,'warehouse',NULL,w2,r,s,request_ids[1],999,'bank_transfer','hidden-warehouse-payment',now(),'["secret"]',e,gen_random_uuid());
+  EXCEPTION WHEN foreign_key_violation THEN
+    GET STACKED DIAGNOSTICS rejected_constraint=CONSTRAINT_NAME;
+    IF rejected_constraint IS DISTINCT FROM 'supplier_payments_request_warehouse_scope_fk' THEN RAISE; END IF;
+    payment_id := NULL;
+  END;
+  IF payment_id IS NOT NULL THEN
   -- B payment references A request: test both a B payable (request mismatch)
   -- and an A payable (payment mismatch), without bypassing any constraints.
   INSERT INTO public.supplier_payment_allocations(id,tenant_id,supplier_payment_id,payment_request_id,payment_request_allocation_id,payable_event_id,amount)
@@ -240,6 +247,14 @@ BEGIN
     WHERE payment_request_id=request_ids[1] AND payable_event_id=payable_ids[1];
   INSERT INTO public.supplier_payment_allocations(id,tenant_id,supplier_payment_id,payment_request_id,payment_request_allocation_id,payable_event_id,amount)
     VALUES(gen_random_uuid(),t,payment_id,request_ids[1],allocation_id,payable_ids[1],11);
+  ELSE
+    -- The command migration closes the malformed payment-header edge. Keep
+    -- exercising the still-possible A payment/request -> B payable edge, without
+    -- disabling constraints or treating an arbitrary insertion error as success.
+    SELECT id INTO STRICT payment_id FROM public.supplier_payments WHERE payment_request_id=request_ids[1];
+    INSERT INTO public.supplier_payment_allocations(id,tenant_id,supplier_payment_id,payment_request_id,payment_request_allocation_id,payable_event_id,amount)
+      VALUES(gen_random_uuid(),t,payment_id,request_ids[1],allocation_id,payable_ids[2],7);
+  END IF;
   IF jsonb_array_length(public.get_supplier_payment_request_detail(t,request_ids[1])->'allocations')<>1
     OR public.list_supplier_payment_request_payments(t,request_ids[1])->>'total' IS DISTINCT FROM '1' THEN
     RAISE EXCEPTION 'Cross-warehouse financial edge leaked';

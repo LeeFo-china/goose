@@ -64,7 +64,16 @@
    - 独立规格和质量复审均通过，并分别重跑真实隔离数据库测试。根代理提交前重跑财务查询及采购/收货九组 fixture 全部通过。
    - 此次 runner 也加载尚未提交的付款命令草稿 migration，但没有把付款命令 fixture 纳入九组通过项；付款命令的跨仓库提交测试已复现失败，仍须独立修复和验收。
 
-以上不表示付款命令 RPC、API 联调或开发库升级已验收。
+7. `20260907071752_enable_warehouse_supplier_payment_commands.sql`
+   - 付款草稿增加项目/仓库互斥目的地，默认旧项目；保留旧项目原始命令指纹、全局幂等键锁、版本及冻结成功/失败重放。申请和付款序列化、付款写入传递完整归属。
+   - 真实异常仓库申请复现提交成功的缺口，锁后补齐申请分配 → 应付的租户、目的地、项目/仓库空值安全校验和供应商/币种校验。付款执行也做相同核对，稳定返回 `scope_mismatch`，不产生付款事实。
+   - 原项目复合外键含可空项目字段，真实测试证明不能阻止跨仓库付款。新增仓库复合唯一键/外键并保留原项目外键；不改写历史，不一致的存量事实会阻断 migration，须另行诊断。
+   - 进一步复现异常其他仓库分配使合法申请被错误判定 `amount_unavailable`。提交占用、提交及支付的已付聚合核对完整财务关联，与读取口径一致；正向测试确认合法竞争占用和既有付款仍会限制可付金额。
+   - 既有 AP 在仓库停用、关闭补货后仍能创建申请和结清。现金台账保留 `project_id=null`，仅仓库分支增加仓库元数据；不写项目成本或承诺，旧项目现金元数据保持原样。
+   - `payment-commands.sql` 验证仓库 30+70 付款、旧项目 100 付款、原指纹、禁止自审、驳回/取消/关闭、缺凭证/超额/版本拒绝、失败重放及结清后重放早先部分付款。读取 fixture 只接受确切命名仓库 FK 拒绝，仍覆盖剩余异常分配的汇总隔离。
+   - 独立规格、质量复审均通过并分别重跑两组付款 fixture；根代理提交前重跑全部十组采购领域 fixture，通过。并发付款、真实需发票场景、完整历史升级和接口联调仍待最终验收，不能据此放行部署。
+
+以上不表示完整 API 联调或开发库升级已验收。
 
 ### Admin 前置：库存来源单据
 
@@ -81,6 +90,7 @@
 
 ```bash
 bun scripts/verify-warehouse-stage-b-database.ts \
+  scripts/fixtures/warehouse-stage-b/payment-commands.sql \
   scripts/fixtures/warehouse-stage-b/payment-read.sql \
   scripts/fixtures/warehouse-stage-b/draft-destination.sql \
   scripts/fixtures/warehouse-stage-b/save-draft.sql \
@@ -125,14 +135,14 @@ bun scripts/verify-warehouse-stage-b-database.ts \
 - 已有应付允许在停用仓库或关闭补货后结清，包括按已有应付新建付款申请；不因此开放新增库存或应付。编辑草稿同时授权旧目的地和新目的地。
 - 保留金额、凭证、版本及幂等规则；付款成功响应额外核对申请与付款的精确目的地一致性。项目成本 schema 和报表逻辑未改。
 - 独立规格复审通过（5 文件、34 项测试）；独立质量复审通过（15 文件、109 项测试）。根代理提交前按文件独立重跑财务/项目成本相关 34 文件、203 项测试通过；API typecheck、build（972 模块）、文件大小及 diff 检查通过。
-- **必须配套后续 SQL，当前不是可发布闭环**：应付/付款申请/筛选列表 RPC 追加 `p_include_warehouse=false`、`p_destination_type=null`、`p_warehouse_id=null`；应付按 ID 批量查询只追加 include 参数；草稿追加目的地和仓库参数，旧项目调用省略默认新增参数。
+- **必须配套 70346/71752 SQL，不能单独发布 API**：应付/付款申请/筛选列表 RPC 追加 `p_include_warehouse=false`、`p_destination_type=null`、`p_warehouse_id=null`；应付按 ID 批量查询只追加 include 参数；草稿追加目的地和仓库参数，旧项目调用省略默认新增参数。配套 SQL 已完成上述隔离验证，仍未完成开发库升级和真实 API 联调。
 - 详情及成功响应必须传递完整目的地；特别是付款记录列表 RPC 必须为旧项目行也返回 `project_id`，否则新 schema 会拒绝缺失身份的数据。不得提前单独发布此 API 单元。
 
 - 批次 submit/review、子申请单转订单和订单提交的会计核心及仓库工作流：已完成隔离测试和双阶段审查；真实 API 联调待执行。
 - 工作流 submit/preflight/review/withdraw/task-list 已完成上述隔离验证与两轮审查，开发库联调待执行。
 - 默认采购审批图的预算分支是 `budget_status != over_budget`，已通过 `not_applicable` 的真实仓库审批；未修改已发布审批图。
 - 收货 wrapper、历史项目收货、库存/应付原子事务及同单并发/回滚已通过上述隔离测试；跨订单并发、租户隔离及真实接口 smoke 仍需最终验收。
-- 付款查询已完成上述隔离验证和双阶段复审；付款命令仍须补齐跨仓库关联校验、约束及真实回归，第二步尚未完成。
+- 付款查询及命令已完成上述隔离验证和双阶段复审；并发、发票前置和 API 联调等最终验收仍待完成，第二步不能视为已发布。
 - 库存列表 RPC 的扫描/排序边界及 EXPLAIN 尚待验证。
 
 ## 合并门槛
