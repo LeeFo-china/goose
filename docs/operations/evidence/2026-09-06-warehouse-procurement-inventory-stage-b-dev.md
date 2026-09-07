@@ -159,6 +159,38 @@ H5 migration 已存在于当前 Git 历史，但在本开发库尚未应用。�
 [平台开关设计](../../superpowers/specs/2026-09-07-warehouse-procurement-rollout-entry-design.md)。
 这不等于已经开启指定租户，也不授权员工代登录或自动应用尚未生成的新增 migration。
 
+### 2026-09-07 20:29 更新：服务器备份完成，远端 H5 历史已变化
+
+用户说明开发服务器信息位于本机 SSH 目录。只读核对 `gooes-dev` 别名，目标
+`43.165.126.30` 与 `api-dev.goodcms.cn` 的 DNS 一致，用户为 `ubuntu`，严格主机密钥校验开启。
+登录主机名 `VM-0-11-ubuntu`、开发部署目录 `/opt/gooes-dev/docker` 与既有开发 workflow 相符；
+未连接生产别名、读取私钥内容或修改 SSH 配置。
+
+在该主机的 `supabase-db` 容器使用 PostgreSQL 17 的本地连接生成 custom-format 归档，
+UTC `12:25:55–12:25:59`，整个命令 exit 0：
+
+- 范围仅 `public`、`supabase_migrations`；不是包含 auth/storage/全局角色的全实例备份。
+- 宿主路径：`/var/tmp/gooes-stage-b-dev-backup.E2FYPm/public-and-migrations.dump`。
+- 容器副本：`/tmp/gooes-stage-b-dev-backup.FPNlEn/public-and-migrations.dump`。
+- 7,910,347 bytes；宿主目录 0700、文件 0600；归档目录 5,637 项，273 项 TABLE DATA，迁移历史表 1 项。
+- 宿主和容器 SHA-256 相同：`d8b8502481b1d8653dd864bf2ee9f2459f0838cde186503cfde45272649d2554`。
+- 没有将业务内容输出或提交 Git，未进行恢复演练。此前空文件不作为有效备份。
+
+服务器内只读历史检查发现 581 条记录，最新为 `20260906121818`。根代理再通过原已校验
+公网直连独立查询，UTC `12:26:31.630254+00:00`，结果相同；`migration list` exit 0，
+593 个版本位置、581 已对齐、12 仅 Local、0 仅 Remote。与 20:06 相比，仅 H5 版本已在
+其他执行上下文应用，**不是本轮根代理执行的升级**。该历史记录保存的 32 条 SQL 文本逐条
+均包含于本分支 H5 文件，文件 SHA-256 仍为本文原记录值；这不是 H5 业务 smoke 通过的证明。
+
+20:29 使用 `db push --dry-run --include-all`，exit 0，精确列出原获准 13 条中除 H5 外的
+12 条。`--include-all` 用于识别早于现有 H5 最新版本、但尚未应用的库存基础 migration，
+不代表授权新增迁移或修复/篡改版本历史。实际执行前仍须复核同一剩余清单。
+
+开发 API 容器只读标签显示源码 `d424be4c3c6ede6d71246a68a542b17064519934`，对应 build run
+`34118410964`；自动开发发布 run `34118928688` 已完成。该工作流只校验 migration history，
+不能据此认定它执行了 H5 migration；本轮尚未确定 H5 的具体执行人。当前 API 不是本 Stage B 候选。
+备份准备已有有效归档，但财务审查、后续候选部署和合法独立审批联调仍未完成，仓库开关未开启。
+
 ### 前次本地证据与最终门槛
 
 本地的采购领域隔离 PostgreSQL 12 组夹具、库存 Admin 18 项单元/组件测试、8 项浏览器测试及
