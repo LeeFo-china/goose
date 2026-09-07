@@ -2,6 +2,9 @@
 
 日期：2026-09-08。
 
+本文件记录最初的本地实现阶段。用户后续授权的 main 合并、开发迁移/部署及安全清理已完成，
+最新状态见 [开发发布记录](./2026-09-08-warehouse-rollout-main-dev-release.md)；租户开关仍关闭。
+
 ## 授权与状态
 
 用户确认本地实现 [已确认设计](../../superpowers/specs/2026-09-07-warehouse-procurement-rollout-entry-design.md)。

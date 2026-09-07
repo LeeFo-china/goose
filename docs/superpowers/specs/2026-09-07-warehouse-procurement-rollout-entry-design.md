@@ -1,8 +1,10 @@
 # 仓库采购平台开关入口补充设计
 
-状态：用户于 2026-09-08 确认本设计及本地实施范围；本地实现、验证及独立规格/质量审查通过，尚未部署或开启租户开关。
+状态：用户于 2026-09-08 确认设计；本地实现及审查通过。后续已获授权合并 main、完成开发迁移/部署及分支清理；租户开关仍关闭，未发布生产。
 
 实现证据：`../../operations/evidence/2026-09-08-warehouse-procurement-rollout-entry.md`。
+
+开发发布证据：`../../operations/evidence/2026-09-08-warehouse-rollout-main-dev-release.md`。
 
 ## 目标与根因
 
