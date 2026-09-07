@@ -3,7 +3,7 @@
 本记录接续 [第一批阻断修复](./2026-09-07-warehouse-stage-b-blockers.md)。
 工作区：`feature/warehouse-procurement-inventory-stage-b`，起点 `951d1686`。
 
-已提交：目录/草稿/订单读取 `5d4f7bd1`；采购 API 和冻结历史权限 `958dced3`；审批拆单核算核心 `87b42b82`；仓库工作流 `2915b3cd`。
+已提交：目录/草稿/订单读取 `5d4f7bd1`；采购 API 和冻结历史权限 `958dced3`；审批拆单核算核心 `87b42b82`；仓库工作流 `2915b3cd`；财务 API `02b2440d`。
 
 ## 总目标与状态
 
@@ -47,7 +47,16 @@
    - 规格复审发现最初 SQL 对提交人额外要求两项查看权限。只给申请人两个 manage 权限的真实 PostgreSQL 测试复现 `FORBIDDEN`，修复后同一测试通过；审批人的四项权限保持不变。
    - 根代理最新重跑六组 fixture 全部通过；独立规格复核重跑仓库工作流通过，独立质量复核重跑仓库工作流和双会话锁顺序通过。两轮复审均通过。
 
-以上不表示完整收货、付款 RPC、API 联调或开发库升级已验收。
+5. `20260907065551_harden_warehouse_receipt_posting.sql`
+   - 真实收货测试发现关闭补货开关仍可生成收货、库存和应付；在原子 wrapper 内补齐仓库采购门禁，保留既有成功请求的精确幂等重放。
+   - 双会话复现收货先锁订单、后锁仓库与订单提交相反的锁序，出现 `deadlock detected`。私有履约核心保留全局命令键/指纹重放检查在前，新增 settings → warehouse → order 预锁；原 wrapper 内仓库锁变为同事务重入。
+   - 设置共享锁和仓库更新锁持有至事务结束，既保护门禁/状态检查，也保持库存余额串行过账。原项目收货分支不改；原函数签名与 ACL 保留，patch 匹配数不符则 migration 失败。
+   - `receipt-accounting.sql` 贯通真实商品、批次拆单、订单确认和收货，验证部分/完整/拒收、库存余额与应付一致、停用限制、成功重放、AP 写入故障整笔回滚及旧项目成本/应付/预算占用消耗。
+   - 小数数量实际收货：0.3 × 0.05 冻结为 0.02，三次 0.1 分别计 0.01/0.00/0.01，最终平均成本 0.0667。金额来自冻结采购事实，不接受客户端成本。
+   - `receipt-lock-order.sql` 在一次性容器提交合成种子，经两条本地 PostgreSQL 连接验证真实订单重提与收货不死锁；并发相同最终收货仅生成一次库存/应付，等待方返回幂等成功。
+   - 独立规格和质量复审均重跑两个收货 fixture 并通过。根代理提交前重跑八组 fixture 全部通过；这不是全部跨订单并发、性能、完整历史升级或 API 联调验收。
+
+以上不表示付款 RPC、API 联调或开发库升级已验收。
 
 ## 隔离 PostgreSQL 证据
 
@@ -60,7 +69,9 @@ bun scripts/verify-warehouse-stage-b-database.ts \
   scripts/fixtures/warehouse-stage-b/order-list.sql \
   scripts/fixtures/warehouse-stage-b/batch-accounting.sql \
   scripts/fixtures/warehouse-stage-b/workflow-lock-order.sql \
-  scripts/fixtures/warehouse-stage-b/warehouse-workflow.sql
+  scripts/fixtures/warehouse-stage-b/warehouse-workflow.sql \
+  scripts/fixtures/warehouse-stage-b/receipt-accounting.sql \
+  scripts/fixtures/warehouse-stage-b/receipt-lock-order.sql
 ```
 
 - 已只读核对本地 `supabase_db_gooes`：迁移基线 `20260828160000`，527 条记录。
@@ -99,10 +110,10 @@ bun scripts/verify-warehouse-stage-b-database.ts \
 - **必须配套后续 SQL，当前不是可发布闭环**：应付/付款申请/筛选列表 RPC 追加 `p_include_warehouse=false`、`p_destination_type=null`、`p_warehouse_id=null`；应付按 ID 批量查询只追加 include 参数；草稿追加目的地和仓库参数，旧项目调用省略默认新增参数。
 - 详情及成功响应必须传递完整目的地；特别是付款记录列表 RPC 必须为旧项目行也返回 `project_id`，否则新 schema 会拒绝缺失身份的数据。不得提前单独发布此 API 单元。
 
-- 批次 submit/review、子申请单转订单和订单提交的会计核心：已完成隔离测试和双阶段审查；仍需用真实仓库工作流贯通验证。
+- 批次 submit/review、子申请单转订单和订单提交的会计核心及仓库工作流：已完成隔离测试和双阶段审查；真实 API 联调待执行。
 - 工作流 submit/preflight/review/withdraw/task-list 已完成上述隔离验证与两轮审查，开发库联调待执行。
-- 默认采购审批图的预算分支是 `budget_status != over_budget`，可承接 `not_applicable`；仍需扩展上下文校验、审批终结判断和权限候选检查，并用真实工作流验证。
-- 收货 wrapper、历史项目收货、完整库存/应付事务、并发与回滚验证。
+- 默认采购审批图的预算分支是 `budget_status != over_budget`，已通过 `not_applicable` 的真实仓库审批；未修改已发布审批图。
+- 收货 wrapper、历史项目收货、库存/应付原子事务及同单并发/回滚已通过上述隔离测试；跨订单并发、租户隔离及真实接口 smoke 仍需最终验收。
 - 付款各查询和命令仍有项目非空/项目 JOIN 假设，须单独完成第二步。
 - 库存列表 RPC 的扫描/排序边界及 EXPLAIN 尚待验证。
 
