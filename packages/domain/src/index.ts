@@ -15,6 +15,7 @@ export * from './douyin-public-project';
 export * from './douyin-release-readiness';
 export * from './employee';
 export * from './expense';
+export * from './inventory';
 export * from './marketing-page';
 export * from './ocr';
 export * from './payment';
