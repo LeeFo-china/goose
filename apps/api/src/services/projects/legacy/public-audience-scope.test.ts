@@ -7,6 +7,9 @@ import {
 
 const tenantA = "11111111-1111-4111-8111-111111111111";
 const tenantB = "22222222-2222-4222-8222-222222222222";
+const allTenantsRemainActive = {
+  listActiveTenantIds: async (tenantIds: readonly string[]) => [...tenantIds],
+};
 
 describe("public project audience scope", () => {
   test("uses all distinct visitor matched tenants and prefers selection", async () => {
@@ -19,7 +22,7 @@ describe("public project audience scope", () => {
         ],
         selected_tenant_id: tenantB,
       }),
-    });
+    }, allTenantsRemainActive);
     const payload: JwtPayload = {
       token_type: "visitor_session",
       visitor_id: "visitor-1",
@@ -32,10 +35,32 @@ describe("public project audience scope", () => {
     });
   });
 
+  test("removes tenants that no longer have an active public service area", async () => {
+    const resolve = createPublicProjectAudienceScopeResolver({
+      findLatestActiveForVisitor: async () => ({
+        matched_tenants: [
+          { tenant_id: tenantA },
+          { tenant_id: tenantB },
+        ],
+        selected_tenant_id: tenantA,
+      }),
+    }, {
+      listActiveTenantIds: async () => [tenantB],
+    });
+
+    await expect(
+      resolve({ token_type: "visitor_session", visitor_id: "visitor-1" }),
+    ).resolves.toEqual({
+      kind: "visitor_location",
+      tenantIds: [tenantB],
+      preferredTenantId: null,
+    });
+  });
+
   test("returns empty scope without active visitor context", async () => {
     const resolve = createPublicProjectAudienceScopeResolver({
       findLatestActiveForVisitor: async () => null,
-    });
+    }, allTenantsRemainActive);
 
     await expect(
       resolve({ token_type: "visitor_session", visitor_id: "visitor-1" }),
@@ -52,7 +77,7 @@ describe("public project audience scope", () => {
         matched_tenants: [{ tenant_id: tenantA }],
         selected_tenant_id: tenantB,
       }),
-    });
+    }, allTenantsRemainActive);
 
     await expect(
       resolve({ token_type: "visitor_session", visitor_id: "visitor-1" }),
@@ -70,7 +95,7 @@ describe("public project audience scope", () => {
         calls += 1;
         return { matched_tenants: [], selected_tenant_id: null };
       },
-    });
+    }, allTenantsRemainActive);
 
     await expect(resolve({ token_type: "visitor_session" })).resolves.toEqual({
       kind: "empty",
@@ -96,7 +121,7 @@ describe("public project audience scope", () => {
         calls += 1;
         return null;
       },
-    });
+    }, allTenantsRemainActive);
 
     await expect(resolve({ token_type: "auth", tenant_id: tenantA })).resolves
       .toEqual({
@@ -107,6 +132,21 @@ describe("public project audience scope", () => {
     expect(calls).toBe(0);
   });
 
+  test("returns empty scope when an identity tenant is no longer public", async () => {
+    const resolve = createPublicProjectAudienceScopeResolver({
+      findLatestActiveForVisitor: async () => null,
+    }, {
+      listActiveTenantIds: async () => [],
+    });
+
+    await expect(resolve({ token_type: "auth", tenant_id: tenantA })).resolves
+      .toEqual({
+        kind: "empty",
+        tenantIds: [],
+        preferredTenantId: null,
+      });
+  });
+
   test("returns empty scope for unsupported or missing payload", async () => {
     let calls = 0;
     const resolve = createPublicProjectAudienceScopeResolver({
@@ -114,7 +154,7 @@ describe("public project audience scope", () => {
         calls += 1;
         return null;
       },
-    });
+    }, allTenantsRemainActive);
 
     await expect(resolve(undefined)).resolves.toEqual({
       kind: "empty",

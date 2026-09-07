@@ -108,6 +108,39 @@ class TenantServiceAreaRepository {
       .filter((area) => area.tenant?.status === "active");
   }
 
+  async listActiveTenantIds(tenantIds: readonly string[]): Promise<string[]> {
+    const boundedTenantIds = [...new Set(tenantIds.filter(Boolean))]
+      .sort()
+      .slice(0, 100);
+    if (boundedTenantIds.length === 0) return [];
+
+    const { data, error } = await this.from("tenants")
+      .select("id,service_areas:tenant_service_areas!inner(id)")
+      .in("id", boundedTenantIds)
+      .eq("status", "active")
+      .eq("service_areas.status", "active")
+      .limit(100);
+
+    if (error) {
+      throw Errors.dbError("查询可公开装修公司失败", error);
+    }
+
+    const activeTenantIds = new Set<string>();
+    if (Array.isArray(data)) {
+      for (const tenant of data) {
+        if (
+          tenant
+          && typeof tenant === "object"
+          && "id" in tenant
+          && typeof tenant.id === "string"
+        ) {
+          activeTenantIds.add(tenant.id);
+        }
+      }
+    }
+    return [...activeTenantIds].sort();
+  }
+
   async findById(id: string) {
     const { data, error } = await this.from("tenant_service_areas")
       .select(TENANT_SERVICE_AREA_SELECT)
