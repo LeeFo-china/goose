@@ -10,7 +10,7 @@
 用户授权执行采购收货、财务、Admin、完整验收后合并清理四步。
 **四步尚未全部完成，禁止合并 main、开放补货开关或发布。**
 
-- [ ] 1. 采购、收货双目的地闭环：API、拆单核算、工作流和真实收货已通过隔离验证及两轮审查；开发库真实 API 联调、跨订单并发和完整验收仍待完成。
+- [ ] 1. 采购、收货双目的地闭环：API、拆单核算、工作流、真实收货和指定同价跨订单并发场景已通过隔离验证及两轮审查；开发库真实 API 联调和完整验收仍待完成。
 - [ ] 2. 仓库应付、付款申请、审批、付款记录：API/SQL 已实现并通过隔离验证及两轮审查，仓库不写项目成本/占用；新增付款并发、冻结发票限制及回滚证据见下文，仍待真实 API 联调。
 - [ ] 3. Admin 库存余额、流水、菜单、补货入口及目的地展示；后端未验收不开放入口。
 - [ ] 4. 开发库目标及 migration 清单确认、完整历史升级与 Local/Remote 对齐、并发/幂等/尾差/租户隔离/性能/原项目回归、最终审查、合并和安全清理。
@@ -88,6 +88,16 @@
 - 独立规格、质量审查均通过，各自重跑两份 fixture；根代理补齐现金总数、方向和总金额断言后再次重跑两份 fixture，exit 0，质量复审确认该漏检项已关闭。
 - 覆盖的是上述真实重叠事务，不能外推为全部财务并发、完整历史数据升级、开发库验收或真实 API 联调通过。
 
+### 收货追加验收：跨订单同仓同 SKU 并发
+
+- 新增 `receipt-cross-order-concurrency.sql`，只在一次性隔离数据库生成合成业务数据；两个真实采购批次各 10 件、金额 100，拆成两张不同的已确认订单，共用仓库与 SKU。
+- 第一轮开始时无库存余额，A 真实收货 3 件但暂不提交；B 对另一订单收 7 件，观察其进入 Lock wait 后才提交 A。第二轮已有余额，按同样方式分别收余下的 7/3 件。
+- 每轮只存在一条余额，数量/金额依次为 10/100、20/200，平均成本均为 10；库存流水及 AP 数量依次为 2、4，流水数量/价值和 AP 总额一致。
+- 每张订单最终恰有两次收货、应付总额 100；没有项目成本或预算占用，不通过直接写库存/应付或跳过约束制造通过结果。
+- 两条容器内 Unix 连接，观察锁等待期限 4 秒、语句超时 8 秒。正常断开连接，失败时由 runner 清理本次容器。首次运行发现夹具 SQL 别名与 PL/pgSQL 变量重名；修正后通过，不将此夹具错误记为业务缺陷 RED。
+- 独立规格、质量审查均通过，分别重跑本夹具 exit 0；根代理独立重跑本夹具，以及含它在内的全部 12 组采购领域夹具，均 exit 0。
+- 本项证明同价、同仓、同 SKU 的跨订单并发首次建账与累加；不代替不同价格的加权成本、所有并发组合、性能、历史数据升级或真实 API 联调验收。
+
 ### Admin 前置：库存来源单据
 
 - `20260907073222_add_inventory_source_document_reads.sql` 为库存流水增加可空的 `source_document`，包含收货单 ID/单号和采购单 ID/单号；不再要求 Admin 用内部收货明细 UUID 充当业务单号。
@@ -113,6 +123,7 @@ bun scripts/verify-warehouse-stage-b-database.ts \
   scripts/fixtures/warehouse-stage-b/workflow-lock-order.sql \
   scripts/fixtures/warehouse-stage-b/warehouse-workflow.sql \
   scripts/fixtures/warehouse-stage-b/receipt-accounting.sql \
+  scripts/fixtures/warehouse-stage-b/receipt-cross-order-concurrency.sql \
   scripts/fixtures/warehouse-stage-b/receipt-lock-order.sql
 ```
 
@@ -155,7 +166,7 @@ bun scripts/verify-warehouse-stage-b-database.ts \
 - 批次 submit/review、子申请单转订单和订单提交的会计核心及仓库工作流：已完成隔离测试和双阶段审查；真实 API 联调待执行。
 - 工作流 submit/preflight/review/withdraw/task-list 已完成上述隔离验证与两轮审查，开发库联调待执行。
 - 默认采购审批图的预算分支是 `budget_status != over_budget`，已通过 `not_applicable` 的真实仓库审批；未修改已发布审批图。
-- 收货 wrapper、历史项目收货、库存/应付原子事务及同单并发/回滚已通过上述隔离测试；跨订单并发、租户隔离及真实接口 smoke 仍需最终验收。
+- 收货 wrapper、历史项目收货、库存/应付原子事务及同单并发/回滚已通过上述隔离测试；同价同仓同 SKU 的跨订单并发已补证。不同价格加权成本、完整租户隔离矩阵、性能及真实接口 smoke 仍需最终验收。
 - 付款查询及命令已完成上述隔离验证和双阶段复审；追加测试覆盖上述同 AP 并发申请/付款、同键重放、冻结发票限制及失败回滚。真实 API 联调与完整最终验收仍待完成，第二步不能视为已发布。
 - 库存列表 RPC 的扫描/排序边界及 EXPLAIN 尚待验证。
 
