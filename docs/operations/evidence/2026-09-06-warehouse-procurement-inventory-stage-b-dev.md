@@ -1,6 +1,6 @@
 # 仓库采购 Stage B 开发库预检与验收记录
 
-**状态：仅完成只读预检，未升级开发库，未完成真实 API 验收，不是放行单。**
+**状态：已应用获准的剩余 12 份开发库 migration，593 个版本全量对齐；真实 API 验收未通过，不是放行单。**
 
 文件名沿用实施计划指定日期；首次检查时间为 2026-09-07 16:19（Asia/Shanghai），后续更新见下文。
 工作分支为 `feature/warehouse-procurement-inventory-stage-b`；预检 SQL 内容对应
@@ -191,6 +191,78 @@ UTC `12:25:55–12:25:59`，整个命令 exit 0：
 不能据此认定它执行了 H5 migration；本轮尚未确定 H5 的具体执行人。当前 API 不是本 Stage B 候选。
 备份准备已有有效归档，但财务审查、后续候选部署和合法独立审批联调仍未完成，仓库开关未开启。
 
+### 2026-09-07 20:40 更新：认证准备及剩余迁移前置检查
+
+只读检查开发 API 容器的三个非密钥配置：`GOOES_DEPLOY_ENV=development`、
+`NODE_ENV=production`、`AUTH_PHONE_LOGIN_WITHOUT_CODE=true`。结合已安装源码
+`utils/auth/test-login.ts`，满足官方开发免验证码入口条件；没有修改认证配置、签造 token、
+发送短信或执行登录。GitHub 开发发布 smoke 账号变量与用户指定的 `132****5725` 一致，
+只输出相等判断，没有输出其他账号。另一位同租户独立审批操作人仍待用户指定。
+
+UTC `12:40:15.024126+00:00` 在开发服务器本地数据库以只读事务复核，exit 0：
+仍为 4 条应付、项目归属异常 0 条、付款申请/付款均 0 条，库存流水表尚不存在。
+`20260907102914` 要求的两个函数体 MD5 均匹配，函数所有者相同，待创建私有 helper 不存在。
+这些是剩余迁移的实际前置证据，不是应用完成或业务联调通过的证据。
+
+### 2026-09-07 21:03 更新：剩余 12 份迁移已应用
+
+财务 Admin 单元经规格/质量审查及根代理独立验证后提交 `c4f5ab62`，本地结果为
+93 tests / 442 assertions、17 E2E、check/build 通过。随后复查本文原获准清单、逐文件
+SHA-256、开发目标和备份；备份仍为 7,910,347 bytes，权限与哈希不变，归档目录可读。
+
+UTC `13:02:52–13:03:11`，通过已校验直连执行 `supabase db push --include-all --yes`，
+exit 0，实际应用原获准 13 份中除已应用 H5 外的全部 12 份，没有新增范围。
+紧接执行 `supabase migration list`：**593 个位置全对齐，0 仅 Local、0 仅 Remote**；
+`db push --dry-run --include-all` exit 0，待执行为空。未修改历史 migration 或手工修库。
+
+UTC `13:04:38` 开发服务器数据库只读事务检查 exit 0：
+
+- 原项目应付仍 4 条，目的地/项目归属异常 0；付款申请、付款、库存余额、流水均为 0。
+- 指定租户仓库采购开关仍关闭；未新建单据、付款或改动既有应付。
+- 两张库存表 RLS 开启，anon/authenticated 无 SELECT，service_role 有 SELECT、无直接 INSERT。
+- 两个库存列表 RPC 为 SECURITY DEFINER、固定 search_path，仅 service_role 可执行；
+  流水 RPC 保留 `plan_cache_mode=force_custom_plan`。SKU 私有 helper 对三个应用角色均不可执行。
+- 以 `SET LOCAL ROLE service_role` 实际调用指定租户的两个库存分页 RPC，均返回
+  `items=[] / total=0 / page=1 / page_size=20`；事务最后回滚，无业务写入。
+
+### 2026-09-07 真实 API 只读 smoke：开发旧版本与权限阻断
+
+通过已确认的开发免验证码正式登录入口验证指定账号，登录及 `/admin/auth/me` 均 HTTP 200，
+tenant/employee 与指定身份精确相符。没有打印或保存 token，没有操作其他员工。
+登录仅发生正式入口的会员身份同步/最近登录时间更新，不属于采购或财务业务写入。
+首个临时 smoke 脚本误要求成功响应含 `success=true`，在登录 HTTP 200 时停止；
+按真实 `ResponseHandler.success` 的 `{data,message}` 修正断言后继续，不将脚本错误算作业务失败。
+
+- `GET /warehouses?page=1&pageSize=20` 稳定 HTTP 500，错误码
+  `TENANT_SERVICE_ROUTE_CAPABILITY_UNMAPPED`（请求 `req-4h`）。当前部署 `d424be4c` 的
+  capability map 缺少 warehouses；本分支已含 `9e7b08ea` 修复，尚未部署该候选。
+  因此不是直接将库存 migration 回滚或绕过服务门禁的问题。
+- 应付列表和付款申请列表分别 HTTP 403 `FORBIDDEN`（`req-4i`/`req-4j`）。正式登录响应
+  中 `system_admin` 角色存在，仓库 view/manage 与 project.read 存在，但
+  `supplier.payable.view`、`supplier.payment-request.{view,manage,approve,pay}` 五项均缺失。
+  现有逐操作权限校验按该会话拒绝；未自行增权、代登录或跳过权限。
+- 根代理在 API 目录使用 loopback 虚拟配置独立运行路由映射/访问测试：54 tests、90 assertions
+  通过。此前从仓库根运行的 alias 导入失败已纠正工作目录；不作为业务 RED 或修复证据。
+
+上述检查不代表新 Stage B API 已发布或完整闭环通过。仍需候选开发部署、合法财务权限、
+同租户独立审批操作人和正式平台开关入口；禁止使用既有 4 条应付做付款验收。
+
+### 类型生成候选：已生成，差异尚未同步
+
+本机使用已安装官方 `postgres-meta:v0.96.4`、目标 DNS 单容器映射及只读连接参数生成，
+未出现 DNS 错误，但查询/连接等待超时，exit 1、stdout 0 bytes；未覆盖源类型文件。
+随后只读检查开发服务器现有 `supabase-meta`（`v0.96.6`）真实 constants/server 代码，
+在其独立子进程使用正式 typescript generator；连接限定本机开发数据库 `db/supabase-db`、
+`postgres`，仅该子进程设定 `default_transaction_read_only=on`、语句 60 秒、锁等待 2 秒。
+未修改容器配置或重启服务，未执行数据库写入。
+
+服务器内生成 exit 0：1,031,479 bytes、31,741 行；完整生成输出 SHA-256：
+`f74d98d1fc92c47d2ce7ae54c3f00792632334dd5b49a5381f7ef97e8caec5a0`。
+相对当前源类型有 54 个表/函数块差异，除本次库存采购外，还包含 AI、材料笔记等历史漂移。
+结构差异候选保存在本地未跟踪 `.artifacts/warehouse-stage-b-typegen-20260907-f74d98d1.diff.json`，
+不含业务行或凭据，且仅是差异、不是完整生成文件。尚未覆盖 `apps/api/src/types/database.ts`；
+须定向审查本任务字段/RPC 后同步并运行 API 类型/构建检查，不把“生成成功”写成“类型门禁通过”。
+
 ### 前次本地证据与最终门槛
 
 本地的采购领域隔离 PostgreSQL 12 组夹具、库存 Admin 18 项单元/组件测试、8 项浏览器测试及
@@ -198,9 +270,9 @@ Admin check/build 已通过，详情见[执行记录](./2026-09-07-warehouse-sta
 其中浏览器后端为独立 HTTP fixture；隔离数据库使用 schema-only 基线与合成数据，不能替代本开发库验收。
 
 - [ ] 完成 Admin 补货、采购单及财务目的地适配和最终审查。
-- [ ] 重新核对待执行文件内容/指纹、开发库目标、迁移状态并确认完整应用清单。
+- [x] 重新核对待执行文件内容/指纹、开发库目标、迁移状态并确认完整应用清单。
 - [ ] 验证历史数据与新增约束兼容，完成升级前风险及恢复准备。
-- [ ] 经确认后通过 migration 升级；应用后重新运行 `supabase migration list` 与 `db push --dry-run`，证明 Local/Remote 全量对齐。
+- [x] 经确认后通过 migration 升级；应用后重新运行 `supabase migration list` 与 `db push --dry-run`，证明 Local/Remote 全量对齐。
 - [ ] 重新生成数据库类型，运行最终 API/Domain/Admin、权限边界及数据库写入审计门禁。
 - [ ] 用明确的开发测试租户/账号/单据进行真实接口采购→审批→收货→库存/应付→付款验收及原项目回归。
 - [ ] 完成不同价格加权成本、完整租户隔离矩阵和大数据量查询执行计划检查。
