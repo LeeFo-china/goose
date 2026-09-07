@@ -3,14 +3,14 @@
 本记录接续 [第一批阻断修复](./2026-09-07-warehouse-stage-b-blockers.md)。
 工作区：`feature/warehouse-procurement-inventory-stage-b`，起点 `951d1686`。
 
-已提交：目录/草稿/订单读取 `5d4f7bd1`；采购 API 和冻结历史权限 `958dced3`。
+已提交：目录/草稿/订单读取 `5d4f7bd1`；采购 API 和冻结历史权限 `958dced3`；审批拆单核算核心 `87b42b82`。
 
 ## 总目标与状态
 
 用户授权执行采购收货、财务、Admin、完整验收后合并清理四步。
 **四步尚未全部完成，禁止合并 main、开放补货开关或发布。**
 
-- [ ] 1. 采购、收货双目的地闭环：API 规格和质量复核通过；目录、草稿、订单列表及审批拆单会计核心已有真实 PostgreSQL 测试；工作流权限和完整收货仍需贯通。
+- [ ] 1. 采购、收货双目的地闭环：API、拆单核算核心及仓库工作流的规格和质量复核通过；完整收货仍需贯通。
 - [ ] 2. 仓库应付、付款申请、审批、付款记录；仓库采购不写项目成本/占用；原项目财务回归。
 - [ ] 3. Admin 库存余额、流水、菜单、补货入口及目的地展示；后端未验收不开放入口。
 - [ ] 4. 开发库目标及 migration 清单确认、完整历史升级与 Local/Remote 对齐、并发/幂等/尾差/租户隔离/性能/原项目回归、最终审查、合并和安全清理。
@@ -40,7 +40,14 @@
    - 隔离 PostgreSQL 下仓库提交、驳回、审批转订单及旧项目采购通过；本单元独立规格和质量审查通过。
    - 质量复核发现 review wrapper 已持 batch 锁再进入新核心锁 settings，与 submit 的顺序相反。双会话真实项目工作流复现 `deadlock detected` 后，修复外层和内部两个 wrapper，统一 settings → warehouse → batch 顺序；同一测试重跑通过。
 
-以上不表示完整工作流、收货或付款 RPC 已验收。
+4. `20260907062812_enable_warehouse_purchase_workflow.sql`
+   - 仓库真实工作流支持提交、候选人判定、审批、撤回和任务列表；预算为 `not_applicable`，保留已发布审批图不变。
+   - 实例冻结仓库目的地、仓库名称和空项目；历史任务及成功重试根据冻结身份授权，不从当前批次借用项目/仓库归属。
+   - 提交、撤回要求采购管理和仓库管理；审批额外要求节点权限、采购查看及仓库查看，不要求采购管理，不调用项目数据范围。
+   - 规格复审发现最初 SQL 对提交人额外要求两项查看权限。只给申请人两个 manage 权限的真实 PostgreSQL 测试复现 `FORBIDDEN`，修复后同一测试通过；审批人的四项权限保持不变。
+   - 根代理最新重跑六组 fixture 全部通过；独立规格复核重跑仓库工作流通过，独立质量复核重跑仓库工作流和双会话锁顺序通过。两轮复审均通过。
+
+以上不表示完整收货、付款 RPC、API 联调或开发库升级已验收。
 
 ## 隔离 PostgreSQL 证据
 
@@ -52,7 +59,8 @@ bun scripts/verify-warehouse-stage-b-database.ts \
   scripts/fixtures/warehouse-stage-b/save-draft.sql \
   scripts/fixtures/warehouse-stage-b/order-list.sql \
   scripts/fixtures/warehouse-stage-b/batch-accounting.sql \
-  scripts/fixtures/warehouse-stage-b/workflow-lock-order.sql
+  scripts/fixtures/warehouse-stage-b/workflow-lock-order.sql \
+  scripts/fixtures/warehouse-stage-b/warehouse-workflow.sql
 ```
 
 - 已只读核对本地 `supabase_db_gooes`：迁移基线 `20260828160000`，527 条记录。
@@ -77,12 +85,12 @@ bun scripts/verify-warehouse-stage-b-database.ts \
 - 主代理另行重跑 7 个针对性文件、41 项测试、API 类型检查和文件大小检查，全部通过。
 - 提交前主代理按文件独立重跑全部 21 个变更测试文件，共 155 项通过；API 类型检查、构建（972 个模块）及文件大小检查通过。需环境初始化的测试使用指向 `127.0.0.1:1` 的虚拟配置，不使用真实服务凭据；首次未提供虚拟配置时的缺少环境变量失败不作为业务失败或通过证据。
 - 质量复核发现历史卡片仍泄露当前批次的金额/数量/申请人。修复后历史卡片保留冻结目的地，只用冻结申请人 ID，缺失的历史金额/数量/提交时间不再从当前批次补齐；待办卡片维持现有展示。项目→仓库、仓库→项目、项目 A→隐藏项目 B 均有回归测试。独立质量复核重跑 16 项测试并重新执行泄露复现，通过。
-- PostgreSQL fallback 任务列表的冻结上下文和权限适配尚未完成；这些 API 测试不能替代真实 RPC 联调。
+- PostgreSQL fallback 任务列表已通过隔离工作流测试：无项目权限的仓库审批人、无候选人、显式拒绝、越界分页总数、仓库→项目和项目→仓库历史隔离。它们仍不能替代真实 API 联调。
 
 ## 后续数据库适配清单
 
 - 批次 submit/review、子申请单转订单和订单提交的会计核心：已完成隔离测试和双阶段审查；仍需用真实仓库工作流贯通验证。
-- 工作流 submit/preflight/review/withdraw/task-list：仓库上下文冻结 `destination_type/warehouse_id/project_id=null`；仓库审批保留节点权限并要求仓库管理权限；不调用项目数据范围。
+- 工作流 submit/preflight/review/withdraw/task-list 已完成上述隔离验证与两轮审查，开发库联调待执行。
 - 默认采购审批图的预算分支是 `budget_status != over_budget`，可承接 `not_applicable`；仍需扩展上下文校验、审批终结判断和权限候选检查，并用真实工作流验证。
 - 收货 wrapper、历史项目收货、完整库存/应付事务、并发与回滚验证。
 - 付款各查询和命令仍有项目非空/项目 JOIN 假设，须单独完成第二步。
