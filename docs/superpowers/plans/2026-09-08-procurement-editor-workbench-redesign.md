@@ -27,8 +27,10 @@
 修改文件：
 
 - `apps/api/src/controllers/supplier-purchase-batches/index.ts`、`routes.test.ts`、`services/supplier-purchase-batches.ts`、`services/supplier-purchase-batches.test.ts`、`repositories/supplier-purchase-batch-catalog.ts`、`schema/supplier-purchase-batches.ts`：批次叶子分类选项只读接口及契约测试。
+- `apps/api/src/repositories/supplier-purchase-batch-catalog.test.ts`：批次分类选项 repository 测试。
 - `packages/domain/src/supplier-purchase-batch.ts`、`supplier-purchase-batch.test.ts`：共享用途建议。
 - `packages/domain/package.json`、`bun.lock`：补丁版本升级到 `1.21.1` 并同步锁文件。
+- `packages/domain/scripts/verify-packed-consumer.mjs`：指定制品消费验证和采购用途断言。
 - `apps/admin/components/supplier-purchase-batches/batch-api.ts`、`batch-api.test.ts`：目录筛选和筛选选项请求。
 - `apps/admin/components/supplier-purchase-batches/batch-types.ts`、`batch-rules.ts`、`batch-rules.test.ts`：目录参考价事实和结构化校验。
 - `apps/admin/components/supplier-purchase-batches/batch-catalog.tsx`、`batch-lines.tsx`、`batch-editor.tsx`：批次工作台。
@@ -39,7 +41,7 @@
 
 不修改：
 
-- `apps/api`、Supabase migration 和数据库结构（但允许新增下述只读分类选项接口）。
+- 不修改既有保存 API、Supabase migration 和数据库结构。
 - `/Users/leefo/Public/work/orange` 中任何文件。
 - 现有 `reason` 请求字段、幂等键、版本号和服务端计价规则。
 
