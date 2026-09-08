@@ -31,7 +31,7 @@ D1 分为请求契约、数据库原子命令、API、Admin、开发验收五个
 
 - 源仓以完成时移动平均成本计算出库金额；清空该 SKU 时取剩余库存价值，避免残留分币。
 - 目标仓收到完全相同的数量和金额，随后重新计算自身移动平均成本；不采用目标仓原成本作为入库金额。
-- 每项形成一条 `transfer_out` 与一条 `transfer_in`，以相同调拨明细关联；两条数量之和、价值之和均为 0。
+- 每项形成一条 `transfer_out` 与一条 `transfer_in`，以相同调拨明细关联；两条数量之和、价值之和均为 0。沿用现有 `(tenant_id, source_type, source_id)` 唯一键：分别使用 `warehouse_transfer_out_item`、`warehouse_transfer_in_item` 来源类型，`source_id` 均为该调拨明细 ID，不放宽采购／领退料的既有来源去重约束。
 - 不写 `project_cost_events`、`supplier_payable_events`、付款或现金事实。
 - 余额、两条流水、完成状态和成功回执必须原子提交。任何异常整体回滚。
 - 延续 C 的锁顺序：租户设置、按 UUID 排序的仓库、单据、按仓库与 SKU 排序的余额。不存在的目标余额也必须在仓库锁内建立，避免反向调拨死锁及重复投影。
