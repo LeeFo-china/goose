@@ -523,6 +523,7 @@ git commit -m "feat(admin): 建立采购工作台共享组件"
 - Modify: `apps/api/src/services/supplier-purchase-batches.ts`
 - Modify: `apps/api/src/services/supplier-purchase-batches.test.ts`
 - Create: `apps/api/src/repositories/supplier-purchase-batch-catalog.ts`
+- Create: `apps/api/src/repositories/supplier-purchase-batch-catalog.test.ts`
 - Modify: `apps/api/src/schema/supplier-purchase-batches.ts`
 - Modify: `apps/admin/components/supplier-purchase-batches/batch-api.test.ts`
 - Modify: `apps/admin/components/supplier-purchase-batches/batch-api.ts`
@@ -740,6 +741,10 @@ path，供 E2E 断言分页和筛选参数。
 Run:
 
 ```bash
+(cd apps/api && bun test \
+  src/repositories/supplier-purchase-batch-catalog.test.ts \
+  src/controllers/supplier-purchase-batches/routes.test.ts \
+  src/services/supplier-purchase-batches.test.ts)
 (cd apps/admin && bun test \
   components/supplier-purchase-batches/batch-api.test.ts \
   components/supplier-purchase-batches/batch-ui.test.tsx)
@@ -753,12 +758,19 @@ Expected: tests 和 ESLint 全部退出 0。
 
 ```bash
 git add \
+  apps/api/src/controllers/supplier-purchase-batches/index.ts \
+  apps/api/src/controllers/supplier-purchase-batches/routes.test.ts \
+  apps/api/src/services/supplier-purchase-batches.ts \
+  apps/api/src/services/supplier-purchase-batches.test.ts \
+  apps/api/src/repositories/supplier-purchase-batch-catalog.ts \
+  apps/api/src/repositories/supplier-purchase-batch-catalog.test.ts \
+  apps/api/src/schema/supplier-purchase-batches.ts \
   apps/admin/components/supplier-purchase-batches/batch-api.ts \
   apps/admin/components/supplier-purchase-batches/batch-api.test.ts \
   apps/admin/components/supplier-purchase-batches/batch-catalog.tsx \
   apps/admin/components/supplier-purchase-batches/batch-catalog-filters.tsx \
   apps/admin/e2e/supplier-purchase-batch-mock-backend.mjs
-git commit -m "feat(admin): 增加批次商品目录筛选"
+git commit -m "feat(procurement): 增加批次目录 API 与 Admin 契约"
 ```
 
 ### Task 5: 将新建采购批次重构为双栏工作台
@@ -1252,9 +1264,11 @@ git commit -m "test(admin): 覆盖采购工作台关键交互"
 
 修改 `packages/domain/scripts/verify-packed-consumer.mjs`：在 TypeScript 和运行时 consumer
 代码中导入 `SUPPLIER_PURCHASE_PURPOSE_PRESETS`，断言项目/仓库建议值和不包含“其他”；同时支持
-通过 `GOOES_DOMAIN_ARCHIVE` 指定待验证 tarball，严格要求 basename 为
-`gooes-domain-1.21.1.tgz`，并对该路径执行安装、类型检查和运行时断言。未指定时可保留现有
+通过 `GOOES_DOMAIN_ARCHIVE` 指定待验证 tarball。verifier 从 `packages/domain/package.json` 读取
+version，计算 `gooes-domain-${version}.tgz` 并校验指定路径 basename，不硬编码版本号；随后对该路径执行安装、类型检查和运行时断言。未指定时可保留现有
 临时打包兜底，但 Task 8 必须使用指定 `.artifacts` 制品完成验证。
+环境变量路径按 verifier 当前工作目录（`packages/domain`）解析，因此调用时使用
+`../../.artifacts/domain/...`。
 
 - [ ] **Step 3: 构建并打包共享包**
 
@@ -1274,7 +1288,7 @@ Expected: 生成精确文件 `.artifacts/domain/gooes-domain-1.21.1.tgz`，输�
 Run:
 
 ```bash
-GOOES_DOMAIN_ARCHIVE=.artifacts/domain/gooes-domain-1.21.1.tgz \
+GOOES_DOMAIN_ARCHIVE=../../.artifacts/domain/gooes-domain-1.21.1.tgz \
   bun --cwd packages/domain run verify:packed-consumer
 shasum -a 256 .artifacts/domain/gooes-domain-1.21.1.tgz
 ```
@@ -1313,7 +1327,20 @@ Run:
 
 Expected: 全部 PASS。
 
-- [ ] **Step 2: 运行 Admin 静态检查、文件大小和构建**
+- [ ] **Step 2: 运行 API 最小完整检查**
+
+先依据 `apps/api/package.json` 使用已存在的 `check` 脚本，覆盖 API typecheck、build 和
+file-size 检查；不执行 migration 或保存写逻辑。
+
+Run:
+
+```bash
+pnpm --dir apps/api run check
+```
+
+Expected: API TypeScript、构建和文件大小检查全部退出 0。
+
+- [ ] **Step 3: 运行 Admin 静态检查、文件大小和构建**
 
 Run:
 
@@ -1328,7 +1355,7 @@ pnpm --dir apps/admin run build
 
 Expected: TypeScript、文件大小、ESLint 和 Next.js production build 全部退出 0。
 
-- [ ] **Step 3: 再次运行两套 E2E**
+- [ ] **Step 4: 再次运行两套 E2E**
 
 Run:
 
@@ -1341,7 +1368,7 @@ pnpm --dir apps/admin exec playwright test \
 
 Expected: 两套全部 PASS。
 
-- [ ] **Step 4: 核对数据库和仓库边界**
+- [ ] **Step 5: 核对数据库和仓库边界**
 
 Run:
 
@@ -1353,11 +1380,11 @@ git status --short
 
 Expected:
 
-- Gooes 差异不包含 `supabase/migrations/` 或 `apps/api/`。
+- Gooes 差异中的 API 仅包含 Task 4 列明的批次只读分类选项接口 controller/service/repository/schema/route 及相关测试；不包含 `supabase/migrations/`，也不包含既有保存 API 或任何保存写逻辑改动。
 - orange 状态与执行前完全一致，没有本任务造成的文件变化。
 - Gooes 仅保留执行前已有的 `.artifacts/` 未跟踪目录，业务源码和文档均已提交。
 
-- [ ] **Step 5: 检查最终提交历史和格式**
+- [ ] **Step 6: 检查最终提交历史和格式**
 
 Run:
 
