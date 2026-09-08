@@ -60,6 +60,7 @@ export const SupplierPurchaseBatchProjectOptionQuerySchema = optionQuery.extend(
   }).optional(),
 }).strict();
 export const SupplierPurchaseBatchCostCategoryQuerySchema = optionQuery;
+export const SupplierPurchaseBatchCategoryOptionQuerySchema = optionQuery;
 
 export const SupplierPurchaseBatchCatalogQuerySchema =
   PaginationQuerySchema.extend({
@@ -157,6 +158,8 @@ export type SupplierPurchaseBatchProjectOptionQuery =
   z.infer<typeof SupplierPurchaseBatchProjectOptionQuerySchema>;
 export type SupplierPurchaseBatchCostCategoryQuery =
   z.infer<typeof SupplierPurchaseBatchCostCategoryQuerySchema>;
+export type SupplierPurchaseBatchCategoryOptionQuery =
+  z.infer<typeof SupplierPurchaseBatchCategoryOptionQuerySchema>;
 export type SupplierPurchaseBatchCatalogQuery =
   z.infer<typeof SupplierPurchaseBatchCatalogQuerySchema>;
 export type SupplierPurchaseBatchDraftItem =

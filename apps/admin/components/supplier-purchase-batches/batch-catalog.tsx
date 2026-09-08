@@ -4,13 +4,6 @@ import { useEffect, useState } from "react";
 import { Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
   InputGroup,
   InputGroupAddon,
   InputGroupInput,
@@ -24,6 +17,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { loadBatchCatalog } from "./batch-api";
+import {
+  BatchCatalogFilters,
+  type BatchCatalogFilterState,
+} from "./batch-catalog-filters";
 import { batchError } from "./batch-rules";
 import { batchMoney, BatchPager, BatchReadState } from "./batch-page-parts";
 import type {
@@ -44,6 +41,10 @@ export function BatchCatalog(
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [keyword, setKeyword] = useState("");
+  const [filters, setFilters] = useState<BatchCatalogFilterState>({
+    category: null,
+    supplier: null,
+  });
   const [result, setResult] = useState<PageData<BatchCatalogItem> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -56,7 +57,11 @@ export function BatchCatalog(
     loadBatchCatalog(
       { destination_type, project_id, warehouse_id },
       page,
-      keyword,
+      {
+        keyword,
+        categoryId: filters.category?.id,
+        tenantSupplierId: filters.supplier?.id,
+      },
       controller.signal,
     ).then((next) => {
       if (controller.signal.aborted) return;
@@ -71,20 +76,28 @@ export function BatchCatalog(
       if (!controller.signal.aborted) setLoading(false);
     });
     return () => controller.abort();
-  }, [destination_type, project_id, warehouse_id, page, keyword, retry]);
+  }, [
+    destination_type,
+    project_id,
+    warehouse_id,
+    page,
+    keyword,
+    filters.category?.id,
+    filters.supplier?.id,
+    retry,
+  ]);
   const rows = loading || error ? [] : result?.list ?? [];
   return (
-    <Card className="shadow-none">
-      <CardHeader>
-        <CardTitle className="text-base">可采购商品</CardTitle>
-        <div className="flex gap-2">
-          <InputGroup>
+    <div className="flex min-h-0 flex-col">
+      <div className="sticky top-0 z-10 space-y-3 border-b bg-background px-4 py-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <InputGroup className="min-w-64 flex-1">
             <InputGroupAddon>
               <Search className="size-4" />
             </InputGroupAddon>
             <InputGroupInput
               aria-label="搜索采购商品"
-              placeholder="商品名称 / SKU"
+              placeholder="搜索商品编码、名称或 SKU 编码、名称"
               value={search}
               maxLength={80}
               disabled={disabled}
@@ -118,11 +131,19 @@ export function BatchCatalog(
             刷新价格
           </Button>
         </div>
+        <BatchCatalogFilters
+          value={filters}
+          disabled={disabled}
+          onChange={(next) => {
+            setFilters(next);
+            setPage(1);
+          }}
+        />
         <p className="text-sm text-muted-foreground">
           目录价格仅供选品参考，最终金额以保存后的服务端冻结结果为准。
         </p>
-      </CardHeader>
-      <CardContent className="p-0">
+      </div>
+      <div className="min-h-0 overflow-auto">
         <BatchReadState
           loading={loading}
           error={error}
@@ -131,6 +152,7 @@ export function BatchCatalog(
           onClear={() => {
             setSearch("");
             setKeyword("");
+            setFilters({ category: null, supplier: null });
             setPage(1);
           }}
         />
@@ -141,7 +163,8 @@ export function BatchCatalog(
                 <TableRow>
                   <TableHead>商品 / SKU</TableHead>
                   <TableHead>供应商</TableHead>
-                  <TableHead className="text-right">单价</TableHead>
+                  <TableHead>单位</TableHead>
+                  <TableHead className="text-right">参考价</TableHead>
                   <TableHead className="text-right">操作</TableHead>
                 </TableRow>
               </TableHeader>
@@ -155,6 +178,13 @@ export function BatchCatalog(
                   ) && new Set(lines.map((line) =>
                         line.supplier_id
                       )).size >= 20;
+                  const disabledReason = selected
+                    ? "该商品已加入"
+                    : lines.length >= 100
+                    ? "每个批次最多选择 100 个 SKU"
+                    : tooManySuppliers
+                    ? "每个批次最多选择 20 家供应商"
+                    : null;
                   return (
                     <TableRow key={item.supplier_sku_id}>
                       <TableCell>
@@ -164,21 +194,23 @@ export function BatchCatalog(
                         </div>
                       </TableCell>
                       <TableCell>{item.supplier_name}</TableCell>
+                      <TableCell>{item.purchase_unit_name}</TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {batchMoney(item.unit_price)} /{" "}
-                        {item.purchase_unit_name}
+                        {batchMoney(item.unit_price)}
                       </TableCell>
                       <TableCell className="text-right">
                         <Button
                           type="button"
                           size="sm"
-                          variant="outline"
-                          disabled={disabled || selected ||
-                            lines.length >= 100 || tooManySuppliers}
-                          onClick={() =>
-                            onAdd(item)}
+                          variant={selected ? "secondary" : "outline"}
+                          disabled={disabled || Boolean(disabledReason)}
+                          title={disabledReason ?? undefined}
+                          aria-label={disabledReason
+                            ? `${item.product_name}：${disabledReason}`
+                            : `加入${item.product_name}`}
+                          onClick={() => onAdd(item)}
                         >
-                          {selected ? "已选择" : "选择"}
+                          {selected ? "已选" : "加入"}
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -188,14 +220,14 @@ export function BatchCatalog(
             </Table>
           )
           : null}
-      </CardContent>
-      <CardFooter className="border-t pt-4">
+      </div>
+      <div className="border-t px-4 py-3">
         <BatchPager
           pagination={result?.pagination}
           loading={loading || disabled}
           onPage={setPage}
         />
-      </CardFooter>
-    </Card>
+      </div>
+    </div>
   );
 }

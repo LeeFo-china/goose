@@ -1,5 +1,7 @@
 import { requestBackendJson } from "@/lib/backend-client";
 import type { DeepReadonly } from "@/components/supplier-purchase-orders/purchase-order-fulfillment-ui-state";
+import type { PurchaseOrderSupplierOption } from
+  "@/components/supplier-purchase-orders/purchase-order-types";
 import type {
   BatchCatalogItem,
   BatchCommandKind,
@@ -23,6 +25,11 @@ export type BatchFilters = {
   destinationType?: "project" | "warehouse";
   projectId?: string;
   warehouseId?: string;
+};
+export type BatchCatalogFilters = {
+  keyword: string;
+  categoryId?: string;
+  tenantSupplierId?: string;
 };
 export function pageQuery(page = 1, keyword = "", pageSize = 20) {
   const query = new URLSearchParams({
@@ -125,10 +132,10 @@ export function loadBatchSettings(signal?: AbortSignal) {
 export function loadBatchCatalog(
   destination: BatchDestination,
   page: number,
-  keyword: string,
+  filters: BatchCatalogFilters,
   signal?: AbortSignal,
 ) {
-  const query = pageQuery(page, keyword);
+  const query = pageQuery(page, filters.keyword);
   query.set("destinationType", destination.destination_type);
   if (
     destination.destination_type === "warehouse" && destination.warehouse_id
@@ -136,10 +143,59 @@ export function loadBatchCatalog(
   if (destination.destination_type === "project" && destination.project_id) {
     query.set("projectId", destination.project_id);
   }
+  if (filters.categoryId) query.set("categoryId", filters.categoryId);
+  if (filters.tenantSupplierId) {
+    query.set("tenantSupplierId", filters.tenantSupplierId);
+  }
   return requestBackendJson<PageData<BatchCatalogItem>>(
     `/supplier-purchase-batch-catalog?${query}`,
     { signal, fallbackMessage: "采购目录加载失败" },
   );
+}
+
+type BatchCatalogCategoryOption = NamedOption & {
+  code: string;
+  full_name: string;
+};
+
+export async function loadBatchCatalogCategories(
+  page: number,
+  keyword: string,
+  signal?: AbortSignal,
+): Promise<PageData<NamedOption>> {
+  const result = await requestBackendJson<PageData<BatchCatalogCategoryOption>>(
+    `/supplier-purchase-batch-category-options?${pageQuery(page, keyword)}`,
+    { signal, fallbackMessage: "商品分类加载失败" },
+  );
+  return {
+    ...result,
+    list: result.list.map((category) => ({
+      id: category.id,
+      name: category.full_name || category.name,
+      status: category.status,
+    })),
+  };
+}
+
+export async function loadBatchCatalogSuppliers(
+  page: number,
+  keyword: string,
+  signal?: AbortSignal,
+): Promise<PageData<NamedOption>> {
+  const result = await requestBackendJson<PageData<PurchaseOrderSupplierOption>>(
+    `/supplier-purchase-requisition-supplier-options?${
+      pageQuery(page, keyword, 100)
+    }`,
+    { signal, fallbackMessage: "供应商选项加载失败" },
+  );
+  return {
+    ...result,
+    list: result.list.map((relationship) => ({
+      id: relationship.tenant_supplier_id,
+      name: relationship.supplier.name,
+      status: relationship.relationship_status,
+    })),
+  };
 }
 export function sendBatchCommand(
   id: string,

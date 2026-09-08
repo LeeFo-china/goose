@@ -13,6 +13,7 @@ import { batchMoney } from "./batch-page-parts";
 import { draftError, newBatchDraft } from "./batch-rules";
 import type { BatchDetail as Detail } from "./batch-types";
 import { BatchRevisionNotice } from "./batch-revision-notice";
+import { BatchCatalogFilters } from "./batch-catalog-filters";
 
 test("revision notice identifies the frozen revision version, not the latest batch version", () => {
   const html = renderToStaticMarkup(
@@ -115,4 +116,22 @@ test("missing default cost category is actionable and blocks save", () => {
       <BatchLines lines={lines} disabled={false} onChange={() => {}} />,
     ),
   ).toContain("请选择成本类目");
+});
+
+test("catalog filters expose controlled category and supplier reset actions", () => {
+  const html = renderToStaticMarkup(
+    <BatchCatalogFilters
+      value={{
+        category: { id: "category", name: "主材" },
+        supplier: { id: "supplier", name: "建材供应商" },
+      }}
+      disabled={false}
+      onChange={() => {}}
+    />,
+  );
+
+  expect(html).toContain("商品分类");
+  expect(html).toContain("供应商");
+  expect(html).toContain("全部分类");
+  expect(html).toContain("全部供应商");
 });

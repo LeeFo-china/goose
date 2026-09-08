@@ -47,6 +47,7 @@ const EXCLUDED_TOP_LEVEL = [
   "supplier-payment-request-payable-facts", "supplier-payment-requests",
   "supplier-price-lists", "supplier-products", "supplier-purchasable-products",
   "supplier-purchase-batch-catalog", "supplier-purchase-batch-cost-categories",
+  "supplier-purchase-batch-category-options",
   "supplier-purchase-batch-project-options", "supplier-purchase-batches",
   "supplier-purchase-order-catalog",
   "supplier-purchase-order-project-options", "supplier-purchase-order-supplier-options",

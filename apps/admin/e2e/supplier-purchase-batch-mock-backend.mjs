@@ -24,6 +24,39 @@ import {
 
 // UI contract fixture only: isolated HTTP state, no real API, database or provider calls.
 const port = Number(process.env.BATCH_MOCK_PORT || "3986");
+const catalogCategories = Array.from({ length: 23 }, (_, index) => ({
+  id: index === 0 ? ids.category : uuid(1000 + index),
+  code: `CAT-${index + 1}`,
+  name: `商品分类${String(index + 1).padStart(2, "0")}`,
+  full_name: `材料 / 商品分类${String(index + 1).padStart(2, "0")}`,
+  status: "active",
+}));
+const supplierRelationships = [
+  {
+    tenant_supplier_id: ids.relationship,
+    supplier_id: ids.supplier,
+    relationship_status: "active",
+    default_currency: "CNY",
+    supplier: {
+      id: ids.supplier,
+      code: "SUP-1",
+      name: "第一建材商",
+      legal_name: "第一建材商有限公司",
+    },
+  },
+  {
+    tenant_supplier_id: uuid(700),
+    supplier_id: uuid(701),
+    relationship_status: "active",
+    default_currency: "CNY",
+    supplier: {
+      id: uuid(701),
+      code: "SUP-2",
+      name: "第二建材商",
+      legal_name: "第二建材商有限公司",
+    },
+  },
+];
 let state;
 function reset(scenario = "empty") {
   const warehouse = scenario.startsWith("warehouse") || scenario === "revision";
@@ -116,7 +149,10 @@ function page(response, url, records, searchFields = ["name"]) {
   const filtered = records.filter((record) =>
     !keyword ||
     searchFields.some((field) =>
-      String(record[field] || "").toLowerCase().includes(keyword)
+      String(field.split(".").reduce(
+        (value, key) => value?.[key],
+        record,
+      ) || "").toLowerCase().includes(keyword)
     )
   );
   return data(response, {
@@ -385,6 +421,24 @@ const server = createServer(async (request, response) => {
     if (url.pathname === "/supplier-purchase-batch-cost-categories") {
       return page(response, url, categories);
     }
+    if (url.pathname === "/supplier-purchase-batch-category-options") {
+      return page(
+        response,
+        url,
+        catalogCategories,
+        ["code", "name", "full_name"],
+      );
+    }
+    if (
+      url.pathname === "/supplier-purchase-requisition-supplier-options"
+    ) {
+      return page(
+        response,
+        url,
+        supplierRelationships,
+        ["supplier.code", "supplier.name", "supplier.legal_name"],
+      );
+    }
     if (url.pathname === "/supplier-purchase-batch-catalog") {
       if (
         url.searchParams.get("destinationType") === "warehouse"
@@ -402,7 +456,23 @@ const server = createServer(async (request, response) => {
           product_name: "慢商品旧结果",
         }], ["product_name"]);
       }
-      return page(response, url, catalog(), ["product_name", "sku_code"]);
+      const catalogRows = catalog().map((item, index) => ({
+        ...item,
+        category_id: catalogCategories[index]?.id ?? ids.category,
+        category_name: catalogCategories[index]?.name ?? "商品分类01",
+      })).filter((item) =>
+        (!url.searchParams.get("categoryId") ||
+          item.category_id === url.searchParams.get("categoryId")) &&
+        (!url.searchParams.get("tenantSupplierId") ||
+          item.tenant_supplier_id ===
+            url.searchParams.get("tenantSupplierId"))
+      );
+      return page(
+        response,
+        url,
+        catalogRows,
+        ["product_code", "product_name", "sku_code", "sku_name"],
+      );
     }
     if (url.pathname === "/supplier-purchase-batches") {
       const keyword = url.searchParams.get("keyword");
