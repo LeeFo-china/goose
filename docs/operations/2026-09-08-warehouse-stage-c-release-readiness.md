@@ -2,6 +2,8 @@
 
 日期：2026-09-08。分支：`feature/warehouse-project-material-stage-c`。
 
+最新检查点（2026-09-08 15:43 后）：用户确认下一步第 1、2 项并指定“固始晴天装饰工程有限公司”，已只读选择有现成权限的员工“风清扬”。固定候选 `983b775e` 已推送，开发 migration plan 成功，Local 599 / Remote 595，待执行仍仅原 4 条 C migration，applied=0。相关静态、构建、API / Admin 单测和隔离数据库回归重新通过。main 合入会触发全服务发布，故保留待合并；C apply / 部署 / 开关均未执行。详见[固定候选与开发 plan 验收](evidence/2026-09-08-warehouse-stage-c-candidate-plan.md)。下方较早检查点为历史，不代表仍等待指定租户或发布清理修复。
+
 后续更新（2026-09-08 11:58）：用户已选择开发环境并授权只读预检。目标身份核对通过，开发库 594 条／候选 598 条，差集恰好为下列 4 条 C migration，远端独有版本为 0；详见 [开发环境完整迁移预检](evidence/2026-09-08-warehouse-stage-c-dev-migration-preflight.md)。以下“本轮”保留原发布准备范围；工作流 plan、备份／数据兼容检查、apply 和部署仍未执行或获准。
 
 ## 本轮范围与结论
