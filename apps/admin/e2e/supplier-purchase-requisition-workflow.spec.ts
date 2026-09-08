@@ -107,8 +107,8 @@ async function createDraft(
   await page.getByRole("option", { name: "E2E 海棠湾项目" }).click();
   await sheet.getByLabel("合作供应商").click();
   await page.getByRole("option", { name: /E2E 建材供应商/ }).click();
-  if (reason === "现场补料") {
-    await sheet.getByRole("button", { name: "现场补料", exact: true }).click();
+  if (reason === "项目备料" || reason === "现场补料") {
+    await sheet.getByRole("button", { name: reason, exact: true }).click();
   } else {
     await sheet.getByRole("button", { name: "其他", exact: true }).click();
     await sheet.getByRole("textbox", { name: "采购用途" }).fill(reason);

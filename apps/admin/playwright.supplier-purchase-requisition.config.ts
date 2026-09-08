@@ -6,7 +6,10 @@ if (process.env.FORCE_COLOR && process.env.NO_COLOR) {
 
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: "supplier-purchase-requisition-workflow.spec.ts",
+  testMatch: [
+    "supplier-purchase-requisition-workflow.spec.ts",
+    "supplier-purchase-requisition-workbench.spec.ts",
+  ],
   timeout: 60_000,
   fullyParallel: false,
   workers: 1,
