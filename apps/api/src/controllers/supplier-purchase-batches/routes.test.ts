@@ -296,6 +296,13 @@ describe("SupplierPurchaseBatchesController", () => {
       statusCode: 400,
       code: "VALIDATION_ERROR",
     });
+    await expect(value.listCatalogCategories({
+      query: { keyword: "超".repeat(81) },
+    } as never)).rejects.toMatchObject({
+      statusCode: 400,
+      code: "VALIDATION_ERROR",
+    });
+    expect(listCatalogCategories).toHaveBeenCalledTimes(1);
   });
 
   test("passes validated mutations and idempotency keys", async () => {

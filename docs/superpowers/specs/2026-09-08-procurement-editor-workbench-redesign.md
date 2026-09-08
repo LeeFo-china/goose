@@ -205,7 +205,13 @@ export const SUPPLIER_PURCHASE_PURPOSE_PRESETS = {
 ## 9. 接口与数据边界
 
 - 保存请求继续发送 `reason`，不增加 `purpose` 字段。
-- 本次仅新增采购批次权限域内的只读分类选项接口，不修改既有保存接口；不新增数据库表、字段、RPC 或 schema migration。
+- 本次新增采购批次权限域内的只读分类选项接口，不修改既有保存接口，也不新增数据库表或字段。
+- 2026-09-08 规格审查后，用户批准新增一个只读 schema migration：
+  `resolve_supplier_purchase_batch_category_options(uuid,timestamptz,text,integer,integer)`。
+  该 RPC 使用 `SECURITY INVOKER`，仅授予 `service_role` 执行权，无业务写入；它必须先按最新
+  供应商资质/合同规则和批次 catalog 的品牌、单位、ownership、计价单位及唯一有效价格候选规则
+  得到真实可采购 SKU，再对 active 叶子分类去重、关键词过滤和分页。精确回滚为
+  `DROP FUNCTION public.resolve_supplier_purchase_batch_category_options(uuid,timestamptz,text,integer,integer);`。
 - 批次目录继续使用 `GET /supplier-purchase-batch-catalog`，参数保持分页并按需增加
   `categoryId`、`tenantSupplierId`。
 - 采购申请目录继续使用现有单供应商分页目录接口。

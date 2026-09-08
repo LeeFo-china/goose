@@ -45,7 +45,7 @@
 - `/Users/leefo/Public/work/orange` 中任何文件。
 - 现有 `reason` 请求字段、幂等键、版本号和服务端计价规则。
 
-允许的后端例外：仅新增批次权限域内的只读分类选项接口及其 controller/service/repository/schema、路由和契约测试；不新增数据库表、字段、RPC 或 migration。
+允许的后端例外：新增批次权限域内的只读分类选项接口及其 controller/service/repository/schema、路由和契约测试；规格审查后用户另批准一个只读 RPC migration，用于保证分类选项与真实批次 catalog 准入一致。仍不新增数据库表、字段或业务写入。
 
 ### Task 1: 提交已确认的设计与实施基线
 
@@ -526,12 +526,14 @@ git commit -m "feat(admin): 建立采购工作台共享组件"
 - Modify: `apps/api/src/services/supplier-purchase-batches.test.ts`
 - Create: `apps/api/src/repositories/supplier-purchase-batch-catalog.ts`
 - Create: `apps/api/src/repositories/supplier-purchase-batch-catalog.test.ts`
+- Create: `apps/api/src/services/supplier-purchase-batch-category-options-migration-contract.test.ts`
 - Modify: `apps/api/src/schema/supplier-purchase-batches.ts`
 - Modify: `apps/admin/components/supplier-purchase-batches/batch-api.test.ts`
 - Modify: `apps/admin/components/supplier-purchase-batches/batch-api.ts`
 - Create: `apps/admin/components/supplier-purchase-batches/batch-catalog-filters.tsx`
 - Modify: `apps/admin/components/supplier-purchase-batches/batch-catalog.tsx`
 - Modify: `apps/admin/e2e/supplier-purchase-batch-mock-backend.mjs`
+- Create: `supabase/migrations/20260908110000_resolve_supplier_purchase_batch_category_options.sql`
 
 - [ ] **Step 1: 先写目录筛选 API 失败测试**
 
@@ -579,7 +581,24 @@ Expected: FAIL，指向 `loadBatchCatalogCategories` / `loadBatchCatalogSupplier
 `GET /supplier-purchase-batch-category-options`。接口要求调用
 `supplier.purchase-requisition.manage` 权限检查，仅查询当前租户可实际采购的租户与平台分类，
 过滤 active 的叶子分类，支持 `page`、`pageSize`（服务端最大 100）和 `keyword`，只返回
-`id`、`code`、`name`、`full_name`、`status` 与标准分页元数据；不新增表、字段、RPC 或 migration。
+`id`、`code`、`name`、`full_name`、`status` 与标准分页元数据。
+
+2026-09-08 规格审查确认：普通 PostgREST join 无法同时表达供应商资质/合同资格、跨表 ownership
+与单位一致性、有效价格候选唯一性以及分类去重后的准确分页。用户批准将原来的“无 RPC/migration”
+边界收窄为“允许一个无业务写入、无表结构变化的只读 RPC migration”。新增
+`resolve_supplier_purchase_batch_category_options(uuid,timestamptz,text,integer,integer)`，使用
+`SECURITY INVOKER`，在函数内对齐最新批次 catalog 与私有供应商资格函数的准入语义；仅向
+`service_role` 授予执行权。回滚使用精确签名：
+
+```sql
+DROP FUNCTION public.resolve_supplier_purchase_batch_category_options(
+  uuid, timestamptz, text, integer, integer
+);
+```
+
+不得手工向远端执行 DDL。提交前用 `supabase migration list --local` 检查本地历史；有独立临时
+本地数据库时通过 `supabase migration up --db-url ... --include-all` 验证 migration，并对 RPC
+执行空租户分页 smoke。远端仅做只读 `supabase migration list`；未链接时记录阻塞，不执行 apply。
 为 controller、service 和 repository 增加权限隔离、租户/平台可采购范围、分页上限、关键词和字段
 白名单测试。
 
@@ -629,7 +648,7 @@ export function loadBatchCatalog(
 保留 `pageSize=100` 上限并映射 `tenant_supplier_id`、`supplier.name`。
 
 目录关键词只依赖现有 RPC 支持的 `product_code`、`product_name`、`sku_code`、`sku_name` 字段；
-搜索仅限上述四个字段，不新增搜索维度，也不引入 migration。
+搜索仅限上述四个字段，不新增搜索维度，也不为商品目录搜索另增 migration。
 
 - [ ] **Step 4: 运行 API 测试确认通过**
 
@@ -638,7 +657,9 @@ Run:
 ```bash
 (cd apps/api && bun test \
   src/controllers/supplier-purchase-batches/routes.test.ts \
-  src/services/supplier-purchase-batches.test.ts)
+  src/services/supplier-purchase-batches.test.ts \
+  src/repositories/supplier-purchase-batch-catalog.test.ts \
+  src/services/supplier-purchase-batch-category-options-migration-contract.test.ts)
 (cd apps/admin && bun test components/supplier-purchase-batches/batch-api.test.ts)
 ```
 
