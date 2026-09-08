@@ -4,7 +4,7 @@
 
 **Goal:** 将 Admin 的“新建采购批次”和“发起采购申请”重构为商品优先的双栏采购工作台，并通过 `@gooes/domain` 向小程序提供一致的采购用途建议。
 
-**Architecture:** 保留两个采购入口各自的 API、命令恢复和审批边界，只共享采购用途、补充信息、工作台布局、确认弹层及汇总规则等表现层能力。批次目录在现有分页查询上接入分类和供应商筛选；采购申请保持单供应商关键词分页。数据库字段和命令契约不变，页面仍将“采购用途”发送为 `reason`。
+**Architecture:** 保留两个采购入口各自的 API、命令恢复和审批边界，只共享采购用途、补充信息、工作台布局、确认弹层及汇总规则等表现层能力。批次目录在现有分页查询上接入分类和供应商筛选；分类筛选通过采购批次权限域内新增的只读叶子分类选项接口，供应商筛选复用现有分页选项；采购申请保持单供应商关键词分页。数据库字段和命令契约不变，页面仍将“采购用途”发送为 `reason`。
 
 **Tech Stack:** TypeScript、React 19、Next.js 15、Tailwind CSS、shadcn/Radix、Bun test、Playwright、`@gooes/domain`
 
@@ -26,8 +26,9 @@
 
 修改文件：
 
+- `apps/api/src/controllers/supplier-purchase-batches/index.ts`、`routes.test.ts`、`services/supplier-purchase-batches.ts`、`services/supplier-purchase-batches.test.ts`、`repositories/supplier-purchase-batch-catalog.ts`、`schema/supplier-purchase-batches.ts`：批次叶子分类选项只读接口及契约测试。
 - `packages/domain/src/supplier-purchase-batch.ts`、`supplier-purchase-batch.test.ts`：共享用途建议。
-- `packages/domain/package.json`：补丁版本升级到 `1.21.1`。
+- `packages/domain/package.json`、`bun.lock`：补丁版本升级到 `1.21.1` 并同步锁文件。
 - `apps/admin/components/supplier-purchase-batches/batch-api.ts`、`batch-api.test.ts`：目录筛选和筛选选项请求。
 - `apps/admin/components/supplier-purchase-batches/batch-types.ts`、`batch-rules.ts`、`batch-rules.test.ts`：目录参考价事实和结构化校验。
 - `apps/admin/components/supplier-purchase-batches/batch-catalog.tsx`、`batch-lines.tsx`、`batch-editor.tsx`：批次工作台。
@@ -38,9 +39,11 @@
 
 不修改：
 
-- `apps/api`、Supabase migration 和数据库结构。
+- `apps/api`、Supabase migration 和数据库结构（但允许新增下述只读分类选项接口）。
 - `/Users/leefo/Public/work/orange` 中任何文件。
 - 现有 `reason` 请求字段、幂等键、版本号和服务端计价规则。
+
+允许的后端例外：仅新增批次权限域内的只读分类选项接口及其 controller/service/repository/schema、路由和契约测试；不新增数据库表、字段、RPC 或 migration。
 
 ### Task 1: 提交已确认的设计与实施基线
 
@@ -90,6 +93,7 @@ Expected: 只提交两份 Markdown 文档，不提交 `.artifacts/`。
 - Modify: `packages/domain/src/supplier-purchase-batch.test.ts`
 - Modify: `packages/domain/src/supplier-purchase-batch.ts`
 - Modify: `packages/domain/package.json`
+- Modify: `bun.lock`
 
 - [ ] **Step 1: 先写共享用途建议失败测试**
 
@@ -134,13 +138,16 @@ export type SupplierPurchasePurposePreset =
 
 不要新增 `reason` 枚举或 Zod 限制；历史自由文本必须继续有效。
 
-- [ ] **Step 4: 升级共享包补丁版本**
+- [ ] **Step 4: 升级共享包补丁版本并同步 Bun 锁文件**
 
 使用补丁将 `packages/domain/package.json` 修改为：
 
 ```json
 "version": "1.21.1"
 ```
+
+运行 `bun install --lockfile-only` 同步根目录 `bun.lock` 中 `packages/domain` 的 workspace 版本，
+并断言 lockfile 与 `packages/domain/package.json` 保持一致。
 
 - [ ] **Step 5: 运行共享包测试与构建**
 
@@ -158,6 +165,7 @@ Expected: 三条命令全部退出 0；`dist/index.d.ts` 可以检索到新常�
 
 ```bash
 git add \
+  bun.lock \
   packages/domain/package.json \
   packages/domain/src/supplier-purchase-batch.ts \
   packages/domain/src/supplier-purchase-batch.test.ts
@@ -510,6 +518,12 @@ git commit -m "feat(admin): 建立采购工作台共享组件"
 
 **Files:**
 
+- Modify: `apps/api/src/controllers/supplier-purchase-batches/index.ts`
+- Modify: `apps/api/src/controllers/supplier-purchase-batches/routes.test.ts`
+- Modify: `apps/api/src/services/supplier-purchase-batches.ts`
+- Modify: `apps/api/src/services/supplier-purchase-batches.test.ts`
+- Create: `apps/api/src/repositories/supplier-purchase-batch-catalog.ts`
+- Modify: `apps/api/src/schema/supplier-purchase-batches.ts`
 - Modify: `apps/admin/components/supplier-purchase-batches/batch-api.test.ts`
 - Modify: `apps/admin/components/supplier-purchase-batches/batch-api.ts`
 - Create: `apps/admin/components/supplier-purchase-batches/batch-catalog-filters.tsx`
@@ -536,7 +550,7 @@ expect(requests.at(-1)).toContain(`tenantSupplierId=${TENANT_SUPPLIER_ID}`);
 
 await loadBatchCatalogCategories(3, "主材");
 expect(requests.at(-1)).toContain(
-  "/catalog/categories?page=3&pageSize=20&keyword=%E4%B8%BB%E6%9D%90&status=active",
+  "/supplier-purchase-batch-category-options?page=3&pageSize=20&keyword=%E4%B8%BB%E6%9D%90",
 );
 
 await loadBatchCatalogSuppliers(2, "建材");
@@ -556,7 +570,18 @@ Run:
 Expected: FAIL，指向 `loadBatchCatalogCategories` / `loadBatchCatalogSuppliers`
 未导出或 `loadBatchCatalog` 参数类型不匹配。
 
-- [ ] **Step 3: 扩展批次目录请求，不修改后端契约**
+- [ ] **Step 3: 新增批次权限域内的叶子分类选项接口**
+
+沿用批次 controller/service/repository 分层，新增
+`GET /supplier-purchase-batch-category-options`。接口要求调用
+`supplier.purchase-requisition.manage` 权限检查，仅查询当前租户可实际采购的租户与平台分类，
+过滤 active 的叶子分类，支持 `page`、`pageSize`（服务端最大 100）和 `keyword`，只返回
+`id`、`code`、`name`、`full_name`、`status` 与标准分页元数据；不新增表、字段、RPC 或 migration。
+为 controller、service 和 repository 增加权限隔离、租户/平台可采购范围、分页上限、关键词和字段
+白名单测试。
+
+更新 `apps/api` 能力映射及路由注册，并在 Admin mock 中使用该端点；不得再调用通用
+`/catalog/categories`。
 
 在 `batch-api.ts` 增加：
 
@@ -596,19 +621,25 @@ export function loadBatchCatalog(
 }
 ```
 
-分类 loader 调用 `/catalog/categories`，显式传 `page/pageSize=20/status=active` 并把
+分类 loader 调用 `/supplier-purchase-batch-category-options`，显式传 `page/pageSize=20` 并把
 响应映射成 `PageData<NamedOption>`；供应商 loader 复用采购申请供应商选项端点，显式
 保留 `pageSize=100` 上限并映射 `tenant_supplier_id`、`supplier.name`。
+
+目录关键词只依赖现有 RPC 支持的 `product_code`、`product_name`、`sku_code`、`sku_name` 字段；
+搜索仅限上述四个字段，不新增搜索维度，也不引入 migration。
 
 - [ ] **Step 4: 运行 API 测试确认通过**
 
 Run:
 
 ```bash
+(cd apps/api && bun test \
+  src/controllers/supplier-purchase-batches/routes.test.ts \
+  src/services/supplier-purchase-batches.test.ts)
 (cd apps/admin && bun test components/supplier-purchase-batches/batch-api.test.ts)
 ```
 
-Expected: PASS，且原来的采购去向互斥查询断言继续通过。
+Expected: API 权限、分页、字段白名单与 Admin loader 测试均 PASS，且原来的采购去向互斥查询断言继续通过。
 
 - [ ] **Step 5: 实现批次目录筛选工具栏**
 
@@ -693,7 +724,7 @@ const disabledReason = selected
 在 mock backend 中增加分页响应：
 
 ```js
-if (url.pathname === "/catalog/categories") {
+if (url.pathname === "/supplier-purchase-batch-category-options") {
   return json(pageResult(activeCategories, url));
 }
 if (url.pathname === "/supplier-purchase-requisition-supplier-options") {
@@ -1192,6 +1223,7 @@ git commit -m "test(admin): 覆盖采购工作台关键交互"
 
 **Files:**
 
+- Modify: `packages/domain/scripts/verify-packed-consumer.mjs`
 - Create: `docs/2026-09-08-procurement-purpose-miniprogram-handoff.md`
 - Generate, do not commit: `.artifacts/domain/gooes-domain-1.21.1.tgz`
 
@@ -1208,7 +1240,7 @@ git commit -m "test(admin): 覆盖采购工作台关键交互"
 - 项目建议：`项目备料`、`现场补料`
 - 仓库建议：`仓库补货`
 - “其他”是 UI 入口，选择后发送用户填写的自由文本
-- 不新增接口，不修改幂等、版本、权限或保存顺序
+- 不新增业务保存接口；采购批次分类只读选项接口按 Task 4 执行，不修改幂等、版本、权限或保存顺序
 - orange 删除 `BatchTextFields.tsx` 中用途值的本地硬编码，改从共享包读取
 - Gooes 未修改 orange；安装、真机验证和小程序提交由小程序团队完成
 ```
@@ -1216,7 +1248,15 @@ git commit -m "test(admin): 覆盖采购工作台关键交互"
 同时提供验收清单：项目/仓库建议切换、自定义用途、旧草稿自由文本回显、空用途阻止保存、
 保存 payload 仍为 `reason`、重复点击不重复提交。
 
-- [ ] **Step 2: 构建并打包共享包**
+- [ ] **Step 2: 修改 verifier 支持指定制品并加入采购用途断言**
+
+修改 `packages/domain/scripts/verify-packed-consumer.mjs`：在 TypeScript 和运行时 consumer
+代码中导入 `SUPPLIER_PURCHASE_PURPOSE_PRESETS`，断言项目/仓库建议值和不包含“其他”；同时支持
+通过 `GOOES_DOMAIN_ARCHIVE` 指定待验证 tarball，严格要求 basename 为
+`gooes-domain-1.21.1.tgz`，并对该路径执行安装、类型检查和运行时断言。未指定时可保留现有
+临时打包兜底，但 Task 8 必须使用指定 `.artifacts` 制品完成验证。
+
+- [ ] **Step 3: 构建并打包共享包**
 
 Run:
 
@@ -1226,24 +1266,27 @@ bun --cwd packages/domain run build
 (cd packages/domain && npm pack --pack-destination ../../.artifacts/domain)
 ```
 
-Expected: 生成 `.artifacts/domain/gooes-domain-1.21.1.tgz`，输出文件列表只包含
+Expected: 生成精确文件 `.artifacts/domain/gooes-domain-1.21.1.tgz`，输出文件列表只包含
 `dist`、`README.md` 和 `package.json` 声明允许的内容。
 
-- [ ] **Step 3: 校验 tarball 消费与指纹**
+- [ ] **Step 4: 先校验指定 tarball，再计算指纹**
 
 Run:
 
 ```bash
-bun --cwd packages/domain run verify:packed-consumer
+GOOES_DOMAIN_ARCHIVE=.artifacts/domain/gooes-domain-1.21.1.tgz \
+  bun --cwd packages/domain run verify:packed-consumer
 shasum -a 256 .artifacts/domain/gooes-domain-1.21.1.tgz
 ```
 
 Expected: packed consumer 退出 0；记录 SHA-256 到交接文档，不把制品加入 Git。
 
-- [ ] **Step 4: 提交小程序交接文档**
+- [ ] **Step 5: 提交小程序交接文档与 verifier**
 
 ```bash
-git add docs/2026-09-08-procurement-purpose-miniprogram-handoff.md
+git add \
+  packages/domain/scripts/verify-packed-consumer.mjs \
+  docs/2026-09-08-procurement-purpose-miniprogram-handoff.md
 git commit -m "docs(procurement): 补充小程序采购用途对接"
 ```
 
