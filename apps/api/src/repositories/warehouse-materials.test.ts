@@ -87,3 +87,24 @@ test('return command receipt accepts raw return order fields without a submitted
     expected_version: 0, payload: { original_issue_order_id: ID, items: [{ original_issue_item_id: ID, quantity: '1.0000' }] },
     idempotency_key: 'return-key' })).order).toEqual(order);
 });
+
+test.each([null, '', '   ', '有效项目'])('normalizes legacy project label %s in both summaries and project options', async (name) => {
+  const { WarehouseMaterialReadsRepository } = await import('./warehouse-material-reads');
+  const expectedName = name?.trim() ? name : '未命名项目';
+  const { submitted_at: _, ...returnBase } = ISSUE_ORDER;
+  const repository = new WarehouseMaterialReadsRepository({ rpc: async (rpcName, params) => {
+    const document = params.p_document_type === 'return'
+      ? { ...returnBase, original_issue_order_id: ID, original_issue_order_no: 'WI-001', document_type: 'return',
+        warehouse_name: '主仓库', project_name: name, total_amount: null, item_count: 1 }
+      : { ...summary, project_name: name };
+    return { data: rpcName === 'get_warehouse_material_order' ? document : {
+      items: rpcName === 'list_warehouse_material_projects' ? [{ id: ID, name }] : [document],
+      total: 1, page: 1, pageSize: 20,
+    }, error: null };
+  } });
+  for (const document_type of ['issue', 'return'] as const) {
+    expect((await repository.get({ ...scope, document_type, order_id: ID })).project_name).toBe(expectedName);
+    expect((await repository.list({ ...scope, document_type, page: 1, pageSize: 20 })).list[0]?.project_name).toBe(expectedName);
+  }
+  expect((await repository.listProjects({ ...scope, page: 1, pageSize: 20 })).list[0]?.name).toBe(expectedName);
+});

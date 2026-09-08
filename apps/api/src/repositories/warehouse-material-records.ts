@@ -8,6 +8,8 @@ import { Errors } from '@/errors/error-factory';
 const uuid = z.uuid();
 const quantity = z.string().regex(/^(?:0|[1-9]\d{0,13})(?:\.\d{1,4})?$/);
 const amount = z.string().regex(/^(?:0|[1-9]\d{0,15})(?:\.\d{1,2})?$/);
+// Legacy projects may have a null/blank name; keep the display contract a string.
+const projectLabel = z.string().nullable().transform((name) => name?.trim() ? name : '未命名项目');
 const order = z.object({
   id: uuid, tenant_id: uuid, warehouse_id: uuid, project_id: uuid,
   order_no: z.string().min(1), version: z.number().int().positive(), reason: z.string().nullable(),
@@ -21,7 +23,7 @@ export const WarehouseReturnOrderSchema = order.extend({
   status: z.enum(WAREHOUSE_RETURN_STATUS_VALUES), original_issue_order_id: uuid,
 });
 const summary = {
-  warehouse_name: z.string(), project_name: z.string(), total_amount: amount.nullable(),
+  warehouse_name: z.string(), project_name: projectLabel, total_amount: amount.nullable(),
   item_count: z.number().int().nonnegative(),
 };
 export const WarehouseIssueSummarySchema = WarehouseIssueOrderSchema.extend({
@@ -42,7 +44,7 @@ export const WarehouseIssueItemSchema = item.extend({ issue_order_id: uuid });
 export const WarehouseReturnItemSchema = item.extend({
   return_order_id: uuid, original_issue_order_id: uuid, original_issue_item_id: uuid,
 });
-export const WarehouseMaterialProjectSchema = z.object({ id: uuid, name: z.string() }).strict();
+export const WarehouseMaterialProjectSchema = z.object({ id: uuid, name: projectLabel }).strict();
 
 export interface WarehouseMaterialActor {
   tenant_id: string;
