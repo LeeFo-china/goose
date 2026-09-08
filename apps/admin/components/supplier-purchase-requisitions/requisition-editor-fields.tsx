@@ -183,7 +183,6 @@ export function RequisitionCatalogBrowser({
   onSearch,
   onPageChange,
   onRetry,
-  onDismissError,
   onAdd,
 }: {
   catalog: PurchaseOrderCatalogPage;
@@ -198,7 +197,6 @@ export function RequisitionCatalogBrowser({
   onSearch: () => void;
   onPageChange: (page: number) => void;
   onRetry: () => void;
-  onDismissError: () => void;
   onAdd: (item: PurchaseOrderCatalogItem) => void;
 }) {
   const totalPages = Math.max(1, catalog.pagination.totalPages || 1);
@@ -256,24 +254,14 @@ export function RequisitionCatalogBrowser({
             <StatusAlert title="商品目录加载失败">
               {catalogError}
             </StatusAlert>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="min-h-11 md:min-h-9"
-                onClick={onRetry}
-              >
-                重新加载目录
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                className="min-h-11 md:min-h-9"
-                onClick={onDismissError}
-              >
-                关闭提示
-              </Button>
-            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11 md:min-h-9"
+              onClick={onRetry}
+            >
+              重新加载目录
+            </Button>
           </div>
         ) : catalog.list.length === 0 ? (
           <CatalogEmpty

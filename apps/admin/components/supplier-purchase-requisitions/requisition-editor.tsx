@@ -91,7 +91,6 @@ export function RequisitionEditor({
     setPage: setCatalogPage,
     search: searchCatalog,
     retry: retryCatalog,
-    dismissError: dismissCatalogError,
     reset: resetCatalog,
     abort: abortCatalog,
   } = useRequisitionCatalog({
@@ -410,7 +409,6 @@ export function RequisitionEditor({
         onCatalogSearch={searchCatalog}
         onCatalogPageChange={setCatalogPage}
         onRetryCatalog={() => void retryCatalog()}
-        onDismissCatalogError={dismissCatalogError}
         onAdd={(item) => updateUserState(() => {
           setFacts((current) => ({
             ...current,

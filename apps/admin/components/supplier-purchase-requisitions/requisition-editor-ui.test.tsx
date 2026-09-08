@@ -117,7 +117,7 @@ test("申请上下文使用项目用途预设和折叠备注，页脚汇总待�
   expect(footer).toContain("min-h-11");
 });
 
-test("目录错误在紧凑粘性搜索区下方独立展示并提供重试和关闭", () => {
+test("目录错误在紧凑粘性搜索区下方只展示错误和重试", () => {
   const html = renderToStaticMarkup(
     <RequisitionCatalogBrowser
       catalog={{
@@ -135,7 +135,6 @@ test("目录错误在紧凑粘性搜索区下方独立展示并提供重试和�
       onSearch={() => {}}
       onPageChange={() => {}}
       onRetry={() => {}}
-      onDismissError={() => {}}
       onAdd={() => {}}
     />,
   );
@@ -143,7 +142,8 @@ test("目录错误在紧凑粘性搜索区下方独立展示并提供重试和�
   expect(html).toContain("目录暂不可用");
   expect(html).not.toContain(catalogItem.product_name);
   expect(html).toContain("重新加载目录");
-  expect(html).toContain("关闭提示");
+  expect(html).not.toContain("关闭提示");
+  expect(html).not.toContain("没有可采购商品");
   expect(html).toContain("sticky top-0");
   expect(html).not.toContain("lg:sticky");
   expect(html.match(/role=\"search\"/g)).toHaveLength(1);

@@ -114,7 +114,7 @@ describe("采购申请命令成功后的刷新边界", () => {
     expect(editor + catalog).toContain("isAbortError(caught)");
   });
 
-  test("目录错误与保存命令错误分离并在新查询前清理", () => {
+  test("目录错误与保存命令错误分离并在目录加载成功后清理", () => {
     const editor = readSource("./requisition-editor.tsx");
     const workbench = readSource("./requisition-editor-workbench.tsx");
     const catalog = readSource("./use-requisition-catalog.ts");
@@ -146,15 +146,19 @@ describe("采购申请命令成功后的刷新边界", () => {
     expect(parts).toContain("重新加载采购申请");
   });
 
-  test("目录新查询先移除旧商品且失败后关闭提示不会恢复旧页", () => {
+  test("目录新查询先移除旧商品且错误保持到重试或新查询", () => {
     const catalog = readSource("./use-requisition-catalog.ts");
     const clearAt = catalog.indexOf("setCatalog(emptyRequisitionCatalog)",
       catalog.indexOf("const request = requests.begin()"));
     const requestAt = catalog.indexOf("await loadRequisitionCatalog");
+    const successAt = catalog.indexOf("setCatalog(next)");
+    const clearErrorAt = catalog.indexOf("setError(null)", successAt);
 
     expect(clearAt).toBeGreaterThan(-1);
     expect(clearAt).toBeLessThan(requestAt);
-    expect(catalog).toContain("dismissError: () => setError(null)");
+    expect(clearErrorAt).toBeGreaterThan(successAt);
+    expect(catalog).not.toContain("dismissError");
+    expect(catalog).not.toContain("onDismissError");
   });
 
   test("草稿刷新GET独立取消且不向mutation注入signal或改变幂等重试", () => {

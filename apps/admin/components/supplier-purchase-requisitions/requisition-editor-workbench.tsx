@@ -104,7 +104,6 @@ export function RequisitionEditorWorkbench({
   onCatalogSearch,
   onCatalogPageChange,
   onRetryCatalog,
-  onDismissCatalogError,
   onAdd,
   onLineChange,
   onRemove,
@@ -161,7 +160,6 @@ export function RequisitionEditorWorkbench({
   onCatalogSearch: () => void;
   onCatalogPageChange: (page: number) => void;
   onRetryCatalog: () => void;
-  onDismissCatalogError: () => void;
   onAdd: (item: PurchaseOrderCatalogItem) => void;
   onLineChange: (skuId: string, patch: Partial<RequisitionDraftLine>) => void;
   onRemove: (skuId: string) => void;
@@ -241,7 +239,6 @@ export function RequisitionEditorWorkbench({
               onSearch={onCatalogSearch}
               onPageChange={onCatalogPageChange}
               onRetry={onRetryCatalog}
-              onDismissError={onDismissCatalogError}
               onAdd={onAdd}
             />
           }

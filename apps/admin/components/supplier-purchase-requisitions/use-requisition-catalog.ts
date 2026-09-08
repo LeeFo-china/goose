@@ -50,7 +50,6 @@ export function useRequisitionCatalog({
     const request = requests.begin();
     setCatalog(emptyRequisitionCatalog);
     setLoading(true);
-    setError(null);
     try {
       const next = await loadRequisitionCatalog(
         tenantSupplierId,
@@ -63,6 +62,7 @@ export function useRequisitionCatalog({
         requestVersion.current !== version
       ) return;
       setCatalog(next);
+      setError(null);
       onLoaded(next.list);
     } catch (caught) {
       if (isAbortError(caught) || !requests.isCurrent(request)) return;
@@ -104,7 +104,6 @@ export function useRequisitionCatalog({
     requests.invalidate();
     requestVersion.current += 1;
     setCatalog(emptyRequisitionCatalog);
-    setError(null);
     setPage(nextPage);
   }, [requests]);
 
@@ -112,7 +111,6 @@ export function useRequisitionCatalog({
     requests.invalidate();
     requestVersion.current += 1;
     setCatalog(emptyRequisitionCatalog);
-    setError(null);
     setPage(1);
     setAppliedKeyword(keyword.trim());
     setContextVersion((value) => value + 1);
@@ -128,7 +126,6 @@ export function useRequisitionCatalog({
     setPage: changePage,
     search,
     retry: load,
-    dismissError: () => setError(null),
     reset,
     abort,
   };
