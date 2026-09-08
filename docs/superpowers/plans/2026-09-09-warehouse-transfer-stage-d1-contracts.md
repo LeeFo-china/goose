@@ -30,7 +30,7 @@
 
 ### Step 1：先写 Domain 回归
 
-- [ ] 新建测试，先从现有 barrel 动态导入并核验新导出；先运行观察新增常量缺失导致断言失败，再添加实现，不以拼错路径的导入错误作为红灯证据。
+- [x] 新建测试，先从现有 barrel 动态导入并核验新导出；先运行观察新增常量缺失导致断言失败，再添加实现，不以拼错路径的导入错误作为红灯证据。
 
 ```ts
 import { expect, test } from 'bun:test';
@@ -55,7 +55,7 @@ Expected RED：缺少新导出，收到 undefined 而不是预期数组。
 
 ### Step 2：实现 Domain 并构建
 
-- [ ] 新建领域文件，向 index.ts 增加 `export * from './warehouse-transfer';`，不向既有库存类型提前添加数据库尚不接受的值。
+- [x] 新建领域文件，向 index.ts 增加 `export * from './warehouse-transfer';`，不向既有库存类型提前添加数据库尚不接受的值。
 
 ```ts
 export const WAREHOUSE_TRANSFER_STATUS_VALUES = ['draft', 'submitted', 'completed', 'cancelled'] as const;
@@ -92,7 +92,7 @@ Expected：测试与构建退出 0，编译后的包暴露新常量。
 
 ### Step 3：写严格输入测试并确认红灯
 
-- [ ] 用真实 schema 测试；首个新文件可使用最小空导出骨架运行断言，红灯必须是契约尚未实现，不保留空骨架。以下是必须包含的测试内容，可按行为拆分测试名称：
+- [x] 用真实 schema 测试；首个新文件可使用最小空导出骨架运行断言，红灯必须是契约尚未实现，不保留空骨架。以下是必须包含的测试内容，可按行为拆分测试名称：
 
 ```ts
 import { expect, test } from 'bun:test';
@@ -171,7 +171,7 @@ Expected RED：新 schema 未定义或不能接受合法输入。实现前保留
 
 ### Step 4：实现严格 API schema
 
-- [ ] 新建 `apps/api/src/schema/warehouse-transfers.ts`：
+- [x] 新建 `apps/api/src/schema/warehouse-transfers.ts`：
 
 ```ts
 import { WAREHOUSE_TRANSFER_STATUS_VALUES } from '@gooes/domain';
@@ -218,13 +218,14 @@ export type WarehouseTransferListQuery = z.infer<typeof WarehouseTransferListQue
 
 ### Step 5：验证、两阶段审查及提交
 
-- [ ] 从 apps/api 执行 `bun test src/schema/warehouse-transfers.test.ts src/schema/warehouse-materials.test.ts && bun run typecheck`；预期 0 失败、类型检查退出 0。
-- [ ] 从根目录执行 `bun test packages/domain/src/warehouse-transfer.test.ts packages/domain/src/warehouse-material.test.ts && bun run --cwd packages/domain build && git diff --check`；预期全部退出 0。
-- [ ] 规格审查逐条检查设计第 7 节请求契约验收；之后独立代码质量审查检查未知字段、精度、UUID 归一比较、范围、包导出与无越界写入。修复发现项后重新运行对应测试。
-- [ ] 写入上述证据文件：记录实际测试数量、红灯原因、最终命令及退出码，明确未创建数据库命令、未注册路由、未部署。
-- [ ] 精确暂存五个源／测试文件与证据，提交 `feat(inventory): 建立阶段 D1 调拨请求契约`；计划的完成勾选与验收记录可单独 docs 提交，不混入其他工作。
+- [x] 从 apps/api 执行 `bun test src/schema/warehouse-transfers.test.ts src/schema/warehouse-materials.test.ts && bun run typecheck`；预期 0 失败、类型检查退出 0。
+- [x] 从根目录执行 `bun test packages/domain/src/warehouse-transfer.test.ts packages/domain/src/warehouse-material.test.ts && bun run --cwd packages/domain build && git diff --check`；预期全部退出 0。
+- [x] 规格审查逐条检查设计第 7 节请求契约验收；之后独立代码质量审查检查未知字段、精度、UUID 归一比较、范围、包导出与无越界写入。修复发现项后重新运行对应测试。
+- [x] 写入上述证据文件：记录实际测试数量、红灯原因、最终命令及退出码，明确未创建数据库命令、未注册路由、未部署。
+- [x] 精确暂存五个源／测试文件与证据，提交 `feat(inventory): 建立阶段 D1 调拨请求契约`；计划的完成勾选与验收记录可单独 docs 提交，不混入其他工作。
 
 ## 计划自检
 
-此计划覆盖设计第 7 节的请求契约批次。设计中数据库、权限配置、UI 和真实调拨验收明确属于后续批次，不以本计划的完成替代 D1 完整验收。本批次没有运行态功能开关，因为未新增任何可调用入口；后续入口必须在独立开关和原子命令完整后开放。
+执行结果（2026-09-09）：契约提交 `edb196a2`。Domain 红灯 1 fail 后重建转绿；API 红灯 2 fail 后实现转绿；Domain 2 pass／11 断言、API（含领退料）5 pass／134 断言、Domain 构建、API 完整 check 与独立两阶段审查通过。见 [本批次证据](../../operations/evidence/2026-09-09-warehouse-stage-d1-contracts.md)。原协作未执行 Domain RED 的过程缺口已明确记录并由主代理按测试先行重新实施，不据此声称原步骤执行过。
 
+此计划覆盖设计第 7 节的请求契约批次。设计中数据库、权限配置、UI 和真实调拨验收明确属于后续批次，不以本计划的完成替代 D1 完整验收。本批次没有运行态功能开关，因为未新增任何可调用入口；后续入口必须在独立开关和原子命令完整后开放。
