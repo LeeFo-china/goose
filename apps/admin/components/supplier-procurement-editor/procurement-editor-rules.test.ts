@@ -70,6 +70,16 @@ describe("procurement editor rules", () => {
     ]).referenceAmount).toBe("0.00");
   });
 
+  test("normalizes quantity leading zeroes before checking integer digits", () => {
+    expect(procurementSummary([
+      {
+        quantity: "012345678901234",
+        unitPrice: "1.00",
+        costCategoryId: "category-a",
+      },
+    ]).referenceAmount).toBe("12345678901234.00");
+  });
+
   test("only asks before changing context when products are selected", () => {
     expect(shouldConfirmContextChange(0)).toBe(false);
     expect(shouldConfirmContextChange(1)).toBe(true);

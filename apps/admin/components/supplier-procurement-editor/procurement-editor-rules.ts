@@ -35,6 +35,7 @@ export function procurementSummary(
       line.quantity,
       4,
       QUANTITY_MAX_INTEGER_DIGITS,
+      true,
     );
     const unitPrice = scaledDecimal(
       line.unitPrice ?? "",
@@ -93,15 +94,19 @@ function scaledDecimal(
   value: string,
   scale: number,
   maxIntegerDigits: number,
+  normalizeLeadingZeroes = false,
 ): bigint | null {
   if (value.length > maxIntegerDigits + scale + 1) return null;
   const match = /^(\d+)(?:\.(\d+))?$/.exec(value);
   if (
     !match ||
-    (match[1]?.length ?? 0) > maxIntegerDigits ||
     (match[2]?.length ?? 0) > scale
   ) return null;
-  const whole = match[1] ?? "0";
+  const rawWhole = match[1] ?? "0";
+  const whole = normalizeLeadingZeroes
+    ? rawWhole.replace(/^0+(?=\d)/, "")
+    : rawWhole;
+  if (whole.length > maxIntegerDigits) return null;
   const fraction = (match[2] ?? "").padEnd(scale, "0");
   return BigInt(`${whole}${fraction}`);
 }
