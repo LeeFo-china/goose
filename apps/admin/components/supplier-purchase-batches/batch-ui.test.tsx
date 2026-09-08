@@ -15,6 +15,7 @@ import type { BatchDetail as Detail } from "./batch-types";
 import { BatchRevisionNotice } from "./batch-revision-notice";
 import { BatchCatalogFilters } from "./batch-catalog-filters";
 import { BatchCatalogAddAction } from "./batch-catalog";
+import { BatchCostCategoryPicker } from "./batch-cost-category-picker";
 
 test("revision notice identifies the frozen revision version, not the latest batch version", () => {
   const html = renderToStaticMarkup(
@@ -116,7 +117,54 @@ test("missing default cost category is actionable and blocks save", () => {
     renderToStaticMarkup(
       <BatchLines lines={lines} disabled={false} onChange={() => {}} />,
     ),
-  ).toContain("请选择成本类目");
+  ).toContain("选择成本类目");
+});
+
+test("selected products stay visible in the workbench with unit and compact category action", () => {
+  const line = {
+    supplier_sku_id: "sku",
+    supplier_id: "supplier",
+    supplier_name: "建材供应商",
+    name: "瓷砖 · 米白 600×600",
+    sku_code: "SKU-001",
+    cost_category_id: "",
+    quantity: "2",
+    purchase_unit_name: "箱",
+  };
+  const html = renderToStaticMarkup(
+    <BatchLines lines={[line]} disabled={false} onChange={() => {}} />,
+  );
+  expect(html).toContain("已选商品");
+  expect(html).toContain("1 / 100");
+  expect(html).toContain("建材供应商");
+  expect(html).toContain("SKU-001");
+  expect(html).toContain("箱");
+  expect(html).toContain("选择成本类目");
+
+  const empty = renderToStaticMarkup(
+    <BatchLines lines={[]} disabled={false} onChange={() => {}} />,
+  );
+  expect(empty).toContain("从左侧商品目录加入商品");
+});
+
+test("cost category picker exposes a warning-labelled popover trigger", () => {
+  const line = {
+    supplier_sku_id: "sku",
+    supplier_id: "supplier",
+    name: "瓷砖",
+    cost_category_id: "",
+    quantity: "1",
+  };
+  const html = renderToStaticMarkup(
+    <BatchCostCategoryPicker
+      line={line}
+      disabled={false}
+      onChange={() => {}}
+    />,
+  );
+  expect(html).toContain("选择成本类目");
+  expect(html).toContain("尚未选择成本类目");
+  expect(html).toContain("aria-haspopup=\"dialog\"");
 });
 
 test("catalog filters expose controlled category and supplier reset actions", () => {

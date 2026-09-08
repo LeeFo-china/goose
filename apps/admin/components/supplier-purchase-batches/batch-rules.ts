@@ -91,36 +91,67 @@ export function draftPayload(
     })),
   };
 }
-export function draftError(draft: BatchDraft): string | null {
-  if (
-    !(draft.destination_type === "project"
-      ? draft.project_id
-      : draft.warehouse_id)
-  ) return "请先选择采购项目或仓库";
-  if (!draft.reason.trim() || draft.reason.trim().length > 500) {
-    return "请填写采购原因（不超过 500 字）";
+
+export type BatchDraftValidation = {
+  message: string;
+  field: "destination" | "reason" | "remark" | "items";
+};
+
+export function validateBatchDraft(
+  draft: BatchDraft,
+): BatchDraftValidation | null {
+  const hasDestination = draft.destination_type === "project"
+    ? Boolean(draft.project_id)
+    : Boolean(draft.warehouse_id);
+  if (!hasDestination) {
+    return { message: "请先选择采购项目或仓库", field: "destination" };
   }
-  if (draft.remark.trim().length > 500) return "备注不能超过 500 字";
+  const reason = draft.reason.trim();
+  if (!reason) {
+    return { message: "请选择或填写采购用途", field: "reason" };
+  }
+  if (reason.length > 500) {
+    return { message: "采购用途不能超过 500 字", field: "reason" };
+  }
+  if (draft.remark.trim().length > 500) {
+    return { message: "备注不能超过 500 字", field: "remark" };
+  }
   if (!draft.lines.length || draft.lines.length > 100) {
-    return "请选择 1–100 个商品 SKU";
+    return { message: "请选择 1–100 个商品 SKU", field: "items" };
   }
-  if (new Set(draft.lines.map((line) => line.supplier_id)).size > 20) {
-    return "每批最多选择 20 家供应商";
+  if (new Set(draft.lines.map(({ supplier_id }) => supplier_id)).size > 20) {
+    return { message: "每批最多选择 20 家供应商", field: "items" };
+  }
+  const skuIds = draft.lines.map(({ supplier_sku_id }) =>
+    supplier_sku_id.toLowerCase()
+  );
+  if (new Set(skuIds).size !== draft.lines.length) {
+    return { message: "同一 SKU 不能重复添加", field: "items" };
+  }
+  if (draft.lines.some(({ cost_category_id }) => !cost_category_id)) {
+    return { message: "请为每个商品选择成本类目", field: "items" };
   }
   if (
-    new Set(draft.lines.map((line) => line.supplier_sku_id.toLowerCase()))
-      .size !== draft.lines.length
-  ) return "同一 SKU 不能重复添加";
-  if (draft.lines.some((line) => !line.cost_category_id)) {
-    return "请为每个商品选择成本类目";
-  }
-  if (
-    draft.lines.some((line) =>
-      !/^\d{1,14}(?:\.\d{1,4})?$/.test(line.quantity) ||
-      !/[1-9]/.test(line.quantity)
+    draft.lines.some(({ quantity }) =>
+      !/^\d{1,14}(?:\.\d{1,4})?$/.test(quantity) || !/[1-9]/.test(quantity)
     )
-  ) return "采购数量必须大于 0，最多 4 位小数";
+  ) {
+    return {
+      message: "采购数量必须大于 0，最多 4 位小数",
+      field: "items",
+    };
+  }
   return null;
+}
+
+export function draftError(draft: BatchDraft): string | null {
+  return validateBatchDraft(draft)?.message ?? null;
+}
+
+export function batchContextChangeRequiresConfirmation(
+  draft: BatchDraft,
+): boolean {
+  return draft.lines.length > 0;
 }
 export function destinationName(batch: BatchDetail): string {
   return batch.destination_type === "warehouse"
