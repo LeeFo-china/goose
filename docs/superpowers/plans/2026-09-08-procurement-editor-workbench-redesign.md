@@ -537,6 +537,7 @@ git commit -m "feat(admin): 建立采购工作台共享组件"
 - Create: `supabase/migrations/20260908110000_resolve_supplier_purchase_batch_category_options.sql`
 - Create: `supabase/tests/supplier_purchase_batch_category_options.sql`
 - Create: `scripts/verify-supplier-purchase-batch-category-options.sh`
+- Create: `scripts/verify-supplier-purchase-batch-category-options.test.ts`
 - Create: `docs/operations/evidence/2026-09-08-supplier-purchase-batch-category-options.md`
 
 - [ ] **Step 1: 先写目录筛选 API 失败测试**
@@ -600,9 +601,10 @@ DROP FUNCTION public.resolve_supplier_purchase_batch_category_options(
 );
 ```
 
-不得手工向远端执行 DDL。提交前用 `supabase migration list --local` 检查本地历史；有独立临时
-本地数据库时通过 `supabase migration up --db-url ... --include-all` 验证 migration，并对 RPC
-执行空租户分页 smoke。远端仅做只读 `supabase migration list`；未链接时记录阻塞，不执行 apply。
+不得手工向远端执行 DDL。提交前用 `supabase migration list --local` 检查本地历史；事务 SQL
+runner 必须先核对目标 ledger 记录与精确函数存在性：1/1 只运行测试，0/0 临时执行唯一 migration
+且不写 ledger，1/0 或 0/1 立即报告 schema drift。ledger table 不存在可明确判作未应用，真实查询
+错误不得吞掉。远端仅做只读 `supabase migration list`；未链接时记录阻塞，不执行 apply。
 为 controller、service 和 repository 增加权限隔离、租户/平台可采购范围、分页上限、关键词和字段
 白名单测试。
 
@@ -775,12 +777,15 @@ Run:
 (cd apps/admin && bun test \
   components/supplier-purchase-batches/batch-api.test.ts \
   components/supplier-purchase-batches/batch-ui.test.tsx)
+bun test scripts/verify-supplier-purchase-batch-category-options.test.ts
 ./scripts/verify-supplier-purchase-batch-category-options.sh
+pnpm --dir apps/api run check
 pnpm --dir apps/admin run check
 ```
 
 Expected: API/Admin tests、事务化 SQL 集成测试、文件大小和 TypeScript 检查全部退出 0；
-SQL verifier 必须精确删除临时 RPC，并证明 fixture 行为全部 ROLLBACK。
+SQL verifier 必须按 ledger/function 四态安全运行；只有 0/0 临时模式精确删除本次创建的 RPC，
+并证明 ledger 未变化、fixture 行为全部 ROLLBACK。
 
 ```bash
 git add \

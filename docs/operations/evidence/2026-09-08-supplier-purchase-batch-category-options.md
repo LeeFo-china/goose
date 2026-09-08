@@ -14,9 +14,21 @@
 ./scripts/verify-supplier-purchase-batch-category-options.sh
 ```
 
-该脚本固定使用本地 `supabase_db_gooes`，拒绝覆盖已存在的同名函数；临时应用目标
-migration 后运行 `supabase/tests/supplier_purchase_batch_category_options.sql`，最后按精确签名
-删除函数。SQL fixture 自身使用 `BEGIN` / `ROLLBACK`，测试失败时 shell trap 仍会删除临时函数。
+该脚本固定使用本地 `supabase_db_gooes`，先分别读取
+`supabase_migrations.schema_migrations` 中版本 `20260908110000` 的记录和精确函数签名，再按以下
+状态机运行；任何路径都不增删或更新 migration ledger：
+
+| ledger 已应用 | 精确函数存在 | 行为 |
+| --- | --- | --- |
+| 1 | 1 | 已迁移模式：只运行事务 SQL 测试和 EXPLAIN，绝不 create/drop |
+| 0 | 0 | 本地临时模式：直接执行唯一目标 migration，不写 ledger；测试后按精确签名 DROP |
+| 1 | 0 | 立即以 schema drift 失败，不修复对象 |
+| 0 | 1 | 立即以 schema drift 失败，不删除对象 |
+
+ledger schema/table 不存在时会明确报告并安全判作未应用；ledger 查询或连接错误保留原退出码，
+不会被误判成 0。SQL fixture 自身使用 `BEGIN` / `ROLLBACK`，临时模式测试失败时 shell trap 只清理
+由本次 runner 创建的精确函数。`scripts/verify-supplier-purchase-batch-category-options.test.ts`
+使用隔离的 fake docker 状态验证了四种组合、ledger 缺失和查询失败分支，不接触真实 ledger。
 
 精确回滚：
 
@@ -42,8 +54,10 @@ DROP FUNCTION public.resolve_supplier_purchase_batch_category_options(
   `pageSize=100` 返回 100 个唯一分类，第 16 页返回 2 个；
 - 每个响应项严格只有 `id/code/name/full_name/status` 五个字段。
 
-执行完成后，本地 `category-option-fixture-%` 租户和 `CATOPT-%` 分类计数均为 0，目标函数为
-`ABSENT`，数据库容器为 `healthy`。
+2026-09-08 实际执行本地 0/0 临时模式成功。执行前后目标 ledger 记录均为 0；执行完成后，本地
+`category-option-fixture-%` 租户和 `CATOPT-%` 分类计数均为 0，目标函数为 `ABSENT`，数据库
+容器为 `healthy`。状态机测试 5/5 通过，证明 1/1 路径不 create/drop、两种漂移路径无任何
+apply/drop/test，以及 ledger 查询失败不会继续执行。
 
 ## EXPLAIN ANALYZE
 
