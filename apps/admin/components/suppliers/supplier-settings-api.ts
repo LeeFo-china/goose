@@ -10,6 +10,7 @@ export type PlatformModuleIntent = {
   procurementSnapshotV1Enabled?: boolean;
   purchaseBatchWorkflowEnabled?: boolean;
   warehouseProcurementEnabled?: boolean;
+  warehouseMaterialsEnabled?: boolean;
   reason?: string;
 };
 
@@ -59,6 +60,8 @@ export function createPlatformSupplierSettingsRequest({
         warehouse_procurement_enabled:
           intent.warehouseProcurementEnabled ??
           current.warehouse_procurement_enabled ?? false,
+        warehouse_materials_enabled:
+          intent.warehouseMaterialsEnabled ?? current.warehouse_materials_enabled ?? false,
         expected_version: current.version,
         ...(intent.reason ? { reason: intent.reason } : {}),
       }),

@@ -57,7 +57,8 @@ const rolloutFields: ReadonlyArray<{
     | "privateCatalogWritesEnabled"
     | "procurementSnapshotV1Enabled"
     | "purchaseBatchWorkflowEnabled"
-    | "warehouseProcurementEnabled";
+    | "warehouseProcurementEnabled"
+    | "warehouseMaterialsEnabled";
 }> = [
   {
     flag: "ownership_reads_enabled",
@@ -95,6 +96,12 @@ const rolloutFields: ReadonlyArray<{
     description: "需先启用采购批次 Workflow 及全部前置开关，允许采购到仓库并衔接入库。",
     intentKey: "warehouseProcurementEnabled",
   },
+  {
+    flag: "warehouse_materials_enabled",
+    label: "仓库领退料",
+    description: "允许向项目领料出库和退料回仓，并同步项目成本；供应商模块启用后可独立开启。",
+    intentKey: "warehouseMaterialsEnabled",
+  },
 ];
 
 const defaultSettings = (tenantId: string): TenantSupplierSettings => ({
@@ -107,6 +114,7 @@ const defaultSettings = (tenantId: string): TenantSupplierSettings => ({
   procurement_snapshot_v1_enabled: false,
   purchase_batch_workflow_enabled: false,
   warehouse_procurement_enabled: false,
+  warehouse_materials_enabled: false,
   enabled_by_employee_id: null,
   enabled_at: null,
   version: 0,
@@ -310,7 +318,7 @@ export function TenantSupplierSettingsCard({
           <Alert>
             <AlertTitle>请先逆序关闭子开关</AlertTitle>
             <AlertDescription>
-              必须依次关闭仓库采购、采购批次 Workflow、采购单快照、私有目录、私有供应商和所有权读取，
+              请关闭仓库领退料，并依次关闭仓库采购、采购批次 Workflow、采购单快照、私有目录、私有供应商和所有权读取，
               才能停用供应商模块。
             </AlertDescription>
           </Alert>

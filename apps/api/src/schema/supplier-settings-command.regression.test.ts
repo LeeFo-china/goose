@@ -18,6 +18,17 @@ const initialSettings = {
 };
 
 describe("platform tenant supplier settings command", () => {
+  test("materials flag preserves omission and only accepts booleans", () => {
+    for (const warehouse_materials_enabled of [true, false]) {
+      const result = PlatformTenantSupplierSettingsCommandSchema.safeParse({ ...initialSettings, warehouse_materials_enabled });
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data).toMatchObject({ warehouse_materials_enabled });
+    }
+    expect(PlatformTenantSupplierSettingsCommandSchema.parse(initialSettings)).not.toHaveProperty("warehouse_materials_enabled");
+    for (const warehouse_materials_enabled of [null, "true", 1]) {
+      expect(PlatformTenantSupplierSettingsCommandSchema.safeParse({ ...initialSettings, warehouse_materials_enabled }).success).toBe(false);
+    }
+  });
   test("accepts explicit warehouse booleans while preserving omission", () => {
     for (const warehouse_procurement_enabled of [true, false]) {
       expect(PlatformTenantSupplierSettingsCommandSchema.parse({

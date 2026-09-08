@@ -15,6 +15,7 @@ const disabled = {
   procurement_snapshot_v1_enabled: false,
   purchase_batch_workflow_enabled: false,
   warehouse_procurement_enabled: false,
+  warehouse_materials_enabled: false,
 };
 
 describe("supplier rollout settings", () => {
@@ -29,7 +30,7 @@ describe("supplier rollout settings", () => {
     expect(() => assertSupplierRolloutTransition(warehouse, workflow)).not.toThrow();
     expect(() => assertSupplierRolloutTransition({ ...workflow,
       purchase_batch_workflow_enabled: false }, warehouse)).toThrow();
-    for (const flag of Object.keys(workflow).filter((key) => key !== "warehouse_procurement_enabled")) {
+    for (const flag of Object.keys(workflow).filter((key) => !["warehouse_procurement_enabled", "warehouse_materials_enabled"].includes(key))) {
       const invalid = { ...warehouse, [flag]: false };
       expect(() => assertSupplierRolloutDependencies(invalid)).toThrow();
       expect(effectiveSupplierRolloutSettings(invalid).warehouse_procurement_enabled).toBe(false);

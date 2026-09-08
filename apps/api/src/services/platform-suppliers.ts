@@ -75,6 +75,7 @@ type SettingsRequest = {
   procurement_snapshot_v1_enabled: boolean;
   purchase_batch_workflow_enabled: boolean;
   warehouse_procurement_enabled?: boolean;
+  warehouse_materials_enabled?: boolean;
   expected_version: number; reason?: string; idempotencyKey: string;
 };
 export class PlatformSuppliersService {
@@ -314,8 +315,9 @@ export class PlatformSuppliersService {
     assertSupplierRolloutDependencies(input);
     const current = await this.repository.getTenantSupplierSettings(input.tenantId);
     if ((current?.version ?? 0) === input.expected_version) {
-      const target = { ...input, warehouse_procurement_enabled:
-        input.warehouse_procurement_enabled ?? current?.warehouse_procurement_enabled ?? false };
+      const target = { ...input,
+        warehouse_procurement_enabled: input.warehouse_procurement_enabled ?? current?.warehouse_procurement_enabled ?? false,
+        warehouse_materials_enabled: input.warehouse_materials_enabled ?? current?.warehouse_materials_enabled ?? false };
       assertSupplierRolloutDependencies(target);
       assertSupplierRolloutTransition(current ?? {
         module_enabled: false,
@@ -339,6 +341,9 @@ export class PlatformSuppliersService {
           input.purchase_batch_workflow_enabled,
         ...(input.warehouse_procurement_enabled === undefined ? {} : {
           warehouse_procurement_enabled: input.warehouse_procurement_enabled,
+        }),
+        ...(input.warehouse_materials_enabled === undefined ? {} : {
+          warehouse_materials_enabled: input.warehouse_materials_enabled,
         }),
         expected_version: input.expected_version, actor_user_id: actor.authUserId,
         actor_employee_id: actor.employeeId,

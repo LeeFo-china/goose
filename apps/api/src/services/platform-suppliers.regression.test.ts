@@ -80,6 +80,36 @@ function auth(permissionCodes: string[], isPlatformAdmin = true): AuthContext {
 }
 
 describe("PlatformSuppliersService regression boundaries", () => {
+  test("module disable preserves omitted materials and rejects only current-version invalid targets", async () => {
+    const { service, repository, audit } = await createHarness();
+    repository.getTenantSupplierSettings.mockImplementation(async () => ({
+      ...settings, module_enabled: true, warehouse_materials_enabled: true, version: 8,
+    }));
+    const request = { ...settings, tenantId: TENANT_ID, expected_version: 8,
+      reason: "停用", idempotencyKey: "materials-module-disable" };
+    await expect(service.setTenantSupplierSettings(auth(["platform.supplier.manage"]), request))
+      .rejects.toMatchObject({ code: "SUPPLIER_ROLLOUT_ORDER_INVALID" });
+    expect(repository.setTenantSupplierSettings).not.toHaveBeenCalled();
+    repository.setTenantSupplierSettings.mockImplementation(async () => ({
+      status: "updated", idempotent: true, setting: settings, previous_setting: null, version: 1,
+    }));
+    await service.setTenantSupplierSettings(auth(["platform.supplier.manage"]), { ...request, expected_version: 0 });
+    expect(repository.setTenantSupplierSettings.mock.calls[0]?.[0]).not.toHaveProperty("warehouse_materials_enabled");
+    expect(audit.recordBestEffort).not.toHaveBeenCalled();
+  });
+
+  test("explicit material transitions are forwarded and audited independently of procurement", async () => {
+    const { service, repository, audit } = await createHarness();
+    repository.getTenantSupplierSettings.mockImplementation(async () => ({ ...settings, module_enabled: true }));
+    await service.setTenantSupplierSettings(auth(["platform.supplier.manage"]), {
+      ...settings, tenantId: TENANT_ID, module_enabled: true,
+      warehouse_materials_enabled: true, expected_version: 1, idempotencyKey: "materials-enable",
+    });
+    expect(repository.setTenantSupplierSettings.mock.calls[0]?.[0]).toMatchObject({ warehouse_materials_enabled: true });
+    expect(audit.recordBestEffort).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({ to: expect.objectContaining({ warehouse_materials_enabled: true }) }),
+    }));
+  });
   test("warehouse command preserves omission and audits the RPC before and after", async () => {
     const { service, repository, audit } = await createHarness();
     const workflow = { ...settings, module_enabled: true, ownership_reads_enabled: true,
