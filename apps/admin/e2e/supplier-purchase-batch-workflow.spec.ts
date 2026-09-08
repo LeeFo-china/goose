@@ -1,51 +1,13 @@
-import { type APIRequestContext, expect, type Page, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+
+import {
+  batchBackend as backend,
+  openBatchPage as open,
+  startBatchDraft as newDraft,
+} from "./supplier-purchase-batch-workflow-helpers";
 import { ids } from "./supplier-purchase-batch-fixture.mjs";
 
 // Browser UI contract acceptance, not real backend integration.
-const backend = "http://127.0.0.1:3986";
-async function open(
-  page: Page,
-  request: APIRequestContext,
-  scenario = "empty",
-  role = "manager",
-  detail = false,
-) {
-  expect(
-    (await request.post(`${backend}/__test/reset?scenario=${scenario}`)).ok(),
-  ).toBe(true);
-  expect(
-    (await page.request.post("/api/auth/login", {
-      data: { phone: role, code: "" },
-    })).ok(),
-  ).toBe(true);
-  await page.goto(
-    `/supplier-purchase-batches${
-      detail ? `?purchase_batch_id=${ids.batch}` : ""
-    }`,
-  );
-}
-async function newDraft(page: Page, destination = "project") {
-  await page.getByRole("button", { name: "新建批次" }).click();
-  const editor = page.getByRole("dialog", { name: "新建采购批次" });
-  if (destination === "warehouse") {
-    await editor.getByRole("tab", { name: "仓库补货" }).click();
-    await expect(editor.getByLabel("启用仓库", { exact: true })).toContainText(
-      "补货仓22",
-    );
-  } else {
-    await editor.getByLabel("采购项目", { exact: true }).click();
-    await page.getByRole("option", { name: "采购项目01", exact: true }).click();
-  }
-  await editor.getByRole("button", {
-    name: destination === "warehouse" ? "仓库补货" : "项目备料",
-    exact: true,
-  }).click();
-  await editor.getByRole("row").filter({ hasText: "采购商品02" }).getByRole(
-    "button",
-    { name: "加入采购商品02", exact: true },
-  ).click();
-  return editor;
-}
 test("异步项目选择不产生 React Portal 或控制台错误", async ({ page, request }) => {
   const errors: string[] = [];
   page.on("console", (message) => {

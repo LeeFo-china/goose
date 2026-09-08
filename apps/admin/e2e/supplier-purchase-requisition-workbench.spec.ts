@@ -63,6 +63,16 @@ test("桌面申请工作台左右并排，加入商品即显示数量和成本�
     selectionBox!.x + 1,
   );
   expect(Math.abs(catalogBox!.y - selectionBox!.y)).toBeLessThanOrEqual(1);
+  expect(await catalog.evaluate((catalogElement) => {
+    const selectionElement = Array.from(
+      catalogElement.parentElement?.children ?? [],
+    ).find((element) => element.getAttribute("aria-label") === "已选商品");
+    return Boolean(
+      selectionElement &&
+        catalogElement.compareDocumentPosition(selectionElement) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  })).toBe(true);
 
   await addCatalogItem(editor);
   const selectedHeading = editor.getByRole("heading", {

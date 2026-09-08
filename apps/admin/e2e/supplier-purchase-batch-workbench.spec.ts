@@ -24,6 +24,16 @@ test("桌面工作台并排显示目录和已选商品，组合筛选保留分�
     selectionBox!.x + 1,
   );
   expect(Math.abs(catalogBox!.y - selectionBox!.y)).toBeLessThanOrEqual(1);
+  expect(await catalog.evaluate((catalogElement) => {
+    const selectionElement = Array.from(
+      catalogElement.parentElement?.children ?? [],
+    ).find((element) => element.getAttribute("aria-label") === "已选商品");
+    return Boolean(
+      selectionElement &&
+        catalogElement.compareDocumentPosition(selectionElement) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  })).toBe(true);
 
   const toolbar = editor.getByRole("search", { name: "商品目录工具栏" });
   await toolbar.getByRole("button", { name: "商品分类：全部分类" }).click();
@@ -131,35 +141,49 @@ test("保存进行中锁定按钮，连续触发只发送一次 mutation", async
   request,
 }) => {
   const editor = await openProjectBatchEditor(page, request);
+  const saveRequestPattern =
+    "**/api/backend/supplier-purchase-batches/*/save-draft";
   let releaseRequest: () => void = () => {};
-  let markIntercepted: () => void = () => {};
-  const requestIntercepted = new Promise<void>((resolve) => {
-    markIntercepted = resolve;
-  });
   const requestGate = new Promise<void>((resolve) => {
     releaseRequest = resolve;
   });
   await page.route(
-    "**/api/backend/supplier-purchase-batches/*/save-draft",
+    saveRequestPattern,
     async (route) => {
-      markIntercepted();
       await requestGate;
       await route.continue();
     },
   );
-  const save = editor.getByRole("button", { name: "保存草稿", exact: true });
-  await save.click();
-  await requestIntercepted;
-  const pendingSave = editor.getByRole("button", {
-    name: "正在确认…",
-    exact: true,
-  });
-  await expect(pendingSave).toHaveText("正在确认…");
-  await expect(pendingSave).toBeDisabled();
-  await pendingSave.evaluate((button: HTMLButtonElement) => button.click());
-  releaseRequest();
-  await expect(page.getByText("本次保存的供应商拆单预览")).toBeVisible();
-  expect((await readBatchState(request)).commands).toHaveLength(1);
+  try {
+    const intercepted = page.waitForRequest(
+      (request) =>
+        request.method() === "POST" &&
+        request.url().includes(
+          "/api/backend/supplier-purchase-batches/",
+        ) && request.url().endsWith("/save-draft"),
+      { timeout: 5_000 },
+    );
+    const save = editor.getByRole("button", {
+      name: "保存草稿",
+      exact: true,
+    });
+    await save.click();
+    await intercepted;
+    const pendingSave = editor.getByRole("button", {
+      name: "正在确认…",
+      exact: true,
+    });
+    await expect(pendingSave).toHaveText("正在确认…");
+    await expect(pendingSave).toBeDisabled();
+    await pendingSave.evaluate((button: HTMLButtonElement) => button.click());
+    releaseRequest();
+    await expect(page.getByText("本次保存的供应商拆单预览"))
+      .toBeVisible();
+    expect((await readBatchState(request)).commands).toHaveLength(1);
+  } finally {
+    releaseRequest();
+    await page.unroute(saveRequestPattern);
+  }
 });
 
 test("375×812 可真实加入商品，保存入口留在视口且页面不横溢", async ({
