@@ -1,11 +1,51 @@
 "use client";
 
 import { StatusAlert } from "@/components/admin/status-alert";
+import { ProcurementConfirmDialog } from "@/components/supplier-procurement-editor/procurement-confirm-dialog";
 import type { ProcurementSummary } from "@/components/supplier-procurement-editor/procurement-editor-rules";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 
 import { formatRequisitionMoney } from "./requisition-page-utils";
+
+export function RequisitionEditorConfirmations({
+  contextOpen,
+  lineCount,
+  closeOpen,
+  onCancelContext,
+  onConfirmContext,
+  onCancelClose,
+  onConfirmClose,
+}: {
+  contextOpen: boolean;
+  lineCount: number;
+  closeOpen: boolean;
+  onCancelContext: () => void;
+  onConfirmContext: () => void;
+  onCancelClose: () => void;
+  onConfirmClose: () => void;
+}) {
+  return (
+    <>
+      <ProcurementConfirmDialog
+        open={contextOpen}
+        title="更换采购范围？"
+        description={`更换项目或合作供应商会清空 ${lineCount} 个已选商品。`}
+        confirmLabel="清空并更换"
+        onCancel={onCancelContext}
+        onConfirm={onConfirmContext}
+      />
+      <ProcurementConfirmDialog
+        open={closeOpen}
+        title="放弃未保存的更改？"
+        description="当前采购申请有尚未保存的修改，关闭后这些修改不会保留。"
+        confirmLabel="放弃更改"
+        onCancel={onCancelClose}
+        onConfirm={onConfirmClose}
+      />
+    </>
+  );
+}
 
 export function RequisitionEditorAlerts({
   error,

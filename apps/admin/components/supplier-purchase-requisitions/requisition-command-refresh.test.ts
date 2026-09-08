@@ -98,4 +98,38 @@ describe("采购申请命令成功后的刷新边界", () => {
     expect(lines).toContain('role="alert"');
     expect(lines).toContain("productLabel");
   });
+
+  test("草稿和目录请求分别取消旧请求且继续用版本号隔离迟到响应", () => {
+    const editor = readSource("./requisition-editor.tsx");
+    const authority = readSource("./requisition-request-authority.ts");
+    const catalog = readSource("./use-requisition-catalog.ts");
+
+    expect(authority).toContain("new AbortController()");
+    expect(authority).toContain("current?.controller.abort()");
+    expect(editor).toContain("draftRequests.invalidate()");
+    expect(editor).toContain("abortCatalog()");
+    expect(editor + catalog).toContain("request.controller.signal");
+    expect(editor).toContain("draftRequestVersion.current !== version");
+    expect(catalog).toContain("requestVersion.current !== version");
+    expect(editor + catalog).toContain("isAbortError(caught)");
+  });
+
+  test("目录错误与保存命令错误分离并在新查询前清理", () => {
+    const editor = readSource("./requisition-editor.tsx");
+    const workbench = readSource("./requisition-editor-workbench.tsx");
+    const catalog = readSource("./use-requisition-catalog.ts");
+
+    expect(catalog).toContain("const [error, setError]");
+    expect(catalog).toContain("setError(null)");
+    expect(catalog).toContain("setError(errorMessage(caught");
+    expect(workbench).toContain("catalogError={catalogError}");
+    expect(workbench).toContain("onRetry={onRetryCatalog}");
+  });
+
+  test("详情统一展示采购用途且不再使用临时采购原因文案", () => {
+    const detailContent = readSource("./requisition-detail-content.tsx");
+
+    expect(detailContent).toContain('label="采购用途"');
+    expect(detailContent).not.toContain("临时采购原因");
+  });
 });

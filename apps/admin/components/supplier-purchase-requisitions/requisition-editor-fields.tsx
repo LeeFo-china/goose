@@ -12,6 +12,7 @@ import type {
   PurchaseOrderSupplierOption,
 } from "@/components/supplier-purchase-orders/purchase-order-types";
 import { Button } from "@/components/ui/button";
+import { StatusAlert } from "@/components/admin/status-alert";
 import {
   Empty,
   EmptyDescription,
@@ -173,6 +174,7 @@ export function RequisitionCatalogBrowser({
   catalog,
   catalogPage,
   catalogKeyword,
+  catalogError,
   loadingCatalog,
   tenantSupplierId,
   fieldsLocked,
@@ -180,11 +182,14 @@ export function RequisitionCatalogBrowser({
   onKeywordChange,
   onSearch,
   onPageChange,
+  onRetry,
+  onDismissError,
   onAdd,
 }: {
   catalog: PurchaseOrderCatalogPage;
   catalogPage: number;
   catalogKeyword: string;
+  catalogError: string | null;
   loadingCatalog: boolean;
   tenantSupplierId: string;
   fieldsLocked: boolean;
@@ -192,6 +197,8 @@ export function RequisitionCatalogBrowser({
   onKeywordChange: (value: string) => void;
   onSearch: () => void;
   onPageChange: (page: number) => void;
+  onRetry: () => void;
+  onDismissError: () => void;
   onAdd: (item: PurchaseOrderCatalogItem) => void;
 }) {
   const totalPages = Math.max(1, catalog.pagination.totalPages || 1);
@@ -200,9 +207,9 @@ export function RequisitionCatalogBrowser({
       <div
         role="search"
         aria-label="采购申请商品目录工具栏"
-        className="z-10 flex flex-wrap items-center gap-2 border-b bg-background px-4 py-3 lg:sticky lg:top-0"
+        className="sticky top-0 z-10 flex flex-nowrap items-center gap-2 border-b bg-background px-4 py-3"
       >
-        <InputGroup className="min-h-11 min-w-[12rem] flex-[1_1_16rem] md:min-h-9">
+        <InputGroup className="min-h-11 min-w-0 flex-1 md:min-h-9">
           <InputGroupAddon>
             <Search className="size-4" aria-hidden="true" />
           </InputGroupAddon>
@@ -243,6 +250,30 @@ export function RequisitionCatalogBrowser({
             {Array.from({ length: 5 }, (_, index) => (
               <Skeleton key={index} className="h-12 w-full" />
             ))}
+          </div>
+        ) : catalogError ? (
+          <div className="space-y-3 p-4">
+            <StatusAlert title="商品目录加载失败">
+              {catalogError}
+            </StatusAlert>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11 md:min-h-9"
+                onClick={onRetry}
+              >
+                重新加载目录
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="min-h-11 md:min-h-9"
+                onClick={onDismissError}
+              >
+                关闭提示
+              </Button>
+            </div>
           </div>
         ) : catalog.list.length === 0 ? (
           <CatalogEmpty

@@ -6,7 +6,10 @@ import {
   catalogItem,
   category,
 } from "../../e2e/supplier-purchase-requisition-mock-fixture.mjs";
-import { RequisitionHeaderFields } from "./requisition-editor-fields";
+import {
+  RequisitionCatalogBrowser,
+  RequisitionHeaderFields,
+} from "./requisition-editor-fields";
 import { SelectedRequisitionLines } from "./requisition-editor-lines";
 import { RequisitionEditorFooter } from "./requisition-editor-parts";
 
@@ -108,4 +111,35 @@ test("申请上下文使用项目用途预设和折叠备注，页脚汇总待�
   expect(footer).toContain("¥250.00");
   expect(footer).toContain("待选成本类目");
   expect(footer).toContain("min-h-11");
+});
+
+test("目录错误在紧凑粘性搜索区下方独立展示并提供重试和关闭", () => {
+  const html = renderToStaticMarkup(
+    <RequisitionCatalogBrowser
+      catalog={{
+        list: [],
+        pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+      }}
+      catalogPage={1}
+      catalogKeyword=""
+      catalogError="目录暂不可用"
+      loadingCatalog={false}
+      tenantSupplierId="relationship-1"
+      fieldsLocked={false}
+      lines={[]}
+      onKeywordChange={() => {}}
+      onSearch={() => {}}
+      onPageChange={() => {}}
+      onRetry={() => {}}
+      onDismissError={() => {}}
+      onAdd={() => {}}
+    />,
+  );
+
+  expect(html).toContain("目录暂不可用");
+  expect(html).toContain("重新加载目录");
+  expect(html).toContain("关闭提示");
+  expect(html).toContain("sticky top-0");
+  expect(html).not.toContain("lg:sticky");
+  expect(html.match(/role=\"search\"/g)).toHaveLength(1);
 });

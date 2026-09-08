@@ -192,6 +192,21 @@ test("采购申请工作台在桌面与手机均可选品并保护上下文", as
   })).toBeVisible();
 
   await page.setViewportSize({ width: 375, height: 667 });
+  const catalogToolbar = sheet.getByRole("search", {
+    name: "采购申请商品目录工具栏",
+  });
+  await expect(catalogToolbar).toBeVisible();
+  expect((await catalogToolbar.boundingBox())?.height).toBeLessThanOrEqual(76);
+  const mobileCatalogRow = sheet.getByRole("row").filter({
+    hasText: "E2E 分页商品 1",
+  });
+  await mobileCatalogRow.getByRole("button", {
+    name: "加入E2E 分页商品 1",
+    exact: true,
+  }).click();
+  await expect(sheet.getByRole("heading", {
+    name: "E2E 分页商品 1 · E2E 分页商品 SKU 1",
+  })).toBeVisible();
   await sheet.getByRole("button", { name: "其他", exact: true }).click();
   await sheet.getByRole("textbox", { name: "采购用途" }).fill(
     "展厅样板补充",

@@ -66,6 +66,7 @@ export function RequisitionEditorWorkbench({
   catalog,
   catalogPage,
   catalogKeyword,
+  catalogError,
   loadingCatalog,
   loadingDraft,
   validation,
@@ -99,6 +100,8 @@ export function RequisitionEditorWorkbench({
   onCatalogKeywordChange,
   onCatalogSearch,
   onCatalogPageChange,
+  onRetryCatalog,
+  onDismissCatalogError,
   onAdd,
   onLineChange,
   onRemove,
@@ -117,6 +120,7 @@ export function RequisitionEditorWorkbench({
   catalog: PurchaseOrderCatalogPage;
   catalogPage: number;
   catalogKeyword: string;
+  catalogError: string | null;
   loadingCatalog: boolean;
   loadingDraft: boolean;
   validation: RequisitionDraftErrors;
@@ -150,6 +154,8 @@ export function RequisitionEditorWorkbench({
   onCatalogKeywordChange: (value: string) => void;
   onCatalogSearch: () => void;
   onCatalogPageChange: (page: number) => void;
+  onRetryCatalog: () => void;
+  onDismissCatalogError: () => void;
   onAdd: (item: PurchaseOrderCatalogItem) => void;
   onLineChange: (skuId: string, patch: Partial<RequisitionDraftLine>) => void;
   onRemove: (skuId: string) => void;
@@ -218,6 +224,7 @@ export function RequisitionEditorWorkbench({
               catalog={catalog}
               catalogPage={catalogPage}
               catalogKeyword={catalogKeyword}
+              catalogError={catalogError}
               loadingCatalog={loadingCatalog}
               tenantSupplierId={tenantSupplierId}
               fieldsLocked={fieldsLocked}
@@ -225,6 +232,8 @@ export function RequisitionEditorWorkbench({
               onKeywordChange={onCatalogKeywordChange}
               onSearch={onCatalogSearch}
               onPageChange={onCatalogPageChange}
+              onRetry={onRetryCatalog}
+              onDismissError={onDismissCatalogError}
               onAdd={onAdd}
             />
           }

@@ -94,7 +94,7 @@ export function RequisitionFacts({
         />
       </div>
       <div className="mt-4 grid gap-3 border-t pt-4 md:grid-cols-2">
-        <Fact label="临时采购原因" value={requisition.reason} />
+        <Fact label="采购用途" value={requisition.reason} />
         <Fact label="备注" value={requisition.remark ?? "-"} />
         {requisition.review_remark ? (
           <Fact label="审核备注" value={requisition.review_remark} />
