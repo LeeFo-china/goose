@@ -4,6 +4,7 @@ import {
   SUPPLIER_PURCHASE_BATCH_COMMAND_STATUS_VALUES,
   SUPPLIER_PURCHASE_BATCH_COMMAND_TYPE_VALUES,
   SUPPLIER_PURCHASE_BATCH_STATUS_VALUES,
+  SUPPLIER_PURCHASE_PURPOSE_PRESETS,
 } from "./index";
 
 describe("supplier purchase batch domain contract", () => {
@@ -37,5 +38,15 @@ describe("supplier purchase batch domain contract", () => {
       "cancel",
       "withdraw",
     ]);
+  });
+
+  test("exports stable purpose presets without the UI-only other option", () => {
+    expect(SUPPLIER_PURCHASE_PURPOSE_PRESETS).toEqual({
+      project: ["项目备料", "现场补料"],
+      warehouse: ["仓库补货"],
+    });
+    expect(Object.values(SUPPLIER_PURCHASE_PURPOSE_PRESETS).flat()).not.toContain(
+      "其他",
+    );
   });
 });
