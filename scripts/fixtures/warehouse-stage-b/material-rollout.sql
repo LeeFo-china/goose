@@ -1,5 +1,23 @@
 -- Synthetic data only, executed in the offline disposable database.
 BEGIN;
+DO $history$
+DECLARE f public.stage_c_historical_rollout%ROWTYPE; result jsonb;
+BEGIN
+  SELECT * INTO STRICT f FROM public.stage_c_historical_rollout;
+  result:=public.set_tenant_supplier_rollout_settings(jsonb_build_object('tenant_id',f.tenant_id,
+    'actor_employee_id',f.employee_id,'module_enabled',true,'require_active_contract_for_new_order',false,
+    'ownership_reads_enabled',false,'private_supplier_writes_enabled',false,'private_catalog_writes_enabled',false,
+    'procurement_snapshot_v1_enabled',false,'expected_version',1,'reason',NULL,'warehouse_materials_enabled',true),
+    f.user_id,'material-after-schema');
+  IF result->'setting'->>'warehouse_materials_enabled'<>'true' THEN RAISE EXCEPTION 'C enable failed'; END IF;
+  result:=public.set_tenant_supplier_rollout_settings(f.tenant_id,true,false,false,false,false,false,
+    0,f.user_id,f.employee_id,'material-before-schema',NULL);
+  IF result IS DISTINCT FROM (f.result||'{"idempotent":true}') OR result->'setting' ? 'warehouse_materials_enabled'
+    OR NOT (SELECT warehouse_materials_enabled FROM public.tenant_supplier_settings WHERE tenant_id=f.tenant_id) THEN
+    RAISE EXCEPTION 'Pre-C historical replay snapshot or current settings changed';
+  END IF;
+END;
+$history$;
 CREATE FUNCTION pg_temp.reject_material_setting_event() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN RAISE EXCEPTION 'MATERIAL_SETTING_EVENT_FAILURE'; END;
 $$;
@@ -84,3 +102,4 @@ BEGIN
 END;
 $test$;
 ROLLBACK;
+SELECT 'EVIDENCE pre-C typed request snapshot replays exactly after C enabled without changing live settings';
