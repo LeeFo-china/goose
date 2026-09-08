@@ -105,3 +105,9 @@ da40dce9ac76456a80bcce35db63f9dce196678fc84a5443ccbc1918e040fa74
 [修复实施证据](evidence/2026-09-08-warehouse-orphan-remediation.md)：提交 `80bb606b` 已完成 smoke 清理根因修复、精确审计删除 migration、69 项定向测试、API check、隔离 SQL 与真实 gateway／完整 schema 联动验证及独立两阶段评审。开发库只读复核目标 hash 未变。修复 migration-only 候选 CLI 清单 Local 595／Remote 594，唯一待执行 `20260908062915`，不含 C 四条。
 
 尚未应用任何真实迁移、删除真实数据、部署修复或推送／合并；按计划等待精确清单的开发 apply 最终确认。新备份与完整 ownership／ACL／数据恢复及逐表核对尚未执行，C 发布门禁不因此解除。当前 C 分支 599 条 migration 不可直接作为此次修复 db push 清单。
+
+## 2026-09-08 15:02 后实际修复与恢复检查点
+
+用户确认后，专用候选 `af3c37f3` 的唯一修复 migration 已应用开发库，Local／Remote 595 条对齐；精确 4 条审计归档删除成功，正常仓库和九表事实不变。新备份完整恢复与 325 张表同快照逐表计数对账通过，临时容器已清除，真实服务健康。见 [实际应用与恢复证据](evidence/2026-09-08-warehouse-orphan-dev-apply.md)。这解除的是本次开发数据库备份恢复门禁，不是 C 全部发布门禁。
+
+修复／验收已本地同步至 C 候选；最新 CLI 全量差集仍为 4 条原 C migrations（Local 599／Remote 595），修复版本已对齐。较早 C 编号的 include-all 执行方式须在 C 发布时另行审核。没有应用 C、push、main 合并、部署或启用开关；旧分支 smoke 在清理代码发布前仍可能复发。历史检查点保留，但不再代表当前等待修复 apply。
