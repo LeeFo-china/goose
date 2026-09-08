@@ -12,10 +12,13 @@ Gooes 已将采购表单面向用户的“采购原因”统一为“采购用�
 
 本次共享包制品：
 
-- 文件：`.artifacts/domain/gooes-domain-1.21.1.tgz`
+- 最终交付路径：`/Users/leefo/Public/work/gooes/.artifacts/domain/gooes-domain-1.21.1.tgz`
 - 大小：72,383 bytes
 - SHA-256：`fa1de189695e9c6c7f2901efb6a3c28a36e0452468831d7783142d22541655d3`
 - 包内容边界：npm 固有的 `package.json`，以及 `files` 白名单中的 `README.md`、`dist/`
+
+worktree 内的 `.artifacts/domain/` 只用于本次构建过程，不是小程序团队的交付路径；Orange
+必须引用上面的 gooes 主仓库稳定路径，避免 worktree 清理后依赖失效。
 
 Gooes 还增加了采购批次“可采购叶子分类”只读接口。该接口只返回当前租户确实存在
 可采购 SKU 的分类，避免小程序使用通用分类接口后出现“分类有数据、商品列表为空”的
@@ -209,13 +212,72 @@ GET /supplier-purchase-batch-catalog?destinationType=warehouse&warehouseId=<uuid
 | 409 `SUPPLIER_MODULE_DISABLED` | 提示管理员开启供应商模块 |
 | 5xx / 网络异常 | 保留当前选择并提供重试；不能把失败当成空分类 |
 
+### 4.2 Orange 类型与 loader 映射
+
+Orange 当前通用 `ProcurementCatalogOption` 没有必填 `full_name` 和 `status`，不能直接拿它
+声明新接口，否则照本文访问 `full_name` 会出现类型错误。优先新增批次筛选专用 DTO，不污染
+创建分类、品牌等页面使用的通用类型：
+
+```ts
+export interface SupplierPurchaseBatchCategoryOption {
+  id: string;
+  code: string;
+  name: string;
+  full_name: string;
+  status: 'active';
+}
+
+export type SupplierPurchaseBatchCategoryOptionPage =
+  ProcurementPage<SupplierPurchaseBatchCategoryOption>;
+```
+
+这里的 `ProcurementPage` 复用 orange 现有分页 envelope；上一节成功响应展示了
+`page/pageSize/total/totalPages` 的完整结构，不要另建不兼容分页类型。
+
+在 `SupplierProcurementService` 中增加独立 loader：
+
+```ts
+listBatchCatalogCategories: (
+  params: { page?: number; pageSize?: number; keyword?: string } = {},
+) =>
+  api.get<ProcurementPage<SupplierPurchaseBatchCategoryOption>>(
+    '/supplier-purchase-batch-category-options',
+    { page: 1, pageSize: 20, ...params },
+    quiet,
+  ),
+```
+
+组件层只映射显示字段，保留服务端 ID 和分页 envelope：
+
+```ts
+const response = await SupplierProcurementService
+  .listBatchCatalogCategories({ page, pageSize: 20, keyword });
+
+const options = response.data.list.map((category) => ({
+  id: category.id,
+  name: category.full_name || category.name,
+  description: category.code,
+}));
+const pagination = response.data.pagination;
+```
+
+如果团队选择扩展现有 `ProcurementCatalogOption`，也必须把 `full_name` 和 `status` 的可选性
+与通用接口区分清楚；专用 DTO 更能防止把批次筛选契约误用于资料维护接口。
+
 ## 5. Orange 适配位置与步骤
 
 以下基于 2026-09-08 对 orange `main@b428d1cf` 的只读核对，实施时由小程序团队复核
 最新分支：
 
-1. `package.json` 当前仍指向 `gooes-domain-1.21.0.tgz`。校验制品 SHA 后升级为
-   `@gooes/domain@1.21.1` 的交付 tarball，并更新锁文件。
+1. `package.json` 当前仍指向主仓库下的 `gooes-domain-1.21.0.tgz`。校验制品 SHA 后改为：
+
+   ```json
+   {
+     "@gooes/domain": "file:/Users/leefo/Public/work/gooes/.artifacts/domain/gooes-domain-1.21.1.tgz"
+   }
+   ```
+
+   然后用仓库既有包管理方式更新锁文件。
 2. `src/packageProcurement/pages/batch-edit/components/BatchTextFields.tsx` 删除本地
    `REASON_OPTIONS` 和仓库用途硬编码，改为导入
    `SUPPLIER_PURCHASE_PURPOSE_PRESETS`；标签、空态、输入提示改成“采购用途”。
@@ -239,7 +301,7 @@ GET /supplier-purchase-batch-catalog?destinationType=warehouse&warehouseId=<uuid
 安装前先核对：
 
 ```bash
-shasum -a 256 /path/to/gooes-domain-1.21.1.tgz
+shasum -a 256 /Users/leefo/Public/work/gooes/.artifacts/domain/gooes-domain-1.21.1.tgz
 ```
 
 应得到：
@@ -250,11 +312,27 @@ fa1de189695e9c6c7f2901efb6a3c28a36e0452468831d7783142d22541655d3
 
 然后由 orange 团队用仓库既有包管理方式安装该本地 tarball，并提交 `package.json` 与锁文件。
 
-## 6. 完整验收清单
+## 6. Gooes 制品验证门禁
+
+`packages/domain/scripts/verify-packed-consumer.test.ts` 的 source、错误路径和安装路径测试用于
+防止 verifier 逻辑回退，不替代真实 tarball 的安装、类型检查和运行时消费，也不替代 Admin /
+小程序 E2E、接口联调或真机验收。最终合并与发布验收必须保留下面这条主路径精确验证，
+不能只运行 verifier 单测，也不能让 verifier 临时重新 pack 一个包来代替最终交付件：
+
+```bash
+GOOES_DOMAIN_ARCHIVE=/Users/leefo/Public/work/gooes/.artifacts/domain/gooes-domain-1.21.1.tgz \
+  bun run --cwd packages/domain verify:packed-consumer
+```
+
+同时重新执行 `shasum -a 256`，确认大小为 72,383 bytes、SHA-256 与本文一致。主仓库
+tarball 是被 Git 忽略的交付物，不纳入 commit；不得被 worktree 清理步骤覆盖或删除。
+
+## 7. 完整验收清单
 
 ### 共享包与静态检查
 
 - [ ] 安装的是 `@gooes/domain@1.21.1`，制品文件名和 SHA-256 与本文一致。
+- [ ] Orange 的 file 依赖指向 gooes 主仓库稳定路径，不指向 worktree。
 - [ ] TypeScript 可从包根导入 `SUPPLIER_PURCHASE_PURPOSE_PRESETS`。
 - [ ] project 精确为“项目备料、现场补料”，warehouse 精确为“仓库补货”，共享常量不含“其他”。
 - [ ] orange 中不再维护另一套采购用途数组，构建和类型检查通过。
@@ -272,6 +350,7 @@ fa1de189695e9c6c7f2901efb6a3c28a36e0452468831d7783142d22541655d3
 ### 分类与商品目录
 
 - [ ] 分类请求使用 `/supplier-purchase-batch-category-options`，不是通用 `/catalog/categories`。
+- [ ] 新接口使用包含 `id/code/name/full_name/status` 的专用 DTO，访问 `full_name` 无类型错误。
 - [ ] 分类首屏 `page=1&pageSize=20`，可连续加载至 `totalPages`，不会一次拉取全量。
 - [ ] 搜索 trim 后发出，搜索/清除/切换筛选均回到第 1 页，旧响应不能覆盖新结果。
 - [ ] 展示 `full_name || name`，选择后以 `categoryId` 重新请求批次商品目录。
@@ -290,7 +369,7 @@ fa1de189695e9c6c7f2901efb6a3c28a36e0452468831d7783142d22541655d3
 - [ ] 开发接口联调通过后完成 iOS/Android 微信真机的项目采购、仓库补货、旧草稿回显、
       弱网重试与 409 冲突验收。
 
-## 7. 可直接转发给小程序团队
+## 8. 可直接转发给小程序团队
 
 > 请把采购编辑页面向用户的“采购原因”统一改成“采购用途”，并升级使用
 > `@gooes/domain@1.21.1` 的 `SUPPLIER_PURCHASE_PURPOSE_PRESETS`：项目采购显示“项目备料、
@@ -301,5 +380,8 @@ fa1de189695e9c6c7f2901efb6a3c28a36e0452468831d7783142d22541655d3
 > `full_name || name`，选中后把 id 传给现有商品目录的 `categoryId`；不要把通用
 > `/catalog/categories` 全局替换掉。版本、幂等键、商品顺序、权限、服务端计价和审批逻辑
 > 全部保持不变。制品 `gooes-domain-1.21.1.tgz` 的 SHA-256 是
-> `fa1de189695e9c6c7f2901efb6a3c28a36e0452468831d7783142d22541655d3`。请由小程序团队在
-> orange 自行安装、改代码、提交，并完成开发联调和微信真机验收；Gooes 没有修改 orange。
+> `fa1de189695e9c6c7f2901efb6a3c28a36e0452468831d7783142d22541655d3`，Orange file 依赖请
+> 指向 `/Users/leefo/Public/work/gooes/.artifacts/domain/gooes-domain-1.21.1.tgz`，不要引用
+> worktree 临时目录。分类 DTO 请单独声明完整的 `id/code/name/full_name/status` 字段。请由
+> 小程序团队在 orange 自行安装、改代码、提交，并完成开发联调和微信真机验收；Gooes
+> 没有修改 orange。

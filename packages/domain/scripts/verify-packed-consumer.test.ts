@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,14 +17,17 @@ afterAll(async () => {
   await rm(fixtureRoot, { force: true, recursive: true });
 });
 
-async function runVerifier(archivePath: string) {
+async function runVerifier(
+  archivePath: string,
+  path = "/usr/bin:/bin",
+) {
   const processResult = Bun.spawn([process.execPath, verifierPath], {
     cwd: packageRoot,
     env: {
       ...process.env,
       GOOES_DOMAIN_ARCHIVE: archivePath,
       // The explicit-archive branch must validate before trying to build or pack.
-      PATH: "/usr/bin:/bin",
+      PATH: path,
     },
     stdout: "pipe",
     stderr: "pipe",
@@ -56,6 +59,25 @@ describe("packed domain consumer verifier", () => {
     expect(result.exitCode).not.toBe(0);
     expect(result.stderr).toContain(
       `指定的 domain package archive 文件名必须为 ${expectedArchiveName}`,
+    );
+  });
+
+  test("passes the exact explicit archive into the consumer install", async () => {
+    const archiveRoot = join(fixtureRoot, "invalid-archive");
+    const archivePath = join(archiveRoot, expectedArchiveName);
+    await mkdir(archiveRoot);
+    await writeFile(archivePath, "not-a-package");
+
+    const result = await runVerifier(
+      archivePath,
+      process.env.PATH ?? "/usr/bin:/bin",
+    );
+    const output = `${result.stdout}\n${result.stderr}`;
+
+    expect(result.exitCode).not.toBe(0);
+    expect(output).toContain(archivePath);
+    expect(output).not.toContain(
+      "packed domain consumer verified with shared zod identity",
     );
   });
 
