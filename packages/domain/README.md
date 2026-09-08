@@ -5,7 +5,7 @@ Shared domain constants, literal unions, config maps, and type guards for Gooes.
 ## Install
 
 ```bash
-npm install @gooes/domain@1.21.0
+npm install @gooes/domain@1.21.1
 ```
 
 ## Usage
@@ -54,6 +54,17 @@ integrated sources. Existing command, permission and pagination contracts
 remain unchanged. See `docs/2026-09-06-h5-customer-leads-miniprogram-handoff.md`.
 This local package does not imply the backend has been deployed.
 
+`1.21.1` adds shared procurement-purpose suggestions while keeping the
+existing free-text `reason` contract unchanged. The client may append its own
+UI-only “其他” option when it needs a custom value:
+
+```ts
+import { SUPPLIER_PURCHASE_PURPOSE_PRESETS } from "@gooes/domain";
+
+const projectPurposeSuggestions =
+  SUPPLIER_PURCHASE_PURPOSE_PRESETS.project;
+```
+
 From the repository root:
 
 ```bash
@@ -61,7 +72,7 @@ bun run --cwd packages/domain build
 bun run --cwd packages/domain verify:packed-consumer
 mkdir -p .artifacts/domain
 npm pack ./packages/domain --ignore-scripts --pack-destination .artifacts/domain
-shasum -a 256 .artifacts/domain/gooes-domain-1.21.0.tgz
+shasum -a 256 .artifacts/domain/gooes-domain-1.21.1.tgz
 ```
 
 Build before packing. `--ignore-scripts` intentionally avoids the legacy

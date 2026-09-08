@@ -157,11 +157,11 @@ Run:
 
 ```bash
 bun test packages/domain/src/supplier-purchase-batch.test.ts
-bun --cwd packages/domain run build
-bun --cwd packages/domain run verify:packed-consumer
+bun run --cwd packages/domain build
+bun run --cwd packages/domain verify:packed-consumer
 ```
 
-Expected: 三条命令全部退出 0；`dist/index.d.ts` 可以检索到新常量。
+Expected: 三条命令全部退出 0；`dist/supplier-purchase-batch.d.ts` 可以检索到新常量。
 
 - [ ] **Step 6: 提交共享契约**
 
@@ -1278,7 +1278,7 @@ Run:
 
 ```bash
 mkdir -p .artifacts/domain
-bun --cwd packages/domain run build
+bun run --cwd packages/domain build
 (cd packages/domain && npm pack --pack-destination ../../.artifacts/domain)
 ```
 
@@ -1291,7 +1291,7 @@ Run:
 
 ```bash
 GOOES_DOMAIN_ARCHIVE=../../.artifacts/domain/gooes-domain-1.21.1.tgz \
-  bun --cwd packages/domain run verify:packed-consumer
+  bun run --cwd packages/domain verify:packed-consumer
 shasum -a 256 .artifacts/domain/gooes-domain-1.21.1.tgz
 ```
 
