@@ -34,6 +34,7 @@ export const WarehouseTransferListQuerySchema = PaginationQuerySchema.extend({
   keyword: z.string().trim().max(100).optional(),
 }).strict();
 export const WarehouseTransferItemsQuerySchema = PaginationQuerySchema.strict();
+export const WarehouseTransferSettingsQuerySchema = z.object({}).strict();
 
 export type WarehouseTransferDraftInput = z.infer<typeof WarehouseTransferDraftSchema>;
 export type WarehouseTransferCommandInput = z.infer<typeof WarehouseTransferCommandSchema>;

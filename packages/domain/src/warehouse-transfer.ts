@@ -25,3 +25,49 @@ export interface WarehouseTransferDraft {
 export interface WarehouseTransferCommandInput {
   expected_version: number;
 }
+
+export interface WarehouseTransferOrder {
+  id: string;
+  tenant_id: string;
+  source_warehouse_id: string;
+  destination_warehouse_id: string;
+  order_no: string;
+  status: WarehouseTransferStatus;
+  version: number;
+  reason: string;
+  created_by_employee_id: string;
+  updated_by_employee_id: string;
+  created_at: string;
+  updated_at: string;
+  submitted_at: string | null;
+  completed_at: string | null;
+  cancelled_at: string | null;
+}
+
+export interface WarehouseTransferSummary extends WarehouseTransferOrder {
+  source_warehouse_name: string;
+  destination_warehouse_name: string;
+  item_count: number;
+  total_amount: string | null;
+}
+
+export interface WarehouseTransferItem {
+  id: string;
+  tenant_id: string;
+  transfer_order_id: string;
+  source_warehouse_id: string;
+  destination_warehouse_id: string;
+  line_no: number;
+  supplier_sku_id: string;
+  quantity: string;
+  unit_cost: string | null;
+  amount: string | null;
+  sku_name: string;
+  sku_code: string;
+}
+
+export interface WarehouseTransferSettings { warehouse_transfers_enabled: boolean }
+export interface WarehouseTransferCommandResult {
+  status: 'saved' | 'submitted' | 'completed' | 'cancelled';
+  order: WarehouseTransferOrder;
+}
