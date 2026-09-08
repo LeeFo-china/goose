@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import {
   batchAccess,
   batchContextChangeRequiresConfirmation,
+  batchLineReferenceMoney,
+  batchSelectionValidation,
   changeDestination,
   draftPayload,
   newBatchDraft,
@@ -122,6 +124,47 @@ test("requires confirmation only before changing a context with selected product
     ...newBatchDraft(),
     lines: validLines,
   })).toBe(true);
+});
+
+test("calculates line reference money with BigInt precision and preserves unknown prices", () => {
+  expect(batchLineReferenceMoney({
+    ...validLines[0],
+    quantity: "90071992547409.91",
+    unit_price: "1.00",
+  })).toEqual({
+    unitPrice: "1.00",
+    subtotal: "90071992547409.91",
+  });
+  expect(batchLineReferenceMoney({
+    ...validLines[0],
+    unit_price: undefined,
+  })).toEqual({ unitPrice: null, subtotal: null });
+});
+
+test("marks every duplicated SKU and keeps line and collection errors separate", () => {
+  const duplicated = batchSelectionValidation([
+    { ...validLines[0], quantity: "0" },
+    { ...validLines[0], supplier_sku_id: "SKU" },
+  ]);
+  expect(duplicated.lines).toEqual([
+    {
+      duplicateSku: "同一 SKU 不能重复添加",
+      quantity: "采购数量必须大于 0，最多 4 位小数",
+    },
+    { duplicateSku: "同一 SKU 不能重复添加" },
+  ]);
+  expect(duplicated.list).toEqual([]);
+
+  const overSupplierLimit = batchSelectionValidation(
+    Array.from({ length: 21 }, (_, index) => ({
+      ...validLines[0],
+      supplier_sku_id: `sku-${index}`,
+      supplier_id: `supplier-${index}`,
+    })),
+  );
+  expect(overSupplierLimit.list).toEqual([
+    "每批最多选择 20 家供应商",
+  ]);
 });
 
 test("returns field-aware validation for every batch draft boundary", () => {

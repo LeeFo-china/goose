@@ -129,6 +129,7 @@ test("selected products stay visible in the workbench with unit and compact cate
     sku_code: "SKU-001",
     cost_category_id: "",
     quantity: "2",
+    unit_price: "88.00",
     purchase_unit_name: "箱",
   };
   const html = renderToStaticMarkup(
@@ -139,12 +140,77 @@ test("selected products stay visible in the workbench with unit and compact cate
   expect(html).toContain("建材供应商");
   expect(html).toContain("SKU-001");
   expect(html).toContain("箱");
+  expect(html).toContain("参考单价");
+  expect(html).toContain("¥88.00 / 箱");
+  expect(html).toContain("估算小计");
+  expect(html).toContain("¥176.00");
   expect(html).toContain("选择成本类目");
 
   const empty = renderToStaticMarkup(
     <BatchLines lines={[]} disabled={false} onChange={() => {}} />,
   );
   expect(empty).toContain("从左侧商品目录加入商品");
+});
+
+test("selected lines expose local errors and recent-add feedback without motion dependency", () => {
+  const line = {
+    supplier_sku_id: "sku",
+    supplier_id: "supplier",
+    supplier_name: "建材供应商",
+    name: "瓷砖",
+    sku_code: "SKU-001",
+    cost_category_id: "category",
+    category_name: "主材",
+    quantity: "0",
+    unit_price: "88.00",
+    purchase_unit_name: "箱",
+  };
+  const html = renderToStaticMarkup(
+    <BatchLines
+      lines={[line, { ...line, supplier_sku_id: "SKU" }]}
+      disabled={false}
+      recentlyAddedSkuId="sku"
+      onChange={() => {}}
+    />,
+  );
+  expect(html).toContain('aria-invalid="true"');
+  expect(html).toContain("采购数量必须大于 0，最多 4 位小数");
+  expect(html.match(/同一 SKU 不能重复添加/g)?.length).toBe(2);
+  expect(html).toContain("刚刚加入");
+  expect(html).toContain('aria-live="polite"');
+  expect(html).toContain("motion-reduce:transition-none");
+
+  const collectionError = renderToStaticMarkup(
+    <BatchLines
+      lines={Array.from({ length: 21 }, (_, index) => ({
+        ...line,
+        supplier_sku_id: `sku-${index}`,
+        supplier_id: `supplier-${index}`,
+        quantity: "1",
+      }))}
+      disabled={false}
+      onChange={() => {}}
+    />,
+  );
+  expect(collectionError).toContain("每批最多选择 20 家供应商");
+  expect(collectionError).toContain('role="alert"');
+});
+
+test("unknown catalog prices stay visibly unknown", () => {
+  const html = renderToStaticMarkup(
+    <BatchLines
+      lines={[{
+        supplier_sku_id: "sku",
+        supplier_id: "supplier",
+        name: "瓷砖",
+        cost_category_id: "category",
+        quantity: "1",
+      }]}
+      disabled={false}
+      onChange={() => {}}
+    />,
+  );
+  expect(html.match(/—/g)?.length).toBe(2);
 });
 
 test("cost category picker exposes a warning-labelled popover trigger", () => {
@@ -164,7 +230,7 @@ test("cost category picker exposes a warning-labelled popover trigger", () => {
   );
   expect(html).toContain("选择成本类目");
   expect(html).toContain("尚未选择成本类目");
-  expect(html).toContain("aria-haspopup=\"dialog\"");
+  expect(html).toContain('aria-haspopup="dialog"');
 });
 
 test("catalog filters expose controlled category and supplier reset actions", () => {
@@ -198,6 +264,6 @@ test("catalog limit reasons remain visible beside an unfocusable disabled action
 
   expect(html).toContain("每个批次最多选择 100 个 SKU");
   expect(html).toContain("aria-describedby=");
-  expect(html).toContain("disabled=\"\"");
+  expect(html).toContain('disabled=""');
   expect(html).not.toContain("title=");
 });

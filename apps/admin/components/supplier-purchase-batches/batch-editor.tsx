@@ -11,12 +11,7 @@ import { ProcurementWorkbenchLayout } from "@/components/supplier-procurement-ed
 import { Button } from "@/components/ui/button";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { loadBatchItems, loadBatchProjects } from "./batch-api";
@@ -25,13 +20,15 @@ import { BatchLines } from "./batch-lines";
 import { BatchOptionPicker } from "./batch-option-picker";
 import { batchMoney } from "./batch-page-parts";
 import {
+  type BatchContextChange,
   batchContextChangeRequiresConfirmation,
+  batchDraftFromDetail,
+  type BatchDraftValidation,
   batchError,
   changeDestination,
   draftPayload,
-  newBatchDraft,
+  isSameBatchContext,
   validateBatchDraft,
-  type BatchDraftValidation,
 } from "./batch-rules";
 import { BatchWarehousePicker } from "./batch-warehouse-picker";
 import { useBatchCommand } from "./use-batch-command";
@@ -39,14 +36,10 @@ import type {
   BatchCommandResult,
   BatchDetail,
   BatchDraft,
-  DestinationType,
   NamedOption,
 } from "./batch-types";
 
-type PendingContextChange =
-  | { kind: "destination"; destinationType: DestinationType }
-  | { kind: "project"; option: NamedOption }
-  | { kind: "warehouse"; option: NamedOption };
+const RECENTLY_ADDED_FEEDBACK_MS = 1_600;
 
 export function BatchEditor({
   record,
@@ -59,7 +52,7 @@ export function BatchEditor({
   onClose: () => void;
   onAccepted: (result: BatchCommandResult) => void;
 }) {
-  const [draft, setDraft] = useState<BatchDraft>(() => initialDraft(record));
+  const [draft, setDraft] = useState<BatchDraft>(() => batchDraftFromDetail(record));
   const [project, setProject] = useState<NamedOption | null>(
     record?.project ?? null,
   );
@@ -69,14 +62,11 @@ export function BatchEditor({
   const [loading, setLoading] = useState(Boolean(record));
   const [loadError, setLoadError] = useState("");
   const [retry, setRetry] = useState(0);
-  const [validation, setValidation] = useState<BatchDraftValidation | null>(
-    null,
-  );
+  const [validation, setValidation] = useState<BatchDraftValidation | null>(null);
   const [dirty, setDirty] = useState(false);
-  const [pendingContext, setPendingContext] = useState<
-    PendingContextChange | null
-  >(null);
+  const [pendingContext, setPendingContext] = useState<BatchContextChange | null>(null);
   const [confirmClose, setConfirmClose] = useState(false);
+  const [recentlyAddedSkuId, setRecentlyAddedSkuId] = useState<string | null>(null);
   const command = useBatchCommand(record?.id ?? "new", onAccepted, () => {});
 
   useEffect(() => {
@@ -112,6 +102,15 @@ export function BatchEditor({
     return () => controller.abort();
   }, [record, retry]);
 
+  useEffect(() => {
+    if (!recentlyAddedSkuId) return;
+    const timeout = window.setTimeout(
+      () => setRecentlyAddedSkuId(null),
+      RECENTLY_ADDED_FEEDBACK_MS,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [recentlyAddedSkuId]);
+
   const disabled = loading || Boolean(loadError) || command.busy ||
     Boolean(command.pending) || !command.ready;
   const destinationReady = draft.destination_type === "project"
@@ -130,7 +129,8 @@ export function BatchEditor({
     setValidation(null);
   }
 
-  function applyContextChange(change: PendingContextChange) {
+  function applyContextChange(change: BatchContextChange) {
+    setRecentlyAddedSkuId(null);
     if (change.kind === "destination") {
       updateDraft((current) =>
         changeDestination(current, change.destinationType)
@@ -160,8 +160,8 @@ export function BatchEditor({
     }));
   }
 
-  function requestContextChange(change: PendingContextChange) {
-    if (isSameContext(change, draft, project, warehouse)) return;
+  function requestContextChange(change: BatchContextChange) {
+    if (isSameBatchContext(change, draft, project, warehouse)) return;
     if (batchContextChangeRequiresConfirmation(draft)) {
       setPendingContext(change);
       return;
@@ -353,7 +353,8 @@ export function BatchEditor({
                   destination={draft}
                   lines={draft.lines}
                   disabled={disabled}
-                  onAdd={(item) =>
+                  onAdd={(item) => {
+                    setRecentlyAddedSkuId(item.supplier_sku_id);
                     updateDraft((current) => ({
                       ...current,
                       lines: [...current.lines, {
@@ -363,14 +364,13 @@ export function BatchEditor({
                         name: `${item.product_name} · ${item.sku_name}`,
                         sku_code: item.sku_code,
                         quantity: "1",
-                        cost_category_id:
-                          item.default_cost_category_id ?? "",
-                        category_name:
-                          item.default_cost_category_name ?? "",
+                        cost_category_id: item.default_cost_category_id ?? "",
+                        category_name: item.default_cost_category_name ?? "",
                         unit_price: item.unit_price,
                         purchase_unit_name: item.purchase_unit_name,
                       }],
-                    }))}
+                    }));
+                  }}
                 />
               )
               : (
@@ -384,8 +384,18 @@ export function BatchEditor({
               <BatchLines
                 lines={draft.lines}
                 disabled={disabled}
-                onChange={(lines) =>
-                  updateDraft((current) => ({ ...current, lines }))}
+                recentlyAddedSkuId={recentlyAddedSkuId}
+                onChange={(lines) => {
+                  if (
+                    recentlyAddedSkuId &&
+                    !lines.some((line) =>
+                      line.supplier_sku_id === recentlyAddedSkuId
+                    )
+                  ) {
+                    setRecentlyAddedSkuId(null);
+                  }
+                  updateDraft((current) => ({ ...current, lines }));
+                }}
               />
             }
             footer={
@@ -394,15 +404,33 @@ export function BatchEditor({
                   className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm"
                   aria-live="polite"
                 >
-                  <span><strong className="tabular-nums">{summary.itemCount}</strong> 个 SKU</span>
-                  <span><strong className="tabular-nums">{summary.supplierCount}</strong> 家供应商</span>
-                  <span>参考货值 <strong className="tabular-nums">{batchMoney(summary.referenceAmount)}</strong></span>
+                  <span>
+                    <strong className="tabular-nums">
+                      {summary.itemCount}
+                    </strong>{" "}
+                    个 SKU
+                  </span>
+                  <span>
+                    <strong className="tabular-nums">
+                      {summary.supplierCount}
+                    </strong>{" "}
+                    家供应商
+                  </span>
+                  <span>
+                    参考货值{" "}
+                    <strong className="tabular-nums">
+                      {batchMoney(summary.referenceAmount)}
+                    </strong>
+                  </span>
                   <span
                     className={summary.missingCategoryCount
                       ? "font-medium text-warning-foreground"
                       : "text-muted-foreground"}
                   >
-                    缺成本类目 <strong className="tabular-nums">{summary.missingCategoryCount}</strong>
+                    缺成本类目{" "}
+                    <strong className="tabular-nums">
+                      {summary.missingCategoryCount}
+                    </strong>
                   </span>
                 </div>
                 <div className="flex shrink-0 justify-end gap-2">
@@ -467,30 +495,4 @@ export function BatchEditor({
       />
     </>
   );
-}
-
-function initialDraft(record: BatchDetail | null): BatchDraft {
-  if (!record) return newBatchDraft();
-  return {
-    ...newBatchDraft(),
-    destination_type: record.destination_type,
-    project_id: record.project_id,
-    warehouse_id: record.warehouse_id,
-    reason: record.reason,
-    remark: record.remark ?? "",
-    expected_delivery_date: record.expected_delivery_date ?? "",
-  };
-}
-
-function isSameContext(
-  change: PendingContextChange,
-  draft: BatchDraft,
-  project: NamedOption | null,
-  warehouse: NamedOption | null,
-): boolean {
-  if (change.kind === "destination") {
-    return change.destinationType === draft.destination_type;
-  }
-  if (change.kind === "project") return change.option.id === project?.id;
-  return change.option.id === warehouse?.id;
 }
