@@ -262,6 +262,15 @@ export async function cleanupSupplierPurchasableSkuSmokeFixture(
       ${tx.array([fixture.categoryId, fixture.platformCategoryId], "UUID")})`;
     await tx`delete from public.catalog_units
       where id = ${fixture.unitId}::uuid`;
+    // Enabling supplier settings creates a default warehouse. Restore FK checks
+    // so modified warehouses or referenced warehouse facts abort all cleanup.
+    await tx`set local session_replication_role = origin`.simple();
+    await tx`delete from public.warehouses
+      where tenant_id = ${fixture.tenantId}::uuid
+        and name = '公司仓库' and is_default and status = 'active'
+        and version = 1 and manager_employee_id is null
+        and created_by_employee_id = ${fixture.actorEmployeeId}::uuid
+        and updated_by_employee_id = ${fixture.actorEmployeeId}::uuid`;
     await tx`delete from public.employees where id = any(
       ${tx.array([fixture.actorEmployeeId, fixture.otherEmployeeId,
         fixture.platformEmployeeId], "UUID")})`;
@@ -297,6 +306,10 @@ export async function countSupplierPurchasableSkuSmokeResiduals(
       (select count(*) from public.tenant_suppliers
         where id = ${fixture.relationshipId}::uuid) +
       (select count(*) from public.tenant_supplier_settings where tenant_id in
+        (${fixture.tenantId}::uuid, ${fixture.otherTenantId}::uuid)) +
+      (select count(*) from public.warehouses where tenant_id in
+        (${fixture.tenantId}::uuid, ${fixture.otherTenantId}::uuid)) +
+      (select count(*) from public.warehouse_command_events where tenant_id in
         (${fixture.tenantId}::uuid, ${fixture.otherTenantId}::uuid)) +
       (select count(*) from public.supplier_products where supplier_id = any(
         ${sql.array([fixture.supplierId, fixture.platformSupplierId], "UUID")})) +
