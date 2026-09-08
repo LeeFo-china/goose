@@ -63,7 +63,7 @@ bun test components/supplier-purchase-orders/purchase-order-financial-summary.te
 这些测试验证汇总函数，不代替完整收货命令的端到端回归。知识库查询返回 502，
 本次结论来自当前 migration、代码、Chrome 验收事实和只读数据库查询。
 
-## 交付状态与后续
+## 本地修复交付时状态（apply 前）
 
 本记录时修复仅在本地验证，尚未对开发或生产数据库 apply，未发布服务。
 开发浏览器中的原摘要仍可能显示 0，不能将本地通过描述为线上修复完成。
@@ -76,3 +76,42 @@ bun test components/supplier-purchase-orders/purchase-order-financial-summary.te
 
 如需回退，用新的 forward migration 恢复原函数定义和权限，不删除业务事实。
 回退会恢复仓库收货摘要显示错误，不影响库存或付款事实。
+
+## 开发 apply 结果：PASS
+
+用户随后授权“apply 新 migration”。2026-09-09 00:25:45（北京时间）通过
+[Migrate Dev Database #34250973598](https://github.com/LeeFo-china/goose/actions/runs/34250973598)
+完成应用，状态 completed / success，固定提交
+`debed4bb12311777c4340b35f362e224ba2da982`，目标仍为
+`api-dev.goodcms.cn` / `fclnkyatvfvmzgzdqlba`，仅开发数据库。
+
+执行前发现开发库另已应用主分支的 `20260908110000` 分类查询 migration。
+从原提交 `6e9ff3c22e096c610f743fc2b54c317e9403e1d4` 原样同步该文件，
+Git blob 均为 `a106e6c4eb4a7b6a9c60d31f6738c2bc288f74b4`；未重跑该迁移，
+未执行 migration repair，也未合并或发布 main。
+
+Supabase CLI dry-run 与
+[工作流 plan #34250823481](https://github.com/LeeFo-china/goose/actions/runs/34250823481)
+均确认唯一待应用版本为 `20260908161657`。
+该修复文件 SHA-256 为
+`753f5ce6a64bbbb9a8919e666be3d8a33f4b9bc20bfd6df51d365c897b5cf00d`。
+Apply 报告 before_count=600、after_count=601、pending_count=1、applied_count=1。
+应用后重新执行 `supabase migration list`，并用
+`scripts/verify-migration-history.mjs` 验证 601 条完整历史，输出
+`migration_history_aligned=true`、`target_migration_present=true`。
+
+应用后只读检查（SET ROLE service_role）该实际采购单 RPC 返回：
+
+- accepted_amount：88.00（应用前 0.00）。
+- payable_amount / open_amount / available_to_request_amount：88.00。
+- paid_amount / reserved_request_amount：0.00。
+- EXECUTE 权限：service_role=true、anon=false、authenticated=false。
+
+对指定测试租户的五张表按 id 排序计算行 JSON 摘要，前后计数及 MD5 一致：
+inventory_balances=1、inventory_transactions=1、project_cost_events=4、
+supplier_payable_events=5、supplier_payments=0。
+该核对只覆盖这些表和该租户，不代表全库所有数据核对。
+
+本轮重跑 7 项数据库回归全部通过。没有部署或重启 API/Admin，也未访问生产。
+浏览器页面本轮尚未重新验收；这里的 88.00 为远端实际 RPC 查询结果。
+后续可刷新采购单详情复核页面，再继续阶段 C 领退料验收。
