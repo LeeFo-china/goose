@@ -88,49 +88,44 @@ export function BatchCatalog(
   ]);
   const rows = loading || error ? [] : result?.list ?? [];
   return (
-    <div className="flex min-h-0 flex-col">
-      <div className="sticky top-0 z-10 space-y-3 border-b bg-background px-4 py-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <InputGroup className="min-w-64 flex-1">
-            <InputGroupAddon>
-              <Search className="size-4" />
-            </InputGroupAddon>
-            <InputGroupInput
-              aria-label="搜索采购商品"
-              placeholder="搜索商品编码、名称或 SKU 编码、名称"
-              value={search}
-              maxLength={80}
-              disabled={disabled}
-              onChange={(event) => setSearch(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  setKeyword(search);
-                  setPage(1);
-                }
-              }}
-            />
-          </InputGroup>
-          <Button
-            type="button"
-            variant="outline"
+    <div className="flex h-full min-h-0 flex-col">
+      <div
+        role="search"
+        aria-label="商品目录工具栏"
+        className="z-10 flex flex-wrap items-center gap-2 border-b bg-background px-4 py-3 lg:sticky lg:top-0"
+      >
+        <InputGroup className="min-h-11 min-w-[12rem] flex-[1_1_16rem] md:min-h-9">
+          <InputGroupAddon>
+            <Search className="size-4" />
+          </InputGroupAddon>
+          <InputGroupInput
+            aria-label="搜索采购商品"
+            placeholder="搜索商品编码、名称或 SKU 编码、名称"
+            value={search}
+            maxLength={80}
             disabled={disabled}
-            onClick={() => {
-              setKeyword(search);
-              setPage(1);
+            onChange={(event) => setSearch(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                setKeyword(search);
+                setPage(1);
+              }
             }}
-          >
-            搜索
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={disabled || loading}
-            onClick={() => setRetry((value) => value + 1)}
-          >
-            刷新价格
-          </Button>
-        </div>
+          />
+        </InputGroup>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={disabled}
+          className="min-h-11 md:min-h-9"
+          onClick={() => {
+            setKeyword(search);
+            setPage(1);
+          }}
+        >
+          搜索
+        </Button>
         <BatchCatalogFilters
           value={filters}
           disabled={disabled}
@@ -139,11 +134,17 @@ export function BatchCatalog(
             setPage(1);
           }}
         />
-        <p className="text-sm text-muted-foreground">
-          目录价格仅供选品参考，最终金额以保存后的服务端冻结结果为准。
-        </p>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={disabled || loading}
+          className="min-h-11 md:min-h-9"
+          onClick={() => setRetry((value) => value + 1)}
+        >
+          刷新价格
+        </Button>
       </div>
-      <div className="min-h-0 overflow-auto">
+      <div className="min-h-0 overflow-x-auto lg:flex-1 lg:overflow-auto">
         <BatchReadState
           loading={loading}
           error={error}
@@ -204,7 +205,8 @@ export function BatchCatalog(
                           selected={selected}
                           disabled={disabled || Boolean(disabledReason)}
                           disabledReason={disabledReason}
-                          onAdd={() => onAdd(item)}
+                          onAdd={() =>
+                            onAdd(item)}
                         />
                       </TableCell>
                     </TableRow>
@@ -252,6 +254,7 @@ export function BatchCatalogAddAction({
         aria-label={disabledReason
           ? `${productName}：${disabledReason}`
           : `加入${productName}`}
+        className="min-h-11 md:min-h-8"
         onClick={onAdd}
       >
         {selected ? "已选" : "加入"}

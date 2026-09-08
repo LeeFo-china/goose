@@ -122,7 +122,7 @@ export function BatchLines(
                       size="icon"
                       disabled={disabled}
                       aria-label={`移除${line.name}`}
-                      className="size-8 shrink-0 text-muted-foreground hover:text-destructive"
+                      className="size-11 shrink-0 text-muted-foreground hover:text-destructive md:size-8"
                       onClick={() =>
                         onChange(lines.filter((item) => item !== line))}
                     >
@@ -169,6 +169,9 @@ export function BatchLines(
                       <span>成本类目</span>
                       <BatchCostCategoryPicker
                         line={line}
+                        label={`${line.name}${
+                          line.sku_code ? ` · SKU ${line.sku_code}` : ""
+                        }`}
                         disabled={disabled}
                         onChange={(category) =>
                           onChange(lines.map((item) =>

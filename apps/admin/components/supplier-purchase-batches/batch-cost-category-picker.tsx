@@ -16,17 +16,22 @@ import type { BatchLine, NamedOption } from "./batch-types";
 
 export function BatchCostCategoryPicker({
   line,
+  label,
   disabled,
   onChange,
 }: {
   line: BatchLine;
+  label: string;
   disabled: boolean;
   onChange: (category: NamedOption) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const pickerId = `${useId()}-cost-category`;
+  const baseId = useId();
+  const pickerId = `${baseId}-cost-category`;
   const warningId = `${pickerId}-warning`;
+  const dialogId = `${pickerId}-dialog`;
   const missingCategory = !line.cost_category_id;
+  const currentLabel = line.category_name || "选择成本类目";
 
   return (
     <div className="min-w-0 space-y-1">
@@ -37,20 +42,21 @@ export function BatchCostCategoryPicker({
             variant="outline"
             size="sm"
             disabled={disabled}
+            aria-label={`${label}的成本类目：${currentLabel}`}
             aria-describedby={missingCategory ? warningId : undefined}
-            className={
-              missingCategory
-                ? "w-full min-w-0 justify-between text-warning-foreground"
-                : "w-full min-w-0 justify-between"
-            }
+            className={missingCategory
+              ? "min-h-11 w-full min-w-0 justify-between text-warning-foreground md:min-h-8"
+              : "min-h-11 w-full min-w-0 justify-between md:min-h-8"}
           >
-            <span className="truncate">
-              {line.category_name || "选择成本类目"}
-            </span>
+            <span className="truncate">{currentLabel}</span>
             <ChevronDown className="size-4 shrink-0" aria-hidden="true" />
           </Button>
         </PopoverTrigger>
         <PopoverContent
+          id={dialogId}
+          role="dialog"
+          aria-label={`${label}的成本类目选择`}
+          aria-describedby={missingCategory ? warningId : undefined}
           align="end"
           collisionPadding={12}
           className="w-[min(24rem,calc(100vw-2rem))] p-4"

@@ -5,20 +5,19 @@ import { useEffect, useState } from "react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { ProcurementConfirmDialog } from "@/components/supplier-procurement-editor/procurement-confirm-dialog";
 import { procurementSummary } from "@/components/supplier-procurement-editor/procurement-editor-rules";
-import { ProcurementPurposeField } from "@/components/supplier-procurement-editor/procurement-purpose-field";
-import { ProcurementRemarkField } from "@/components/supplier-procurement-editor/procurement-remark-field";
 import { ProcurementWorkbenchLayout } from "@/components/supplier-procurement-editor/procurement-workbench-layout";
 import { Button } from "@/components/ui/button";
-import { Field, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetTitle,
+} from "@/components/ui/sheet";
 
-import { loadBatchItems, loadBatchProjects } from "./batch-api";
+import { loadBatchItems } from "./batch-api";
 import { BatchCatalog } from "./batch-catalog";
+import { BatchEditorContext, BatchEditorFooter } from "./batch-editor-parts";
 import { BatchLines } from "./batch-lines";
-import { BatchOptionPicker } from "./batch-option-picker";
-import { batchMoney } from "./batch-page-parts";
 import {
   type BatchContextChange,
   batchContextChangeRequiresConfirmation,
@@ -30,7 +29,6 @@ import {
   isSameBatchContext,
   validateBatchDraft,
 } from "./batch-rules";
-import { BatchWarehousePicker } from "./batch-warehouse-picker";
 import { useBatchCommand } from "./use-batch-command";
 import type {
   BatchCommandResult,
@@ -52,7 +50,9 @@ export function BatchEditor({
   onClose: () => void;
   onAccepted: (result: BatchCommandResult) => void;
 }) {
-  const [draft, setDraft] = useState<BatchDraft>(() => batchDraftFromDetail(record));
+  const [draft, setDraft] = useState<BatchDraft>(() =>
+    batchDraftFromDetail(record)
+  );
   const [project, setProject] = useState<NamedOption | null>(
     record?.project ?? null,
   );
@@ -62,11 +62,17 @@ export function BatchEditor({
   const [loading, setLoading] = useState(Boolean(record));
   const [loadError, setLoadError] = useState("");
   const [retry, setRetry] = useState(0);
-  const [validation, setValidation] = useState<BatchDraftValidation | null>(null);
+  const [validation, setValidation] = useState<BatchDraftValidation | null>(
+    null,
+  );
   const [dirty, setDirty] = useState(false);
-  const [pendingContext, setPendingContext] = useState<BatchContextChange | null>(null);
+  const [pendingContext, setPendingContext] = useState<
+    BatchContextChange | null
+  >(null);
   const [confirmClose, setConfirmClose] = useState(false);
-  const [recentlyAddedSkuId, setRecentlyAddedSkuId] = useState<string | null>(null);
+  const [recentlyAddedSkuId, setRecentlyAddedSkuId] = useState<string | null>(
+    null,
+  );
   const command = useBatchCommand(record?.id ?? "new", onAccepted, () => {});
 
   useEffect(() => {
@@ -246,105 +252,32 @@ export function BatchEditor({
             title={record ? "编辑采购批次" : "新建采购批次"}
             alerts={alerts}
             context={
-              <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(18rem,1fr)_minmax(17rem,1fr)_minmax(15rem,0.8fr)]">
-                <Tabs
-                  value={draft.destination_type}
-                  onValueChange={(type) => {
-                    if (
-                      !disabled &&
-                      (type === "project" || type === "warehouse")
-                    ) {
-                      requestContextChange({
-                        kind: "destination",
-                        destinationType: type,
-                      });
-                    }
-                  }}
-                >
-                  <TabsList aria-label="采购去向">
-                    <TabsTrigger value="project" disabled={disabled}>
-                      项目采购
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="warehouse"
-                      disabled={disabled || Boolean(warehouseBlocker)}
-                    >
-                      仓库补货
-                    </TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="project">
-                    <BatchOptionPicker
-                      id="batch-project"
-                      label="采购项目"
-                      value={project}
-                      load={loadBatchProjects}
-                      disabled={disabled}
-                      onChange={(option) =>
-                        requestContextChange({ kind: "project", option })}
-                    />
-                  </TabsContent>
-                  <TabsContent value="warehouse">
-                    {warehouseBlocker
-                      ? (
-                        <StatusAlert tone="warning">
-                          {warehouseBlocker}
-                        </StatusAlert>
-                      )
-                      : (
-                        <BatchWarehousePicker
-                          value={warehouse}
-                          disabled={disabled}
-                          onChange={(option) =>
-                            requestContextChange({
-                              kind: "warehouse",
-                              option,
-                            })}
-                        />
-                      )}
-                  </TabsContent>
-                </Tabs>
-                <ProcurementPurposeField
-                  destinationType={draft.destination_type}
-                  value={draft.reason}
-                  disabled={disabled}
-                  error={validation?.field === "reason"
-                    ? validation.message
-                    : undefined}
-                  onChange={(reason) =>
-                    updateDraft((current) => ({ ...current, reason }))}
-                />
-                <div className="min-w-0 space-y-3">
-                  <Field>
-                    <FieldLabel htmlFor="batch-delivery">
-                      期望到货日期
-                    </FieldLabel>
-                    <Input
-                      id="batch-delivery"
-                      type="date"
-                      value={draft.expected_delivery_date}
-                      disabled={disabled}
-                      onChange={(event) =>
-                        updateDraft((current) => ({
-                          ...current,
-                          expected_delivery_date: event.target.value,
-                        }))}
-                    />
-                  </Field>
-                  <ProcurementRemarkField
-                    value={draft.remark}
-                    disabled={disabled}
-                    onChange={(remark) =>
-                      updateDraft((current) => ({ ...current, remark }))}
-                  />
-                </div>
-                {warehouseBlocker && draft.destination_type === "project"
-                  ? (
-                    <p className="text-sm text-muted-foreground xl:col-span-3">
-                      {warehouseBlocker}
-                    </p>
-                  )
-                  : null}
-              </div>
+              <BatchEditorContext
+                draft={draft}
+                project={project}
+                warehouse={warehouse}
+                warehouseBlocker={warehouseBlocker}
+                disabled={disabled}
+                validation={validation}
+                onDestinationChange={(destinationType) =>
+                  requestContextChange({
+                    kind: "destination",
+                    destinationType,
+                  })}
+                onProjectChange={(option) =>
+                  requestContextChange({ kind: "project", option })}
+                onWarehouseChange={(option) =>
+                  requestContextChange({ kind: "warehouse", option })}
+                onReasonChange={(reason) =>
+                  updateDraft((current) => ({ ...current, reason }))}
+                onDeliveryDateChange={(expected_delivery_date) =>
+                  updateDraft((current) => ({
+                    ...current,
+                    expected_delivery_date,
+                  }))}
+                onRemarkChange={(remark) =>
+                  updateDraft((current) => ({ ...current, remark }))}
+              />
             }
             catalog={destinationReady
               ? (
@@ -399,74 +332,18 @@ export function BatchEditor({
               />
             }
             footer={
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div
-                  className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm"
-                  aria-live="polite"
-                >
-                  <span>
-                    <strong className="tabular-nums">
-                      {summary.itemCount}
-                    </strong>{" "}
-                    个 SKU
-                  </span>
-                  <span>
-                    <strong className="tabular-nums">
-                      {summary.supplierCount}
-                    </strong>{" "}
-                    家供应商
-                  </span>
-                  <span>
-                    参考货值{" "}
-                    <strong className="tabular-nums">
-                      {batchMoney(summary.referenceAmount)}
-                    </strong>
-                  </span>
-                  <span
-                    className={summary.missingCategoryCount
-                      ? "font-medium text-warning-foreground"
-                      : "text-muted-foreground"}
-                  >
-                    缺成本类目{" "}
-                    <strong className="tabular-nums">
-                      {summary.missingCategoryCount}
-                    </strong>
-                  </span>
-                </div>
-                <div className="flex shrink-0 justify-end gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={command.busy}
-                    onClick={requestClose}
-                  >
-                    关闭
-                  </Button>
-                  {command.pending
-                    ? (
-                      <Button
-                        type="button"
-                        disabled={command.busy || !command.canRetry}
-                        onClick={command.retry}
-                      >
-                        {command.busy ? "正在确认…" : "使用原请求重试"}
-                      </Button>
-                    )
-                    : (
-                      <Button
-                        type="button"
-                        disabled={disabled || !destinationReady}
-                        onClick={save}
-                      >
-                        {loading
-                          ? "正在加载明细…"
-                          : command.busy
-                          ? "正在保存…"
-                          : "保存草稿"}
-                      </Button>
-                    )}
-                </div>
-              </div>
+              <BatchEditorFooter
+                summary={summary}
+                loading={loading}
+                disabled={disabled}
+                destinationReady={destinationReady}
+                commandBusy={command.busy}
+                hasPendingCommand={Boolean(command.pending)}
+                canRetry={command.canRetry}
+                onClose={requestClose}
+                onRetry={command.retry}
+                onSave={save}
+              />
             }
           />
         </SheetContent>
