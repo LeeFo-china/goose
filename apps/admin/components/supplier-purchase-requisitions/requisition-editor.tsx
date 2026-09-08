@@ -337,14 +337,15 @@ export function RequisitionEditor({
     }
   }
   function closeEditor() {
+    if (saving || attempt) return;
     draftRequests.invalidate();
     abortCatalog();
     invalidateRefresh();
     onOpenChange(false);
   }
   function requestClose() {
-    if (saving) return;
-    if (attempt || !dirty) {
+    if (saving || attempt) return;
+    if (!dirty) {
       closeEditor();
       return;
     }
@@ -354,7 +355,9 @@ export function RequisitionEditor({
     <>
       <RequisitionEditorWorkbench
         open={open}
-        editingId={recordId ?? editingId}
+        editingId={
+          attempt ? (attempt.resourceId ?? editingId) : (recordId ?? editingId)
+        }
         projectId={projectId}
         tenantSupplierId={tenantSupplierId}
         reason={reason}
@@ -453,6 +456,7 @@ export function RequisitionEditor({
         onCancelClose={() => setConfirmClose(false)}
         onConfirmClose={() => {
           setConfirmClose(false);
+          if (saving || attempt) return;
           closeEditor();
         }}
       />

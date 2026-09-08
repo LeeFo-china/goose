@@ -188,3 +188,29 @@ test("记录加载失败提供重试且未水合状态锁住保存", () => {
   expect(alert).toContain("重新加载采购申请");
   expect(footer).toMatch(/<button[^>]+disabled[^>]*>保存草稿<\/button>/);
 });
+
+test("结果未确认时锁住关闭入口并说明解除方式", () => {
+  const footer = renderToStaticMarkup(
+    <RequisitionEditorFooter
+      summary={{
+        itemCount: 1,
+        supplierCount: 1,
+        missingCategoryCount: 0,
+        referenceAmount: "100.00",
+      }}
+      loading={false}
+      saving={false}
+      refreshing={false}
+      refreshRequired={false}
+      draftReady
+      hasAttempt
+      onClose={() => {}}
+      onSave={() => {}}
+    />,
+  );
+
+  expect(footer).toContain("请先重试确认或放弃原请求，再关闭窗口");
+  expect(footer).toMatch(/<button[^>]+disabled[^>]*>关闭<\/button>/);
+  expect(footer).toMatch(/<button[^>]+aria-describedby="[^"]+"[^>]*>关闭<\/button>/);
+  expect(footer).toContain("使用原请求重试");
+});

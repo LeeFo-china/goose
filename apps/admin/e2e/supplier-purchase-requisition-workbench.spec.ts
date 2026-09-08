@@ -142,3 +142,62 @@ test("375×812 可真实加入商品，自定义用途与保存入口可用且�
     await editor.evaluate((element) => element.scrollWidth <= element.clientWidth),
   ).toBe(true);
 });
+
+test("保存结果未确认时锁定窗口，放弃原请求后才允许关闭", async ({
+  page,
+  request,
+}) => {
+  await page.route(
+    "**/api/backend/supplier-purchase-requisitions/*/save-draft",
+    async (route) => {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: false,
+          message: "模拟保存结果未知",
+        }),
+      });
+    },
+  );
+  const editor = await openRequisitionEditor(page, request);
+  await addCatalogItem(editor);
+  await editor.getByLabel(/E2E 临采瓷砖.*的成本类目/).click();
+  await page.getByRole("option", { name: /主材/ }).click();
+  await editor.getByRole("button", { name: "保存草稿", exact: true }).click();
+
+  const lockedEditor = page.getByRole("dialog", {
+    name: "编辑采购申请草稿",
+  });
+  await expect(lockedEditor.getByText(/存在结果未确认的保存请求/))
+    .toBeVisible();
+  const closeButtons = lockedEditor.getByRole("button", {
+    name: "关闭",
+    exact: true,
+  });
+  await expect(closeButtons).toHaveCount(2);
+  await expect(closeButtons.first()).toBeDisabled();
+  await expect(closeButtons.last()).toBeDisabled();
+  await expect(lockedEditor.getByText("请先重试确认或放弃原请求，再关闭窗口"))
+    .toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(lockedEditor).toBeVisible();
+
+  await page.unroute(
+    "**/api/backend/supplier-purchase-requisitions/*/save-draft",
+  );
+  await lockedEditor.getByRole("button", {
+    name: "放弃本次重试并刷新",
+    exact: true,
+  }).click();
+  const resetEditor = page.getByRole("dialog", { name: "发起采购申请" });
+  await expect(resetEditor.getByText(/存在结果未确认的保存请求/))
+    .toBeHidden();
+  const resetClose = resetEditor.getByRole("button", {
+    name: "关闭",
+    exact: true,
+  }).last();
+  await expect(resetClose).toBeEnabled();
+  await resetClose.click();
+  await expect(resetEditor).toBeHidden();
+});

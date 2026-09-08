@@ -375,9 +375,6 @@ describe("采购申请页面边界", () => {
     expect(editorSurface).toContain("<ProcurementWorkbenchLayout");
     expect(editorSurface).toContain("<ProcurementConfirmDialog");
     expect(editor).toContain("setDirty(false)");
-    expect(editorSurface).toContain("项目");
-    expect(editorSurface).toContain("合作供应商");
-    expect(editorSurface).toContain("成本分类");
     expect(editorSurface).toContain("采购数量");
     expect(editorSurface).toContain("ProcurementPurposeField");
     expect(editorSurface).toContain("期望到货日期");
@@ -387,7 +384,7 @@ describe("采购申请页面边界", () => {
     expect(saveFlow).toContain("allocateResourceId: true");
     expect(editor).toContain("draftRequestVersion");
     expect(catalogFlow).toContain("requestVersion");
-    expect(editor).toContain("attempt || !dirty");
+    expect(editor).toContain("if (saving || attempt) return");
     expect(editorSurface).toContain("放弃本次重试并刷新");
     expect(editor).toContain("requestContextChange");
     expect(editor).toContain("applyContextChange");

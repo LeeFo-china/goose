@@ -242,7 +242,7 @@ export const SUPPLIER_PURCHASE_PURPOSE_PRESETS = {
 7. 保存、幂等、版本冲突、价格变化和审批规则与现状兼容。
 8. Admin 与小程序最终显示“采购用途”，并消费相同的共享用途建议。
 9. `@gooes/domain@1.21.1` 构建、类型声明校验和 packed consumer 校验通过。
-10. Admin 相关单元测试、类型检查、ESLint、开发构建和两条采购 E2E 工作流通过。
+10. Admin 相关单元测试、类型检查、生产构建和两条采购 E2E 工作流通过；仓库当前没有可非交互执行的 ESLint 配置，因此不声称 ESLint 已通过。
 
 ## 12. 交付物
 

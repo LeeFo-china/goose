@@ -173,7 +173,10 @@ export function RequisitionEditorWorkbench({
         if (!nextOpen) onRequestClose();
       }}
     >
-      <SheetContent className="w-full gap-0 overflow-hidden p-0 sm:max-w-[76rem]">
+      <SheetContent
+        closeDisabled={saving || hasAttempt}
+        className="w-full gap-0 overflow-hidden p-0 sm:max-w-[76rem]"
+      >
         <SheetTitle className="sr-only">{title}</SheetTitle>
         <SheetDescription className="sr-only">
           选择项目、合作供应商和采购商品，填写成本类目后保存草稿。

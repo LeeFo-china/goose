@@ -1,5 +1,7 @@
 "use client";
 
+import { useId } from "react";
+
 import { StatusAlert } from "@/components/admin/status-alert";
 import { ProcurementConfirmDialog } from "@/components/supplier-procurement-editor/procurement-confirm-dialog";
 import type { ProcurementSummary } from "@/components/supplier-procurement-editor/procurement-editor-rules";
@@ -96,7 +98,7 @@ export function RequisitionEditorAlerts({
           <StatusAlert tone={conflict ? "error" : "warning"}>
             {conflict
               ? "本次保存与最新数据冲突，可放弃原请求并重新加载。"
-              : "存在结果未确认的保存请求，字段已锁定。请使用原请求重试，关闭窗口不会清除请求。"}
+              : "存在结果未确认的保存请求，字段和窗口已锁定。请使用原请求重试，或放弃原请求后再关闭。"}
           </StatusAlert>
           <Button
             type="button"
@@ -148,6 +150,8 @@ export function RequisitionEditorFooter({
 }) {
   const locked =
     loading || saving || refreshing || refreshRequired || !draftReady;
+  const closeDescriptionId = useId();
+  const closeLocked = saving || hasAttempt;
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
       <div
@@ -176,25 +180,40 @@ export function RequisitionEditorFooter({
           </strong>
         </span>
       </div>
-      <div className="flex shrink-0 justify-end gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          className="min-h-11 md:min-h-9"
-          disabled={saving}
-          onClick={onClose}
-        >
-          关闭
-        </Button>
-        <Button
-          type="button"
-          className="min-h-11 md:min-h-9"
-          disabled={locked}
-          onClick={onSave}
-        >
-          {saving ? <Spinner data-icon="inline-start" /> : null}
-          {saving ? "正在保存…" : hasAttempt ? "使用原请求重试" : "保存草稿"}
-        </Button>
+      <div className="flex shrink-0 flex-col items-end gap-1">
+        {hasAttempt ? (
+          <span
+            id={closeDescriptionId}
+            className="text-xs text-warning-foreground"
+          >
+            请先重试确认或放弃原请求，再关闭窗口
+          </span>
+        ) : null}
+        <div className="flex justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11 md:min-h-9"
+            disabled={closeLocked}
+            aria-describedby={hasAttempt ? closeDescriptionId : undefined}
+            onClick={onClose}
+          >
+            关闭
+          </Button>
+          <Button
+            type="button"
+            className="min-h-11 md:min-h-9"
+            disabled={locked}
+            onClick={onSave}
+          >
+            {saving ? <Spinner data-icon="inline-start" /> : null}
+            {saving
+              ? "正在保存…"
+              : hasAttempt
+              ? "使用原请求重试"
+              : "保存草稿"}
+          </Button>
+        </div>
       </div>
     </div>
   );
