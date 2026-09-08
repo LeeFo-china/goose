@@ -132,4 +132,46 @@ describe("采购申请命令成功后的刷新边界", () => {
     expect(detailContent).toContain('label="采购用途"');
     expect(detailContent).not.toContain("临时采购原因");
   });
+
+  test("切换记录先撤销旧水合身份且加载失败时锁住保存并提供重试", () => {
+    const editor = readSource("./requisition-editor.tsx");
+    const save = readSource("./use-requisition-draft-save.ts");
+    const parts = readSource("./requisition-editor-parts.tsx");
+
+    expect(editor).toContain("setDraftLoadFailed(false)");
+    expect(editor).toContain("clearHydratedDraft()");
+    expect(editor).toContain("setDraftLoadFailed(true)");
+    expect(editor).toContain("canUseRequisitionHydration(");
+    expect(save).toContain("!draftReady");
+    expect(parts).toContain("重新加载采购申请");
+  });
+
+  test("目录新查询先移除旧商品且失败后关闭提示不会恢复旧页", () => {
+    const catalog = readSource("./use-requisition-catalog.ts");
+    const clearAt = catalog.indexOf("setCatalog(emptyRequisitionCatalog)",
+      catalog.indexOf("const request = requests.begin()"));
+    const requestAt = catalog.indexOf("await loadRequisitionCatalog");
+
+    expect(clearAt).toBeGreaterThan(-1);
+    expect(clearAt).toBeLessThan(requestAt);
+    expect(catalog).toContain("dismissError: () => setError(null)");
+  });
+
+  test("草稿刷新GET独立取消且不向mutation注入signal或改变幂等重试", () => {
+    const save = readSource("./use-requisition-draft-save.ts");
+    const refreshStart = save.indexOf("async function refreshSavedDraft");
+    const saveStart = save.indexOf("async function saveDraft");
+    const refreshFlow = save.slice(refreshStart, saveStart);
+    const mutationFlow = save.slice(saveStart);
+
+    expect(save).toContain("refreshRequests.begin()");
+    expect(save).toContain("refreshRequests.invalidate()");
+    expect(refreshFlow).toContain("request.controller.signal");
+    expect(refreshFlow).toContain("isAbortError(refreshed.error)");
+    expect(mutationFlow).not.toContain("request.controller.signal");
+    expect(mutationFlow).toContain("resolveSupplierCommandAttempt(attempt");
+    expect(mutationFlow).toContain(
+      "refreshGeneration.current === refreshGenerationAtCommandStart",
+    );
+  });
 });

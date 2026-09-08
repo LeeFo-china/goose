@@ -48,6 +48,7 @@ export function useRequisitionCatalog({
       return;
     }
     const request = requests.begin();
+    setCatalog(emptyRequisitionCatalog);
     setLoading(true);
     setError(null);
     try {
@@ -99,6 +100,24 @@ export function useRequisitionCatalog({
     setLoading(false);
   }, [requests]);
 
+  const changePage = useCallback((nextPage: number) => {
+    requests.invalidate();
+    requestVersion.current += 1;
+    setCatalog(emptyRequisitionCatalog);
+    setError(null);
+    setPage(nextPage);
+  }, [requests]);
+
+  const search = useCallback(() => {
+    requests.invalidate();
+    requestVersion.current += 1;
+    setCatalog(emptyRequisitionCatalog);
+    setError(null);
+    setPage(1);
+    setAppliedKeyword(keyword.trim());
+    setContextVersion((value) => value + 1);
+  }, [keyword, requests]);
+
   return {
     catalog,
     page,
@@ -106,12 +125,8 @@ export function useRequisitionCatalog({
     loading,
     error,
     setKeyword,
-    setPage,
-    search: () => {
-      setPage(1);
-      setAppliedKeyword(keyword.trim());
-      setContextVersion((value) => value + 1);
-    },
+    setPage: changePage,
+    search,
     retry: load,
     dismissError: () => setError(null),
     reset,

@@ -6,6 +6,7 @@ import { loadRequisition, loadRequisitionItems } from "./requisition-api";
 import { catalogFactFromRequisitionItem } from "./requisition-editor-lines";
 import { RequisitionEditorConfirmations } from "./requisition-editor-parts";
 import {
+  canUseRequisitionHydration,
   createRequisitionRequestAuthority,
   isAbortError,
 } from "./requisition-request-authority";
@@ -60,6 +61,7 @@ export function RequisitionEditor({
     null,
   );
   const [loadingDraft, setLoadingDraft] = useState(false);
+  const [draftLoadFailed, setDraftLoadFailed] = useState(false);
   const [validation, setValidation] = useState<RequisitionDraftErrors>({});
   const [dirty, setDirty] = useState(false);
   const [pendingContext, setPendingContext] =
@@ -71,6 +73,7 @@ export function RequisitionEditor({
   const draftRequestVersion = useRef(0);
   const draftRequests = useRef(createRequisitionRequestAuthority()).current;
   const activeDraftId = useRef<string | null>(null);
+  const localDraftId = useRef<string | null>(null);
   const recordId = record?.id ?? null;
   const mergeCatalogFacts = useCallback((items: PurchaseOrderCatalogItem[]) => {
     setFacts((current) => ({
@@ -96,6 +99,28 @@ export function RequisitionEditor({
     tenantSupplierId,
     onLoaded: mergeCatalogFacts,
   });
+  const clearHydratedDraft = useCallback(() => {
+    activeDraftId.current = null;
+    localDraftId.current = null;
+    setEditingId(null);
+    setProjectId("");
+    setTenantSupplierId("");
+    setReason("");
+    setExpectedDeliveryDate("");
+    setRemark("");
+    setExpectedVersion(0);
+    setLines([]);
+    setFacts({});
+    setSavedRecord(null);
+    setDirty(false);
+    setRecentlyAddedSkuId(null);
+    resetCatalog();
+  }, [resetCatalog]);
+  const draftReady = canUseRequisitionHydration(
+    recordId ?? localDraftId.current,
+    activeDraftId.current,
+    draftLoadFailed,
+  );
   const applyLoadedDraft = useCallback(
     (detail: RequisitionDetail, itemPage: RequisitionItemPage) => {
       const requisition = detail.requisition;
@@ -123,6 +148,7 @@ export function RequisitionEditor({
         ),
       );
       setSavedRecord(requisition);
+      setDraftLoadFailed(false);
       setDirty(false);
       setRecentlyAddedSkuId(null);
     },
@@ -145,9 +171,11 @@ export function RequisitionEditor({
   } = useRequisitionDraftSave({
     editingId,
     loadingDraft,
+    draftReady,
     onValidation: setValidation,
     onCommandAccepted: (requisition) => {
       activeDraftId.current = requisition.id;
+      if (!editingId) localDraftId.current = requisition.id;
       setEditingId(requisition.id);
       setExpectedVersion(requisition.version);
       setSavedRecord(requisition);
@@ -167,24 +195,16 @@ export function RequisitionEditor({
       setConflict(null);
       setValidation({});
       setError(null);
+      setDraftLoadFailed(false);
       if (!targetId) {
         setLoadingDraft(false);
-        activeDraftId.current = null;
-        setEditingId(null);
-        setProjectId("");
-        setTenantSupplierId("");
-        resetCatalog();
-        setReason("");
-        setExpectedDeliveryDate("");
-        setRemark("");
-        setExpectedVersion(0);
-        setLines([]);
-        setFacts({});
-        setSavedRecord(null);
+        clearHydratedDraft();
         setRefreshRequired(false);
-        setDirty(false);
-        setRecentlyAddedSkuId(null);
         return "empty" as const;
+      }
+      if (targetId !== activeDraftId.current) {
+        setRefreshRequired(false);
+        clearHydratedDraft();
       }
       const request = draftRequests.begin();
       setLoadingDraft(true);
@@ -205,6 +225,7 @@ export function RequisitionEditor({
           return null;
         }
         if (draftRequestVersion.current === version) {
+          setDraftLoadFailed(true);
           setError(errorMessage(caught, "采购申请草稿加载失败"));
           if (errorStatus(caught) === 404) return "not_found" as const;
         }
@@ -218,6 +239,7 @@ export function RequisitionEditor({
     },
     [
       applyLoadedDraft,
+      clearHydratedDraft,
       draftRequests,
       recordId,
       setConflict,
@@ -261,7 +283,8 @@ export function RequisitionEditor({
     return () => window.clearTimeout(timeout);
   }, [recentlyAddedSkuId]);
   const fieldsLocked =
-    loadingDraft || refreshing || saving || attempt !== null || refreshRequired;
+    loadingDraft || refreshing || saving || attempt !== null ||
+    refreshRequired || !draftReady;
   const summary = procurementSummary(
     lines.map((line) => ({
       supplierId: tenantSupplierId,
@@ -332,7 +355,7 @@ export function RequisitionEditor({
     <>
       <RequisitionEditorWorkbench
         open={open}
-        editingId={editingId}
+        editingId={recordId ?? editingId}
         projectId={projectId}
         tenantSupplierId={tenantSupplierId}
         reason={reason}
@@ -347,6 +370,8 @@ export function RequisitionEditor({
         catalogError={catalogError}
         loadingCatalog={loadingCatalog}
         loadingDraft={loadingDraft}
+        draftLoadFailed={draftLoadFailed}
+        draftReady={draftReady}
         validation={validation}
         fieldsLocked={fieldsLocked}
         projects={projects}
@@ -366,6 +391,7 @@ export function RequisitionEditor({
         summary={summary}
         onRequestClose={requestClose}
         onAbandonAttempt={() => void abandonAttempt()}
+        onRetryLoad={() => void hydrateDraft(recordId)}
         onRefresh={() => {
           if (editingId) void refreshSavedDraft(editingId);
         }}

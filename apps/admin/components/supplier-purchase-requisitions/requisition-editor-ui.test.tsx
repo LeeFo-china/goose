@@ -11,7 +11,10 @@ import {
   RequisitionHeaderFields,
 } from "./requisition-editor-fields";
 import { SelectedRequisitionLines } from "./requisition-editor-lines";
-import { RequisitionEditorFooter } from "./requisition-editor-parts";
+import {
+  RequisitionEditorAlerts,
+  RequisitionEditorFooter,
+} from "./requisition-editor-parts";
 
 const activeCategory: FinanceCostCategoryRecord = {
   ...category,
@@ -97,6 +100,7 @@ test("申请上下文使用项目用途预设和折叠备注，页脚汇总待�
       saving={false}
       refreshing={false}
       refreshRequired={false}
+      draftReady
       hasAttempt={false}
       onClose={() => {}}
       onSave={() => {}}
@@ -117,8 +121,8 @@ test("目录错误在紧凑粘性搜索区下方独立展示并提供重试和�
   const html = renderToStaticMarkup(
     <RequisitionCatalogBrowser
       catalog={{
-        list: [],
-        pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+        list: [catalogItem],
+        pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
       }}
       catalogPage={1}
       catalogKeyword=""
@@ -137,9 +141,50 @@ test("目录错误在紧凑粘性搜索区下方独立展示并提供重试和�
   );
 
   expect(html).toContain("目录暂不可用");
+  expect(html).not.toContain(catalogItem.product_name);
   expect(html).toContain("重新加载目录");
   expect(html).toContain("关闭提示");
   expect(html).toContain("sticky top-0");
   expect(html).not.toContain("lg:sticky");
   expect(html.match(/role=\"search\"/g)).toHaveLength(1);
+});
+
+test("记录加载失败提供重试且未水合状态锁住保存", () => {
+  const alert = renderToStaticMarkup(
+    <RequisitionEditorAlerts
+      error="采购申请 B 加载失败"
+      conflict={null}
+      hasAttempt={false}
+      saving={false}
+      loadingDraft={false}
+      draftLoadFailed
+      refreshRequired={false}
+      editingId={null}
+      refreshing={false}
+      onAbandonAttempt={() => {}}
+      onRetryLoad={() => {}}
+      onRefresh={() => {}}
+    />,
+  );
+  const footer = renderToStaticMarkup(
+    <RequisitionEditorFooter
+      summary={{
+        itemCount: 0,
+        supplierCount: 0,
+        missingCategoryCount: 0,
+        referenceAmount: "0.00",
+      }}
+      loading={false}
+      saving={false}
+      refreshing={false}
+      refreshRequired={false}
+      draftReady={false}
+      hasAttempt={false}
+      onClose={() => {}}
+      onSave={() => {}}
+    />,
+  );
+
+  expect(alert).toContain("重新加载采购申请");
+  expect(footer).toMatch(/<button[^>]+disabled[^>]*>保存草稿<\/button>/);
 });

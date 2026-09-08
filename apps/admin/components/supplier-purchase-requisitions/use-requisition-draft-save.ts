@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -17,6 +17,10 @@ import {
 import {
   refreshRequisitionAfterCommand,
 } from "./requisition-command-refresh";
+import {
+  createRequisitionRequestAuthority,
+  isAbortError,
+} from "./requisition-request-authority";
 import {
   commandConflictMessage,
   errorCode,
@@ -38,6 +42,7 @@ import type {
 export function useRequisitionDraftSave({
   editingId,
   loadingDraft,
+  draftReady,
   onValidation,
   onCommandAccepted,
   onRefreshAccepted,
@@ -45,6 +50,7 @@ export function useRequisitionDraftSave({
 }: {
   editingId: string | null;
   loadingDraft: boolean;
+  draftReady: boolean;
   onValidation: (errors: RequisitionDraftErrors) => void;
   onCommandAccepted: (record: RequisitionRecord) => void;
   onRefreshAccepted: (
@@ -60,24 +66,33 @@ export function useRequisitionDraftSave({
   const [conflict, setConflict] = useState<string | null>(null);
   const [refreshRequired, setRefreshRequired] = useState(false);
   const refreshGeneration = useRef(0);
+  const refreshRequests = useRef(createRequisitionRequestAuthority()).current;
 
   const invalidateRefresh = useCallback(() => {
+    refreshRequests.invalidate();
     refreshGeneration.current += 1;
     setRefreshing(false);
-  }, []);
+  }, [refreshRequests]);
+
+  useEffect(() => () => refreshRequests.invalidate(), [refreshRequests]);
 
   async function refreshSavedDraft(targetId: string) {
+    const request = refreshRequests.begin();
     const generation = ++refreshGeneration.current;
     setRefreshing(true);
     const refreshed = await refreshRequisitionAfterCommand(() =>
       Promise.all([
-        loadRequisition(targetId),
-        loadRequisitionItems(targetId),
+        loadRequisition(targetId, request.controller.signal),
+        loadRequisitionItems(targetId, 1, 100, request.controller.signal),
       ])
     );
-    if (refreshGeneration.current !== generation) return false;
+    if (
+      !refreshRequests.isCurrent(request) ||
+      refreshGeneration.current !== generation
+    ) return false;
     setRefreshing(false);
     if (refreshed.status === "refresh_failed") {
+      if (isAbortError(refreshed.error)) return false;
       onRefreshFailed();
       setRefreshRequired(true);
       setError("草稿已成功保存，但最新数据刷新失败，请手动刷新。");
@@ -98,8 +113,10 @@ export function useRequisitionDraftSave({
       saving ||
       refreshing ||
       refreshRequired ||
-      loadingDraft
+      loadingDraft ||
+      !draftReady
     ) return;
+    const refreshGenerationAtCommandStart = refreshGeneration.current;
     const payload = toRequisitionDraftPayload(draft);
     const scope = editingId
       ? "purchase-requisition:update"
@@ -142,7 +159,9 @@ export function useRequisitionDraftSave({
     setRefreshRequired(true);
     onCommandAccepted(commandResult.requisition);
     toast.success("采购申请草稿已保存");
-    await refreshSavedDraft(commandResult.requisition.id);
+    if (refreshGeneration.current === refreshGenerationAtCommandStart) {
+      await refreshSavedDraft(commandResult.requisition.id);
+    }
     setSaving(false);
   }
 

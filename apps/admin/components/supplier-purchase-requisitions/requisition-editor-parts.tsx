@@ -53,10 +53,12 @@ export function RequisitionEditorAlerts({
   hasAttempt,
   saving,
   loadingDraft,
+  draftLoadFailed,
   refreshRequired,
   editingId,
   refreshing,
   onAbandonAttempt,
+  onRetryLoad,
   onRefresh,
 }: {
   error: string | null;
@@ -64,16 +66,31 @@ export function RequisitionEditorAlerts({
   hasAttempt: boolean;
   saving: boolean;
   loadingDraft: boolean;
+  draftLoadFailed: boolean;
   refreshRequired: boolean;
   editingId: string | null;
   refreshing: boolean;
   onAbandonAttempt: () => void;
+  onRetryLoad: () => void;
   onRefresh: () => void;
 }) {
-  if (!error && !hasAttempt && !refreshRequired) return null;
+  if (!error && !hasAttempt && !refreshRequired && !draftLoadFailed) {
+    return null;
+  }
   return (
     <div className="space-y-2 border-b px-5 py-3">
       {error ? <StatusAlert>{error}</StatusAlert> : null}
+      {draftLoadFailed ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={loadingDraft}
+          onClick={onRetryLoad}
+        >
+          重新加载采购申请
+        </Button>
+      ) : null}
       {hasAttempt && !saving ? (
         <div className="flex flex-wrap items-center gap-2">
           <StatusAlert tone={conflict ? "error" : "warning"}>
@@ -114,6 +131,7 @@ export function RequisitionEditorFooter({
   saving,
   refreshing,
   refreshRequired,
+  draftReady,
   hasAttempt,
   onClose,
   onSave,
@@ -123,11 +141,13 @@ export function RequisitionEditorFooter({
   saving: boolean;
   refreshing: boolean;
   refreshRequired: boolean;
+  draftReady: boolean;
   hasAttempt: boolean;
   onClose: () => void;
   onSave: () => void;
 }) {
-  const locked = loading || saving || refreshing || refreshRequired;
+  const locked =
+    loading || saving || refreshing || refreshRequired || !draftReady;
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
       <div

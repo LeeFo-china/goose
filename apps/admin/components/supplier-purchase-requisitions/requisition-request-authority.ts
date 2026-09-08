@@ -27,3 +27,11 @@ export function createRequisitionRequestAuthority() {
 export function isAbortError(error: unknown) {
   return error instanceof DOMException && error.name === "AbortError";
 }
+
+export function canUseRequisitionHydration(
+  requestedRecordId: string | null,
+  hydratedRecordId: string | null,
+  loadFailed: boolean,
+) {
+  return !loadFailed && requestedRecordId === hydratedRecordId;
+}

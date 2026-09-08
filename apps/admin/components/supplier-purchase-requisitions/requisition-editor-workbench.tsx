@@ -69,6 +69,8 @@ export function RequisitionEditorWorkbench({
   catalogError,
   loadingCatalog,
   loadingDraft,
+  draftLoadFailed,
+  draftReady,
   validation,
   fieldsLocked,
   projects,
@@ -88,6 +90,7 @@ export function RequisitionEditorWorkbench({
   summary,
   onRequestClose,
   onAbandonAttempt,
+  onRetryLoad,
   onRefresh,
   onProjectChange,
   onSupplierChange,
@@ -123,6 +126,8 @@ export function RequisitionEditorWorkbench({
   catalogError: string | null;
   loadingCatalog: boolean;
   loadingDraft: boolean;
+  draftLoadFailed: boolean;
+  draftReady: boolean;
   validation: RequisitionDraftErrors;
   fieldsLocked: boolean;
   projects: ProjectOption[];
@@ -142,6 +147,7 @@ export function RequisitionEditorWorkbench({
   summary: ProcurementSummary;
   onRequestClose: () => void;
   onAbandonAttempt: () => void;
+  onRetryLoad: () => void;
   onRefresh: () => void;
   onProjectChange: (value: string) => void;
   onSupplierChange: (value: string) => void;
@@ -183,10 +189,12 @@ export function RequisitionEditorWorkbench({
               hasAttempt={hasAttempt}
               saving={saving}
               loadingDraft={loadingDraft}
+              draftLoadFailed={draftLoadFailed}
               refreshRequired={refreshRequired}
               editingId={editingId}
               refreshing={refreshing}
               onAbandonAttempt={onAbandonAttempt}
+              onRetryLoad={onRetryLoad}
               onRefresh={onRefresh}
             />
           }
@@ -264,6 +272,7 @@ export function RequisitionEditorWorkbench({
                 saving={saving}
                 refreshing={refreshing}
                 refreshRequired={refreshRequired}
+                draftReady={draftReady}
                 hasAttempt={hasAttempt}
                 onClose={onRequestClose}
                 onSave={onSave}
