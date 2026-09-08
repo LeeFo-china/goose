@@ -108,3 +108,19 @@ test.each([null, '', '   ', '有效项目'])('normalizes legacy project label %s
   }
   expect((await repository.listProjects({ ...scope, page: 1, pageSize: 20 })).list[0]?.name).toBe(expectedName);
 });
+
+test('material settings RPC forwards only actor scope and exposes a strict boolean flag', async () => {
+  const { WarehouseMaterialReadsRepository } = await import('./warehouse-material-reads');
+  expect(WarehouseMaterialReadsRepository.prototype.getSettings).toBeFunction();
+  for (const data of [{ warehouse_materials_enabled: true }, { warehouse_materials_enabled: false },
+    { warehouse_materials_enabled: 'true' }, { warehouse_materials_enabled: true, module_enabled: true }, {}]) {
+    const repository = new WarehouseMaterialReadsRepository({ rpc: async (name, params) => {
+      expect(name).toBe('get_warehouse_material_settings');
+      expect(params).toEqual({ p_tenant_id: ID, p_actor_user_id: ID, p_actor_employee_id: ID });
+      return { data, error: null };
+    } });
+    if (typeof data.warehouse_materials_enabled === 'boolean' && !('module_enabled' in data)) {
+      expect(await repository.getSettings(scope)).toEqual(data);
+    } else await expect(repository.getSettings(scope)).rejects.toMatchObject({ code: 'DB_ERROR' });
+  }
+});

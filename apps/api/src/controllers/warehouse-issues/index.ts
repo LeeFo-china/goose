@@ -10,6 +10,7 @@ import {
   WarehouseMaterialCommandSchema, WarehouseMaterialItemsQuerySchema,
   WarehouseMaterialParamSchema,
   WarehouseMaterialProjectQuerySchema,
+  WarehouseMaterialSettingsQuerySchema,
 } from '@/schema/warehouse-materials';
 import { warehouseMaterialsService } from '@/services/warehouse-materials';
 import { Get, Post } from '@/utils/decorators/route';
@@ -30,6 +31,13 @@ class WarehouseIssuesController extends TenantBaseController {
     const auth = await this.getRequiredTenantContext(request);
     const query = this.parse(WarehouseMaterialProjectQuerySchema, request.query);
     return ResponseHandler.success(await warehouseMaterialsService.listProjects(auth, query));
+  }
+
+  @Get('/warehouse-issues/settings')
+  async getSettings(request: FastifyRequest) {
+    const auth = await this.getRequiredTenantContext(request);
+    this.parse(WarehouseMaterialSettingsQuerySchema, request.query);
+    return ResponseHandler.success(await warehouseMaterialsService.getSettings(auth));
   }
 
   @Get('/warehouse-issues/:id')

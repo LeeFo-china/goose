@@ -12,6 +12,7 @@ const issueItem = z.object({ supplier_sku_id: uuid, quantity }).strict();
 const returnItem = z.object({ original_issue_item_id: uuid, quantity }).strict();
 
 export const WarehouseMaterialParamSchema = z.object({ id: uuid }).strict();
+export const WarehouseMaterialSettingsQuerySchema = z.object({}).strict();
 export const WarehouseIssueDraftSchema = z.object({
   expected_version: expectedVersion,
   warehouse_id: uuid,

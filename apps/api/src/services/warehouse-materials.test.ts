@@ -99,3 +99,31 @@ test('project-scope read failures from SQL are forbidden and unrelated errors st
       .rejects.toMatchObject({ code: message.startsWith('WAREHOUSE_') ? message : 'DB_ERROR' });
   }
 });
+
+test('independent material settings permit every inventory role plus project read even when the flag is off', async () => {
+  for (const permission of ['inventory.stock.view', 'inventory.issue.manage', 'inventory.issue.approve']) {
+    for (const enabled of [true, false]) {
+      const { service, calls } = await setup({ data: { warehouse_materials_enabled: enabled }, error: null });
+      expect(service.getSettings).toBeFunction();
+      expect(await service.getSettings(auth([permission, 'project.read']))).toEqual({ warehouse_materials_enabled: enabled });
+      expect(calls).toEqual([{ name: 'get_warehouse_material_settings', params: {
+        p_tenant_id: ID, p_actor_user_id: USER, p_actor_employee_id: EMPLOYEE,
+      } }]);
+    }
+  }
+});
+
+test('material settings reject missing role, project permission or actor and map SQL tenant isolation failures', async () => {
+  const { service, calls } = await setup({ data: { warehouse_materials_enabled: true }, error: null });
+  expect(service.getSettings).toBeFunction();
+  for (const context of [auth(['project.read']), auth(['supplier.view', 'project.read']), auth(['inventory.issue.manage']),
+    { ...auth(['inventory.issue.manage', 'project.read']), employeeId: null },
+    { ...auth(['inventory.issue.manage', 'project.read']), tenantId: null },
+    { ...auth(['inventory.issue.manage', 'project.read']), employeeStatus: 'inactive' }]) {
+    await expect(service.getSettings(context)).rejects.toMatchObject({ statusCode: 403 });
+  }
+  expect(calls).toHaveLength(0);
+  const forbidden = await setup({ data: null, error: { message: 'WAREHOUSE_MATERIAL_ACTOR_INVALID' } });
+  await expect(forbidden.service.getSettings(auth(['inventory.issue.manage', 'project.read'])))
+    .rejects.toMatchObject({ statusCode: 403, code: 'WAREHOUSE_MATERIAL_ACTOR_INVALID' });
+});

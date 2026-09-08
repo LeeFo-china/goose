@@ -3,6 +3,7 @@ export const WAREHOUSE_RETURN_STATUS_VALUES = ['draft', 'completed', 'cancelled'
 export type WarehouseIssueStatus = (typeof WAREHOUSE_ISSUE_STATUS_VALUES)[number];
 export type WarehouseReturnStatus = (typeof WAREHOUSE_RETURN_STATUS_VALUES)[number];
 export type WarehouseMaterialDocumentType = 'issue' | 'return';
+export interface WarehouseMaterialSettings { warehouse_materials_enabled: boolean }
 export type WarehouseMaterialCommand = 'save_draft' | 'submit' | 'complete' | 'cancel';
 
 export const WAREHOUSE_ISSUE_STATUS_LABELS = {

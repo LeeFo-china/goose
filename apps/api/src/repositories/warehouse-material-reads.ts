@@ -1,10 +1,11 @@
-import type { WarehouseIssueItem, WarehouseMaterialDocumentType, WarehouseMaterialOrder, WarehouseIssueStatus, WarehouseReturnItem } from '@gooes/domain';
+import type { WarehouseIssueItem, WarehouseMaterialDocumentType, WarehouseMaterialOrder, WarehouseMaterialSettings, WarehouseIssueStatus, WarehouseReturnItem } from '@gooes/domain';
 
 import { Errors } from '@/errors/error-factory';
 import { SupabaseDB } from '@/utils/supabase';
 import {
   WarehouseIssueSummarySchema, WarehouseReturnSummarySchema, WarehouseIssueItemSchema,
   WarehouseReturnItemSchema, WarehouseMaterialProjectSchema, materialActorParams, parseMaterialPage, parseMaterialRecord,
+  WarehouseMaterialSettingsSchema,
   type WarehouseMaterialActor, type WarehouseMaterialPage, type WarehouseMaterialPageInput, type WarehouseMaterialRpcClient,
 } from './warehouse-material-records';
 
@@ -23,6 +24,11 @@ export interface WarehouseMaterialListInput extends WarehouseMaterialActor, Ware
 export class WarehouseMaterialReadsRepository {
   constructor(private readonly clientOrProvider: WarehouseMaterialRpcClient | (() => WarehouseMaterialRpcClient) = () =>
     SupabaseDB.getAdminClient() as unknown as WarehouseMaterialRpcClient) {}
+
+  async getSettings(input: WarehouseMaterialActor): Promise<WarehouseMaterialSettings> {
+    return parseMaterialRecord(WarehouseMaterialSettingsSchema,
+      await this.rpc('get_warehouse_material_settings', materialActorParams(input)));
+  }
 
   async list(input: WarehouseMaterialListInput): Promise<WarehouseMaterialPage<WarehouseMaterialOrder>> {
     const data = await this.rpc('list_warehouse_material_orders', {

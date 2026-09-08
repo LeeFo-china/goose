@@ -24,7 +24,7 @@ test('material controllers register only explicit paged reads and command writes
   try {
     await app.ready();
     const expected = [
-      'GET /warehouse-issues', 'GET /warehouse-issues/project-options', 'GET /warehouse-issues/:id', 'GET /warehouse-issues/:id/items',
+      'GET /warehouse-issues', 'GET /warehouse-issues/settings', 'GET /warehouse-issues/project-options', 'GET /warehouse-issues/:id', 'GET /warehouse-issues/:id/items',
       'GET /warehouse-returns', 'GET /warehouse-returns/:id', 'GET /warehouse-returns/:id/items',
       ...['save-draft', 'submit', 'complete', 'cancel'].map((action) => `POST /warehouse-issues/:id/${action}`),
       ...['save-draft', 'complete', 'cancel'].map((action) => `POST /warehouse-returns/:id/${action}`),
@@ -44,6 +44,7 @@ test('HTTP boundary rejects malformed commands and forwards valid authenticated 
   const { default: returns } = await import('./warehouse-returns');
   const { authorizationService } = await import('@/services/authorization');
   const { warehouseMaterialsService } = await import('@/services/warehouse-materials');
+  expect(warehouseMaterialsService.getSettings).toBeFunction();
   const id = '10000000-0000-4000-8000-000000000001';
   const context = {
     authUserId: id, employeeId: id, tenantId: id, tenantName: null, tenantSlug: null,
@@ -58,6 +59,7 @@ test('HTTP boundary rejects malformed commands and forwards valid authenticated 
     created_at: '2026-09-08', updated_at: '2026-09-08', submitted_at: null, completed_at: null, cancelled_at: '2026-09-08',
   } };
   const commandSpy = spyOn(warehouseMaterialsService, 'command').mockResolvedValue(receipt);
+  const settingsSpy = spyOn(warehouseMaterialsService, 'getSettings').mockResolvedValue({ warehouse_materials_enabled: false });
   const app = Fastify();
   issues.registerExtraRoutes(app);
   returns.registerExtraRoutes(app);
@@ -78,9 +80,15 @@ test('HTTP boundary rejects malformed commands and forwards valid authenticated 
     expect(commandSpy).toHaveBeenCalledWith(context, 'issue', id, 'cancel', { expected_version: 1 }, 'key');
     expect((await app.inject({ method: 'POST', url: `/warehouse-returns/${id}/submit`, payload: { expected_version: 1 } })).statusCode).toBe(404);
     expect((await app.inject({ method: 'GET', url: '/warehouse-issues?pageSize=101' })).statusCode).toBe(400);
+    const settings = await app.inject({ method: 'GET', url: '/warehouse-issues/settings' });
+    expect(settings.statusCode).toBe(200);
+    expect(settings.json<unknown>()).toEqual({ data: { warehouse_materials_enabled: false }, message: 'success' });
+    expect(settingsSpy).toHaveBeenCalledWith(context);
+    expect((await app.inject({ method: 'GET', url: `/warehouse-issues/settings?tenant_id=${id}` })).statusCode).toBe(400);
   } finally {
     authSpy.mockRestore();
     commandSpy.mockRestore();
+    settingsSpy.mockRestore();
     await app.close();
   }
 });

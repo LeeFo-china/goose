@@ -1,4 +1,4 @@
-import type { WarehouseMaterialCommand, WarehouseMaterialCommandResult, WarehouseMaterialDocumentType } from '@gooes/domain';
+import type { WarehouseMaterialCommand, WarehouseMaterialCommandResult, WarehouseMaterialDocumentType, WarehouseMaterialSettings } from '@gooes/domain';
 
 import { Errors } from '@/errors/error-factory';
 import { warehouseMaterialCommandsRepository, type WarehouseMaterialCommandsRepository } from '@/repositories/warehouse-material-commands';
@@ -14,7 +14,7 @@ import { withWarehouseMaterialErrors } from './warehouse-material-errors';
 
 interface Dependencies {
   commands?: Pick<WarehouseMaterialCommandsRepository, 'command'>;
-  reads?: Pick<WarehouseMaterialReadsRepository, 'list' | 'get' | 'listItems' | 'listProjects'>;
+  reads?: Pick<WarehouseMaterialReadsRepository, 'list' | 'get' | 'listItems' | 'listProjects' | 'getSettings'>;
 }
 
 export class WarehouseMaterialsService {
@@ -24,6 +24,14 @@ export class WarehouseMaterialsService {
   constructor(dependencies: Dependencies = {}) {
     this.commands = dependencies.commands ?? warehouseMaterialCommandsRepository;
     this.reads = dependencies.reads ?? warehouseMaterialReadsRepository;
+  }
+
+  async getSettings(auth: AuthContext): Promise<WarehouseMaterialSettings> {
+    const permission = ['inventory.stock.view', 'inventory.issue.manage', 'inventory.issue.approve']
+      .find((code) => accessPolicyService.hasPermission(auth, code));
+    if (!permission) throw Errors.forbidden();
+    const scope = this.requireScope(auth, permission);
+    return withWarehouseMaterialErrors(() => this.reads.getSettings(scope));
   }
 
   async list(auth: AuthContext, documentType: WarehouseMaterialDocumentType, query: WarehouseMaterialListQuery) {

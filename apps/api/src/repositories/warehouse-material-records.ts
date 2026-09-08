@@ -45,6 +45,7 @@ export const WarehouseReturnItemSchema = item.extend({
   return_order_id: uuid, original_issue_order_id: uuid, original_issue_item_id: uuid,
 });
 export const WarehouseMaterialProjectSchema = z.object({ id: uuid, name: projectLabel }).strict();
+export const WarehouseMaterialSettingsSchema = z.object({ warehouse_materials_enabled: z.boolean() }).strict();
 
 export interface WarehouseMaterialActor {
   tenant_id: string;

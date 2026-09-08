@@ -47,3 +47,12 @@ test('material queries and commands enforce pagination and versions', async () =
   }
   expect(WarehouseMaterialCommandSchema.parse({ expected_version: 1 })).toEqual({ expected_version: 1 });
 });
+
+test('material settings query accepts no client identity or unrelated filters', async () => {
+  const { WarehouseMaterialSettingsQuerySchema } = await import('./warehouse-materials');
+  expect(WarehouseMaterialSettingsQuerySchema).toBeDefined();
+  expect(WarehouseMaterialSettingsQuerySchema.parse({})).toEqual({});
+  for (const input of [{ tenant_id: ID }, { actor_user_id: ID }, { supplierId: ID }, { page: 1 }]) {
+    expect(WarehouseMaterialSettingsQuerySchema.safeParse(input).success).toBe(false);
+  }
+});
