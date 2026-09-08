@@ -29,7 +29,6 @@ export function BatchCostCategoryPicker({
   const baseId = useId();
   const pickerId = `${baseId}-cost-category`;
   const warningId = `${pickerId}-warning`;
-  const dialogId = `${pickerId}-dialog`;
   const missingCategory = !line.cost_category_id;
   const currentLabel = line.category_name || "选择成本类目";
 
@@ -53,7 +52,6 @@ export function BatchCostCategoryPicker({
           </Button>
         </PopoverTrigger>
         <PopoverContent
-          id={dialogId}
           role="dialog"
           aria-label={`${label}的成本类目选择`}
           aria-describedby={missingCategory ? warningId : undefined}

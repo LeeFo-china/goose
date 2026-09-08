@@ -400,15 +400,16 @@ test(
     expect(mobileToolbar!.height).toBeLessThan(mobileCatalog!.height);
     await catalog.getByRole("row").filter({ hasText: "采购商品03" })
       .getByRole("button", { name: "加入采购商品03", exact: true }).click();
-    await expect(editor.getByRole("button", {
-      name: /采购商品01.*成本类目：选择成本类目/,
-    })).toHaveCount(1);
-    await expect(editor.getByRole("button", {
-      name: /采购商品02.*成本类目：材料类目01/,
-    })).toHaveCount(1);
-    await expect(editor.getByRole("button", {
-      name: /采购商品03.*成本类目：材料类目01/,
-    })).toHaveCount(1);
+    await expect(editor.getByRole("button", { name: /采购商品01.*成本类目：选择成本类目/ })).toHaveCount(1);
+    await expect(editor.getByRole("button", { name: /采购商品02.*成本类目：材料类目01/ })).toHaveCount(1);
+    await expect(editor.getByRole("button", { name: /采购商品03.*成本类目：材料类目01/ })).toHaveCount(1);
+    const firstCategoryTrigger = editor.getByRole("button", { name: /采购商品01.*成本类目：选择成本类目/ });
+    await firstCategoryTrigger.click();
+    const controlledDialogId = await firstCategoryTrigger.getAttribute("aria-controls");
+    expect(controlledDialogId).toBeTruthy();
+    const firstCategoryDialog = page.getByRole("dialog", { name: /采购商品01.*成本类目选择/ });
+    await expect(firstCategoryDialog).toHaveAttribute("id", controlledDialogId!);
+    await page.keyboard.press("Escape");
     await expect(editor.getByRole("button", { name: "保存草稿", exact: true }))
       .toBeInViewport();
     await page.screenshot({
