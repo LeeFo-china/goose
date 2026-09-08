@@ -709,9 +709,9 @@ path，供 E2E 断言分页和筛选参数。
 Run:
 
 ```bash
-bun test \
-  apps/admin/components/supplier-purchase-batches/batch-api.test.ts \
-  apps/admin/components/supplier-purchase-batches/batch-ui.test.tsx
+(cd apps/admin && bun test \
+  components/supplier-purchase-batches/batch-api.test.ts \
+  components/supplier-purchase-batches/batch-ui.test.tsx)
 pnpm --dir apps/admin exec eslint \
   components/supplier-purchase-batches/batch-api.ts \
   components/supplier-purchase-batches/batch-catalog.tsx \
@@ -925,10 +925,10 @@ Sheet 外壳使用：
 Run:
 
 ```bash
-bun test \
-  apps/admin/components/supplier-purchase-batches/batch-rules.test.ts \
-  apps/admin/components/supplier-purchase-batches/batch-api.test.ts \
-  apps/admin/components/supplier-purchase-batches/batch-ui.test.tsx
+(cd apps/admin && bun test \
+  components/supplier-purchase-batches/batch-rules.test.ts \
+  components/supplier-purchase-batches/batch-api.test.ts \
+  components/supplier-purchase-batches/batch-ui.test.tsx)
 pnpm --dir apps/admin exec eslint components/supplier-purchase-batches
 pnpm --dir apps/admin run typecheck
 ```
@@ -1058,9 +1058,9 @@ if (!reason) {
 Run:
 
 ```bash
-bun test \
-  apps/admin/components/supplier-purchase-requisitions/requisition-page.test.ts \
-  apps/admin/components/supplier-purchase-requisitions/requisition-command-refresh.test.ts
+(cd apps/admin && bun test \
+  components/supplier-purchase-requisitions/requisition-page.test.ts \
+  components/supplier-purchase-requisitions/requisition-command-refresh.test.ts)
 pnpm --dir apps/admin exec eslint \
   components/supplier-purchase-requisitions \
   components/supplier-procurement-editor
@@ -1258,14 +1258,14 @@ git commit -m "docs(procurement): 补充小程序采购用途对接"
 Run:
 
 ```bash
-bun test \
-  packages/domain/src/supplier-purchase-batch.test.ts \
-  apps/admin/components/supplier-procurement-editor/procurement-editor-rules.test.ts \
-  apps/admin/components/supplier-purchase-batches/batch-api.test.ts \
-  apps/admin/components/supplier-purchase-batches/batch-rules.test.ts \
-  apps/admin/components/supplier-purchase-batches/batch-ui.test.tsx \
-  apps/admin/components/supplier-purchase-requisitions/requisition-page.test.ts \
-  apps/admin/components/supplier-purchase-requisitions/requisition-command-refresh.test.ts
+(bun test packages/domain/src/supplier-purchase-batch.test.ts)
+(cd apps/admin && bun test \
+  components/supplier-procurement-editor/procurement-editor-rules.test.ts \
+  components/supplier-purchase-batches/batch-api.test.ts \
+  components/supplier-purchase-batches/batch-rules.test.ts \
+  components/supplier-purchase-batches/batch-ui.test.tsx \
+  components/supplier-purchase-requisitions/requisition-page.test.ts \
+  components/supplier-purchase-requisitions/requisition-command-refresh.test.ts)
 ```
 
 Expected: 全部 PASS。
