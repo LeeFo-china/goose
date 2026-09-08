@@ -26,6 +26,7 @@ describe("采购申请命令成功后的刷新边界", () => {
 
   test("编辑器先提交命令结果再独立刷新且刷新失败不保留重试身份", () => {
     const editor = readSource("./requisition-editor.tsx");
+    const editorParts = readSource("./requisition-editor-parts.tsx");
     const save = readSource("./use-requisition-draft-save.ts");
     const cleared = save.indexOf("setAttempt(null)");
     const refreshed = save.indexOf("await refreshSavedDraft");
@@ -38,20 +39,20 @@ describe("采购申请命令成功后的刷新边界", () => {
     expect(editor).toContain("setSavedRecord(requisition)");
     expect(editor).toContain("onSaved(requisition)");
     expect(editor).toContain("const recordId = record?.id ?? null");
-    expect(editor).toContain("}, [applyLoadedDraft, recordId])");
+    expect(editor).toContain("applyLoadedDraft");
+    expect(editor).toContain("recordId");
     expect(editor).toContain(
       "if (recordId && recordId === activeDraftId.current) return",
     );
     expect(save).toContain("setRefreshRequired(true)");
-    expect(save).toContain(
-      "草稿已成功保存，但最新数据刷新失败，请手动刷新。",
-    );
-    expect(editor).toContain("刷新最新数据");
+    expect(save).toContain("草稿已成功保存，但最新数据刷新失败，请手动刷新。");
+    expect(editorParts).toContain("刷新最新数据");
     expect(cleared).toBeGreaterThan(-1);
     expect(cleared).toBeLessThan(refreshed);
     expect(save.indexOf("采购申请草稿保存失败")).toBeLessThan(cleared);
-    expect(save.indexOf('toast.success("采购申请草稿已保存")'))
-      .toBeLessThan(refreshed);
+    expect(save.indexOf('toast.success("采购申请草稿已保存")')).toBeLessThan(
+      refreshed,
+    );
   });
 
   test("详情先采用四类命令结果再刷新并按记录 ID 稳定资源身份", () => {
@@ -67,9 +68,7 @@ describe("采购申请命令成功后的刷新边界", () => {
     expect(detail.match(/commandResult = await/g)?.length).toBe(4);
     expect(detail).toContain("onChanged(commandResult.requisition)");
     expect(detail).toContain("setConfirmOpen(false)");
-    expect(detail).toContain(
-      "操作已成功，但最新详情刷新失败，请手动刷新。",
-    );
+    expect(detail).toContain("操作已成功，但最新详情刷新失败，请手动刷新。");
     expect(detail).toContain("const recordId = record?.id ?? null");
     expect(detail).toContain("const recordRef = useRef(record)");
     expect(detail).toContain("[open, recordId, reload]");
@@ -92,11 +91,11 @@ describe("采购申请命令成功后的刷新边界", () => {
     expect(lines).toContain("isValidRequisitionQuantity(line.quantity)");
     expect(lines).toContain("aria-invalid={quantityInvalid}");
     expect(lines).toContain("aria-describedby={");
-    expect(lines).toContain('className="sr-only"');
-    expect(lines).toContain("requisition-quantity-error-");
+    expect(lines).toContain("quantity-error");
+    expect(lines).toContain("REQUISITION_QUANTITY_ERROR");
     expect(lines).not.toContain("aria-invalid={Boolean(error)}");
-    expect(lines).not.toContain('<Field data-invalid={Boolean(error)}>');
-    expect(lines).toContain("<Field data-invalid={quantityInvalid}>");
-    expect(lines).toContain("<FieldError>{error}</FieldError>");
+    expect(lines).not.toContain("<Field data-invalid={Boolean(error)}>");
+    expect(lines).toContain('role="alert"');
+    expect(lines).toContain("productLabel");
   });
 });

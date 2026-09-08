@@ -1,33 +1,15 @@
 "use client";
 
-import { PackageSearch } from "lucide-react";
+import { useEffect, useId, useRef } from "react";
+import { Trash2 } from "lucide-react";
 
 import { FormSelect } from "@/components/admin/form-select";
-import type {
-  FinanceCostCategoryRecord,
-} from "@/components/finance/finance-cost-budget-requests";
-import type {
-  PurchaseOrderCatalogItem,
-} from "@/components/supplier-purchase-orders/purchase-order-types";
+import type { FinanceCostCategoryRecord } from "@/components/finance/finance-cost-budget-requests";
+import { procurementSummary } from "@/components/supplier-procurement-editor/procurement-editor-rules";
+import type { PurchaseOrderCatalogItem } from "@/components/supplier-purchase-orders/purchase-order-types";
 import { Button } from "@/components/ui/button";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
-import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 
 import {
   formatRequisitionDateTime,
@@ -37,10 +19,7 @@ import {
   shortBusinessId,
   type RequisitionDraftLine,
 } from "./requisition-page-utils";
-import type {
-  RequisitionItem,
-  RequisitionRecord,
-} from "./requisition-types";
+import type { RequisitionItem, RequisitionRecord } from "./requisition-types";
 
 export function SelectedRequisitionLines({
   lines,
@@ -48,6 +27,7 @@ export function SelectedRequisitionLines({
   categories,
   error,
   disabled,
+  recentlyAddedSkuId,
   onChange,
   onRemove,
 }: {
@@ -56,187 +36,198 @@ export function SelectedRequisitionLines({
   categories: FinanceCostCategoryRecord[];
   error?: string;
   disabled: boolean;
+  recentlyAddedSkuId?: string | null;
   onChange: (skuId: string, patch: Partial<RequisitionDraftLine>) => void;
   onRemove: (skuId: string) => void;
 }) {
+  const baseId = useId();
+  const recentlyAddedRow = useRef<HTMLElement | null>(null);
   const categoryOptions = categories.map((category) => ({
     value: category.id,
     label: `${category.name} · ${category.code}`,
   }));
+
+  useEffect(() => {
+    if (!recentlyAddedSkuId || !recentlyAddedRow.current) return;
+    const reduceMotion =
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    recentlyAddedRow.current.scrollIntoView({
+      block: "nearest",
+      behavior: reduceMotion ? "auto" : "smooth",
+    });
+  }, [recentlyAddedSkuId]);
+
   return (
-    <Field>
-      <FieldLabel>采购明细（{lines.length}/100）</FieldLabel>
-      <div className="rounded-md border">
-        <Table containerClassName="max-w-full overflow-x-auto">
-          <TableHeader>
-            <TableRow>
-              <TableHead>商品 / SKU</TableHead>
-              <TableHead className="min-w-48">成本分类</TableHead>
-              <TableHead className="w-36">采购数量</TableHead>
-              <TableHead>采购单位</TableHead>
-              <TableHead className="text-right">操作</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {lines.map((line) => {
-              const fact = facts[line.supplierSkuId];
-              const quantityInvalid =
-                !isValidRequisitionQuantity(line.quantity);
-              const quantityErrorId =
-                `requisition-quantity-error-${line.supplierSkuId}`;
-              return (
-                <TableRow key={line.supplierSkuId}>
-                  <TableCell>
-                    <div className="font-medium">
-                      {fact?.product_name ?? "已选商品"}
+    <div className="flex min-h-full flex-col bg-background">
+      <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-background px-4 py-3">
+        <div>
+          <h3 className="text-base font-semibold">已选商品</h3>
+          <p className="text-xs text-muted-foreground">单一供应商采购申请</p>
+        </div>
+        <span className="text-sm font-medium tabular-nums">
+          {lines.length} / 100
+        </span>
+      </div>
+      {error ? (
+        <p
+          role="alert"
+          className="border-b px-4 py-2 text-xs font-medium text-destructive"
+        >
+          {error}
+        </p>
+      ) : null}
+      {lines.length ? (
+        <div className="min-w-0 divide-y">
+          {lines.map((line, index) => {
+            const fact = facts[line.supplierSkuId];
+            const productLabel = fact
+              ? `${fact.product_name} · ${fact.sku_name}`
+              : `已选商品 · SKU ${shortBusinessId(line.supplierSkuId)}`;
+            const quantityInvalid = !isValidRequisitionQuantity(line.quantity);
+            const quantityErrorId = `${baseId}-${index}-quantity-error`;
+            const categoryId = `${baseId}-${index}-cost-category`;
+            const recentlyAdded = line.supplierSkuId === recentlyAddedSkuId;
+            const referenceAmount = procurementSummary([
+              {
+                quantity: line.quantity,
+                unitPrice: fact?.unit_price,
+                costCategoryId: line.costCategoryId,
+              },
+            ]).referenceAmount;
+            return (
+              <article
+                key={line.supplierSkuId}
+                ref={recentlyAdded ? recentlyAddedRow : undefined}
+                className={cn(
+                  "min-w-0 space-y-3 px-4 py-4 transition-colors duration-200 motion-reduce:transition-none",
+                  recentlyAdded &&
+                    "bg-primary/5 ring-1 ring-inset ring-primary/20",
+                )}
+              >
+                <div className="flex min-w-0 items-start gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <h4 className="break-words text-sm font-semibold leading-5">
+                        {productLabel}
+                      </h4>
+                      {recentlyAdded ? (
+                        <span
+                          role="status"
+                          aria-live="polite"
+                          className="text-xs font-medium text-primary"
+                        >
+                          刚刚加入
+                        </span>
+                      ) : null}
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      {fact?.sku_name ??
-                        `SKU ${shortBusinessId(line.supplierSkuId)}`}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <FormSelect
-                      id={`requisition-category-${line.supplierSkuId}`}
-                      value={line.costCategoryId}
-                      options={categoryOptions}
-                      placeholder="选择成本分类"
-                      disabled={disabled}
-                      invalid={!line.costCategoryId}
-                      onChange={(costCategoryId) =>
-                        onChange(line.supplierSkuId, { costCategoryId })}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Field data-invalid={quantityInvalid}>
+                    <p className="mt-1 break-words text-xs leading-5 text-muted-foreground">
+                      {fact?.sku_code
+                        ? `SKU ${fact.sku_code}`
+                        : `SKU ${shortBusinessId(line.supplierSkuId)}`}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="size-11 shrink-0 text-muted-foreground hover:text-destructive md:size-8"
+                    disabled={disabled}
+                    aria-label={`移除${productLabel}`}
+                    onClick={() => onRemove(line.supplierSkuId)}
+                  >
+                    <Trash2 className="size-4" aria-hidden="true" />
+                  </Button>
+                </div>
+                <div className="grid min-w-0 grid-cols-[minmax(7rem,0.8fr)_minmax(0,1.2fr)] items-start gap-3">
+                  <label className="min-w-0 space-y-1 text-xs font-medium">
+                    <span>采购数量</span>
+                    <div className="flex min-w-0 items-center gap-2">
                       <Input
-                        aria-label={`采购数量 ${
-                          fact?.sku_name ?? line.supplierSkuId
-                        }`}
+                        className="min-w-0 tabular-nums"
+                        aria-label={`${productLabel}采购数量`}
                         type="text"
                         inputMode="decimal"
                         pattern="\d+(?:\.\d{1,4})?"
                         value={line.quantity}
                         aria-invalid={quantityInvalid}
-                        aria-describedby={quantityInvalid
-                          ? quantityErrorId
-                          : undefined}
+                        aria-describedby={
+                          quantityInvalid ? quantityErrorId : undefined
+                        }
                         disabled={disabled}
                         onChange={(event) =>
                           onChange(line.supplierSkuId, {
                             quantity: event.target.value,
-                          })}
+                          })
+                        }
                       />
-                      {quantityInvalid ? (
-                        <span id={quantityErrorId} className="sr-only">
-                          {REQUISITION_QUANTITY_ERROR}
-                        </span>
-                      ) : null}
-                    </Field>
-                  </TableCell>
-                  <TableCell>
-                    {fact?.purchase_unit_symbol ?? "-"}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
+                      <span className="shrink-0 font-normal text-muted-foreground">
+                        {fact?.purchase_unit_symbol ?? "单位"}
+                      </span>
+                    </div>
+                    {quantityInvalid ? (
+                      <span
+                        id={quantityErrorId}
+                        className="font-normal text-destructive"
+                      >
+                        {REQUISITION_QUANTITY_ERROR}
+                      </span>
+                    ) : null}
+                  </label>
+                  <div className="min-w-0 space-y-1 text-xs font-medium">
+                    <span aria-hidden="true">成本类目</span>
+                    <label className="sr-only" htmlFor={categoryId}>
+                      {productLabel}的成本类目
+                    </label>
+                    <FormSelect
+                      id={categoryId}
+                      value={line.costCategoryId}
+                      options={categoryOptions}
+                      placeholder="选择成本类目"
                       disabled={disabled}
-                      onClick={() => onRemove(line.supplierSkuId)}
-                    >
-                      删除
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </div>
-      <FieldError>{error}</FieldError>
-    </Field>
-  );
-}
-
-export function RequisitionCatalogTable({
-  items,
-  selectedSkuIds,
-  loading,
-  disabled,
-  onAdd,
-}: {
-  items: PurchaseOrderCatalogItem[];
-  selectedSkuIds: Set<string>;
-  loading: boolean;
-  disabled: boolean;
-  onAdd: (item: PurchaseOrderCatalogItem) => void;
-}) {
-  if (loading) {
-    return (
-      <div className="flex flex-col gap-2 py-2">
-        {Array.from({ length: 4 }, (_, index) => (
-          <Skeleton key={index} className="h-11 w-full" />
-        ))}
-      </div>
-    );
-  }
-  if (items.length === 0) {
-    return (
-      <Empty className="min-h-48">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <PackageSearch />
-          </EmptyMedia>
-          <EmptyTitle>没有可采购商品</EmptyTitle>
-          <EmptyDescription>
-            调整搜索词，或确认供应商已有当前有效的已发布价格。
-          </EmptyDescription>
-        </EmptyHeader>
-      </Empty>
-    );
-  }
-  return (
-    <Table containerClassName="max-w-full overflow-x-auto">
-      <TableHeader>
-        <TableRow>
-          <TableHead>可采购商品</TableHead>
-          <TableHead>单位</TableHead>
-          <TableHead className="text-right">目录参考价</TableHead>
-          <TableHead className="text-right">操作</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {items.map((item) => {
-          const selected = selectedSkuIds.has(item.supplier_sku_id);
-          return (
-            <TableRow key={item.supplier_sku_id}>
-              <TableCell>
-                <div className="font-medium">{item.product_name}</div>
-                <div className="text-xs text-muted-foreground">
-                  {item.sku_name} · {item.sku_code}
+                      invalid={!line.costCategoryId}
+                      triggerClassName="min-h-11 w-full md:min-h-9"
+                      onChange={(costCategoryId) =>
+                        onChange(line.supplierSkuId, { costCategoryId })
+                      }
+                    />
+                    {!line.costCategoryId ? (
+                      <p className="font-normal text-warning-foreground">
+                        尚未选择成本类目
+                      </p>
+                    ) : null}
+                  </div>
                 </div>
-              </TableCell>
-              <TableCell>{item.purchase_unit_symbol}</TableCell>
-              <TableCell className="text-right font-mono tabular-nums">
-                {formatRequisitionMoney(item.unit_price)}
-              </TableCell>
-              <TableCell className="text-right">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={disabled || selected}
-                  onClick={() => onAdd(item)}
-                >
-                  {selected ? "已添加" : "添加"}
-                </Button>
-              </TableCell>
-            </TableRow>
-          );
-        })}
-      </TableBody>
-    </Table>
+                <dl className="grid grid-cols-2 gap-3 text-xs">
+                  <div className="min-w-0">
+                    <dt className="text-muted-foreground">参考单价</dt>
+                    <dd className="mt-1 truncate font-medium tabular-nums">
+                      {fact?.unit_price
+                        ? `${formatRequisitionMoney(fact.unit_price)} / ${fact.purchase_unit_symbol || "单位"}`
+                        : "—"}
+                    </dd>
+                  </div>
+                  <div className="min-w-0 text-right">
+                    <dt className="text-muted-foreground">估算小计</dt>
+                    <dd className="mt-1 truncate font-medium tabular-nums">
+                      {fact?.unit_price &&
+                      isValidRequisitionQuantity(line.quantity)
+                        ? formatRequisitionMoney(referenceAmount)
+                        : "—"}
+                    </dd>
+                  </div>
+                </dl>
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="flex min-h-40 flex-1 items-center justify-center px-5 py-10 text-center">
+          <p className="text-sm text-muted-foreground">
+            从左侧商品目录加入商品
+          </p>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -246,27 +237,24 @@ export function RequisitionSavedFacts({
   requisition: RequisitionRecord;
 }) {
   return (
-    <section className="rounded-md border bg-muted/20 p-3">
-      <h3 className="text-sm font-medium">最近一次服务端计价</h3>
-      <div className="mt-3 grid gap-3 sm:grid-cols-4">
-        <Fact
-          label="计价时间"
-          value={formatRequisitionDateTime(requisition.priced_at)}
-        />
-        <Fact
-          label="未税金额"
-          value={formatRequisitionMoney(requisition.subtotal_amount)}
-        />
-        <Fact
-          label="税额"
-          value={formatRequisitionMoney(requisition.tax_amount)}
-        />
-        <Fact
-          label="申请金额"
-          value={formatRequisitionMoney(requisition.total_amount)}
-        />
-      </div>
-    </section>
+    <dl className="grid grid-cols-2 gap-x-4 gap-y-2 border-t pt-3 text-xs sm:grid-cols-4">
+      <Fact
+        label="服务端计价"
+        value={formatRequisitionDateTime(requisition.priced_at)}
+      />
+      <Fact
+        label="未税金额"
+        value={formatRequisitionMoney(requisition.subtotal_amount)}
+      />
+      <Fact
+        label="税额"
+        value={formatRequisitionMoney(requisition.tax_amount)}
+      />
+      <Fact
+        label="已保存申请金额"
+        value={formatRequisitionMoney(requisition.total_amount)}
+      />
+    </dl>
   );
 }
 
@@ -305,9 +293,9 @@ export function catalogFactFromRequisitionItem(
 
 function Fact({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="mt-1 font-mono text-sm tabular-nums">{value}</div>
+    <div className="min-w-0">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="mt-1 truncate font-medium tabular-nums">{value}</dd>
     </div>
   );
 }

@@ -107,7 +107,12 @@ async function createDraft(
   await page.getByRole("option", { name: "E2E 海棠湾项目" }).click();
   await sheet.getByLabel("合作供应商").click();
   await page.getByRole("option", { name: /E2E 建材供应商/ }).click();
-  await sheet.getByLabel("临时采购原因").fill(reason);
+  if (reason === "现场补料") {
+    await sheet.getByRole("button", { name: "现场补料", exact: true }).click();
+  } else {
+    await sheet.getByRole("button", { name: "其他", exact: true }).click();
+    await sheet.getByRole("textbox", { name: "采购用途" }).fill(reason);
+  }
   if (exercisePagination) {
     await sheet.getByRole("button", { name: "下一页" }).click();
     await expect(sheet.getByText("第 2 / 2 页", { exact: true }))
@@ -117,20 +122,20 @@ async function createDraft(
   const catalogRow = sheet.getByRole("row").filter({
     hasText: "E2E 临采瓷砖",
   });
-  await catalogRow.getByRole("button", { name: "添加" }).click();
-  const selectedRow = sheet.getByRole("table").filter({
-    has: page.getByRole("columnheader", { name: "成本分类" }),
-  }).getByRole("row").filter({ hasText: "E2E 临采瓷砖" });
-  await selectedRow.getByRole("combobox").click();
+  await catalogRow.getByRole("button", { name: "加入E2E 临采瓷砖" }).click();
+  await sheet.getByLabel(/E2E 临采瓷砖.*的成本类目/).click();
   await page.getByRole("option", { name: /主材/ }).click();
-  await selectedRow.getByLabel("采购数量 E2E 临采瓷砖 800x800")
-    .fill(quantity);
+  await sheet.getByLabel(/E2E 临采瓷砖.*采购数量/).fill(quantity);
   await sheet.getByRole("button", { name: "保存草稿" }).click();
   const savedSheet = page.getByRole("dialog", {
     name: "编辑采购申请草稿",
   });
-  await expect(savedSheet.getByText(expectedAmount, { exact: true }))
-    .toBeVisible();
+  await expect(
+    savedSheet.getByText("已保存申请金额").locator("..").getByText(
+      expectedAmount,
+      { exact: true },
+    ),
+  ).toBeVisible();
   await closeSheet(savedSheet);
 }
 
@@ -153,6 +158,56 @@ async function approveRequisition(page: Page, requestNo: string) {
   await closeSheet(detail);
 }
 
+test("采购申请工作台在桌面与手机均可选品并保护上下文", async ({
+  page,
+  request,
+}) => {
+  await resetMock(request);
+  await switchRole(page, request, "requester");
+  await page.setViewportSize({ width: 1200, height: 768 });
+  await page.getByRole("button", { name: "发起采购申请" }).click();
+  const sheet = page.getByRole("dialog", { name: "发起采购申请" });
+  await sheet.getByLabel("项目").click();
+  await page.getByRole("option", { name: "E2E 海棠湾项目" }).click();
+  await sheet.getByLabel("合作供应商").click();
+  await page.getByRole("option", { name: /E2E 建材供应商/ }).click();
+  await sheet.getByRole("button", { name: "项目备料", exact: true }).click();
+  await expect(sheet.getByRole("region", { name: "可采购商品" }))
+    .toBeVisible();
+  await expect(sheet.getByRole("region", { name: "已选商品" }))
+    .toBeVisible();
+  await sheet.getByRole("button", { name: "加入E2E 临采瓷砖" }).click();
+  await expect(sheet.getByText("刚刚加入", { exact: true })).toBeVisible();
+
+  await sheet.getByLabel("项目").click();
+  await page.getByRole("option", { name: "E2E 分页项目 1", exact: true })
+    .click();
+  const contextDialog = page.getByRole("alertdialog", {
+    name: "更换采购范围？",
+  });
+  await contextDialog.getByRole("button", { name: "取消" }).click();
+  await expect(sheet.getByRole("heading", {
+    name: "E2E 临采瓷砖 · E2E 临采瓷砖 800x800",
+    exact: true,
+  })).toBeVisible();
+
+  await page.setViewportSize({ width: 375, height: 667 });
+  await sheet.getByRole("button", { name: "其他", exact: true }).click();
+  await sheet.getByRole("textbox", { name: "采购用途" }).fill(
+    "展厅样板补充",
+  );
+  await sheet.getByRole("button", { name: /补充信息/ }).click();
+  await sheet.getByLabel("备注", { exact: true }).fill("送达前联系现场");
+  await expect(sheet.getByRole("button", { name: "保存草稿" }))
+    .toBeInViewport();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+    .toBe(true);
+  await sheet.getByRole("button", { name: "关闭", exact: true }).last().click();
+  await expect(page.getByRole("alertdialog", {
+    name: "放弃未保存的更改？",
+  })).toBeVisible();
+});
+
 test("采购申请完成预算承诺、分权审批、转换与释放闭环", async ({
   page,
   request,
@@ -164,9 +219,16 @@ test("采购申请完成预算承诺、分权审批、转换与释放闭环", as
   const withinBudgetNo = "REQ-E2E-0002";
   await openRowAction(page, withinBudgetNo, "编辑草稿");
   let sheet = page.getByRole("dialog", { name: "编辑采购申请草稿" });
-  await sheet.getByLabel("临时采购原因").fill("预算内临时补货（已复核）");
+  await sheet.getByRole("textbox", { name: "采购用途" }).fill(
+    "预算内临时补货（已复核）",
+  );
   await sheet.getByRole("button", { name: "保存草稿" }).click();
-  await expect(sheet.getByText("¥200.00", { exact: true })).toBeVisible();
+  await expect(
+    sheet.getByText("已保存申请金额").locator("..").getByText(
+      "¥200.00",
+      { exact: true },
+    ),
+  ).toBeVisible();
   await closeSheet(sheet);
   await submitRequisition(page, withinBudgetNo);
 
@@ -176,7 +238,7 @@ test("采购申请完成预算承诺、分权审批、转换与释放闭环", as
   await expect(sheet.getByText("预算内", { exact: true }).last()).toBeVisible();
   const budgetSection = sheet.getByRole("heading", { name: "预算影响" })
     .locator("xpath=ancestor::section");
-  const commitmentFact = budgetSection.getByText("本申请承诺").locator("..");
+  const commitmentFact = budgetSection.getByText("本次采购占用").locator("..");
   await expect(commitmentFact.getByText("¥200.00", { exact: true }))
     .toBeVisible();
   await closeSheet(sheet);

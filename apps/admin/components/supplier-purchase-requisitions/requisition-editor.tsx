@@ -1,61 +1,33 @@
 "use client";
-
 import { useCallback, useEffect, useRef, useState } from "react";
-
-import { StatusAlert } from "@/components/admin/status-alert";
-import type {
-  FinanceCostCategoryRecord,
-} from "@/components/finance/finance-cost-budget-requests";
-import type {
-  ProjectOption,
-  PurchaseOrderCatalogItem,
-  PurchaseOrderCatalogPage,
-  PurchaseOrderSupplierOption,
-} from "@/components/supplier-purchase-orders/purchase-order-types";
-import { Button } from "@/components/ui/button";
+import { ProcurementConfirmDialog } from "@/components/supplier-procurement-editor/procurement-confirm-dialog";
+import { procurementSummary } from "@/components/supplier-procurement-editor/procurement-editor-rules";
+import type { PurchaseOrderCatalogItem, PurchaseOrderCatalogPage } from "@/components/supplier-purchase-orders/purchase-order-types";
+import { loadRequisition, loadRequisitionCatalog, loadRequisitionItems } from "./requisition-api";
+import { catalogFactFromRequisitionItem } from "./requisition-editor-lines";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import { Spinner } from "@/components/ui/spinner";
-
-import {
-  loadRequisition,
-  loadRequisitionCatalog,
-  loadRequisitionItems,
-} from "./requisition-api";
+  RequisitionEditorWorkbench,
+  type RequisitionEditorProps,
+} from "./requisition-editor-workbench";
 import {
   errorMessage,
   errorStatus,
   type RequisitionDraftErrors,
   type RequisitionDraftLine,
 } from "./requisition-page-utils";
-import {
-  catalogFactFromRequisitionItem,
-  RequisitionSavedFacts,
-  SelectedRequisitionLines,
-} from "./requisition-editor-lines";
-import {
-  LoadMoreButton,
-  RequisitionCatalogBrowser,
-  RequisitionHeaderFields,
-} from "./requisition-editor-fields";
 import type {
   RequisitionDetail,
   RequisitionItemPage,
   RequisitionRecord,
 } from "./requisition-types";
 import { useRequisitionDraftSave } from "./use-requisition-draft-save";
-
+const RECENTLY_ADDED_FEEDBACK_MS = 1_600;
 const emptyCatalog: PurchaseOrderCatalogPage = {
   list: [],
   pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
 };
-
+type RequisitionContextChange =
+  { kind: "project"; value: string } | { kind: "supplier"; value: string };
 export function RequisitionEditor({
   open,
   record,
@@ -71,22 +43,7 @@ export function RequisitionEditor({
   onLoadMoreCostCategories,
   onOpenChange,
   onSaved,
-}: {
-  open: boolean;
-  record: RequisitionRecord | null;
-  projects: ProjectOption[];
-  relationships: PurchaseOrderSupplierOption[];
-  costCategories: FinanceCostCategoryRecord[];
-  canLoadMoreProjects: boolean;
-  canLoadMoreSuppliers: boolean;
-  canLoadMoreCostCategories: boolean;
-  loadingMoreOptions: boolean;
-  onLoadMoreProjects: () => void;
-  onLoadMoreSuppliers: () => void;
-  onLoadMoreCostCategories: () => void;
-  onOpenChange: (open: boolean) => void;
-  onSaved: (record: RequisitionRecord) => void;
-}) {
+}: RequisitionEditorProps) {
   const [projectId, setProjectId] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tenantSupplierId, setTenantSupplierId] = useState("");
@@ -105,44 +62,58 @@ export function RequisitionEditor({
   const [catalogPage, setCatalogPage] = useState(1);
   const [catalogKeyword, setCatalogKeyword] = useState("");
   const [appliedCatalogKeyword, setAppliedCatalogKeyword] = useState("");
+  const [catalogContextVersion, setCatalogContextVersion] = useState(0);
   const [loadingDraft, setLoadingDraft] = useState(false);
   const [loadingCatalog, setLoadingCatalog] = useState(false);
   const [validation, setValidation] = useState<RequisitionDraftErrors>({});
+  const [dirty, setDirty] = useState(false);
+  const [pendingContext, setPendingContext] =
+    useState<RequisitionContextChange | null>(null);
+  const [confirmClose, setConfirmClose] = useState(false);
+  const [recentlyAddedSkuId, setRecentlyAddedSkuId] = useState<string | null>(
+    null,
+  );
   const draftRequestVersion = useRef(0);
   const catalogRequestVersion = useRef(0);
   const activeSupplierId = useRef("");
   const activeDraftId = useRef<string | null>(null);
   const recordId = record?.id ?? null;
-
-  const applyLoadedDraft = useCallback((
-    detail: RequisitionDetail,
-    itemPage: RequisitionItemPage,
-  ) => {
-    const requisition = detail.requisition;
-    activeDraftId.current = requisition.id;
-    const supplierChanged =
-      activeSupplierId.current !== requisition.tenant_supplier_id;
-    setEditingId(requisition.id);
-    setProjectId(requisition.project_id);
-    activeSupplierId.current = requisition.tenant_supplier_id;
-    setTenantSupplierId(requisition.tenant_supplier_id);
-    if (supplierChanged) setCatalog(emptyCatalog);
-    setReason(requisition.reason);
-    setExpectedDeliveryDate(requisition.expected_delivery_date ?? "");
-    setRemark(requisition.remark ?? "");
-    setExpectedVersion(requisition.version);
-    setLines(itemPage.list.map((item) => ({
-      supplierSkuId: item.supplier_sku_id,
-      costCategoryId: item.cost_category_id,
-      quantity: item.quantity,
-    })));
-    setFacts(Object.fromEntries(itemPage.list.map((item) => [
-      item.supplier_sku_id,
-      catalogFactFromRequisitionItem(item),
-    ])));
-    setSavedRecord(requisition);
-  }, []);
-
+  const applyLoadedDraft = useCallback(
+    (detail: RequisitionDetail, itemPage: RequisitionItemPage) => {
+      const requisition = detail.requisition;
+      activeDraftId.current = requisition.id;
+      const supplierChanged =
+        activeSupplierId.current !== requisition.tenant_supplier_id;
+      setEditingId(requisition.id);
+      setProjectId(requisition.project_id);
+      activeSupplierId.current = requisition.tenant_supplier_id;
+      setTenantSupplierId(requisition.tenant_supplier_id);
+      if (supplierChanged) setCatalog(emptyCatalog);
+      setReason(requisition.reason);
+      setExpectedDeliveryDate(requisition.expected_delivery_date ?? "");
+      setRemark(requisition.remark ?? "");
+      setExpectedVersion(requisition.version);
+      setLines(
+        itemPage.list.map((item) => ({
+          supplierSkuId: item.supplier_sku_id,
+          costCategoryId: item.cost_category_id,
+          quantity: item.quantity,
+        })),
+      );
+      setFacts(
+        Object.fromEntries(
+          itemPage.list.map((item) => [
+            item.supplier_sku_id,
+            catalogFactFromRequisitionItem(item),
+          ]),
+        ),
+      );
+      setSavedRecord(requisition);
+      setDirty(false);
+      setRecentlyAddedSkuId(null);
+    },
+    [],
+  );
   const {
     attempt,
     conflict,
@@ -166,6 +137,7 @@ export function RequisitionEditor({
       setEditingId(requisition.id);
       setExpectedVersion(requisition.version);
       setSavedRecord(requisition);
+      setDirty(false);
       onSaved(requisition);
     },
     onRefreshAccepted: (detail, itemPage) => {
@@ -174,52 +146,53 @@ export function RequisitionEditor({
     },
     onRefreshFailed: () => setFacts({}),
   });
-
-  const hydrateDraft = useCallback(async (
-    targetId = recordId,
-  ) => {
-    const version = ++draftRequestVersion.current;
-    setConflict(null);
-    setValidation({});
-    setError(null);
-    if (!targetId) {
-      activeDraftId.current = null;
-      setEditingId(null);
-      setProjectId("");
-      activeSupplierId.current = "";
-      setTenantSupplierId("");
-      setCatalog(emptyCatalog);
-      setReason("");
-      setExpectedDeliveryDate("");
-      setRemark("");
-      setExpectedVersion(0);
-      setLines([]);
-      setFacts({});
-      setSavedRecord(null);
-      setRefreshRequired(false);
-      return "empty" as const;
-    }
-    setLoadingDraft(true);
-    try {
-      const [detail, itemPage] = await Promise.all([
-        loadRequisition(targetId),
-        loadRequisitionItems(targetId),
-      ]);
-      if (draftRequestVersion.current !== version) return null;
-      applyLoadedDraft(detail, itemPage);
-      setRefreshRequired(false);
-      return detail.requisition;
-    } catch (caught) {
-      if (draftRequestVersion.current === version) {
-        setError(errorMessage(caught, "采购申请草稿加载失败"));
-        if (errorStatus(caught) === 404) return "not_found" as const;
+  const hydrateDraft = useCallback(
+    async (targetId = recordId) => {
+      const version = ++draftRequestVersion.current;
+      setConflict(null);
+      setValidation({});
+      setError(null);
+      if (!targetId) {
+        activeDraftId.current = null;
+        setEditingId(null);
+        setProjectId("");
+        activeSupplierId.current = "";
+        setTenantSupplierId("");
+        setCatalog(emptyCatalog);
+        setReason("");
+        setExpectedDeliveryDate("");
+        setRemark("");
+        setExpectedVersion(0);
+        setLines([]);
+        setFacts({});
+        setSavedRecord(null);
+        setRefreshRequired(false);
+        setDirty(false);
+        setRecentlyAddedSkuId(null);
+        return "empty" as const;
       }
-      return null;
-    } finally {
-      if (draftRequestVersion.current === version) setLoadingDraft(false);
-    }
-  }, [applyLoadedDraft, recordId]);
-
+      setLoadingDraft(true);
+      try {
+        const [detail, itemPage] = await Promise.all([
+          loadRequisition(targetId),
+          loadRequisitionItems(targetId),
+        ]);
+        if (draftRequestVersion.current !== version) return null;
+        applyLoadedDraft(detail, itemPage);
+        setRefreshRequired(false);
+        return detail.requisition;
+      } catch (caught) {
+        if (draftRequestVersion.current === version) {
+          setError(errorMessage(caught, "采购申请草稿加载失败"));
+          if (errorStatus(caught) === 404) return "not_found" as const;
+        }
+        return null;
+      } finally {
+        if (draftRequestVersion.current === version) setLoadingDraft(false);
+      }
+    },
+    [applyLoadedDraft, recordId, setConflict, setError, setRefreshRequired],
+  );
   useEffect(() => {
     if (!open) {
       draftRequestVersion.current += 1;
@@ -228,12 +201,12 @@ export function RequisitionEditor({
       invalidateRefresh();
       return;
     }
+    if (attempt) return;
     if (recordId && recordId === activeDraftId.current) return;
     setCatalogPage(1);
     setAppliedCatalogKeyword("");
     void hydrateDraft();
-  }, [hydrateDraft, invalidateRefresh, open]);
-
+  }, [attempt, hydrateDraft, invalidateRefresh, open, recordId]);
   const loadCatalog = useCallback(async () => {
     const version = ++catalogRequestVersion.current;
     const requestedSupplierId = tenantSupplierId;
@@ -251,33 +224,85 @@ export function RequisitionEditor({
       if (
         catalogRequestVersion.current !== version ||
         activeSupplierId.current !== requestedSupplierId
-      ) return;
+      )
+        return;
       setCatalog(page);
       setFacts((current) => ({
         ...current,
-        ...Object.fromEntries(page.list.map((item) => [
-          item.supplier_sku_id,
-          item,
-        ])),
+        ...Object.fromEntries(
+          page.list.map((item) => [item.supplier_sku_id, item]),
+        ),
       }));
     } catch (caught) {
       if (catalogRequestVersion.current === version) {
         setError(errorMessage(caught, "可采购目录加载失败"));
       }
     } finally {
-      if (catalogRequestVersion.current === version) {
-        setLoadingCatalog(false);
-      }
+      if (catalogRequestVersion.current === version) setLoadingCatalog(false);
     }
-  }, [appliedCatalogKeyword, catalogPage, open, tenantSupplierId]);
-
+  }, [
+    appliedCatalogKeyword,
+    catalogContextVersion,
+    catalogPage,
+    open,
+    setError,
+    tenantSupplierId,
+  ]);
   useEffect(() => {
     void loadCatalog();
   }, [loadCatalog]);
-
-  const fieldsLocked = loadingDraft || refreshing || saving ||
-    attempt !== null || refreshRequired;
-
+  useEffect(() => {
+    if (!recentlyAddedSkuId) return;
+    const timeout = window.setTimeout(
+      () => setRecentlyAddedSkuId(null),
+      RECENTLY_ADDED_FEEDBACK_MS,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [recentlyAddedSkuId]);
+  const fieldsLocked =
+    loadingDraft || refreshing || saving || attempt !== null || refreshRequired;
+  const summary = procurementSummary(
+    lines.map((line) => ({
+      supplierId: tenantSupplierId,
+      quantity: line.quantity,
+      unitPrice: facts[line.supplierSkuId]?.unit_price,
+      costCategoryId: line.costCategoryId,
+    })),
+  );
+  function updateUserState(change: () => void) {
+    change();
+    setDirty(true);
+    setValidation({});
+  }
+  function applyContextChange(change: RequisitionContextChange) {
+    updateUserState(() => {
+      if (change.kind === "project") setProjectId(change.value);
+      else {
+        activeSupplierId.current = change.value;
+        setTenantSupplierId(change.value);
+      }
+      catalogRequestVersion.current += 1;
+      setCatalog(emptyCatalog);
+      setCatalogKeyword("");
+      setAppliedCatalogKeyword("");
+      setCatalogPage(1);
+      setCatalogContextVersion((value) => value + 1);
+      setLines([]);
+      setFacts({});
+      setRecentlyAddedSkuId(null);
+      setError(null);
+    });
+  }
+  function requestContextChange(change: RequisitionContextChange) {
+    const currentValue =
+      change.kind === "project" ? projectId : tenantSupplierId;
+    if (change.value === currentValue) return;
+    if (lines.length > 0) {
+      setPendingContext(change);
+      return;
+    }
+    applyContextChange(change);
+  }
   async function abandonAttempt() {
     const targetId = editingId ?? attempt?.resourceId ?? recordId;
     const result = await hydrateDraft(targetId);
@@ -292,165 +317,129 @@ export function RequisitionEditor({
       onSaved(result);
     }
   }
-
-  function handleOpenChange(nextOpen: boolean) {
-    if (!nextOpen && (saving || attempt)) return;
-    if (!nextOpen) invalidateRefresh();
-    onOpenChange(nextOpen);
+  function closeEditor() {
+    invalidateRefresh();
+    onOpenChange(false);
   }
-
+  function requestClose() {
+    if (saving) return;
+    if (attempt || !dirty) {
+      closeEditor();
+      return;
+    }
+    setConfirmClose(true);
+  }
   return (
-    <Sheet open={open} onOpenChange={handleOpenChange}>
-      <SheetContent className="w-[min(96vw,72rem)] max-w-none gap-0 overflow-hidden p-0 sm:max-w-6xl">
-        <SheetHeader className="shrink-0 border-b p-4 pr-12">
-          <SheetTitle>
-            {editingId ? "编辑采购申请草稿" : "发起采购申请"}
-          </SheetTitle>
-          <SheetDescription>
-            选择项目、合作供应商与成本分类。保存时由服务端按有效目录重新计价。
-          </SheetDescription>
-        </SheetHeader>
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <div className="flex flex-col gap-4">
-            {error ? <StatusAlert>{error}</StatusAlert> : null}
-            {conflict ? (
-              <Button
-                type="button"
-                variant="outline"
-                disabled={loadingDraft}
-                onClick={() => void abandonAttempt()}
-              >
-                放弃本次重试并刷新
-              </Button>
-            ) : null}
-            {attempt && !conflict && !saving ? (
-              <Button
-                type="button"
-                variant="outline"
-                disabled={loadingDraft}
-                onClick={() => void abandonAttempt()}
-              >
-                放弃本次重试并刷新
-              </Button>
-            ) : null}
-            {refreshRequired && editingId ? (
-              <Button
-                type="button"
-                variant="outline"
-                disabled={loadingDraft || refreshing || saving}
-                onClick={() => void refreshSavedDraft(editingId)}
-              >
-                刷新最新数据
-              </Button>
-            ) : null}
-            <RequisitionHeaderFields
-              projectId={projectId}
-              tenantSupplierId={tenantSupplierId}
-              reason={reason}
-              expectedDeliveryDate={expectedDeliveryDate}
-              remark={remark}
-              projects={projects}
-              relationships={relationships}
-              validation={validation}
-              fieldsLocked={fieldsLocked}
-              isExisting={Boolean(editingId)}
-              canLoadMoreProjects={canLoadMoreProjects}
-              canLoadMoreSuppliers={canLoadMoreSuppliers}
-              loadingMoreOptions={loadingMoreOptions}
-              onProjectChange={setProjectId}
-              onSupplierChange={(value) => {
-                catalogRequestVersion.current += 1;
-                activeSupplierId.current = value;
-                setTenantSupplierId(value);
-                setCatalog(emptyCatalog);
-                setCatalogKeyword("");
-                setAppliedCatalogKeyword("");
-                setError(null);
-                setLines([]);
-                setFacts({});
-                setCatalogPage(1);
-              }}
-              onReasonChange={setReason}
-              onDeliveryDateChange={setExpectedDeliveryDate}
-              onRemarkChange={setRemark}
-              onLoadMoreProjects={onLoadMoreProjects}
-              onLoadMoreSuppliers={onLoadMoreSuppliers}
-            />
-            {canLoadMoreCostCategories ? (
-              <LoadMoreButton
-                label="加载更多成本分类"
-                busy={loadingMoreOptions}
-                onClick={onLoadMoreCostCategories}
-              />
-            ) : null}
-            <SelectedRequisitionLines
-              lines={lines}
-              facts={facts}
-              categories={costCategories}
-              error={validation.items}
-              disabled={fieldsLocked}
-              onChange={(skuId, patch) =>
-                setLines((current) =>
-                  current.map((line) =>
-                    line.supplierSkuId === skuId ? { ...line, ...patch } : line
-                  ))}
-              onRemove={(skuId) =>
-                setLines((current) =>
-                  current.filter((line) => line.supplierSkuId !== skuId)
-                )}
-            />
-            <RequisitionCatalogBrowser
-              catalog={catalog}
-              catalogPage={catalogPage}
-              catalogKeyword={catalogKeyword}
-              loadingCatalog={loadingCatalog}
-              tenantSupplierId={tenantSupplierId}
-              fieldsLocked={fieldsLocked}
-              lines={lines}
-              onKeywordChange={setCatalogKeyword}
-              onSearch={() => {
-                setCatalogPage(1);
-                setAppliedCatalogKeyword(catalogKeyword.trim());
-              }}
-              onPageChange={setCatalogPage}
-              onAdd={(supplierSkuId) =>
-                setLines((current) => [
-                  ...current,
-                  { supplierSkuId, costCategoryId: "", quantity: "1" },
-                ])}
-            />
-            {savedRecord ? (
-              <RequisitionSavedFacts requisition={savedRecord} />
-            ) : null}
-          </div>
-        </div>
-        <SheetFooter className="shrink-0 border-t p-4">
-          <Button
-            type="button"
-            variant="outline"
-            disabled={saving || Boolean(attempt)}
-            onClick={() => handleOpenChange(false)}
-          >
-            关闭
-          </Button>
-          <Button
-            type="button"
-            disabled={saving || loadingDraft || refreshing || refreshRequired}
-            onClick={() =>
-              void saveDraft({
-                projectId,
-                tenantSupplierId,
-                reason,
-                expectedDeliveryDate,
-                remark,
-                expectedVersion,
-                items: lines,
-              })}>
-            {saving ? <Spinner data-icon="inline-start" /> : null}
-            {attempt && !saving ? "重试保存" : "保存草稿"}
-          </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+    <>
+      <RequisitionEditorWorkbench
+        open={open}
+        editingId={editingId}
+        projectId={projectId}
+        tenantSupplierId={tenantSupplierId}
+        reason={reason}
+        expectedDeliveryDate={expectedDeliveryDate}
+        remark={remark}
+        lines={lines}
+        facts={facts}
+        savedRecord={savedRecord}
+        catalog={catalog}
+        catalogPage={catalogPage}
+        catalogKeyword={catalogKeyword}
+        loadingCatalog={loadingCatalog}
+        loadingDraft={loadingDraft}
+        validation={validation}
+        fieldsLocked={fieldsLocked}
+        projects={projects}
+        relationships={relationships}
+        costCategories={costCategories}
+        canLoadMoreProjects={canLoadMoreProjects}
+        canLoadMoreSuppliers={canLoadMoreSuppliers}
+        canLoadMoreCostCategories={canLoadMoreCostCategories}
+        loadingMoreOptions={loadingMoreOptions}
+        recentlyAddedSkuId={recentlyAddedSkuId}
+        error={error}
+        conflict={conflict}
+        hasAttempt={Boolean(attempt)}
+        saving={saving}
+        refreshing={refreshing}
+        refreshRequired={refreshRequired}
+        summary={summary}
+        onRequestClose={requestClose}
+        onAbandonAttempt={() => void abandonAttempt()}
+        onRefresh={() => {
+          if (editingId) void refreshSavedDraft(editingId);
+        }}
+        onProjectChange={(value) =>
+          requestContextChange({ kind: "project", value })}
+        onSupplierChange={(value) =>
+          requestContextChange({ kind: "supplier", value })}
+        onReasonChange={(value) => updateUserState(() => setReason(value))}
+        onDeliveryDateChange={(value) =>
+          updateUserState(() => setExpectedDeliveryDate(value))}
+        onRemarkChange={(value) => updateUserState(() => setRemark(value))}
+        onLoadMoreProjects={onLoadMoreProjects}
+        onLoadMoreSuppliers={onLoadMoreSuppliers}
+        onLoadMoreCostCategories={onLoadMoreCostCategories}
+        onCatalogKeywordChange={setCatalogKeyword}
+        onCatalogSearch={() => {
+          setCatalogPage(1);
+          setAppliedCatalogKeyword(catalogKeyword.trim());
+        }}
+        onCatalogPageChange={setCatalogPage}
+        onAdd={(item) => updateUserState(() => {
+          setFacts((current) => ({
+            ...current,
+            [item.supplier_sku_id]: item,
+          }));
+          setLines((current) => [...current, {
+            supplierSkuId: item.supplier_sku_id,
+            costCategoryId: "",
+            quantity: "1",
+          }]);
+          setRecentlyAddedSkuId(item.supplier_sku_id);
+        })}
+        onLineChange={(skuId, patch) => updateUserState(() =>
+          setLines((current) => current.map((line) =>
+            line.supplierSkuId === skuId ? { ...line, ...patch } : line
+          )))}
+        onRemove={(skuId) => updateUserState(() => {
+          setLines((current) => current.filter((line) =>
+            line.supplierSkuId !== skuId
+          ));
+          if (recentlyAddedSkuId === skuId) setRecentlyAddedSkuId(null);
+        })}
+        onSave={() => void saveDraft({
+          projectId,
+          tenantSupplierId,
+          reason,
+          expectedDeliveryDate,
+          remark,
+          expectedVersion,
+          items: lines,
+        })}
+      />
+      <ProcurementConfirmDialog
+        open={Boolean(pendingContext)}
+        title="更换采购范围？"
+        description={`更换项目或合作供应商会清空 ${lines.length} 个已选商品。`}
+        confirmLabel="清空并更换"
+        onCancel={() => setPendingContext(null)}
+        onConfirm={() => {
+          if (pendingContext) applyContextChange(pendingContext);
+          setPendingContext(null);
+        }}
+      />
+      <ProcurementConfirmDialog
+        open={confirmClose}
+        title="放弃未保存的更改？"
+        description="当前采购申请有尚未保存的修改，关闭后这些修改不会保留。"
+        confirmLabel="放弃更改"
+        onCancel={() => setConfirmClose(false)}
+        onConfirm={() => {
+          setConfirmClose(false);
+          closeEditor();
+        }}
+      />
+    </>
   );
 }
