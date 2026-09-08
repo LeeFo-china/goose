@@ -148,4 +148,51 @@ describe("auth plugin Douyin miniapp isolation", () => {
     }
     await app.close();
   });
+
+  test("rejects invalid sessions on all eleven actual material routes including HEAD", async () => {
+    const { DouyinMiniappController } = await import("@/controllers/douyin-miniapp");
+    const app = Fastify({ logger: false });
+    errorHandler(app);
+    authPlugin(app);
+    let dispatched = 0;
+    app.addHook("preHandler", async () => { dispatched += 1; });
+    new DouyinMiniappController().registerExtraRoutes(app);
+    const noteId = "11111111-1111-4111-8111-111111111111";
+    const claimId = "33333333-3333-4333-8333-333333333333";
+    const routes = [
+      ["GET", "/douyin-mini/material-notes"],
+      ["HEAD", "/douyin-mini/material-notes"],
+      ["GET", `/douyin-mini/material-notes/${noteId}`],
+      ["HEAD", `/douyin-mini/material-notes/${noteId}`],
+      ["POST", `/douyin-mini/material-notes/${noteId}/claim`],
+      ["GET", "/douyin-mini/my-material-notes"],
+      ["HEAD", "/douyin-mini/my-material-notes"],
+      ["GET", `/douyin-mini/my-material-notes/${claimId}`],
+      ["HEAD", `/douyin-mini/my-material-notes/${claimId}`],
+      ["POST", `/douyin-mini/my-material-notes/${claimId}/remove`],
+      ["POST", "/douyin-mini/my-material-notes/clear"],
+    ] as const;
+    const regular = signToken({ sub: "employee-auth-user", token_type: "auth" });
+    const expired = signExpiredToken({
+      ...douyinPayload, sub: douyinPayload.subject_hash, token_type: "douyin_miniapp",
+      login_channel: "douyin", roles: ["douyin_miniapp"],
+    });
+    const valid = signDouyinMiniappToken(douyinPayload);
+    const forged = `${valid.slice(0, valid.lastIndexOf(".") + 1)}${"x".repeat(43)}`;
+    try {
+      await app.ready();
+      for (const [method, url] of routes) {
+        expect(shouldBypassDouyinAuth(method, url)).toBe(false);
+        for (const token of [undefined, regular, expired, forged]) {
+          const response = await app.inject({ method, url,
+            headers: token ? { authorization: `Bearer ${token}` } : {},
+          });
+          expect(response.statusCode).toBe(401);
+        }
+      }
+      expect(dispatched).toBe(0);
+    } finally {
+      await app.close();
+    }
+  });
 });

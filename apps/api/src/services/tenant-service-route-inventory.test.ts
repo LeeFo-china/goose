@@ -141,6 +141,64 @@ const UNGUARDED_ROUTE_ALLOWLIST = [
     url: "/douyin-mini/projects/:id/logs",
     reason: "public mini-program content",
   },
+  // Outside employee tenant-service metadata, NOT an authentication bypass.
+  // Actual GET/HEAD/POST routes are covered by legacy-plugin-douyin.test.ts;
+  // material-note-context additionally checks active tenant/app and subject.
+  {
+    method: "GET",
+    url: "/douyin-mini/material-notes",
+    reason: "dedicated Douyin session with active tenant/installation scope",
+  },
+  {
+    method: "HEAD",
+    url: "/douyin-mini/material-notes",
+    reason: "dedicated Douyin session with active tenant/installation scope",
+  },
+  {
+    method: "GET",
+    url: "/douyin-mini/material-notes/:id",
+    reason: "dedicated Douyin session with active tenant/installation scope",
+  },
+  {
+    method: "HEAD",
+    url: "/douyin-mini/material-notes/:id",
+    reason: "dedicated Douyin session with active tenant/installation scope",
+  },
+  {
+    method: "POST",
+    url: "/douyin-mini/material-notes/:id/claim",
+    reason: "dedicated Douyin session; claim bound to authenticated subject",
+  },
+  {
+    method: "GET",
+    url: "/douyin-mini/my-material-notes",
+    reason: "dedicated Douyin session; reads restricted to own claims",
+  },
+  {
+    method: "HEAD",
+    url: "/douyin-mini/my-material-notes",
+    reason: "dedicated Douyin session; reads restricted to own claims",
+  },
+  {
+    method: "GET",
+    url: "/douyin-mini/my-material-notes/:claimId",
+    reason: "dedicated Douyin session; reads restricted to own claims",
+  },
+  {
+    method: "HEAD",
+    url: "/douyin-mini/my-material-notes/:claimId",
+    reason: "dedicated Douyin session; reads restricted to own claims",
+  },
+  {
+    method: "POST",
+    url: "/douyin-mini/my-material-notes/:claimId/remove",
+    reason: "dedicated Douyin session; removes only authenticated subject claims",
+  },
+  {
+    method: "POST",
+    url: "/douyin-mini/my-material-notes/clear",
+    reason: "dedicated Douyin session; clears only authenticated subject claims",
+  },
   {
     method: "POST",
     url: "/douyin-mini/qa",
