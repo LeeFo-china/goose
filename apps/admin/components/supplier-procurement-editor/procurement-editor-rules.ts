@@ -15,6 +15,11 @@ export type ProcurementSummary = {
   referenceAmount: string;
 };
 
+export type PurposeCustomState = {
+  custom: boolean;
+  requestedValue: string | null;
+};
+
 export function procurementSummary(
   lines: readonly ProcurementSummaryLine[],
 ): ProcurementSummary {
@@ -46,6 +51,32 @@ export function shouldConfirmContextChange(
   selectedItemCount: number,
 ): boolean {
   return selectedItemCount > 0;
+}
+
+export function shouldRequestPurposeChange(
+  currentValue: string,
+  nextValue: string,
+): boolean {
+  return currentValue !== nextValue;
+}
+
+export function synchronizePurposeCustomState({
+  currentCustom,
+  value,
+  isPreset,
+  requestedValue,
+}: {
+  currentCustom: boolean;
+  value: string;
+  isPreset: boolean;
+  requestedValue: string | null;
+}): PurposeCustomState {
+  return {
+    custom: requestedValue === value
+      ? currentCustom
+      : Boolean(value) && !isPreset,
+    requestedValue: null,
+  };
 }
 
 function scaledDecimal(value: string, scale: number): bigint | null {

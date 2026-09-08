@@ -7,6 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 
+import {
+  shouldRequestPurposeChange,
+  synchronizePurposeCustomState,
+} from "./procurement-editor-rules";
+
 type ProcurementDestinationType = "project" | "warehouse";
 
 export function ProcurementPurposeField({
@@ -32,14 +37,20 @@ export function ProcurementPurposeField({
   const requestedValue = useRef<string | null>(null);
 
   useEffect(() => {
-    if (requestedValue.current === value) {
-      requestedValue.current = null;
-      return;
-    }
-    setCustom(Boolean(value) && !isPreset);
+    const pendingValue = requestedValue.current;
+    requestedValue.current = null;
+    setCustom((currentCustom) =>
+      synchronizePurposeCustomState({
+        currentCustom,
+        value,
+        isPreset,
+        requestedValue: pendingValue,
+      }).custom
+    );
   }, [isPreset, value]);
 
   function changeValue(nextValue: string) {
+    if (!shouldRequestPurposeChange(value, nextValue)) return;
     requestedValue.current = nextValue;
     onChange(nextValue);
   }
