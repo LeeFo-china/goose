@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
 import {
   procurementSummary,
@@ -6,6 +8,8 @@ import {
   shouldConfirmContextChange,
   shouldRequestPurposeChange,
 } from "./procurement-editor-rules";
+import { ProcurementPurposeField } from "./procurement-purpose-field";
+import { ProcurementRemarkField } from "./procurement-remark-field";
 
 describe("procurement editor rules", () => {
   test("summarizes decimal quantities without Number precision loss", () => {
@@ -46,6 +50,26 @@ describe("procurement editor rules", () => {
     ]).referenceAmount).toBe("3.33");
   });
 
+  test("ignores decimal inputs beyond storage precision before calculating", () => {
+    expect(procurementSummary([
+      {
+        quantity: "123456789012345",
+        unitPrice: "1.00",
+        costCategoryId: "category-a",
+      },
+      {
+        quantity: "1",
+        unitPrice: "1234567890123.00",
+        costCategoryId: "category-b",
+      },
+      {
+        quantity: "9".repeat(64),
+        unitPrice: "1.00",
+        costCategoryId: "category-c",
+      },
+    ]).referenceAmount).toBe("0.00");
+  });
+
   test("only asks before changing context when products are selected", () => {
     expect(shouldConfirmContextChange(0)).toBe(false);
     expect(shouldConfirmContextChange(1)).toBe(true);
@@ -78,5 +102,50 @@ describe("procurement editor rules", () => {
       custom: true,
       requestedValue: null,
     });
+  });
+});
+
+describe("procurement editor field accessibility", () => {
+  test("keeps ids unique and their labels and descriptions connected", () => {
+    const markup = renderToStaticMarkup(createElement(
+      "div",
+      null,
+      createElement(ProcurementPurposeField, {
+        destinationType: "project",
+        value: "自定义用途一",
+        disabled: false,
+        error: "请填写采购用途",
+        onChange: () => {},
+      }),
+      createElement(ProcurementPurposeField, {
+        destinationType: "warehouse",
+        value: "自定义用途二",
+        disabled: false,
+        error: "请填写采购用途",
+        onChange: () => {},
+      }),
+      createElement(ProcurementRemarkField, {
+        value: "备注一",
+        disabled: false,
+        onChange: () => {},
+      }),
+      createElement(ProcurementRemarkField, {
+        value: "备注二",
+        disabled: false,
+        onChange: () => {},
+      }),
+    ));
+    const ids = [...markup.matchAll(/ id="([^"]+)"/g)].map((match) =>
+      match[1]
+    );
+    const referencedIds = [
+      ...markup.matchAll(/(?:aria-labelledby|aria-describedby|for)="([^"]+)"/g),
+    ].flatMap((match) => match[1]?.split(" ") ?? []);
+
+    expect(ids.length).toBeGreaterThan(0);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const referencedId of referencedIds) {
+      expect(ids).toContain(referencedId);
+    }
   });
 });

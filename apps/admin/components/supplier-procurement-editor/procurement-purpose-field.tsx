@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { SUPPLIER_PURCHASE_PURPOSE_PRESETS } from "@gooes/domain";
 
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,11 @@ export function ProcurementPurposeField({
   );
   const [custom, setCustom] = useState(Boolean(value) && !isPreset);
   const requestedValue = useRef<string | null>(null);
+  const baseId = useId();
+  const labelId = `${baseId}-purpose-label`;
+  const groupId = `${baseId}-purpose-group`;
+  const customId = `${baseId}-purpose-custom`;
+  const errorId = `${baseId}-purpose-error`;
 
   useEffect(() => {
     const pendingValue = requestedValue.current;
@@ -57,11 +62,12 @@ export function ProcurementPurposeField({
 
   return (
     <Field data-invalid={Boolean(error)}>
-      <FieldLabel id="procurement-purpose-label">采购用途</FieldLabel>
+      <FieldLabel id={labelId}>采购用途</FieldLabel>
       <div
+        id={groupId}
         role="group"
-        aria-labelledby="procurement-purpose-label"
-        aria-describedby={error ? "procurement-purpose-error" : undefined}
+        aria-labelledby={labelId}
+        aria-describedby={error ? errorId : undefined}
         className="flex min-w-0 flex-wrap gap-2"
       >
         {presets.map((preset) => (
@@ -96,9 +102,9 @@ export function ProcurementPurposeField({
       </div>
       {custom ? (
         <Input
-          id="procurement-purpose-custom"
-          aria-label="自定义采购用途"
-          aria-describedby={error ? "procurement-purpose-error" : undefined}
+          id={customId}
+          aria-labelledby={labelId}
+          aria-describedby={error ? errorId : undefined}
           aria-invalid={Boolean(error)}
           value={isPreset ? "" : value}
           maxLength={500}
@@ -107,7 +113,7 @@ export function ProcurementPurposeField({
           onChange={(event) => changeValue(event.target.value)}
         />
       ) : null}
-      <FieldError id="procurement-purpose-error">{error}</FieldError>
+      <FieldError id={errorId}>{error}</FieldError>
     </Field>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { ChevronDown } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,7 @@ export function ProcurementRemarkField({
   onChange: (value: string) => void;
 }) {
   const [open, setOpen] = useState(Boolean(value.trim()));
+  const remarkId = `${useId()}-remark`;
 
   useEffect(() => {
     if (value.trim()) setOpen(true);
@@ -50,9 +51,9 @@ export function ProcurementRemarkField({
       </CollapsibleTrigger>
       <CollapsibleContent className="pt-2">
         <Field>
-          <FieldLabel htmlFor="procurement-remark">备注</FieldLabel>
+          <FieldLabel htmlFor={remarkId}>备注</FieldLabel>
           <Textarea
-            id="procurement-remark"
+            id={remarkId}
             value={value}
             maxLength={500}
             disabled={disabled}

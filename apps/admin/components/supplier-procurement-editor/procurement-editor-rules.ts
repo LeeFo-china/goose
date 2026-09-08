@@ -1,5 +1,7 @@
 const QUANTITY_SCALE = BigInt(10_000);
 const CENTS_SCALE = BigInt(100);
+const QUANTITY_MAX_INTEGER_DIGITS = 14;
+const UNIT_PRICE_MAX_INTEGER_DIGITS = 12;
 
 export type ProcurementSummaryLine = {
   supplierId?: string | null;
@@ -29,8 +31,16 @@ export function procurementSummary(
     ),
   );
   const cents = lines.reduce((total, line) => {
-    const quantity = scaledDecimal(line.quantity, 4);
-    const unitPrice = scaledDecimal(line.unitPrice ?? "", 2);
+    const quantity = scaledDecimal(
+      line.quantity,
+      4,
+      QUANTITY_MAX_INTEGER_DIGITS,
+    );
+    const unitPrice = scaledDecimal(
+      line.unitPrice ?? "",
+      2,
+      UNIT_PRICE_MAX_INTEGER_DIGITS,
+    );
     if (quantity === null || unitPrice === null) return total;
     return total + roundDivide(quantity * unitPrice, QUANTITY_SCALE);
   }, BigInt(0));
@@ -79,9 +89,18 @@ export function synchronizePurposeCustomState({
   };
 }
 
-function scaledDecimal(value: string, scale: number): bigint | null {
+function scaledDecimal(
+  value: string,
+  scale: number,
+  maxIntegerDigits: number,
+): bigint | null {
+  if (value.length > maxIntegerDigits + scale + 1) return null;
   const match = /^(\d+)(?:\.(\d+))?$/.exec(value);
-  if (!match || (match[2]?.length ?? 0) > scale) return null;
+  if (
+    !match ||
+    (match[1]?.length ?? 0) > maxIntegerDigits ||
+    (match[2]?.length ?? 0) > scale
+  ) return null;
   const whole = match[1] ?? "0";
   const fraction = (match[2] ?? "").padEnd(scale, "0");
   return BigInt(`${whole}${fraction}`);
