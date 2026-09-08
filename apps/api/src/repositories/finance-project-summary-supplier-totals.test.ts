@@ -58,6 +58,20 @@ mock.module("@/utils/supabase/index", () => ({
 }));
 
 describe("FinanceProjectSummaryRepository supplier totals", () => {
+  test("subtracts warehouse returns without reducing supplier payable or cash", async () => {
+    const { listFinanceProjectSupplierTotals } = await import("./finance-project-summary-supplier-totals");
+    responses.set("project_cost_events", { error: null, data: [
+      { ...supplierFact("project-1", "category-1", "40.00"), event_direction: "increase" },
+      { ...supplierFact("project-1", "category-1", "12.35"), event_direction: "decrease" },
+    ] });
+    const result = await listFinanceProjectSupplierTotals({ tenantId: "tenant-1", projectIds: ["project-1"] });
+    expect(result.get("project-1")).toMatchObject({
+      supplier_cost_amount: 27.65,
+      supplier_cost_by_category: new Map([["category-1", 27.65]]),
+      supplier_payable_open_amount: 80,
+      supplier_cash_paid_amount: 20,
+    });
+  });
   beforeEach(() => {
     calls.length = 0;
     responses.clear();
@@ -151,7 +165,7 @@ describe("FinanceProjectSummaryRepository supplier totals", () => {
     }
     expect(calls.map((call) => [call.table, call.select])).toEqual([
       ["finance_ledger_entries", "project_id,direction,entry_type,amount::text,cost_category_id"],
-      ["project_cost_events", "project_id,cost_category_id,amount::text"],
+      ["project_cost_events", "project_id,cost_category_id,amount::text,event_direction"],
       ["supplier_payable_events", "project_id,amount::text"],
       ["supplier_payments", "project_id,amount::text"],
     ]);

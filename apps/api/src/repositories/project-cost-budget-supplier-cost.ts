@@ -1,6 +1,6 @@
 import { Errors } from "@/errors/error-factory";
+import { projectCostEventCents } from "@/utils/project-cost-direction";
 import {
-  addMoneyCents,
   moneyCentsToSafeNumber,
 } from "@/utils/fixed-point-money";
 
@@ -47,14 +47,11 @@ export function summarizeProjectSupplierCosts(
     ) {
       throw Errors.dbError(context.parseErrorMessage, rows);
     }
-    totalCents = addMoneyCents(totalCents, row.amount, context);
+    const signedCents = projectCostEventCents(row.amount, row.event_direction, context);
+    totalCents += signedCents;
     categoryCents.set(
       row.cost_category_id,
-      addMoneyCents(
-        categoryCents.get(row.cost_category_id) ?? BigInt(0),
-        row.amount,
-        context,
-      ),
+      (categoryCents.get(row.cost_category_id) ?? BigInt(0)) + signedCents,
     );
     const existing = categoryDetails.get(row.cost_category_id);
     if (

@@ -1,4 +1,5 @@
 import { Errors } from "@/errors/error-factory";
+import { parseProjectCostDirection, type ProjectCostDirection } from "@/utils/project-cost-direction";
 import { SupabaseDB } from "@/utils/supabase/index";
 
 export type FinanceOperatingReportLedgerRow = {
@@ -35,6 +36,7 @@ export type FinanceOperatingReportSupplierCostRow = {
   cost_category_id: string;
   cost_category_name: string | null;
   amount: string;
+  event_direction?: ProjectCostDirection;
   occurred_at: string;
 };
 
@@ -90,6 +92,7 @@ type SupplierCostDbRow = {
   project_id: string;
   cost_category_id: string;
   amount: number | string | null;
+  event_direction?: unknown;
   occurred_at: string;
   project?: MaybeArray<ProjectRelation>;
   cost_category?: MaybeArray<CostCategoryRelation>;
@@ -219,6 +222,7 @@ class FinanceOperatingReportRepository {
           project_id,
           cost_category_id,
           amount::text,
+          event_direction,
           occurred_at,
           ${projectRelation},
           cost_category:finance_cost_categories!project_cost_events_category_tenant_fkey(id, code, name)
@@ -257,6 +261,7 @@ class FinanceOperatingReportRepository {
         cost_category_id: row.cost_category_id,
         cost_category_name: category?.name || category?.code || null,
         amount: row.amount,
+        event_direction: parseProjectCostDirection(row.event_direction),
         occurred_at: row.occurred_at,
       };
     });

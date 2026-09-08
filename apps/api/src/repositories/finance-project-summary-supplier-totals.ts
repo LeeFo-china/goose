@@ -1,4 +1,5 @@
 import { Errors } from "@/errors/error-factory";
+import { projectCostEventCents } from "@/utils/project-cost-direction";
 import type {
   FinanceProjectLedgerTotals,
   FinanceProjectSupplierTotals,
@@ -66,7 +67,7 @@ export async function listFinanceProjectSupplierTotals(input: {
   const [costResult, payableResult, paymentResult] = await Promise.all([
     queryFactPages(
       "project_cost_events",
-      "project_id,cost_category_id,amount::text",
+      "project_id,cost_category_id,amount::text,event_direction",
       input.tenantId,
       projectIds,
     ),
@@ -172,18 +173,15 @@ function aggregateSupplierCosts(
       throw Errors.dbError("解析项目供应商财务事实失败", rows);
     }
     const current = totals.get(row.project_id) ?? emptySupplierCentsTotals();
-    current.supplierCostCents = addSupplierMoney(
-      current.supplierCostCents,
-      row.amount,
-      rows,
-    );
+    const signedCents = projectCostEventCents(row.amount, row.event_direction, {
+      parseErrorMessage: "解析项目供应商财务事实失败",
+      overflowMessage: "项目供应商财务事实超过安全汇总边界",
+      details: rows,
+    });
+    current.supplierCostCents += signedCents;
     current.costCentsByCategory.set(
       row.cost_category_id,
-      addSupplierMoney(
-        current.costCentsByCategory.get(row.cost_category_id) ?? BigInt(0),
-        row.amount,
-        rows,
-      ),
+      (current.costCentsByCategory.get(row.cost_category_id) ?? BigInt(0)) + signedCents,
     );
     totals.set(row.project_id, current);
   }
