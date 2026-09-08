@@ -1,31 +1,50 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
+const packageManifest = JSON.parse(
+  await readFile(join(packageRoot, 'package.json'), 'utf8'),
+);
+const expectedArchiveName = `gooes-domain-${packageManifest.version}.tgz`;
+const requestedArchive = process.env.GOOES_DOMAIN_ARCHIVE?.trim();
 const temporaryRoot = await mkdtemp(join(tmpdir(), 'gooes-domain-consumer-'));
 
 try {
-  // Build explicitly: the legacy prepack clean also deletes previous tarballs.
-  // A consumer verification must preserve already delivered artifacts.
-  await execFileAsync('bun', ['run', 'build'], {
-    cwd: packageRoot,
-    maxBuffer: 10 * 1024 * 1024,
-  });
-  await execFileAsync('npm', ['pack', '--ignore-scripts', '--pack-destination', temporaryRoot], {
-    cwd: packageRoot,
-    maxBuffer: 10 * 1024 * 1024,
-  });
-
-  const archiveName = (await readdir(temporaryRoot)).find((name) =>
-    name.endsWith('.tgz'),
-  );
-  if (!archiveName) {
-    throw new Error('未生成 domain package archive');
+  let archivePath;
+  if (requestedArchive) {
+    archivePath = resolve(process.cwd(), requestedArchive);
+    if (basename(archivePath) !== expectedArchiveName) {
+      throw new Error(
+        `指定的 domain package archive 文件名必须为 ${expectedArchiveName}`,
+      );
+    }
+    try {
+      await access(archivePath);
+    } catch {
+      throw new Error(`指定的 domain package archive 不存在: ${archivePath}`);
+    }
+  } else {
+    // Build explicitly: the legacy prepack clean also deletes previous tarballs.
+    // A consumer verification must preserve already delivered artifacts.
+    await execFileAsync('bun', ['run', 'build'], {
+      cwd: packageRoot,
+      maxBuffer: 10 * 1024 * 1024,
+    });
+    await execFileAsync('npm', ['pack', '--ignore-scripts', '--pack-destination', temporaryRoot], {
+      cwd: packageRoot,
+      maxBuffer: 10 * 1024 * 1024,
+    });
+    archivePath = join(temporaryRoot, expectedArchiveName);
+    try {
+      await access(archivePath);
+    } catch {
+      throw new Error(`未生成预期的 domain package archive: ${archivePath}`);
+    }
   }
 
   const consumerRoot = join(temporaryRoot, 'consumer');
@@ -40,7 +59,7 @@ try {
       'add',
       '--offline',
       '--ignore-scripts',
-      join(temporaryRoot, archiveName),
+      archivePath,
       'zod@4.4.2',
       'typescript@5.9.3',
     ],
@@ -83,6 +102,7 @@ try {
   SERVICE_TRIAL_FOLLOW_UP_STATUS_VALUES,
   SERVICE_TRIAL_FOLLOW_UP_TYPE_VALUES,
   SERVICE_TRIAL_NOTIFICATION_EVENT_VALUES,
+  SUPPLIER_PURCHASE_PURPOSE_PRESETS,
   PlatformServiceTrialScopeSchema,
   SiteContentDraftBlockSchema,
   type PlatformServiceTrialScopeV1,
@@ -100,6 +120,10 @@ try {
 import { z } from 'zod';
 
 const schema: z.ZodType<SiteContentDraftBlock> = SiteContentDraftBlockSchema;
+const projectPurposes: readonly ["项目备料", "现场补料"] =
+  SUPPLIER_PURCHASE_PURPOSE_PRESETS.project;
+const warehousePurposes: readonly ["仓库补货"] =
+  SUPPLIER_PURCHASE_PURPOSE_PRESETS.warehouse;
 const leadSource: CustomerLeadSource = 'h5';
 const getH5ActivityTitle = (detail: CustomerLeadDetail): string | null =>
   detail.source_context?.h5?.page_title ?? null;
@@ -185,6 +209,8 @@ const assertTypes = (
 };
 
 void schema;
+void projectPurposes;
+void warehousePurposes;
 void assertTypes;
 void trialScopeSchema;
 void trialStatus;
@@ -218,6 +244,7 @@ import {
   SERVICE_TRIAL_FOLLOW_UP_STATUS_VALUES,
   SERVICE_TRIAL_FOLLOW_UP_TYPE_VALUES,
   SERVICE_TRIAL_NOTIFICATION_EVENT_VALUES,
+  SUPPLIER_PURCHASE_PURPOSE_PRESETS,
   PlatformServiceTrialScopeSchema,
   SiteContentDraftBlockSchema,
 } from '@gooes/domain';
@@ -270,6 +297,15 @@ const expectedNotificationEvents = [
   'expires_in_7_days', 'expires_in_3_days', 'expires_in_1_day',
   'entered_grace', 'expired', 'converted',
 ];
+const expectedPurchasePurposes = {
+  project: ['项目备料', '现场补料'],
+  warehouse: ['仓库补货'],
+};
+assert.deepEqual(SUPPLIER_PURCHASE_PURPOSE_PRESETS, expectedPurchasePurposes);
+assert.equal(
+  Object.values(SUPPLIER_PURCHASE_PURPOSE_PRESETS).flat().includes('其他'),
+  false,
+);
 
 if (!(SiteContentDraftBlockSchema instanceof z.ZodType)) {
   throw new Error('packed domain schema 与 consumer 使用了不同的 Zod 类型身份');
