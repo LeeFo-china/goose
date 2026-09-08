@@ -43,6 +43,32 @@ const common = {
   canViewPurchaseOrders: false,
 };
 
+test('领退料来源按项目成本查看权限链接，不借用采购权限', () => {
+  const row: InventoryTransaction = {
+    ...transaction,
+    source_document: {
+      return_order_id: 'return-id',
+      return_order_no: 'TL001',
+      issue_order_id: 'issue-id',
+      issue_order_no: 'LL001',
+    },
+  };
+  const render = (canViewMaterials: boolean) =>
+    renderToStaticMarkup(
+      <InventoryTable
+        {...common}
+        canViewMaterials={canViewMaterials}
+        tab="transactions"
+        balances={[]}
+        transactions={[row]}
+      />,
+    );
+  expect(render(true)).toContain('/warehouse-returns?order_id=return-id');
+  expect(render(true)).toContain('/warehouse-issues?order_id=issue-id');
+  expect(render(false)).toContain('TL001');
+  expect(render(false)).not.toContain('href=');
+});
+
 test('balance rows display exact inventory facts and friendly drill actions without UUIDs', () => {
   const markup = renderToStaticMarkup(
     <InventoryTable

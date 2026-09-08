@@ -9,6 +9,7 @@ export default async function InventoryPage() {
   return (
     <InventoryWorkspace
       {...inventoryAccess(session.permissions.map(({ code }) => code))}
+      canViewMaterials={session.permissions.some(({ code }) => code === 'inventory.stock.view') && session.permissions.some(({ code }) => code === 'project.read')}
     />
   );
 }

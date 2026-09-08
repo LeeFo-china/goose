@@ -2,6 +2,7 @@
 
 import { useEffect, useReducer, useState } from 'react';
 import { Search } from 'lucide-react';
+import Link from 'next/link';
 import {
   INVENTORY_TRANSACTION_TYPE_LABELS,
   INVENTORY_TRANSACTION_TYPE_VALUES,
@@ -34,6 +35,7 @@ type Props = {
   canView: boolean;
   canViewWarehouses: boolean;
   canViewPurchaseOrders: boolean;
+  canViewMaterials?: boolean;
 };
 const transactionOptions = [
   { value: 'all', label: '全部类型' },
@@ -47,6 +49,7 @@ export function InventoryWorkspace({
   canView,
   canViewWarehouses,
   canViewPurchaseOrders,
+  canViewMaterials = false,
 }: Props) {
   const [state, dispatch] = useReducer(inventoryReducer, initialInventoryState);
   const [keyword, setKeyword] = useState('');
@@ -121,6 +124,16 @@ export function InventoryWorkspace({
             库存流水
           </TabsTrigger>
         </TabsList>
+        {canViewMaterials && (
+          <div className="flex flex-wrap gap-2">
+            <Button asChild size="sm" variant="outline">
+              <Link href="/warehouse-issues">项目领料</Link>
+            </Button>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/warehouse-returns">项目退料</Link>
+            </Button>
+          </div>
+        )}
         <TabsContent
           value={state.tab}
           className="mt-0 flex min-h-0 flex-1 flex-col"
@@ -232,6 +245,7 @@ export function InventoryWorkspace({
                   : []
               }
               canViewPurchaseOrders={canViewPurchaseOrders}
+              canViewMaterials={canViewMaterials}
               loading={busy}
               error={error}
               onRetry={() => setRetry((value) => value + 1)}

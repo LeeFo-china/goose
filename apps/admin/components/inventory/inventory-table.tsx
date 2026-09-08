@@ -32,6 +32,7 @@ type Props = {
   balances: InventoryBalance[];
   transactions: InventoryTransaction[];
   canViewPurchaseOrders: boolean;
+  canViewMaterials?: boolean;
   loading: boolean;
   error: string;
   onRetry: () => void;
@@ -57,13 +58,52 @@ function Product({ row }: { row: InventoryBalance | InventoryTransaction }) {
 function SourceDocument({
   row,
   canViewPurchaseOrders,
+  canViewMaterials = false,
 }: {
   row: InventoryTransaction;
   canViewPurchaseOrders: boolean;
+  canViewMaterials?: boolean;
 }) {
   const source = row.source_document;
   if (!source)
     return <span className="text-muted-foreground">来源单据不可用</span>;
+  if ('issue_order_id' in source) {
+    const documents =
+      'return_order_id' in source
+        ? [
+            {
+              href: `/warehouse-returns?order_id=${source.return_order_id}`,
+              label: `退料单 ${source.return_order_no}`,
+            },
+            {
+              href: `/warehouse-issues?order_id=${source.issue_order_id}`,
+              label: `领料单 ${source.issue_order_no}`,
+            },
+          ]
+        : [
+            {
+              href: `/warehouse-issues?order_id=${source.issue_order_id}`,
+              label: `领料单 ${source.issue_order_no}`,
+            },
+          ];
+    return (
+      <div className="flex max-w-64 flex-col gap-1 break-words">
+        {documents.map((document) =>
+          canViewMaterials ? (
+            <Link
+              key={document.href}
+              className="text-primary underline-offset-4 hover:underline"
+              href={document.href}
+            >
+              {document.label}
+            </Link>
+          ) : (
+            <span key={document.href}>{document.label}</span>
+          ),
+        )}
+      </div>
+    );
+  }
   return (
     <div className="flex max-w-64 flex-col gap-1 break-words">
       <span>收货单 {source.receipt_no}</span>
@@ -253,6 +293,7 @@ export function InventoryTable(props: Props) {
                 <SourceDocument
                   row={row}
                   canViewPurchaseOrders={props.canViewPurchaseOrders}
+                  canViewMaterials={props.canViewMaterials}
                 />
               </TableCell>
               <TableCell className="whitespace-nowrap">
