@@ -20,6 +20,8 @@ BEGIN
     new_id := gen_random_uuid(); projects := array_append(projects,new_id);
     INSERT INTO public.projects(id,tenant_id,name,status) VALUES(new_id,f.tenant_id,'Performance project '||i,'designing');
   END LOOP;
+  INSERT INTO public.project_members(project_id,employee_id,role_code)
+    VALUES(projects[1],f.actor_employee_id,'designer');
   CREATE TEMP TABLE material_read_seed AS SELECT n,gen_random_uuid() issue_id,gen_random_uuid() issue_item_id,
     gen_random_uuid() return_id,gen_random_uuid() return_item_id,
     warehouses[1+(n%10)] warehouse_id,projects[1+(n%100)] project_id FROM generate_series(1,20000) n;
@@ -52,8 +54,12 @@ BEGIN
     FOR scenario IN SELECT * FROM (VALUES
       ('first',1,false,false,NULL::text),('deep',500,false,false,NULL::text),
       ('empty',2000,false,false,NULL::text),('warehouse',1,true,false,NULL::text),
-      ('warehouse-status',1,true,false,'completed'),('project',1,false,true,NULL::text)
+      ('warehouse-status',1,true,false,'completed'),('project',1,false,true,NULL::text),
+      ('assigned',1,false,false,NULL::text),('assigned-empty',20,false,false,NULL::text)
     ) cases(label,page,filter_warehouse,filter_project,status) LOOP
+      UPDATE public.employee_permission_overrides
+        SET access_scope=CASE WHEN scenario.label LIKE 'assigned%' THEN 'assigned' ELSE 'all' END
+        WHERE employee_id=f.actor_employee_id AND permission_id=(SELECT id FROM public.permissions WHERE code='project.read');
       warehouse_filter := CASE WHEN scenario.filter_warehouse THEN warehouses[1] ELSE NULL END;
       project_filter := CASE WHEN scenario.filter_project THEN projects[1] ELSE NULL END;
       result := public.list_warehouse_material_orders(f.tenant_id,kind,f.actor_user_id,f.actor_employee_id,
@@ -87,10 +93,19 @@ BEGIN
         OR (scenario.label='project' AND actual_total<>200) OR (scenario.filter_warehouse AND actual_total<>2000) THEN
         RAISE EXCEPTION 'Incorrect filtered or empty page total: % %',scenario.label,result;
       END IF;
+      IF scenario.label LIKE 'assigned%' AND (actual_total<>200 OR EXISTS(
+        SELECT 1 FROM jsonb_array_elements(actual_items) document WHERE document->>'project_id' IS DISTINCT FROM projects[1]::text)) THEN
+        RAISE EXCEPTION 'Assigned project permission leaked rows or lost total';
+      END IF;
       INSERT INTO material_plan_results VALUES(scenario.label,kind,actual_total,jsonb_array_length(actual_items),
         item_rows,(plan->0->>'Execution Time')::numeric,md5(definition),plan);
     END LOOP;
   END LOOP;
+  result:=public.list_warehouse_material_projects(f.tenant_id,f.actor_user_id,f.actor_employee_id,NULL,1,20);
+  IF result->>'total' IS DISTINCT FROM '1' OR jsonb_array_length(result->'items') IS DISTINCT FROM 1
+    OR result->'items'->0->>'id' IS DISTINCT FROM projects[1]::text THEN
+    RAISE EXCEPTION 'Project picker lost assigned-scope boundary';
+  END IF;
 END;
 $test$;
 SELECT 'EVIDENCE material page plan '||jsonb_build_object('case',label,'document_type',document_type,
