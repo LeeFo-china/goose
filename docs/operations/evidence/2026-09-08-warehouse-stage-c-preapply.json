@@ -1,0 +1,56 @@
+{
+  "candidate": "983b775ef67bdc3ccd1ee223ace00351dc2fa552",
+  "checked_at": "2026-09-08T08:15:08.512386+00:00",
+  "host_assertion": "VM-0-11-ubuntu",
+  "database": "postgres",
+  "server_version": "17.6",
+  "transaction_read_only": "on",
+  "statement_timeout": "15s",
+  "migration_count": 595,
+  "latest_migration": "20260908062915",
+  "stage_c_applied_count": 0,
+  "sha256": {
+    "20260908015230": "819af66da060dd9a950f3c7c00fd7ab880a237b8f1a26d7b9789a912aadd42f0",
+    "20260908015649": "9ec3083f10eb20c689e8ea03089adc327dbbd3842bd8940d45185e9712e8ec5a",
+    "20260908020216": "da40dce9ac76456a80bcce35db63f9dce196678fc84a5443ccbc1918e040fa74",
+    "20260908023924": "5e126226f9d7dd567f9537ee3f75f776b7f5ad44014d0466c4f7c58d4f66ff8b"
+  },
+  "candidate_migration_diff_exit": 0,
+  "source_constraints": {
+    "inventory_transactions_stage_b_source_check": { "validated": true, "definition": "CHECK ((source_type = 'supplier_purchase_receipt_item'::text))" },
+    "project_cost_events_source_identity_check": { "validated": true, "definition": "CHECK ((source_id = supplier_purchase_order_receipt_item_id))" },
+    "project_cost_events_source_type_check": { "validated": true, "definition": "CHECK ((source_type = 'supplier_purchase_receipt_item'::text))" }
+  },
+  "procurement_source_columns": {
+    "supplier_id": "uuid NOT NULL",
+    "supplier_purchase_order_id": "uuid NOT NULL",
+    "supplier_purchase_order_item_id": "uuid NOT NULL",
+    "supplier_purchase_order_receipt_id": "uuid NOT NULL",
+    "supplier_purchase_order_receipt_item_id": "uuid NOT NULL",
+    "tenant_supplier_id": "uuid NOT NULL"
+  },
+  "new_relations_absent": 14,
+  "new_columns_absent": 7,
+  "new_material_functions_existing": 0,
+  "new_rollout_json_overload_present": false,
+  "existing_reference_keys_validated": true,
+  "data": { "cost_rows": 4, "cost_incompatible": 0, "inventory_rows": 0, "inventory_incompatible": 0, "settings_rows": 1, "module_null_rows": 0 },
+  "c1_patch": { "signature": "list_inventory_transactions(uuid,uuid,uuid,text,integer,integer)", "matches": 1, "definition_md5": "2f96c843fce3338e5090f2bb05f36bd0" },
+  "c2_patches": [
+    { "signature": "search_finance_project_risk_ids(uuid,integer,integer,text,text,text,text,boolean,boolean,boolean,numeric,numeric)", "function_count": 1, "matches": 2, "expected": 2, "cost_source_present": true, "direction_absent": true, "definition_md5": "97c3ff9df9d4246cf667dc948c2f4605" },
+    { "signature": "__gooes_submit_supplier_purchase_batch_destinations_v2(uuid,uuid,integer,uuid,uuid,text,boolean)", "function_count": 1, "matches": 1, "expected": 1, "cost_source_present": true, "direction_absent": true, "definition_md5": "f269e12daf49d6a356c257583a031608" },
+    { "signature": "__gooes_review_supplier_purchase_batch_destinations_v2(uuid,uuid,integer,text,text,boolean,uuid,uuid,text,boolean)", "function_count": 1, "matches": 1, "expected": 1, "cost_source_present": true, "direction_absent": true, "definition_md5": "3b4922e5d6d9e1c27e70be5655b1938d" },
+    { "signature": "__gooes_supplier_purchase_batch_budget_preflight(uuid,uuid,uuid)", "function_count": 1, "matches": 1, "expected": 1, "cost_source_present": true, "direction_absent": true, "definition_md5": "22cd7ebba9731f7bf43b5793d5b7160a" }
+  ],
+  "c3_patch": { "signature": "__gooes_set_supplier_rollout_settings_v2(jsonb,uuid,text)", "sequential_matches": [1,1,1,1,1,1,1], "before_definition_md5": "fd9043da97a17d3b40bb07d5b3cdae63", "predicted_after_definition_md5": "cadf7fae090ec378cf80315a9f436289" },
+  "dependency_signatures_present": [
+    "__gooes_employee_has_project_permission_scope(uuid,uuid,uuid,text)",
+    "__gooes_has_tenant_procurement_permission(uuid,uuid,text)",
+    "__gooes_set_supplier_rollout_settings_v2(jsonb,uuid,text)",
+    "prevent_inventory_fact_mutation()",
+    "resolve_tenant_supplier_sku_cost_categories(uuid,uuid[])"
+  ],
+  "other_transactions_over_5_minutes": 0,
+  "lock_waiters": 0,
+  "scope": "Read-only preapply compatibility; no DDL/DML, business RPC invocation or credentials read. Migration apply itself and postapply behavior are not proven by this evidence."
+}

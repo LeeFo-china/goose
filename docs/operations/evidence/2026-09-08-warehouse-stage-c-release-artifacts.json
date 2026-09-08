@@ -1,0 +1,47 @@
+{
+  "build_plan": {
+    "schema_version": 1,
+    "target_environment": "development",
+    "commit_sha": "983b775ef67bdc3ccd1ee223ace00351dc2fa552",
+    "before_sha": "983b775ef67bdc3ccd1ee223ace00351dc2fa552",
+    "workflow_run_id": 34203757524,
+    "migration_changed": false,
+    "changed_files": [],
+    "classifications": [
+      "admin",
+      "api"
+    ],
+    "build_services": [
+      "api",
+      "admin"
+    ],
+    "deploy_services": [
+      "api",
+      "admin"
+    ],
+    "no_op": false
+  },
+  "api_manifest": {
+    "service": "api",
+    "image": "useccr.ccs.tencentyun.com/america_goose/goose-api:run-34203757524-983b775ef67bdc3ccd1ee223ace00351dc2fa552",
+    "digest": "sha256:720a66ff7dbd403e9d3847accbf0ec681f4bca8fb8232d1e8554a2e628422249",
+    "build_run_id": 34203757524,
+    "commit_sha": "983b775ef67bdc3ccd1ee223ace00351dc2fa552",
+    "target_environment": "development"
+  },
+  "admin_manifest": {
+    "service": "admin",
+    "image": "useccr.ccs.tencentyun.com/america_goose/goose-admin:run-34203757524-983b775ef67bdc3ccd1ee223ace00351dc2fa552",
+    "digest": "sha256:70487add799fd93f9ac7a44880a90dde8d772dcea616ccd6b327c986dddc57d1",
+    "build_run_id": 34203757524,
+    "commit_sha": "983b775ef67bdc3ccd1ee223ace00351dc2fa552",
+    "target_environment": "development"
+  },
+  "migration_gate": {
+    "environment": "development",
+    "commit_sha": "983b775ef67bdc3ccd1ee223ace00351dc2fa552",
+    "migration_version": "20260711120000",
+    "migration_history_aligned": true,
+    "target_migration_present": true
+  }
+}
