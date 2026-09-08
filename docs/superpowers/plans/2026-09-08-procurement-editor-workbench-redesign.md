@@ -41,7 +41,9 @@
 
 不修改：
 
-- 不修改既有保存 API、Supabase migration 和数据库结构。
+- 不修改既有保存 API 或数据库表结构；唯一例外是用户批准新增
+  `20260908110000_resolve_supplier_purchase_batch_category_options.sql`
+  只读 RPC migration，禁止其它函数或 migration 变化。
 - `/Users/leefo/Public/work/orange` 中任何文件。
 - 现有 `reason` 请求字段、幂等键、版本号和服务端计价规则。
 
@@ -504,12 +506,11 @@ export function ProcurementWorkbenchLayout({
 Run:
 
 ```bash
-pnpm --dir apps/admin exec eslint \
-  components/supplier-procurement-editor
-pnpm --dir apps/admin run typecheck
+pnpm --dir apps/admin run check
 ```
 
-Expected: ESLint 和 TypeScript 均退出 0。
+Expected: 仓库真实配置的文件大小和 TypeScript 检查均退出 0。当前仓库没有可非交互运行的
+ESLint 配置，`next lint` 会进入初始化提示，因此不得把 ESLint 记为已通过。
 
 ```bash
 git add apps/admin/components/supplier-procurement-editor
@@ -534,6 +535,9 @@ git commit -m "feat(admin): 建立采购工作台共享组件"
 - Modify: `apps/admin/components/supplier-purchase-batches/batch-catalog.tsx`
 - Modify: `apps/admin/e2e/supplier-purchase-batch-mock-backend.mjs`
 - Create: `supabase/migrations/20260908110000_resolve_supplier_purchase_batch_category_options.sql`
+- Create: `supabase/tests/supplier_purchase_batch_category_options.sql`
+- Create: `scripts/verify-supplier-purchase-batch-category-options.sh`
+- Create: `docs/operations/evidence/2026-09-08-supplier-purchase-batch-category-options.md`
 
 - [ ] **Step 1: 先写目录筛选 API 失败测试**
 
@@ -771,13 +775,12 @@ Run:
 (cd apps/admin && bun test \
   components/supplier-purchase-batches/batch-api.test.ts \
   components/supplier-purchase-batches/batch-ui.test.tsx)
-pnpm --dir apps/admin exec eslint \
-  components/supplier-purchase-batches/batch-api.ts \
-  components/supplier-purchase-batches/batch-catalog.tsx \
-  components/supplier-purchase-batches/batch-catalog-filters.tsx
+./scripts/verify-supplier-purchase-batch-category-options.sh
+pnpm --dir apps/admin run check
 ```
 
-Expected: tests 和 ESLint 全部退出 0。
+Expected: API/Admin tests、事务化 SQL 集成测试、文件大小和 TypeScript 检查全部退出 0；
+SQL verifier 必须精确删除临时 RPC，并证明 fixture 行为全部 ROLLBACK。
 
 ```bash
 git add \
@@ -995,8 +998,7 @@ Run:
   components/supplier-purchase-batches/batch-rules.test.ts \
   components/supplier-purchase-batches/batch-api.test.ts \
   components/supplier-purchase-batches/batch-ui.test.tsx)
-pnpm --dir apps/admin exec eslint components/supplier-purchase-batches
-pnpm --dir apps/admin run typecheck
+pnpm --dir apps/admin run check
 ```
 
 Expected: 全部退出 0，TypeScript 不出现第三方组件 API 猜测错误。
@@ -1119,7 +1121,7 @@ if (!reason) {
 不要把批次的跨供应商状态合并进申请 editor，也不要更改 `useRequisitionDraftSave` 的
 幂等身份。
 
-- [ ] **Step 7: 运行申请单元、类型和 ESLint 验证**
+- [ ] **Step 7: 运行申请单元和仓库静态验证**
 
 Run:
 
@@ -1127,10 +1129,7 @@ Run:
 (cd apps/admin && bun test \
   components/supplier-purchase-requisitions/requisition-page.test.ts \
   components/supplier-purchase-requisitions/requisition-command-refresh.test.ts)
-pnpm --dir apps/admin exec eslint \
-  components/supplier-purchase-requisitions \
-  components/supplier-procurement-editor
-pnpm --dir apps/admin run typecheck
+pnpm --dir apps/admin run check
 ```
 
 Expected: 全部退出 0，现有刷新失败不重发 mutation 的断言继续通过。
@@ -1369,14 +1368,11 @@ Run:
 
 ```bash
 pnpm --dir apps/admin run check
-pnpm --dir apps/admin exec eslint \
-  components/supplier-procurement-editor \
-  components/supplier-purchase-batches \
-  components/supplier-purchase-requisitions
 pnpm --dir apps/admin run build
 ```
 
-Expected: TypeScript、文件大小、ESLint 和 Next.js production build 全部退出 0。
+Expected: TypeScript、文件大小和 Next.js production build 全部退出 0。ESLint 仍受仓库缺少
+非交互配置的基线限制，不得声称通过。
 
 - [ ] **Step 4: 再次运行两套 E2E**
 
@@ -1403,7 +1399,10 @@ git status --short
 
 Expected:
 
-- Gooes 差异中的 API 仅包含 Task 4 列明的批次只读分类选项接口 controller/service/repository/schema/route 及相关测试；不包含 `supabase/migrations/`，也不包含既有保存 API 或任何保存写逻辑改动。
+- Gooes 差异中的 API 仅包含 Task 4 列明的批次只读分类选项接口
+  controller/service/repository/schema/route 及相关测试；数据库差异允许且仅允许用户批准的
+  `supabase/migrations/20260908110000_resolve_supplier_purchase_batch_category_options.sql`
+  只读 RPC migration 和对应事务化 SQL verifier，不包含既有保存 API 或任何保存写逻辑改动。
 - orange 状态与执行前完全一致，没有本任务造成的文件变化。
 - Gooes 仅保留执行前已有的 `.artifacts/` 未跟踪目录，业务源码和文档均已提交。
 
@@ -1427,5 +1426,8 @@ Expected: 无空白错误；提交依次覆盖设计、domain、共享 UI、批�
   `categoryId` 和 `tenantSupplierId`；采购申请没有虚构分类参数。
 - 性能边界：商品、分类、供应商、项目、仓库和成本类目继续分页，单次 `pageSize` 不超过
   100；没有客户端全量加载或 N+1。
-- 数据库边界：没有表、约束、RLS、函数或初始化数据变化，因此不需要 migration。
+- 数据库边界：没有表、约束、RLS 或初始化数据变化；唯一函数变化是用户批准的
+  `resolve_supplier_purchase_batch_category_options(uuid,timestamptz,text,integer,integer)`，且唯一
+  migration 是 `20260908110000_resolve_supplier_purchase_batch_category_options.sql`。回滚按精确签名
+  `DROP FUNCTION`，禁止扩展到其它数据库对象。
 - 仓库边界：orange 只读；需要的小程序改动全部转成交接事项。

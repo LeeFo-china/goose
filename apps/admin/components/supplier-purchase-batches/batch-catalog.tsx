@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -199,19 +199,13 @@ export function BatchCatalog(
                         {batchMoney(item.unit_price)}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={selected ? "secondary" : "outline"}
+                        <BatchCatalogAddAction
+                          productName={item.product_name}
+                          selected={selected}
                           disabled={disabled || Boolean(disabledReason)}
-                          title={disabledReason ?? undefined}
-                          aria-label={disabledReason
-                            ? `${item.product_name}：${disabledReason}`
-                            : `加入${item.product_name}`}
-                          onClick={() => onAdd(item)}
-                        >
-                          {selected ? "已选" : "加入"}
-                        </Button>
+                          disabledReason={disabledReason}
+                          onAdd={() => onAdd(item)}
+                        />
                       </TableCell>
                     </TableRow>
                   );
@@ -228,6 +222,50 @@ export function BatchCatalog(
           onPage={setPage}
         />
       </div>
+    </div>
+  );
+}
+
+export function BatchCatalogAddAction({
+  productName,
+  selected,
+  disabled,
+  disabledReason,
+  onAdd,
+}: {
+  productName: string;
+  selected: boolean;
+  disabled: boolean;
+  disabledReason: string | null;
+  onAdd: () => void;
+}) {
+  const reasonId = useId();
+  const visibleReason = !selected ? disabledReason : null;
+  return (
+    <div className="inline-flex max-w-48 flex-col items-end gap-1">
+      <Button
+        type="button"
+        size="sm"
+        variant={selected ? "secondary" : "outline"}
+        disabled={disabled}
+        aria-describedby={visibleReason ? reasonId : undefined}
+        aria-label={disabledReason
+          ? `${productName}：${disabledReason}`
+          : `加入${productName}`}
+        onClick={onAdd}
+      >
+        {selected ? "已选" : "加入"}
+      </Button>
+      {visibleReason
+        ? (
+          <span
+            id={reasonId}
+            className="text-right text-xs leading-tight text-muted-foreground"
+          >
+            {visibleReason}
+          </span>
+        )
+        : null}
     </div>
   );
 }

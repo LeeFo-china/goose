@@ -14,6 +14,7 @@ import { draftError, newBatchDraft } from "./batch-rules";
 import type { BatchDetail as Detail } from "./batch-types";
 import { BatchRevisionNotice } from "./batch-revision-notice";
 import { BatchCatalogFilters } from "./batch-catalog-filters";
+import { BatchCatalogAddAction } from "./batch-catalog";
 
 test("revision notice identifies the frozen revision version, not the latest batch version", () => {
   const html = renderToStaticMarkup(
@@ -134,4 +135,21 @@ test("catalog filters expose controlled category and supplier reset actions", ()
   expect(html).toContain("供应商");
   expect(html).toContain("全部分类");
   expect(html).toContain("全部供应商");
+});
+
+test("catalog limit reasons remain visible beside an unfocusable disabled action", () => {
+  const html = renderToStaticMarkup(
+    <BatchCatalogAddAction
+      productName="瓷砖"
+      selected={false}
+      disabled={true}
+      disabledReason="每个批次最多选择 100 个 SKU"
+      onAdd={() => {}}
+    />,
+  );
+
+  expect(html).toContain("每个批次最多选择 100 个 SKU");
+  expect(html).toContain("aria-describedby=");
+  expect(html).toContain("disabled=\"\"");
+  expect(html).not.toContain("title=");
 });
