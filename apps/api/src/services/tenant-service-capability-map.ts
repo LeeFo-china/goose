@@ -55,7 +55,7 @@ const EXCLUDED_TOP_LEVEL = [
   "supplier-purchase-requisition-project-options",
   "supplier-purchase-requisition-supplier-options", "supplier-purchase-requisitions",
   "supplier-settings", "suppliers", "tenant", "tenant-devices", "tenant-onboarding",
-  "tenant-share-links", "usage", "visitor", "warehouses", "wechat",
+  "tenant-share-links", "usage", "visitor", "warehouses", "warehouse-issues", "warehouse-returns", "wechat",
 ] as const;
 
 const EXCLUDED_RULES: readonly TenantServiceCapabilityRule[] = [

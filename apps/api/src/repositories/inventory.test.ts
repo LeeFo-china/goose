@@ -26,6 +26,19 @@ process.env.SUPABASE_PUBLISH ??= 'test-publish-key';
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= 'test-service-role-key';
 
 describe('InventoryRepository', () => {
+  test('preserves issue and return source links and rejects partial or mixed sources', async () => {
+    const { InventoryRepository } = await import('./inventory');
+    const issue = { issue_order_id: WAREHOUSE_ID, issue_order_no: 'WI-001' };
+    const returned = { ...issue, return_order_id: SKU_ID, return_order_no: 'WR-001' };
+    for (const source of [issue, returned, { ...issue, receipt_id: SKU_ID }, { return_order_id: SKU_ID }]) {
+      const repository = new InventoryRepository({ rpc: async () => ({
+        data: { items: [{ ...TRANSACTION, source_document: source }], total: 1, page: 1, page_size: 20 }, error: null,
+      }) });
+      const result = repository.listTransactions({ tenant_id: TENANT_ID, page: 1, pageSize: 20 });
+      if (source === issue || source === returned) expect((await result).list[0]?.source_document).toEqual(source as typeof issue | typeof returned);
+      else await expect(result).rejects.toBeInstanceOf(AppError);
+    }
+  });
   test('returns a complete source document without a second query', async () => {
     const { InventoryRepository } = await import('./inventory');
     let calls = 0;
