@@ -1,0 +1,1035 @@
+{
+  "environment": "DEV",
+  "database_project_ref": "fclnkyatvfvmzgzdqlba",
+  "admin_origin": "https://admin-dev.goodcms.cn",
+  "release_sha": "daee511b352d8bead83327ca286a538ebc97322e",
+  "release_run_id": 34345983716,
+  "scope": "D2.1 minimal live gain/loss and inverse restoration; D2.2 not started",
+  "baseline": {
+    "role": {
+      "id": "e72850fe-dbba-427f-9109-f1779080a239",
+      "code": "system_admin",
+      "status": "active",
+      "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b"
+    },
+    "tenant": {
+      "id": "3eebca47-961f-4899-b976-a3d3208d326b",
+      "name": "固始晴天装饰工程有限公司",
+      "status": "active"
+    },
+    "balances": [
+      {
+        "value": "0.00",
+        "version": 3,
+        "quantity": "0.0000",
+        "unit_cost": "0.0000",
+        "warehouse_id": "7b5af333-fcdf-4f92-9ac2-1ccbc77bedce"
+      },
+      {
+        "value": "88.00",
+        "version": 6,
+        "quantity": "1.0000",
+        "unit_cost": "88.0000",
+        "warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90"
+      }
+    ],
+    "database": "postgres",
+    "employee": {
+      "id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826",
+      "status": "active",
+      "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b"
+    },
+    "readonly": "on",
+    "settings": {
+      "version": 22,
+      "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b",
+      "created_at": "2026-07-24T08:50:22.960468+00:00",
+      "enabled_at": "2026-07-24T08:50:22.960468+00:00",
+      "updated_at": "2026-09-09T06:05:10.012395+00:00",
+      "module_enabled": true,
+      "enabled_by_employee_id": "b19aa3b4-4f47-4f4a-89ca-7187fc455f4f",
+      "ownership_reads_enabled": true,
+      "warehouse_materials_enabled": true,
+      "warehouse_transfers_enabled": false,
+      "warehouse_stocktakes_enabled": false,
+      "warehouse_procurement_enabled": true,
+      "private_catalog_writes_enabled": true,
+      "private_supplier_writes_enabled": true,
+      "procurement_snapshot_v1_enabled": true,
+      "purchase_batch_workflow_enabled": true,
+      "require_active_contract_for_new_order": false
+    },
+    "checked_at": "2026-09-09T11:52:07.038209+00:00",
+    "manage_allowed": true,
+    "approve_allowed": true,
+    "stocktake_grants": [
+      {
+        "code": "inventory.stocktake.manage",
+        "scope": "all"
+      },
+      {
+        "code": "inventory.stocktake.approve",
+        "scope": "all"
+      }
+    ],
+    "migration_count": 610,
+    "migration_latest": "20260909111954"
+  },
+  "baseline_counts": {
+    "checked_at": "2026-09-09T11:52:07.075901+00:00",
+    "stocktake_events": 0,
+    "stocktake_orders": 0,
+    "stocktake_transactions": 0
+  },
+  "after_gain": [
+    {
+      "role": {
+        "id": "e72850fe-dbba-427f-9109-f1779080a239",
+        "code": "system_admin",
+        "status": "active",
+        "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b"
+      },
+      "tenant": {
+        "id": "3eebca47-961f-4899-b976-a3d3208d326b",
+        "name": "固始晴天装饰工程有限公司",
+        "status": "active"
+      },
+      "balances": [
+        {
+          "value": "0.00",
+          "version": 3,
+          "quantity": "0.0000",
+          "unit_cost": "0.0000",
+          "warehouse_id": "7b5af333-fcdf-4f92-9ac2-1ccbc77bedce"
+        },
+        {
+          "value": "176.00",
+          "version": 7,
+          "quantity": "2.0000",
+          "unit_cost": "88.0000",
+          "warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90"
+        }
+      ],
+      "database": "postgres",
+      "employee": {
+        "id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826",
+        "status": "active",
+        "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b"
+      },
+      "readonly": "on",
+      "settings": {
+        "version": 23,
+        "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b",
+        "created_at": "2026-07-24T08:50:22.960468+00:00",
+        "enabled_at": "2026-07-24T08:50:22.960468+00:00",
+        "updated_at": "2026-09-09T12:10:32.494986+00:00",
+        "module_enabled": true,
+        "enabled_by_employee_id": "b19aa3b4-4f47-4f4a-89ca-7187fc455f4f",
+        "ownership_reads_enabled": true,
+        "warehouse_materials_enabled": true,
+        "warehouse_transfers_enabled": false,
+        "warehouse_stocktakes_enabled": true,
+        "warehouse_procurement_enabled": true,
+        "private_catalog_writes_enabled": true,
+        "private_supplier_writes_enabled": true,
+        "procurement_snapshot_v1_enabled": true,
+        "purchase_batch_workflow_enabled": true,
+        "require_active_contract_for_new_order": false
+      },
+      "checked_at": "2026-09-09T12:36:49.28489+00:00",
+      "manage_allowed": true,
+      "approve_allowed": true,
+      "stocktake_grants": [
+        {
+          "code": "inventory.stocktake.manage",
+          "scope": "all"
+        },
+        {
+          "code": "inventory.stocktake.approve",
+          "scope": "all"
+        }
+      ],
+      "migration_count": 610,
+      "migration_latest": "20260909111954"
+    },
+    {
+      "checked_at": "2026-09-09T12:36:49.289658+00:00",
+      "stocktake_events": 5,
+      "stocktake_orders": 1,
+      "stocktake_transactions": 1
+    }
+  ],
+  "after_inverse": [
+    {
+      "role": {
+        "id": "e72850fe-dbba-427f-9109-f1779080a239",
+        "code": "system_admin",
+        "status": "active",
+        "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b"
+      },
+      "tenant": {
+        "id": "3eebca47-961f-4899-b976-a3d3208d326b",
+        "name": "固始晴天装饰工程有限公司",
+        "status": "active"
+      },
+      "balances": [
+        {
+          "value": "0.00",
+          "version": 3,
+          "quantity": "0.0000",
+          "unit_cost": "0.0000",
+          "warehouse_id": "7b5af333-fcdf-4f92-9ac2-1ccbc77bedce"
+        },
+        {
+          "value": "88.00",
+          "version": 8,
+          "quantity": "1.0000",
+          "unit_cost": "88.0000",
+          "warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90"
+        }
+      ],
+      "database": "postgres",
+      "employee": {
+        "id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826",
+        "status": "active",
+        "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b"
+      },
+      "readonly": "on",
+      "settings": {
+        "version": 23,
+        "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b",
+        "created_at": "2026-07-24T08:50:22.960468+00:00",
+        "enabled_at": "2026-07-24T08:50:22.960468+00:00",
+        "updated_at": "2026-09-09T12:10:32.494986+00:00",
+        "module_enabled": true,
+        "enabled_by_employee_id": "b19aa3b4-4f47-4f4a-89ca-7187fc455f4f",
+        "ownership_reads_enabled": true,
+        "warehouse_materials_enabled": true,
+        "warehouse_transfers_enabled": false,
+        "warehouse_stocktakes_enabled": true,
+        "warehouse_procurement_enabled": true,
+        "private_catalog_writes_enabled": true,
+        "private_supplier_writes_enabled": true,
+        "procurement_snapshot_v1_enabled": true,
+        "purchase_batch_workflow_enabled": true,
+        "require_active_contract_for_new_order": false
+      },
+      "checked_at": "2026-09-09T12:56:04.441031+00:00",
+      "manage_allowed": true,
+      "approve_allowed": true,
+      "stocktake_grants": [
+        {
+          "code": "inventory.stocktake.manage",
+          "scope": "all"
+        },
+        {
+          "code": "inventory.stocktake.approve",
+          "scope": "all"
+        }
+      ],
+      "migration_count": 610,
+      "migration_latest": "20260909111954"
+    },
+    {
+      "checked_at": "2026-09-09T12:56:04.447444+00:00",
+      "stocktake_events": 10,
+      "stocktake_orders": 2,
+      "stocktake_transactions": 2
+    }
+  ],
+  "final": [
+    {
+      "role": {
+        "id": "e72850fe-dbba-427f-9109-f1779080a239",
+        "code": "system_admin",
+        "status": "active",
+        "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b"
+      },
+      "tenant": {
+        "id": "3eebca47-961f-4899-b976-a3d3208d326b",
+        "name": "固始晴天装饰工程有限公司",
+        "status": "active"
+      },
+      "balances": [
+        {
+          "value": "0.00",
+          "version": 3,
+          "quantity": "0.0000",
+          "unit_cost": "0.0000",
+          "warehouse_id": "7b5af333-fcdf-4f92-9ac2-1ccbc77bedce"
+        },
+        {
+          "value": "88.00",
+          "version": 8,
+          "quantity": "1.0000",
+          "unit_cost": "88.0000",
+          "warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90"
+        }
+      ],
+      "database": "postgres",
+      "employee": {
+        "id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826",
+        "status": "active",
+        "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b"
+      },
+      "readonly": "on",
+      "settings": {
+        "version": 24,
+        "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b",
+        "created_at": "2026-07-24T08:50:22.960468+00:00",
+        "enabled_at": "2026-07-24T08:50:22.960468+00:00",
+        "updated_at": "2026-09-09T13:05:11.555282+00:00",
+        "module_enabled": true,
+        "enabled_by_employee_id": "b19aa3b4-4f47-4f4a-89ca-7187fc455f4f",
+        "ownership_reads_enabled": true,
+        "warehouse_materials_enabled": true,
+        "warehouse_transfers_enabled": false,
+        "warehouse_stocktakes_enabled": false,
+        "warehouse_procurement_enabled": true,
+        "private_catalog_writes_enabled": true,
+        "private_supplier_writes_enabled": true,
+        "procurement_snapshot_v1_enabled": true,
+        "purchase_batch_workflow_enabled": true,
+        "require_active_contract_for_new_order": false
+      },
+      "checked_at": "2026-09-09T13:05:42.9866+00:00",
+      "manage_allowed": true,
+      "approve_allowed": true,
+      "stocktake_grants": [
+        {
+          "code": "inventory.stocktake.manage",
+          "scope": "all"
+        },
+        {
+          "code": "inventory.stocktake.approve",
+          "scope": "all"
+        }
+      ],
+      "migration_count": 610,
+      "migration_latest": "20260909111954"
+    },
+    {
+      "checked_at": "2026-09-09T13:05:42.991416+00:00",
+      "stocktake_events": 10,
+      "stocktake_orders": 2,
+      "stocktake_transactions": 2
+    }
+  ],
+  "business_before": {
+    "readonly": "on",
+    "checked_at": "2026-09-09T12:05:34.139955+00:00",
+    "lock_waiters": 0,
+    "business_facts": {
+      "warehouses": {
+        "md5": "d979170cf33645f04454166a37058569",
+        "count": 2
+      },
+      "supplier_payments": {
+        "md5": "d41d8cd98f00b204e9800998ecf8427e",
+        "count": 0
+      },
+      "project_cost_events": {
+        "md5": "de288f3c65d5e387a4750387b7780ca4",
+        "count": 7
+      },
+      "finance_ledger_entries": {
+        "md5": "b7d575ad20aadbb73e3d1a234b284054",
+        "count": 20
+      },
+      "warehouse_issue_orders": {
+        "md5": "b248de47e88c0c9f711d40268777eeee",
+        "count": 1
+      },
+      "supplier_command_events": {
+        "md5": "600d3d180b3a074beaab40dbfbacf564",
+        "count": 129
+      },
+      "supplier_payable_events": {
+        "md5": "a555c42133bf7a7975f3285f3a245b07",
+        "count": 5
+      },
+      "warehouse_return_orders": {
+        "md5": "f0dc564fbf021f6eec440e7ea87446a0",
+        "count": 2
+      },
+      "warehouse_transfer_orders": {
+        "md5": "0103527a9ba9dc1ce4663a24447c2822",
+        "count": 2
+      }
+    },
+    "employee_roles": {
+      "md5": "0b49e0a6393c9d2f228426aa27a16496",
+      "count": 34
+    },
+    "long_transactions": 0,
+    "stocktake_objects": 3,
+    "employee_overrides": {
+      "md5": "36b70b31a34f9434892036d5935b884f",
+      "count": 6
+    },
+    "rollout_anchor_counts": [
+      {
+        "count": 1,
+        "anchor": 1
+      },
+      {
+        "count": 0,
+        "anchor": 2
+      },
+      {
+        "count": 0,
+        "anchor": 3
+      },
+      {
+        "count": 1,
+        "anchor": 4
+      },
+      {
+        "count": 1,
+        "anchor": 5
+      },
+      {
+        "count": 1,
+        "anchor": 6
+      },
+      {
+        "count": 1,
+        "anchor": 7
+      }
+    ],
+    "stocktake_permissions": 2,
+    "inventory_anchor_count": 1,
+    "other_role_permissions": {
+      "md5": "76164303e3ac2d8e3b20dcb70ca82a78",
+      "count": 1595
+    },
+    "inventory_materialized_page": false
+  },
+  "business_after": {
+    "readonly": "on",
+    "checked_at": "2026-09-09T13:08:39.516786+00:00",
+    "lock_waiters": 0,
+    "business_facts": {
+      "warehouses": {
+        "md5": "d979170cf33645f04454166a37058569",
+        "count": 2
+      },
+      "supplier_payments": {
+        "md5": "d41d8cd98f00b204e9800998ecf8427e",
+        "count": 0
+      },
+      "project_cost_events": {
+        "md5": "de288f3c65d5e387a4750387b7780ca4",
+        "count": 7
+      },
+      "finance_ledger_entries": {
+        "md5": "b7d575ad20aadbb73e3d1a234b284054",
+        "count": 20
+      },
+      "warehouse_issue_orders": {
+        "md5": "b248de47e88c0c9f711d40268777eeee",
+        "count": 1
+      },
+      "supplier_command_events": {
+        "md5": "0c27031a94838d9865e988e2d7ea8029",
+        "count": 131
+      },
+      "supplier_payable_events": {
+        "md5": "a555c42133bf7a7975f3285f3a245b07",
+        "count": 5
+      },
+      "warehouse_return_orders": {
+        "md5": "f0dc564fbf021f6eec440e7ea87446a0",
+        "count": 2
+      },
+      "warehouse_transfer_orders": {
+        "md5": "0103527a9ba9dc1ce4663a24447c2822",
+        "count": 2
+      }
+    },
+    "employee_roles": {
+      "md5": "0b49e0a6393c9d2f228426aa27a16496",
+      "count": 34
+    },
+    "long_transactions": 0,
+    "stocktake_objects": 3,
+    "employee_overrides": {
+      "md5": "36b70b31a34f9434892036d5935b884f",
+      "count": 6
+    },
+    "rollout_anchor_counts": [
+      {
+        "count": 1,
+        "anchor": 1
+      },
+      {
+        "count": 0,
+        "anchor": 2
+      },
+      {
+        "count": 0,
+        "anchor": 3
+      },
+      {
+        "count": 1,
+        "anchor": 4
+      },
+      {
+        "count": 1,
+        "anchor": 5
+      },
+      {
+        "count": 1,
+        "anchor": 6
+      },
+      {
+        "count": 1,
+        "anchor": 7
+      }
+    ],
+    "stocktake_permissions": 2,
+    "inventory_anchor_count": 1,
+    "other_role_permissions": {
+      "md5": "76164303e3ac2d8e3b20dcb70ca82a78",
+      "count": 1595
+    },
+    "inventory_materialized_page": false
+  },
+  "stocktake_facts": {
+    "items": [
+      {
+        "id": "b7b4d0e9-9b89-4dde-bc27-a8bde10f6ed1",
+        "amount": 88,
+        "unit_cost": 88,
+        "book_value": 88,
+        "warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+        "book_quantity": 1,
+        "book_unit_cost": 88,
+        "supplier_sku_id": "732e2b3b-cb7e-4e40-a4e2-228c22bf985c",
+        "counted_quantity": 2,
+        "difference_reason": "DEV验收模拟盘盈1箱，无实物变动；完成后反向盘亏恢复原库存。",
+        "stocktake_order_id": "94364c81-444f-46bc-a9dd-4d57bbf30efb",
+        "difference_quantity": 1,
+        "book_balance_version": 6
+      },
+      {
+        "id": "f08ec79d-cff2-4a00-85ba-e45baa0bf6c8",
+        "amount": 88,
+        "unit_cost": 88,
+        "book_value": 176,
+        "warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+        "book_quantity": 2,
+        "book_unit_cost": 88,
+        "supplier_sku_id": "732e2b3b-cb7e-4e40-a4e2-228c22bf985c",
+        "counted_quantity": 1,
+        "difference_reason": "DEV验收恢复WS-0000000001模拟盘盈：反向盘亏1箱，无实物变动，恢复1箱/88元基线。",
+        "stocktake_order_id": "b3672bab-2b6f-43c2-b9af-7410fd435569",
+        "difference_quantity": -1,
+        "book_balance_version": 7
+      }
+    ],
+    "events": [
+      {
+        "id": "2a60c5ba-fb3b-40fb-8b9b-26180f7cb1a6",
+        "result": {
+          "order": {
+            "id": "94364c81-444f-46bc-a9dd-4d57bbf30efb",
+            "reason": "DEV盘点验收20260909：模拟盘盈1箱，无实物变动；随后反向盘亏恢复基线1箱/88元。",
+            "status": "draft",
+            "version": 1,
+            "order_no": "WS-0000000001",
+            "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b",
+            "created_at": "2026-09-09T12:23:29.299502+00:00",
+            "started_at": null,
+            "updated_at": "2026-09-09T12:23:29.299502+00:00",
+            "cancelled_at": null,
+            "completed_at": null,
+            "submitted_at": null,
+            "warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+            "created_by_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826",
+            "updated_by_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826"
+          },
+          "status": "saved"
+        },
+        "command": "save_draft",
+        "order_id": "94364c81-444f-46bc-a9dd-4d57bbf30efb",
+        "created_at": "2026-09-09T12:23:29.299502+00:00",
+        "actor_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826"
+      },
+      {
+        "id": "86328068-0747-47d0-8bd4-321f1afc52cd",
+        "result": {
+          "order": {
+            "id": "94364c81-444f-46bc-a9dd-4d57bbf30efb",
+            "reason": "DEV盘点验收20260909：模拟盘盈1箱，无实物变动；随后反向盘亏恢复基线1箱/88元。",
+            "status": "counting",
+            "version": 2,
+            "order_no": "WS-0000000001",
+            "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b",
+            "created_at": "2026-09-09T12:23:29.299502+00:00",
+            "started_at": "2026-09-09T12:26:55.338638+00:00",
+            "updated_at": "2026-09-09T12:26:55.338638+00:00",
+            "cancelled_at": null,
+            "completed_at": null,
+            "submitted_at": null,
+            "warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+            "created_by_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826",
+            "updated_by_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826"
+          },
+          "status": "counting"
+        },
+        "command": "start",
+        "order_id": "94364c81-444f-46bc-a9dd-4d57bbf30efb",
+        "created_at": "2026-09-09T12:26:55.338638+00:00",
+        "actor_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826"
+      },
+      {
+        "id": "3f0acfc3-800e-453c-847f-443df01c365c",
+        "result": {
+          "order": {
+            "id": "94364c81-444f-46bc-a9dd-4d57bbf30efb",
+            "reason": "DEV盘点验收20260909：模拟盘盈1箱，无实物变动；随后反向盘亏恢复基线1箱/88元。",
+            "status": "counting",
+            "version": 3,
+            "order_no": "WS-0000000001",
+            "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b",
+            "created_at": "2026-09-09T12:23:29.299502+00:00",
+            "started_at": "2026-09-09T12:26:55.338638+00:00",
+            "updated_at": "2026-09-09T12:30:43.551568+00:00",
+            "cancelled_at": null,
+            "completed_at": null,
+            "submitted_at": null,
+            "warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+            "created_by_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826",
+            "updated_by_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826"
+          },
+          "status": "counting"
+        },
+        "command": "record_counts",
+        "order_id": "94364c81-444f-46bc-a9dd-4d57bbf30efb",
+        "created_at": "2026-09-09T12:30:43.551568+00:00",
+        "actor_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826"
+      },
+      {
+        "id": "4484fb48-0136-41e8-a725-a56100f8fbab",
+        "result": {
+          "order": {
+            "id": "94364c81-444f-46bc-a9dd-4d57bbf30efb",
+            "reason": "DEV盘点验收20260909：模拟盘盈1箱，无实物变动；随后反向盘亏恢复基线1箱/88元。",
+            "status": "submitted",
+            "version": 4,
+            "order_no": "WS-0000000001",
+            "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b",
+            "created_at": "2026-09-09T12:23:29.299502+00:00",
+            "started_at": "2026-09-09T12:26:55.338638+00:00",
+            "updated_at": "2026-09-09T12:33:26.863859+00:00",
+            "cancelled_at": null,
+            "completed_at": null,
+            "submitted_at": "2026-09-09T12:33:26.863859+00:00",
+            "warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+            "created_by_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826",
+            "updated_by_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826"
+          },
+          "status": "submitted"
+        },
+        "command": "submit",
+        "order_id": "94364c81-444f-46bc-a9dd-4d57bbf30efb",
+        "created_at": "2026-09-09T12:33:26.863859+00:00",
+        "actor_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826"
+      },
+      {
+        "id": "9ed170be-e23c-4349-a16e-84318fed6fab",
+        "result": {
+          "order": {
+            "id": "94364c81-444f-46bc-a9dd-4d57bbf30efb",
+            "reason": "DEV盘点验收20260909：模拟盘盈1箱，无实物变动；随后反向盘亏恢复基线1箱/88元。",
+            "status": "completed",
+            "version": 5,
+            "order_no": "WS-0000000001",
+            "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b",
+            "created_at": "2026-09-09T12:23:29.299502+00:00",
+            "started_at": "2026-09-09T12:26:55.338638+00:00",
+            "updated_at": "2026-09-09T12:36:25.707415+00:00",
+            "cancelled_at": null,
+            "completed_at": "2026-09-09T12:36:25.707415+00:00",
+            "submitted_at": "2026-09-09T12:33:26.863859+00:00",
+            "warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+            "created_by_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826",
+            "updated_by_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826"
+          },
+          "status": "completed"
+        },
+        "command": "complete",
+        "order_id": "94364c81-444f-46bc-a9dd-4d57bbf30efb",
+        "created_at": "2026-09-09T12:36:25.707415+00:00",
+        "actor_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826"
+      },
+      {
+        "id": "589ab805-a78c-47b8-b5f8-5e6583e9d68a",
+        "result": {
+          "order": {
+            "id": "b3672bab-2b6f-43c2-b9af-7410fd435569",
+            "reason": "DEV盘点验收20260909：反向恢复WS-0000000001模拟盘盈，无实物变动；盘亏1箱恢复原基线1箱/88元。",
+            "status": "draft",
+            "version": 1,
+            "order_no": "WS-0000000002",
+            "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b",
+            "created_at": "2026-09-09T12:43:06.329128+00:00",
+            "started_at": null,
+            "updated_at": "2026-09-09T12:43:06.329128+00:00",
+            "cancelled_at": null,
+            "completed_at": null,
+            "submitted_at": null,
+            "warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+            "created_by_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826",
+            "updated_by_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826"
+          },
+          "status": "saved"
+        },
+        "command": "save_draft",
+        "order_id": "b3672bab-2b6f-43c2-b9af-7410fd435569",
+        "created_at": "2026-09-09T12:43:06.329128+00:00",
+        "actor_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826"
+      },
+      {
+        "id": "1731db09-7a27-4a4d-8595-c39668ff50d4",
+        "result": {
+          "order": {
+            "id": "b3672bab-2b6f-43c2-b9af-7410fd435569",
+            "reason": "DEV盘点验收20260909：反向恢复WS-0000000001模拟盘盈，无实物变动；盘亏1箱恢复原基线1箱/88元。",
+            "status": "counting",
+            "version": 2,
+            "order_no": "WS-0000000002",
+            "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b",
+            "created_at": "2026-09-09T12:43:06.329128+00:00",
+            "started_at": "2026-09-09T12:45:36.623087+00:00",
+            "updated_at": "2026-09-09T12:45:36.623087+00:00",
+            "cancelled_at": null,
+            "completed_at": null,
+            "submitted_at": null,
+            "warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+            "created_by_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826",
+            "updated_by_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826"
+          },
+          "status": "counting"
+        },
+        "command": "start",
+        "order_id": "b3672bab-2b6f-43c2-b9af-7410fd435569",
+        "created_at": "2026-09-09T12:45:36.623087+00:00",
+        "actor_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826"
+      },
+      {
+        "id": "ffb4f57c-27f5-48b0-80f6-81ef0558d001",
+        "result": {
+          "order": {
+            "id": "b3672bab-2b6f-43c2-b9af-7410fd435569",
+            "reason": "DEV盘点验收20260909：反向恢复WS-0000000001模拟盘盈，无实物变动；盘亏1箱恢复原基线1箱/88元。",
+            "status": "counting",
+            "version": 3,
+            "order_no": "WS-0000000002",
+            "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b",
+            "created_at": "2026-09-09T12:43:06.329128+00:00",
+            "started_at": "2026-09-09T12:45:36.623087+00:00",
+            "updated_at": "2026-09-09T12:49:32.341066+00:00",
+            "cancelled_at": null,
+            "completed_at": null,
+            "submitted_at": null,
+            "warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+            "created_by_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826",
+            "updated_by_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826"
+          },
+          "status": "counting"
+        },
+        "command": "record_counts",
+        "order_id": "b3672bab-2b6f-43c2-b9af-7410fd435569",
+        "created_at": "2026-09-09T12:49:32.341066+00:00",
+        "actor_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826"
+      },
+      {
+        "id": "19012805-5abb-40fa-a86b-2b88e2b519c2",
+        "result": {
+          "order": {
+            "id": "b3672bab-2b6f-43c2-b9af-7410fd435569",
+            "reason": "DEV盘点验收20260909：反向恢复WS-0000000001模拟盘盈，无实物变动；盘亏1箱恢复原基线1箱/88元。",
+            "status": "submitted",
+            "version": 4,
+            "order_no": "WS-0000000002",
+            "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b",
+            "created_at": "2026-09-09T12:43:06.329128+00:00",
+            "started_at": "2026-09-09T12:45:36.623087+00:00",
+            "updated_at": "2026-09-09T12:52:35.49707+00:00",
+            "cancelled_at": null,
+            "completed_at": null,
+            "submitted_at": "2026-09-09T12:52:35.49707+00:00",
+            "warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+            "created_by_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826",
+            "updated_by_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826"
+          },
+          "status": "submitted"
+        },
+        "command": "submit",
+        "order_id": "b3672bab-2b6f-43c2-b9af-7410fd435569",
+        "created_at": "2026-09-09T12:52:35.49707+00:00",
+        "actor_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826"
+      },
+      {
+        "id": "8ee94590-8d52-4d75-be58-435246525380",
+        "result": {
+          "order": {
+            "id": "b3672bab-2b6f-43c2-b9af-7410fd435569",
+            "reason": "DEV盘点验收20260909：反向恢复WS-0000000001模拟盘盈，无实物变动；盘亏1箱恢复原基线1箱/88元。",
+            "status": "completed",
+            "version": 5,
+            "order_no": "WS-0000000002",
+            "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b",
+            "created_at": "2026-09-09T12:43:06.329128+00:00",
+            "started_at": "2026-09-09T12:45:36.623087+00:00",
+            "updated_at": "2026-09-09T12:55:14.689099+00:00",
+            "cancelled_at": null,
+            "completed_at": "2026-09-09T12:55:14.689099+00:00",
+            "submitted_at": "2026-09-09T12:52:35.49707+00:00",
+            "warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+            "created_by_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826",
+            "updated_by_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826"
+          },
+          "status": "completed"
+        },
+        "command": "complete",
+        "order_id": "b3672bab-2b6f-43c2-b9af-7410fd435569",
+        "created_at": "2026-09-09T12:55:14.689099+00:00",
+        "actor_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826"
+      }
+    ],
+    "orders": [
+      {
+        "id": "94364c81-444f-46bc-a9dd-4d57bbf30efb",
+        "reason": "DEV盘点验收20260909：模拟盘盈1箱，无实物变动；随后反向盘亏恢复基线1箱/88元。",
+        "status": "completed",
+        "version": 5,
+        "order_no": "WS-0000000001",
+        "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b",
+        "created_at": "2026-09-09T12:23:29.299502+00:00",
+        "started_at": "2026-09-09T12:26:55.338638+00:00",
+        "cancelled_at": null,
+        "completed_at": "2026-09-09T12:36:25.707415+00:00",
+        "submitted_at": "2026-09-09T12:33:26.863859+00:00",
+        "warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+        "created_by_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826"
+      },
+      {
+        "id": "b3672bab-2b6f-43c2-b9af-7410fd435569",
+        "reason": "DEV盘点验收20260909：反向恢复WS-0000000001模拟盘盈，无实物变动；盘亏1箱恢复原基线1箱/88元。",
+        "status": "completed",
+        "version": 5,
+        "order_no": "WS-0000000002",
+        "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b",
+        "created_at": "2026-09-09T12:43:06.329128+00:00",
+        "started_at": "2026-09-09T12:45:36.623087+00:00",
+        "cancelled_at": null,
+        "completed_at": "2026-09-09T12:55:14.689099+00:00",
+        "submitted_at": "2026-09-09T12:52:35.49707+00:00",
+        "warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+        "created_by_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826"
+      }
+    ],
+    "readonly": "on",
+    "checked_at": "2026-09-09T13:08:15.425257+00:00",
+    "transactions": [
+      {
+        "id": "4807174f-2e4c-496b-b5bd-363ef81ef194",
+        "source_id": "b7b4d0e9-9b89-4dde-bc27-a8bde10f6ed1",
+        "created_at": "2026-09-09T12:36:25.707415+00:00",
+        "source_type": "warehouse_stocktake_item",
+        "value_delta": 88,
+        "warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+        "quantity_delta": 1,
+        "supplier_sku_id": "732e2b3b-cb7e-4e40-a4e2-228c22bf985c",
+        "transaction_type": "adjustment_in",
+        "warehouse_stocktake_item_id": "b7b4d0e9-9b89-4dde-bc27-a8bde10f6ed1"
+      },
+      {
+        "id": "c000b760-fca7-40cf-98a0-5ab269a321c4",
+        "source_id": "f08ec79d-cff2-4a00-85ba-e45baa0bf6c8",
+        "created_at": "2026-09-09T12:55:14.689099+00:00",
+        "source_type": "warehouse_stocktake_item",
+        "value_delta": -88,
+        "warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+        "quantity_delta": -1,
+        "supplier_sku_id": "732e2b3b-cb7e-4e40-a4e2-228c22bf985c",
+        "transaction_type": "adjustment_out",
+        "warehouse_stocktake_item_id": "f08ec79d-cff2-4a00-85ba-e45baa0bf6c8"
+      }
+    ]
+  },
+  "rollout_events": {
+    "events": [
+      {
+        "id": "f219dc45-034c-4ca3-ab91-97e2ccc177a9",
+        "command": "set_tenant_supplier_rollout_settings",
+        "to_state": {
+          "version": 23,
+          "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b",
+          "created_at": "2026-07-24T08:50:22.960468+00:00",
+          "enabled_at": "2026-07-24T08:50:22.960468+00:00",
+          "updated_at": "2026-09-09T12:10:32.494986+00:00",
+          "module_enabled": true,
+          "enabled_by_employee_id": "b19aa3b4-4f47-4f4a-89ca-7187fc455f4f",
+          "ownership_reads_enabled": true,
+          "warehouse_materials_enabled": true,
+          "warehouse_transfers_enabled": false,
+          "warehouse_stocktakes_enabled": true,
+          "warehouse_procurement_enabled": true,
+          "private_catalog_writes_enabled": true,
+          "private_supplier_writes_enabled": true,
+          "procurement_snapshot_v1_enabled": true,
+          "purchase_batch_workflow_enabled": true,
+          "require_active_contract_for_new_order": false
+        },
+        "created_at": "2026-09-09T12:10:32.494986+00:00",
+        "from_state": {
+          "version": 22,
+          "_request": {
+            "reason": null,
+            "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b",
+            "module_enabled": true,
+            "expected_version": 22,
+            "actor_employee_id": "b19aa3b4-4f47-4f4a-89ca-7187fc455f4f",
+            "ownership_reads_enabled": true,
+            "warehouse_materials_enabled": true,
+            "warehouse_transfers_enabled": false,
+            "warehouse_stocktakes_enabled": true,
+            "warehouse_procurement_enabled": true,
+            "private_catalog_writes_enabled": true,
+            "private_supplier_writes_enabled": true,
+            "procurement_snapshot_v1_enabled": true,
+            "purchase_batch_workflow_enabled": true,
+            "require_active_contract_for_new_order": false
+          },
+          "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b",
+          "created_at": "2026-07-24T08:50:22.960468+00:00",
+          "enabled_at": "2026-07-24T08:50:22.960468+00:00",
+          "updated_at": "2026-09-09T06:05:10.012395+00:00",
+          "module_enabled": true,
+          "enabled_by_employee_id": "b19aa3b4-4f47-4f4a-89ca-7187fc455f4f",
+          "ownership_reads_enabled": true,
+          "warehouse_materials_enabled": true,
+          "warehouse_transfers_enabled": false,
+          "warehouse_stocktakes_enabled": false,
+          "warehouse_procurement_enabled": true,
+          "private_catalog_writes_enabled": true,
+          "private_supplier_writes_enabled": true,
+          "procurement_snapshot_v1_enabled": true,
+          "purchase_batch_workflow_enabled": true,
+          "require_active_contract_for_new_order": false
+        },
+        "resource_id": "3eebca47-961f-4899-b976-a3d3208d326b",
+        "resource_type": "tenant_supplier",
+        "result_version": 23
+      },
+      {
+        "id": "cb61ba3d-4bb8-471f-a1bd-e87e060fb61f",
+        "command": "set_tenant_supplier_rollout_settings",
+        "to_state": {
+          "version": 24,
+          "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b",
+          "created_at": "2026-07-24T08:50:22.960468+00:00",
+          "enabled_at": "2026-07-24T08:50:22.960468+00:00",
+          "updated_at": "2026-09-09T13:05:11.555282+00:00",
+          "module_enabled": true,
+          "enabled_by_employee_id": "b19aa3b4-4f47-4f4a-89ca-7187fc455f4f",
+          "ownership_reads_enabled": true,
+          "warehouse_materials_enabled": true,
+          "warehouse_transfers_enabled": false,
+          "warehouse_stocktakes_enabled": false,
+          "warehouse_procurement_enabled": true,
+          "private_catalog_writes_enabled": true,
+          "private_supplier_writes_enabled": true,
+          "procurement_snapshot_v1_enabled": true,
+          "purchase_batch_workflow_enabled": true,
+          "require_active_contract_for_new_order": false
+        },
+        "created_at": "2026-09-09T13:05:11.555282+00:00",
+        "from_state": {
+          "version": 23,
+          "_request": {
+            "reason": null,
+            "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b",
+            "module_enabled": true,
+            "expected_version": 23,
+            "actor_employee_id": "b19aa3b4-4f47-4f4a-89ca-7187fc455f4f",
+            "ownership_reads_enabled": true,
+            "warehouse_materials_enabled": true,
+            "warehouse_transfers_enabled": false,
+            "warehouse_stocktakes_enabled": false,
+            "warehouse_procurement_enabled": true,
+            "private_catalog_writes_enabled": true,
+            "private_supplier_writes_enabled": true,
+            "procurement_snapshot_v1_enabled": true,
+            "purchase_batch_workflow_enabled": true,
+            "require_active_contract_for_new_order": false
+          },
+          "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b",
+          "created_at": "2026-07-24T08:50:22.960468+00:00",
+          "enabled_at": "2026-07-24T08:50:22.960468+00:00",
+          "updated_at": "2026-09-09T12:10:32.494986+00:00",
+          "module_enabled": true,
+          "enabled_by_employee_id": "b19aa3b4-4f47-4f4a-89ca-7187fc455f4f",
+          "ownership_reads_enabled": true,
+          "warehouse_materials_enabled": true,
+          "warehouse_transfers_enabled": false,
+          "warehouse_stocktakes_enabled": true,
+          "warehouse_procurement_enabled": true,
+          "private_catalog_writes_enabled": true,
+          "private_supplier_writes_enabled": true,
+          "procurement_snapshot_v1_enabled": true,
+          "purchase_batch_workflow_enabled": true,
+          "require_active_contract_for_new_order": false
+        },
+        "resource_id": "3eebca47-961f-4899-b976-a3d3208d326b",
+        "resource_type": "tenant_supplier",
+        "result_version": 24
+      }
+    ],
+    "readonly": "on",
+    "checked_at": "2026-09-09T13:12:43.390918+00:00"
+  },
+  "checks": {
+    "baseline_settings_restored": true,
+    "balances_restored": true,
+    "migration_versions_unchanged": true,
+    "financial_and_business": {
+      "warehouses": true,
+      "supplier_payments": true,
+      "project_cost_events": true,
+      "finance_ledger_entries": true,
+      "warehouse_issue_orders": true,
+      "supplier_payable_events": true,
+      "warehouse_return_orders": true,
+      "warehouse_transfer_orders": true
+    },
+    "authorization": {
+      "other_role_permissions": true,
+      "employee_roles": true,
+      "employee_overrides": true
+    },
+    "two_completed_orders": true,
+    "five_events_per_order": true,
+    "two_transactions_net_zero": true,
+    "source_links_valid": true,
+    "only_two_rollout_events": true
+  },
+  "verification": {
+    "command": "cd apps/admin && bun test components/warehouse-stocktakes components/warehouse-transfers components/platform-tenants/tenant-supplier-settings-rules.test.ts components/inventory/inventory-table.test.tsx",
+    "tests": 52,
+    "assertions": 321,
+    "failures": 0
+  },
+  "browser": {
+    "actor": "风清扬",
+    "permissions": 221,
+    "final_history_readable": true,
+    "final_create_disabled": true,
+    "finalized": true,
+    "screenshot": "Viewed in conversation; not saved as a repository image."
+  }
+}
