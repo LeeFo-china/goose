@@ -1,5 +1,9 @@
 import type { AuthContext } from '@/services/authorization';
 
+process.env.SUPABASE_URL ??= 'http://127.0.0.1:54321';
+process.env.SUPABASE_PUBLISH ??= 'test-publish-key';
+process.env.SUPABASE_SERVICE_ROLE_KEY ??= 'test-service-role-key';
+
 export const STOCKTAKE_ID = '10000000-0000-4000-8000-000000000001';
 export const STOCKTAKE_ACTOR = { tenant_id: STOCKTAKE_ID, actor_user_id: STOCKTAKE_ID, actor_employee_id: STOCKTAKE_ID };
 export const STOCKTAKE_ORDER = { id: STOCKTAKE_ID, tenant_id: STOCKTAKE_ID, warehouse_id: STOCKTAKE_ID,

@@ -25,5 +25,10 @@ test('warehouse stocktake response contracts accept the real read-model shape', 
     updated_at: 'now', started_at: 'now', submitted_at: null, completed_at: null, cancelled_at: null,
   };
   const result: import('./warehouse-stocktake').WarehouseStocktakeCommandResult = { status: 'counting', order };
+  const summary = { ...order, warehouse_name: '主仓', item_count: 1, counted_count: 1, difference_count: 0,
+    gain_amount: null, loss_amount: null } satisfies import('./warehouse-stocktake').WarehouseStocktakeOrderSummary;
+  const settings = { warehouse_stocktakes_enabled: true } satisfies import('./warehouse-stocktake').WarehouseStocktakeSettings;
   expect(result.order.started_at).toBe('now');
+  expect(summary.item_count).toBe(1);
+  expect(settings.warehouse_stocktakes_enabled).toBe(true);
 });
