@@ -27,7 +27,7 @@
 - Create `apps/api/src/schema/warehouse-stocktakes.ts`：输入schema。
 - Create `apps/api/src/schema/warehouse-stocktakes.test.ts`：边界行为及DTO对齐。
 
-- [ ] 先写Domain失败测试，执行 `bun test packages/domain/src/warehouse-stocktake.test.ts`，必须因根出口缺失断言失败，不接受依赖解析失败替代RED。测试文件完整主体：
+- [x] 先写Domain失败测试，执行 `bun test packages/domain/src/warehouse-stocktake.test.ts`，必须因根出口缺失断言失败，不接受依赖解析失败替代RED。测试文件完整主体：
 
 ```ts
 import { expect, test } from 'bun:test';
@@ -54,7 +54,7 @@ test('盘点动作区分开始与录入，终态不可编辑', async () => {
 });
 ```
 
-- [ ] Domain RED后实现以下完整文件，并在index追加 `export * from './warehouse-stocktake';`，不改其他出口：
+- [x] Domain RED后实现以下完整文件，并在index追加 `export * from './warehouse-stocktake';`，不改其他出口：
 
 ```ts
 export const WAREHOUSE_STOCKTAKE_STATUS_VALUES = [
@@ -98,7 +98,7 @@ export interface WarehouseStocktakeCommandInput {
 }
 ```
 
-- [ ] Domain定向测试及build通过后，先写API测试。允许暂用同路径空模块`export {};`使动态导入正常，先观察schema缺失的toBeDefined断言RED；不可将模块解析异常当RED。将以下完整测试保存，并在实现schema前运行：
+- [x] Domain定向测试及build通过后，先写API测试。允许暂用同路径空模块`export {};`使动态导入正常，先观察schema缺失的toBeDefined断言RED；不可将模块解析异常当RED。将以下完整测试保存，并在实现schema前运行：
 
 ```ts
 import { expect, test } from 'bun:test';
@@ -248,7 +248,7 @@ test('参数、过滤、明细和设置查询严格且分页有界', async () =>
 });
 ```
 
-- [ ] 运行 `bun test src/schema/warehouse-stocktakes.test.ts`（cwd apps/api），观察schema导出缺失断言RED后才实现完整schema；测试仅跑真实Zod，无mock，不新增依赖：
+- [x] 运行 `bun test src/schema/warehouse-stocktakes.test.ts`（cwd apps/api），观察schema导出缺失断言RED后才实现完整schema；测试仅跑真实Zod，无mock，不新增依赖：
 
 ```ts
 import { WAREHOUSE_STOCKTAKE_STATUS_VALUES } from '@gooes/domain';
@@ -298,12 +298,12 @@ export type WarehouseStocktakeCommandInput = z.infer<typeof WarehouseStocktakeCo
 export type WarehouseStocktakeListQuery = z.infer<typeof WarehouseStocktakeListQuerySchema>;
 ```
 
-- [ ] GREEN：Domain定向测试/build，API盘点/领退料/调拨schema测试、API typecheck，根diff check；不得先启动浏览器、dev server、Docker或远端测试。
-- [ ] 独立SPEC后quality审查；修复发现并复跑，精确提交5文件 `feat(inventory): 建立阶段D2盘点请求契约`，不把父代理文档混入代码提交。
+- [x] GREEN：Domain定向测试/build，API盘点/领退料/调拨schema测试、API typecheck，根diff check；不得先启动浏览器、dev server、Docker或远端测试。
+- [x] 独立SPEC后quality审查；修复发现并复跑，精确提交5文件 `feat(inventory): 建立阶段D2盘点请求契约`，不把父代理文档混入代码提交。
 
 ## Task 2：主代理验证和证据
 
-- [ ] 主代理读取实际diff，确认只改5个目标文件，无权限、SQL、路由或客户端变更。运行：
+- [x] 主代理读取实际diff，确认只改5个目标文件，无权限、SQL、路由或客户端变更。运行：
 
 ```sh
 bun test packages/domain/src/warehouse-stocktake.test.ts packages/domain/src/warehouse-material.test.ts packages/domain/src/warehouse-transfer.test.ts packages/domain/src/inventory.test.ts
@@ -317,5 +317,7 @@ bun test src/schema/warehouse-stocktakes.test.ts src/schema/warehouse-materials.
 bun run typecheck
 ```
 
-- [ ] 增补本批证据到 `docs/operations/evidence/2026-09-09-warehouse-stocktake-contracts.md`，写明真实RED/GREEN、测试数和审查结论，严格区分契约和未实施数据库行为。检查`git diff --check`、精确docs提交并推送现有功能分支；不移动D1固定发布分支、不合并main。
-- [ ] 后续批次是盘点原子数据库命令及其完整SQL计划；本批没有待apply migration、无需开发镜像重发，盘点和手工调整均未开放。
+- [x] 增补本批证据到 `docs/operations/evidence/2026-09-09-warehouse-stocktake-contracts.md`，写明真实RED/GREEN、测试数和审查结论，严格区分契约和未实施数据库行为。检查`git diff --check`、精确docs提交并推送现有功能分支；不移动D1固定发布分支、不合并main。
+- [x] 后续批次是盘点原子数据库命令及其完整SQL计划；本批没有待apply migration、无需开发镜像重发，盘点和手工调整均未开放。
+
+本批完成：实现提交 `0f472f05`，独立SPEC→质量审查通过，主代理Domain4项/API11项及build/typecheck通过。详见 `../../operations/evidence/2026-09-09-warehouse-stocktake-contracts.md`。以上代码块为实施前计划；最终测试按相邻实现合并为Domain1/API6个新增用例，要求的行为边界均覆盖。盘点数据库命令和真实API/UI尚未交付，D2.2手工调整未开始。
