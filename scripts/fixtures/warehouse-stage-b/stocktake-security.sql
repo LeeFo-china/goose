@@ -1,4 +1,68 @@
 BEGIN;
+DO $uuid_contract$
+DECLARE f public.stage_d2_fixture%ROWTYPE; bad_id text; accepted_id text; payload jsonb;
+BEGIN
+  SELECT * INTO STRICT f FROM public.stage_d2_fixture;
+  payload:=public.stage_d2_draft(ARRAY[f.second_sku_id]);
+  FOREACH bad_id IN ARRAY ARRAY['abcdef00-0000-0000-0000-000000000001','abcdef00-0000-9000-8000-000000000001',
+    'abcdef00-0000-4000-7000-000000000001','FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF'] LOOP
+    PERFORM public.stage_d_transfer_expect_error(public.stage_d2_sql(gen_random_uuid(),'save_draft',0,
+      payload||jsonb_build_object('warehouse_id',bad_id)),'WAREHOUSE_STOCKTAKE_INVALID');
+    PERFORM public.stage_d_transfer_expect_error(public.stage_d2_sql(gen_random_uuid(),'save_draft',0,
+      jsonb_set(payload,'{items,0,supplier_sku_id}',to_jsonb(bad_id))),'WAREHOUSE_STOCKTAKE_ITEMS_INVALID');
+  END LOOP;
+  FOREACH accepted_id IN ARRAY ARRAY['00000000-0000-0000-0000-000000000000','ffffffff-ffff-ffff-ffff-ffffffffffff',
+    'abcdef00-0000-4000-8000-000000000001','ABCDEF00-0000-7000-B000-000000000001'] LOOP
+    -- Correct UUID shape reaches business-reference checks, not input errors.
+    PERFORM public.stage_d_transfer_expect_error(public.stage_d2_sql(gen_random_uuid(),'save_draft',0,
+      payload||jsonb_build_object('warehouse_id',accepted_id)),'WAREHOUSE_STOCKTAKE_WAREHOUSE_INVALID');
+    PERFORM public.stage_d_transfer_expect_error(public.stage_d2_sql(gen_random_uuid(),'save_draft',0,
+      jsonb_set(payload,'{items,0,supplier_sku_id}',to_jsonb(accepted_id))),'WAREHOUSE_STOCKTAKE_SKU_INVALID');
+  END LOOP;
+  PERFORM public.stage_d_transfer_expect_error(public.stage_d2_sql('abcdef00-0000-0000-0000-000000000001','save_draft',0,payload),
+    'WAREHOUSE_STOCKTAKE_INVALID');
+END;
+$uuid_contract$;
+DO $utf16_contract$
+DECLARE f public.stage_d2_fixture%ROWTYPE; v_reason text; v_id uuid; draft_id uuid:=gen_random_uuid(); result jsonb;
+BEGIN
+  SELECT * INTO STRICT f FROM public.stage_d2_fixture;
+  FOREACH v_reason IN ARRAY ARRAY[repeat('😀',250),repeat('盘',500),repeat('😀',249)||'盘A',
+    E' \t'||repeat('😀',250)||E'\n '] LOOP
+    v_id:=gen_random_uuid();
+    result:=public.stage_d2_command(v_id,'save_draft',0,public.stage_d2_draft(ARRAY[f.second_sku_id])||jsonb_build_object('reason',v_reason));
+    IF result->'order'->>'reason' IS DISTINCT FROM public.__gooes_stocktake_trim(v_reason) THEN RAISE EXCEPTION 'UTF16 reason truncated'; END IF;
+    PERFORM public.stage_d2_command(v_id,'start',1);
+    PERFORM public.stage_d2_command(v_id,'record_counts',2,public.stage_d2_count(f.second_sku_id,'4',v_reason));
+    IF (SELECT difference_reason FROM public.warehouse_stocktake_order_items WHERE stocktake_order_id=v_id)
+      IS DISTINCT FROM public.__gooes_stocktake_trim(v_reason) THEN RAISE EXCEPTION 'UTF16 difference reason truncated'; END IF;
+    PERFORM public.stage_d2_command(v_id,'submit',3);
+    PERFORM public.stage_d2_command(v_id,'cancel',4);
+  END LOOP;
+  v_id:=gen_random_uuid();
+  PERFORM public.stage_d2_command(v_id,'save_draft',0,public.stage_d2_draft(ARRAY[f.second_sku_id]));
+  PERFORM public.stage_d2_command(v_id,'start',1);
+  PERFORM public.stage_d2_command(draft_id,'save_draft',0,public.stage_d2_draft(ARRAY[f.second_sku_id]));
+  FOREACH v_reason IN ARRAY ARRAY[repeat('😀',251),repeat('盘',501),repeat('😀',250)||'A',repeat('😀',10000)] LOOP
+    PERFORM public.stage_d_transfer_expect_error(public.stage_d2_sql(gen_random_uuid(),'save_draft',0,
+      public.stage_d2_draft(ARRAY[f.second_sku_id])||jsonb_build_object('reason',v_reason)),'WAREHOUSE_STOCKTAKE_INVALID');
+    PERFORM public.stage_d_transfer_expect_error(public.stage_d2_sql(v_id,'record_counts',2,public.stage_d2_count(f.second_sku_id,'4',v_reason)),
+      'WAREHOUSE_STOCKTAKE_ITEMS_INVALID');
+    BEGIN
+      UPDATE public.warehouse_stocktake_orders SET reason=v_reason WHERE id=draft_id;
+      RAISE EXCEPTION 'Expected table reason length constraint';
+    EXCEPTION WHEN check_violation THEN
+      IF SQLERRM NOT LIKE '%warehouse_stocktake_orders_reason_check%' THEN RAISE; END IF;
+    END;
+    BEGIN
+      UPDATE public.warehouse_stocktake_order_items SET counted_quantity=4,difference_reason=v_reason WHERE stocktake_order_id=v_id;
+      RAISE EXCEPTION 'Expected table difference reason length constraint';
+    EXCEPTION WHEN check_violation THEN
+      IF SQLERRM NOT LIKE '%warehouse_stocktake_order_items_difference_reason_check%' THEN RAISE; END IF;
+    END;
+  END LOOP;
+END;
+$utf16_contract$;
 DO $test$
 DECLARE f public.stage_d2_fixture%ROWTYPE; v_order_id uuid:=gen_random_uuid(); other uuid:=gen_random_uuid(); payload jsonb; bad jsonb;
   saved jsonb; completed jsonb; q jsonb; key text; item_id uuid; snapshot jsonb; tx public.inventory_transactions%ROWTYPE;
@@ -206,4 +270,4 @@ BEGIN
 END;
 $test$;
 ROLLBACK;
-SELECT 'EVIDENCE stocktake security: strict root/row/string/reason/array/UUID contracts, current actor/tenant/permission/deny on replay, disabled replay, states/versions, frozen snapshots and terminal guards, ledger source binding, nonfinite/bad baseline/version overflow';
+SELECT 'EVIDENCE stocktake security: strict root/row/string/array contracts, exact Zod RFC UUID versions/variants/nil/max, UTF16 emoji250/251 and Chinese500/501 reason limits including table constraints, current actor/tenant/permission/deny on replay, disabled replay, states/versions, frozen snapshots and terminal guards, ledger source binding, nonfinite/bad baseline/version overflow';

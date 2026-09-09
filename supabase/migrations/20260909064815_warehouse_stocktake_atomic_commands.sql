@@ -12,6 +12,24 @@ INSERT INTO public.permissions(code,name,module,resource,action,description,stat
   ('inventory.stocktake.manage','管理仓库盘点','inventory','stocktake','manage','保存、开始、录入、提交及取消当前租户仓库盘点','active'),
   ('inventory.stocktake.approve','确认仓库盘点','inventory','stocktake','approve','按冻结账面快照原子确认当前租户仓库盘点','active');
 -- Definitions only. No role/employee permission grants.
+-- JS/Zod string limits count UTF-16 code units, not PostgreSQL characters.
+-- UTF8 lead bytes make this independent of the disposable runner's SQL_ASCII.
+-- More than 2000 bytes cannot fit 500 code units; cap before scanning bytes.
+CREATE FUNCTION public.__gooes_stocktake_reason_length(p_value text) RETURNS integer
+LANGUAGE plpgsql IMMUTABLE STRICT SECURITY DEFINER SET search_path=pg_catalog,public AS $$
+DECLARE bytes bytea; size integer; units integer:=0; octet integer;
+BEGIN
+  IF octet_length(p_value)>2000 THEN RETURN 501; END IF;
+  bytes:=convert_to(p_value,'UTF8'); size:=octet_length(bytes);
+  IF size>2000 THEN RETURN 501; END IF;
+  FOR offset_index IN 0..size-1 LOOP
+    octet:=get_byte(bytes,offset_index);
+    IF octet<128 OR octet>=192 THEN units:=units+CASE WHEN octet>=240 THEN 2 ELSE 1 END; END IF;
+    IF units>500 THEN RETURN 501; END IF;
+  END LOOP;
+  RETURN units;
+END;
+$$;
 CREATE SEQUENCE public.warehouse_stocktake_order_number_seq;
 CREATE TABLE public.warehouse_stocktake_orders (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -20,7 +38,7 @@ CREATE TABLE public.warehouse_stocktake_orders (
   order_no text NOT NULL DEFAULT ('WS-'||lpad(nextval('public.warehouse_stocktake_order_number_seq')::text,10,'0')),
   status text NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','counting','submitted','completed','cancelled')),
   version integer NOT NULL DEFAULT 1 CHECK(version>0),
-  reason text NOT NULL CHECK(char_length(reason) BETWEEN 1 AND 500),
+  reason text NOT NULL CHECK(public.__gooes_stocktake_reason_length(reason) BETWEEN 1 AND 500),
   created_by_employee_id uuid NOT NULL, updated_by_employee_id uuid NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
   started_at timestamptz, submitted_at timestamptz, completed_at timestamptz, cancelled_at timestamptz,
@@ -43,7 +61,7 @@ CREATE TABLE public.warehouse_stocktake_order_items (
   book_value numeric(18,2) CHECK(book_value>=0 AND book_value<'Infinity'::numeric),
   book_unit_cost numeric(18,4) CHECK(book_unit_cost>=0 AND book_unit_cost<'Infinity'::numeric),
   counted_quantity numeric(18,4) CHECK(counted_quantity>=0 AND counted_quantity<'Infinity'::numeric),
-  difference_reason text CHECK(char_length(difference_reason) BETWEEN 1 AND 500),
+  difference_reason text CHECK(public.__gooes_stocktake_reason_length(difference_reason) BETWEEN 1 AND 500),
   difference_quantity numeric(18,4) GENERATED ALWAYS AS (counted_quantity-book_quantity) STORED,
   unit_cost numeric(18,4) CHECK(unit_cost>=0 AND unit_cost<'Infinity'::numeric),
   amount numeric(18,2) CHECK(amount>=0 AND amount<'Infinity'::numeric),
@@ -106,6 +124,12 @@ $$;
 CREATE FUNCTION public.__gooes_stocktake_trim(p_value text) RETURNS text
 LANGUAGE sql IMMUTABLE STRICT SECURITY DEFINER SET search_path=pg_catalog,public AS $$
   SELECT regexp_replace(p_value, '\A(?:[\x09-\x0D ]| | | | | | | | | | | | | | | | | |　|﻿)+|(?:[\x09-\x0D ]| | | | | | | | | | | | | | | | | |　|﻿)+\Z', '', 'g')
+$$;
+-- Exact installed Zod 4.4.2 uuid() semantics: RFC versions 1..8 and variant,
+-- plus nil/lowercase-max exceptions. Do not use a global case-insensitive flag.
+CREATE FUNCTION public.__gooes_stocktake_uuid_valid(p_value text) RETURNS boolean
+LANGUAGE sql IMMUTABLE STRICT SECURITY DEFINER SET search_path=pg_catalog,public AS $$
+  SELECT p_value ~ '\A([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)\Z'
 $$;
 CREATE FUNCTION public.__gooes_stocktake_assert_actor(p_tenant_id uuid,p_user_id uuid,p_employee_id uuid,p_permission text)
 RETURNS void LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalog,public AS $$
@@ -210,7 +234,8 @@ BEGIN
   -- This check is also mandatory before a successful frozen replay.
   PERFORM public.__gooes_stocktake_assert_actor(p_tenant_id,p_actor_user_id,p_actor_employee_id,
     CASE WHEN p_command='complete' THEN 'inventory.stocktake.approve' ELSE 'inventory.stocktake.manage' END);
-  IF p_order_id IS NULL OR p_command IS NULL OR p_command NOT IN ('save_draft','start','record_counts','submit','complete','cancel')
+  IF p_order_id IS NULL OR NOT public.__gooes_stocktake_uuid_valid(p_order_id::text)
+    OR p_command IS NULL OR p_command NOT IN ('save_draft','start','record_counts','submit','complete','cancel')
     OR p_expected_version IS NULL OR p_expected_version<0 OR (p_command<>'save_draft' AND p_expected_version=0)
     OR p_payload IS NULL OR jsonb_typeof(p_payload)<>'object' OR p_idempotency_key IS NULL
     OR char_length(public.__gooes_stocktake_trim(p_idempotency_key)) NOT BETWEEN 1 AND 120 OR char_length(p_idempotency_key)>120 THEN
@@ -219,9 +244,9 @@ BEGIN
   IF p_command='save_draft' THEN
     IF EXISTS(SELECT 1 FROM jsonb_object_keys(p_payload) k WHERE k<>ALL(ARRAY['warehouse_id','reason','items']))
       OR jsonb_typeof(p_payload->'warehouse_id') IS DISTINCT FROM 'string'
-      OR coalesce(p_payload->>'warehouse_id','') !~* '\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z'
+      OR NOT public.__gooes_stocktake_uuid_valid(coalesce(p_payload->>'warehouse_id',''))
       OR jsonb_typeof(p_payload->'reason') IS DISTINCT FROM 'string'
-      OR char_length(public.__gooes_stocktake_trim(p_payload->>'reason')) NOT BETWEEN 1 AND 500
+      OR public.__gooes_stocktake_reason_length(public.__gooes_stocktake_trim(p_payload->>'reason')) NOT BETWEEN 1 AND 500
       OR jsonb_typeof(p_payload->'items') IS DISTINCT FROM 'array' THEN
       RAISE EXCEPTION USING ERRCODE='22023',MESSAGE='WAREHOUSE_STOCKTAKE_INVALID';
     END IF;
@@ -242,14 +267,14 @@ BEGIN
       IF EXISTS(SELECT 1 FROM jsonb_object_keys(v_json) k WHERE k<>ALL(CASE WHEN p_command='save_draft'
           THEN ARRAY['supplier_sku_id'] ELSE ARRAY['supplier_sku_id','counted_quantity','difference_reason'] END))
         OR jsonb_typeof(v_json->'supplier_sku_id') IS DISTINCT FROM 'string'
-        OR coalesce(v_json->>'supplier_sku_id','') !~* '\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z' THEN
+        OR NOT public.__gooes_stocktake_uuid_valid(coalesce(v_json->>'supplier_sku_id','')) THEN
         RAISE EXCEPTION USING ERRCODE='22023',MESSAGE='WAREHOUSE_STOCKTAKE_ITEMS_INVALID';
       END IF;
       IF p_command='record_counts' AND (jsonb_typeof(v_json->'counted_quantity') IS DISTINCT FROM 'string'
         OR coalesce(v_json->>'counted_quantity','') !~ '\A(0|[1-9][0-9]{0,13})(\.[0-9]{1,4})?\Z'
         OR (v_json ? 'difference_reason' AND v_json->'difference_reason'<>'null'::jsonb AND
           (jsonb_typeof(v_json->'difference_reason') IS DISTINCT FROM 'string'
-            OR char_length(public.__gooes_stocktake_trim(v_json->>'difference_reason')) NOT BETWEEN 1 AND 500))) THEN
+            OR public.__gooes_stocktake_reason_length(public.__gooes_stocktake_trim(v_json->>'difference_reason')) NOT BETWEEN 1 AND 500))) THEN
         RAISE EXCEPTION USING ERRCODE='22023',MESSAGE='WAREHOUSE_STOCKTAKE_ITEMS_INVALID';
       END IF;
     END LOOP;
@@ -328,7 +353,7 @@ BEGIN
       RAISE EXCEPTION USING ERRCODE='P0001',MESSAGE='WAREHOUSE_STOCKTAKE_COUNTS_REQUIRED';
     END IF;
     IF EXISTS(SELECT 1 FROM public.warehouse_stocktake_order_items WHERE stocktake_order_id=p_order_id AND difference_quantity<>0
-      AND coalesce(char_length(public.__gooes_stocktake_trim(difference_reason)),0) NOT BETWEEN 1 AND 500) THEN
+      AND coalesce(public.__gooes_stocktake_reason_length(public.__gooes_stocktake_trim(difference_reason)),0) NOT BETWEEN 1 AND 500) THEN
       RAISE EXCEPTION USING ERRCODE='P0001',MESSAGE='WAREHOUSE_STOCKTAKE_DIFFERENCE_REASON_REQUIRED';
     END IF;
   END IF;
