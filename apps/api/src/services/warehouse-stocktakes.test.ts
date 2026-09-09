@@ -31,7 +31,7 @@ test('stocktake service drives all commands and reads through one RPC each with 
     if (name === 'get_warehouse_stocktake_order') return { data: { ...STOCKTAKE_ORDER, warehouse_name: '主仓', item_count: 0, counted_count: 0, difference_count: 0, gain_amount: null, loss_amount: null }, error: null };
     if (name === 'list_warehouse_stocktake_order_items') return { data: { items: [], total: 0, page: params.p_page, pageSize: params.p_page_size }, error: null };
     const command = params.p_command as string;
-    const order = command === 'start' ? { ...STOCKTAKE_ORDER, status: 'counting', started_at: 'now' }
+    const order = command === 'start' || command === 'record_counts' ? { ...STOCKTAKE_ORDER, status: 'counting', started_at: 'now' }
       : command === 'submit' ? { ...STOCKTAKE_ORDER, status: 'submitted', started_at: 'now', submitted_at: 'now' }
       : command === 'complete' ? { ...STOCKTAKE_ORDER, status: 'completed', started_at: 'now', submitted_at: 'now', completed_at: 'now' }
       : command === 'cancel' ? { ...STOCKTAKE_ORDER, status: 'cancelled', cancelled_at: 'now' } : STOCKTAKE_ORDER;

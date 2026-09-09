@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { AppError } from '@/errors/app-error';
-import { STOCKTAKE_ACTOR, STOCKTAKE_ITEM, STOCKTAKE_ORDER, STOCKTAKE_SUMMARY } from './warehouse-stocktake-test-fixtures';
+import { STOCKTAKE_ACTOR, STOCKTAKE_ID, STOCKTAKE_ITEM, STOCKTAKE_ORDER,
+  STOCKTAKE_SUMMARY } from './warehouse-stocktake-test-fixtures';
 import { WarehouseStocktakesRepository } from './warehouse-stocktakes';
 import { WarehouseStocktakeOrderSchema } from './warehouse-stocktake-records';
 import { WarehouseStocktakeCommandResultSchema, WarehouseStocktakeItemSchema, WarehouseStocktakeSummarySchema,
@@ -31,11 +32,11 @@ test('stocktake repository uses actor/filter/default/max pagination wire and rej
   expect((await repository.list({ ...STOCKTAKE_ACTOR, page: 1, pageSize: 20, warehouse_id: STOCKTAKE_ID,
     status: 'counting', keyword: ' key ' })).pagination.totalPages).toBe(0);
   await repository.listItems({ ...STOCKTAKE_ACTOR, order_id: STOCKTAKE_ID, page: 1, pageSize: 100 });
-  expect(calls[0]?.[1]).toEqual({ p_tenant_id: STOCKTAKE_ID, p_actor_user_id: STOCKTAKE_ID,
-    p_actor_employee_id: STOCKTAKE_ID, p_page: 1, p_page_size: 20, p_warehouse_id: STOCKTAKE_ID,
+  expect(calls[0]?.[1]).toEqual({ p_tenant_id: STOCKTAKE_ACTOR.tenant_id, p_actor_user_id: STOCKTAKE_ACTOR.actor_user_id,
+    p_actor_employee_id: STOCKTAKE_ACTOR.actor_employee_id, p_page: 1, p_page_size: 20, p_warehouse_id: STOCKTAKE_ID,
     p_status: 'counting', p_keyword: 'key' });
-  expect(calls[1]?.[1]).toEqual({ p_tenant_id: STOCKTAKE_ID, p_actor_user_id: STOCKTAKE_ID,
-    p_actor_employee_id: STOCKTAKE_ID, p_page: 1, p_page_size: 100, p_order_id: STOCKTAKE_ID });
+  expect(calls[1]?.[1]).toEqual({ p_tenant_id: STOCKTAKE_ACTOR.tenant_id, p_actor_user_id: STOCKTAKE_ACTOR.actor_user_id,
+    p_actor_employee_id: STOCKTAKE_ACTOR.actor_employee_id, p_page: 1, p_page_size: 100, p_order_id: STOCKTAKE_ID });
   for (const page of [0, Number.NaN]) await expect(repository.list({ ...STOCKTAKE_ACTOR, page, pageSize: 20 })).rejects.toMatchObject({ statusCode: 400 });
   await expect(repository.list({ ...STOCKTAKE_ACTOR, page: 1, pageSize: 101 })).rejects.toMatchObject({ statusCode: 400 });
   expect(calls).toHaveLength(2);
@@ -70,8 +71,6 @@ test('stocktake repository rejects malformed RPC responses as DB_ERROR', async (
   const repository = new WarehouseStocktakesRepository({ rpc() { return Promise.resolve({ data: { items: [], total: -1, page: 1, pageSize: 20 }, error: null }); } });
   await expect(repository.list({ ...STOCKTAKE_ACTOR, page: 1, pageSize: 20 })).rejects.toMatchObject({ code: 'DB_ERROR' } satisfies Partial<AppError>);
 });
-
-const STOCKTAKE_ID = STOCKTAKE_ACTOR.tenant_id;
 
 test('stocktake receipt rejects status and audit timestamp mismatches', () => {
   expect(WarehouseStocktakeOrderSchema.safeParse({ ...STOCKTAKE_ORDER, status: 'completed', completed_at: null }).success).toBe(false);
