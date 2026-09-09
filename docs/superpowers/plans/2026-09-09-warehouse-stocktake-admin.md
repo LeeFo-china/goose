@@ -66,11 +66,15 @@ expect(Object.hasOwn(JSON.parse(build({ moduleEnabled: true }, legacyCurrent).bo
 ## Task 3: DEV apply、固定候选发布与晴天验收
 
 **Read:** `.github/workflows/release-dev.yml`、`deploy-dev.yml`、`docs/operations/evidence/2026-09-09-warehouse-transfer-granted-live-acceptance.md`；DEV操作脚本中的参数与环境校验。
-**Create only if needed:** 使用 `supabase migration new qingtian_stocktake_dev_permission_grant` 产生目标租户/员工或既有角色的两项权限迁移与有界验收测试，不修改其他租户。仅观察真实缺失后实施。
+**Create only if needed:** 使用 `supabase migration new grant_qingtian_warehouse_stocktake_permissions` 产生目标租户既有角色的两项权限迁移与有界验收测试，不修改其他租户。名称保留warehouse以进入既有领域隔离SQL runner；仅观察真实缺失后实施。
 **Create:** `docs/operations/evidence/2026-09-09-warehouse-stocktake-admin-live-acceptance.md`。
 
 - [ ] 只读核实DEV远端身份、当前migration list与发布工作流参数，确认四份已提交D2迁移及其他实际待执行项；核实晴天适格员工的真实SQL权限。不得打印token/password/env。
 - [ ] 如缺manage/approve，遵循已验收D1限定授权模式以migration加入两项权限；先隔离SQL回归，说明精确撤回路径。记录待apply列表，再通过仓库DEV工作流apply。
+
+已确认的授权范围：仅租户`3eebca47-961f-4899-b976-a3d3208d326b`、既有active system_admin角色`e72850fe-dbba-427f-9109-f1779080a239`，两个stocktake manage/approve access_scope=all。沿用D1目标姓名/归属/状态/权限元数据守卫；无目标租户时no-op，已有较窄权限时failclosed而非扩大，ON CONFLICT不更新原行，不清除deny。隔离测试使用真实migration字节与同一目标键的合成数据，证明前置拒绝、仅两项新增、回放不变、普通/外租户/停用/deny拒绝以及守卫失败完整回滚。该授权夹具单独运行，避免污染通用“无自动授权”契约。
+
+回退边界：先关闭盘点开关，保留新增表、审计、原始单据及库存事实；授权撤回须另写前向migration，仅撤回本次新增的两行。若已生成盘点流水，不直接回退到不认识盘点来源的旧API镜像，以免历史库存读取失败；优先保持兼容读取并关闭新写或发前向修复。
 - [ ] `supabase migration list`证明Local/Remote对齐。新固定release分支指向审核通过提交（不移动D1分支），push并dispatch DEV；跟踪workflow最终结论、部署SHA及健康端点。失败定位根因，不盲目重复。
 - [ ] 使用Chrome技能bootstrap和真实UI登录、平台开盘点、切换晴天合适员工。先截图/读库存基线，再最小盘盈/盘亏与业务反向单恢复，验收版本/单据/金额/数量/流水来源。期间发现并发变化不强制过账。
 - [ ] 记录命令、迁移状态、workflow URLs/SHA、单据ID与库存前后证据、开关最终状态；不把mock当live结果。最终fresh复验、文档提交push，工作树干净。明确手工调整D2.2仍未开始。
