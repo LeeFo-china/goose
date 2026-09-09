@@ -30,6 +30,26 @@ SPEC初审提出P2测试缺口（不是生产SQL缺陷）：精确正负/零数�
 
 独立质量审查未发现Critical/Important。提出Minor：SQL测试中 `<>` 遇缺字段会返回NULL，应使用 `IS DISTINCT FROM` 防止断言漏检；同时建议列表Summary和详情Summary按ID比较。`fd8f5dbb` 补齐，实施侧五夹具重新通过；独立质量复审关闭全部问题。Task 1 已完成。
 
+## Task 2：API 接入
+
+首版实现 `48c148d0`。父代理检查发现 HTTP 测试仅覆盖注册，完整 HTTP请求、权限组合、system_admin实际SQL拒绝、精度/分页等要求尚未充分覆盖，已退回补充，未以该提交宣称 Task 2 完成。
+
+父代理将真实隔离SQL的混合完成单和草稿输出送入新严格响应解析器，正向保持全部字段及数值；112项字段删除/未知字段/数字型numeric/NaN/Infinity/指数变异均被拒绝。这是 SQL 输出→解析器联合验证，不是 PostgREST传输/登录E2E。
+
+另在无预先注入Supabase变量的普通测试命令下，首版出现43 pass/4 fail/2 errors：repo/service测试顶层静态import提前初始化Supabase，而测试环境值只在后加载的controller文件设置。首先报缺 SUPABASE_URL，后续模块未初始化是连锁错误。根因在测试初始化顺序，要求各测试文件独立设置合成环境再动态import，不能给生产客户端加假值或依赖测试顺序。
+
+`a770d55b`补充验收测试，并由各文件显式导入的共享测试fixture先初始化合成环境；未改生产Supabase配置。父代理普通Bun命令组合运行58 pass、415 assertions，API typecheck退出0；仓储6项、服务5项、HTTP2项、system_admin1项分别独立启动进程也全部通过。Domain2项/6 assertions及构建通过，149504 bytes、Zod identity检查通过。当前解析器再次通过真实SQL正向和112项负向变异检查。
+
+流程说明：实施侧有Domain响应类型缺失、状态/审计时间不一致的RED记录；部分HTTP/service/repository验收用例在复核后才补入，不能称为每项行为均已完成测试先行。验证结论依据最终实际运行及独立审查。
+
+独立SPEC复现两个P2：POST有效命令带 `?force=true` 仍200（runCommand漏校验query）；Summary parser接受draft非NULL金额和completed的NULL金额（只检查nullable字段类型，漏状态关联）。实际SQL金额正确。要求先加入失败用例，再复用空query schema及Summary状态关联校验修复，不更改计价和原始命令回执。
+
+`23703fa2`按上述两个复现先RED后GREEN修复。父代理重新运行六文件59 pass、443 assertions，API typecheck退出0；真实SQL正向及112项负向再次通过。独立SPEC复审通过，并自行运行相关repository/controller测试9 pass、115 assertions。
+
+独立质量审查无Critical/Important，两个Minor：actor fixture的租户/用户/员工应使用不同UUID以检出接线错误；record_counts模拟回执的order应为counting而非draft。生产映射正确，要求收尾补齐测试再关闭本项。
+
+`809a3f14`完成两处fixture修正。父代理在 apps/api 重跑六文件59 pass、444 assertions，API typecheck退出0。独立质量复审相关三文件13 pass、115 assertions，确认两个Minor均关闭。Task 2完成，开始Task 3；本项独立SPEC与质量审查全部通过。
+
 ## 验证边界
 
 本批 SQL runner 仅从本地源容器读取 schema/元数据，在无网络临时 PostgreSQL 测试库应用采购域 migration 和合成数据。已有 runner 使用 SQL_ASCII；不是完整历史升级、真实 DEV 或浏览器登录验收。没有 apply 远端 migration、开启晴天盘点、增授员工/角色权限或发布服务。Admin 盘点页面、来源展示/跳转及平台开关控件仍属于后续批次；真实开放前必须一起接入验证，不能把后端 source_document 扩展单独作为 UI 已完成的证据。
