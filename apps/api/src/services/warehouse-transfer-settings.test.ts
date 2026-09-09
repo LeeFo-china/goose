@@ -27,6 +27,10 @@ test('settings input accepts only an optional boolean transfer flag', () => {
   const { warehouse_transfers_enabled: omitted, ...legacy } = body;
   expect(PlatformTenantSupplierSettingsCommandSchema.parse(legacy)).not.toHaveProperty('warehouse_transfers_enabled');
   expect(PlatformTenantSupplierSettingsCommandSchema.safeParse({ ...body, warehouse_stocktakes_enabled: true }).success).toBe(true);
+  expect(PlatformTenantSupplierSettingsCommandSchema.safeParse({ ...body, warehouse_stocktakes_enabled: false }).success).toBe(true);
+  for (const value of [null, 'true', 1]) {
+    expect(PlatformTenantSupplierSettingsCommandSchema.safeParse({ ...body, warehouse_stocktakes_enabled: value }).success).toBe(false);
+  }
 });
 
 test('explicit false and true use existing JSON overload; omission retains historical typed fingerprint', () => {

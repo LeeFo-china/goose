@@ -1,4 +1,5 @@
 BEGIN;
+CREATE TEMP TABLE stocktake_settings_wire(payload jsonb);
 CREATE FUNCTION pg_temp.reject_stocktake_event() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN RAISE EXCEPTION 'STOCKTAKE_SETTING_EVENT_FAILURE'; END;
 $$;
@@ -17,6 +18,8 @@ BEGIN
   IF original->>'version' IS DISTINCT FROM '3' OR original->'setting'->>'warehouse_stocktakes_enabled' IS DISTINCT FROM 'true'
     OR original->'setting'->>'warehouse_materials_enabled' IS DISTINCT FROM 'false'
     OR original->'setting'->>'warehouse_transfers_enabled' IS DISTINCT FROM 'false' THEN RAISE EXCEPTION 'independent stocktake enable failed'; END IF;
+  INSERT INTO stocktake_settings_wire VALUES(jsonb_build_object('new',original->'setting',
+    'oldTyped',f.typed_result->'setting','oldJson',f.json_result->'setting'));
   result:=public.set_tenant_supplier_rollout_settings(f.tenant_id,true,false,false,false,false,false,3,f.user_id,f.employee_id,'stocktake-typed-omit',NULL);
   IF result->>'version' IS DISTINCT FROM '4' OR result->'setting'->>'warehouse_stocktakes_enabled' IS DISTINCT FROM 'true' THEN RAISE EXCEPTION 'typed omission reset stocktake'; END IF;
   result:=public.set_tenant_supplier_rollout_settings(f.json_request||'{"expected_version":4}'::jsonb,f.user_id,'stocktake-json-omit');
@@ -66,5 +69,6 @@ BEGIN
     RAISE EXCEPTION 'replay/event failure changed state'; END IF;
 END;
 $test$;
+SELECT 'EVIDENCE stocktake settings wire: '||payload::text FROM stocktake_settings_wire;
 ROLLBACK;
 SELECT 'EVIDENCE stocktake rollout: genuine pre-column typed/JSON exact replay; independent flag; omission; strict input/version/key/parent guards; rollback; ACL unchanged';
