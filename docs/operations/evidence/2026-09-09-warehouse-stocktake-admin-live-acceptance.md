@@ -34,6 +34,16 @@ Chrome恢复后可列出原验收标签页，但页面读取再次超时；尚�
 
 GitHub只读检查时无本批进行中的发布任务；远端main43cb38bf、feature4f54d15f与D1固定候选710b3322未变化。计划沿用开发专用plan/apply工作流及`release-dev.yml`的`service=api,admin`，迁移对齐门禁后先API再Admin，另建不可移动候选分支。
 
+## Task 2：平台开关、来源与浏览器回归
+
+实现5da8d98a，独立SPEC与质量均通过，无待修问题。相关Bun 74 tests/405 assertions通过；实施者完整执行盘点38、平台22、调拨32项桌面/375px E2E，全92项通过，Admin typecheck、check:file-size、build退出0。主代理fresh复跑74项Bun及typecheck→38项盘点E2E，退出0。SPEC独立50 tests/317 assertions、质量独立37 tests/176 assertions通过。
+
+初始5项RED暴露缺失能力后实现GREEN。覆盖六动作、精确零/空白、25行分页及分次录入、只读/管理/审批隔离、开关异常锁写、未知请求字节级恢复、真实AppRouter开发StrictMode卸载后的迟到成功保护、盘点来源和平台旧字段省略/显式false/独立开关。fixture的25份summary与49行item另经真实API schema验证；fixture回执状态、非负行金额、错误码及nullable字段与当前契约核对，不将HTTP模拟当数据库验证。
+
+截图位于ignored的`apps/admin/test-results/warehouse-stocktakes/`和`supplier-rollout/`。主代理检查桌面/375px完成态及375px平台开关，实施者检查实盘/草稿；页面未溢出，表格局部横向滚动，确认操作可达。测试调整限于异步完成等待、真实分页label及移动端main作用域断言，没有跳过产品校验。
+
+19:15 CST再次只读核实：远端最新migration仍20260909045512，晴天角色无两项盘点授权，设置version22、公司仓1箱/88元/版本6、分仓0/0/版本3均未变。未运行任何远端写入。
+
 ## 待完成门禁
 
-Task 2平台开关/来源/菜单实施与独立审核、盘点浏览器回归/构建、晴天限定权限迁移验证、固定DEV plan/apply、完整migration list对齐、API/Admin开发发布及Chrome盘盈/盘亏业务恢复验收尚待完成。D2.2手工调整不在本批。
+晴天限定权限迁移验证、固定DEV plan/apply、完整migration list对齐、API/Admin开发发布及Chrome盘盈/盘亏业务恢复验收尚待完成。Chrome标签可列出，但DOM读取及claim均超时，已向用户请求将验收页切到前台并确认扩展提示；尚未因此进行业务写入。D2.2手工调整不在本批。
