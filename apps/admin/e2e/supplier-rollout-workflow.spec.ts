@@ -32,6 +32,7 @@ type MockState = {
     procurement_snapshot_v1_enabled: boolean;
     purchase_batch_workflow_enabled: boolean;
     warehouse_procurement_enabled: boolean;
+    warehouse_materials_enabled: boolean;
   };
   mutations: MutationJournalEntry[];
   settingsReadCount: number;
@@ -83,6 +84,46 @@ test.describe("租户供应商灰度确定性交互", () => {
   test.beforeEach(async ({ page, request }) => {
     await resetMock(request);
     await loginAsPlatformAdmin(page);
+  });
+
+  test("领退料开关独立于采购链，未知结果重放原请求且阻止带子开关停用模块", async ({ page, request }, testInfo) => {
+    await request.post(`${mockBackendBaseUrl}/__test/reset`, { data: { level: 1, version: 1 } });
+    await page.goto("/e2e-harness/supplier-rollout?level=1", { waitUntil: "networkidle" });
+    const materials = page.getByRole("switch", { name: "仓库领退料", exact: true });
+    await expect(materials).toBeEnabled();
+    await expect(page.getByRole("switch", { name: "仓库采购", exact: true })).toBeDisabled();
+    await request.post(`${mockBackendBaseUrl}/__test/failure-next`, { data: { status: 503, commit: true } });
+    await materials.click();
+    await expect(page.getByText("操作结果尚未确认", { exact: true })).toBeVisible();
+    await expect(materials).toBeDisabled();
+    await page.getByRole("button", { name: "重试本次操作", exact: true }).click();
+    await expect(materials).toBeChecked();
+    await expectVersion(request, 2);
+    const afterReplay = await readState(request);
+    expect(afterReplay.settings).toMatchObject({ warehouse_materials_enabled: true, warehouse_procurement_enabled: false,
+      ownership_reads_enabled: false, procurement_snapshot_v1_enabled: false });
+    expect(afterReplay.mutations).toHaveLength(2);
+    expect(afterReplay.mutations[0]!.idempotencyKey).toBe(afterReplay.mutations[1]!.idempotencyKey);
+    expect(afterReplay.mutations[0]!.payload).toEqual(afterReplay.mutations[1]!.payload);
+    const legacyDisable: Record<string, unknown> = { ...afterReplay.mutations[0]!.payload, module_enabled: false,
+      expected_version: 2, reason: "验证旧客户端省略独立开关时不能越过依赖" };
+    delete legacyDisable.warehouse_materials_enabled;
+    const rejected = await request.patch(`${mockBackendBaseUrl}${afterReplay.mutations[0]!.path}`, {
+      headers: { "Idempotency-Key": "legacy-disable-with-materials-enabled" }, data: legacyDisable,
+    });
+    expect(rejected.status()).toBe(409);
+    expect((await readState(request)).settings).toMatchObject({ version: 2,
+      module_enabled: true, warehouse_materials_enabled: true });
+    await expect(page.getByRole("button", { name: "停用供应商模块", exact: true })).toBeDisabled();
+    await page.mouse.move(0, 0);
+    await expect(page.locator("[data-sonner-toast]")).toHaveCount(0, { timeout: 10_000 });
+    await materials.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: testInfo.outputPath("materials-independent.png"), fullPage: true });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await materials.click();
+    await expect(materials).not.toBeChecked();
+    await expectVersion(request, 3);
+    await expect(page.getByRole("button", { name: "停用供应商模块", exact: true })).toBeEnabled();
   });
 
   test("按相邻顺序启停并发送完整带版本的幂等请求", async ({ page, request }, testInfo) => {
@@ -208,6 +249,7 @@ test.describe("租户供应商灰度确定性交互", () => {
         "procurement_snapshot_v1_enabled",
         "purchase_batch_workflow_enabled",
         "warehouse_procurement_enabled",
+        "warehouse_materials_enabled",
         "expected_version",
       ]) {
         expect(mutation.payload).toHaveProperty(field);
@@ -283,6 +325,8 @@ test.describe("租户供应商灰度确定性交互", () => {
       waitUntil: "networkidle",
     });
     const controls = switches(page);
+    await expect(page.getByRole("switch", { name: "仓库领退料", exact: true })).toBeVisible();
+    await expect(page.getByRole("switch", { name: "仓库领退料", exact: true })).toBeDisabled();
     for (const name of rolloutNames) {
       await expect(controls[name]).toBeVisible();
       await expect(controls[name]).toBeChecked();

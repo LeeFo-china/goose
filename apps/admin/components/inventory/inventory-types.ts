@@ -33,12 +33,21 @@ export type InventoryTransaction = InventoryRow & {
   value_delta: string;
   occurred_at: string;
   created_by_employee_name: string | null;
-  source_document: {
-    receipt_id: string;
-    receipt_no: string;
-    purchase_order_id: string;
-    order_no: string;
-  } | null;
+  source_document:
+    | {
+        receipt_id: string;
+        receipt_no: string;
+        purchase_order_id: string;
+        order_no: string;
+      }
+    | { issue_order_id: string; issue_order_no: string }
+    | {
+        return_order_id: string;
+        return_order_no: string;
+        issue_order_id: string;
+        issue_order_no: string;
+      }
+    | null;
 };
 
 export type InventoryState = {

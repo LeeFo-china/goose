@@ -141,6 +141,12 @@ async function patchSettings(request, response, url) {
   }
 
   const targetLevel = rolloutLevel(payload);
+  const effectiveMaterials = payload.warehouse_materials_enabled ?? settings.warehouse_materials_enabled;
+  if (effectiveMaterials && !payload.module_enabled) {
+    mutation.responseStatus = 409;
+    sendJson(response, 409, { success: false, code: "SUPPLIER_ROLLOUT_ORDER_INVALID", message: "仓库领退料需要供应商模块" });
+    return;
+  }
   if (Math.abs(targetLevel - rolloutLevel(settings)) > 1) {
     mutation.responseStatus = 409;
     sendJson(response, 409, {
@@ -174,6 +180,7 @@ async function patchSettings(request, response, url) {
     purchase_batch_workflow_enabled:
       payload.purchase_batch_workflow_enabled,
     warehouse_procurement_enabled: payload.warehouse_procurement_enabled,
+    warehouse_materials_enabled: effectiveMaterials,
     enabled_by_employee_id: payload.module_enabled
       ? settings.enabled_by_employee_id ?? mockSupplierRolloutSession.employee.id
       : null,

@@ -8,6 +8,8 @@ export type SupplierRolloutState = {
   procurement_snapshot_v1_enabled: boolean;
   purchase_batch_workflow_enabled: boolean;
   warehouse_procurement_enabled?: boolean;
+  warehouse_materials_enabled?: boolean;
+  warehouse_transfers_enabled?: boolean;
 };
 
 const DISABLED_FLAGS = {
@@ -17,6 +19,8 @@ const DISABLED_FLAGS = {
   procurement_snapshot_v1_enabled: false,
   purchase_batch_workflow_enabled: false,
   warehouse_procurement_enabled: false,
+  warehouse_materials_enabled: false,
+  warehouse_transfers_enabled: false,
 } as const;
 
 export function effectiveSupplierRolloutSettings<
@@ -44,6 +48,8 @@ export function effectiveSupplierRolloutSettings<
       purchase_batch_workflow_enabled: purchaseBatchWorkflowEnabled,
       warehouse_procurement_enabled: purchaseBatchWorkflowEnabled &&
         settings.warehouse_procurement_enabled === true,
+      warehouse_materials_enabled: settings.warehouse_materials_enabled === true,
+      warehouse_transfers_enabled: settings.warehouse_transfers_enabled === true,
     }),
   };
 }

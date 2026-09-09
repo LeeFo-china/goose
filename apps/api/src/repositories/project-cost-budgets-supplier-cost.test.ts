@@ -40,6 +40,16 @@ mock.module("@/utils/supabase/index", () => ({
 }));
 
 describe("projectCostBudgetRepository supplier cost totals", () => {
+  test("returns restore category budget headroom using the original issue cost", async () => {
+    const { projectCostBudgetRepository } = await import("./project-cost-budgets");
+    rows = [
+      { ...supplierCostRow("category-1", "10.01", "material", "材料"), event_direction: "increase" },
+      { ...supplierCostRow("category-1", "3.34", "material", "材料"), event_direction: "decrease" },
+    ];
+    const result = await projectCostBudgetRepository.listSupplierCostTotals({ tenantId: "tenant-1", projectId: "project-1" });
+    expect(result.totalSupplierCostAmount).toBe(6.67);
+    expect(result.byCategory.get("category-1")).toBe(6.67);
+  });
   beforeEach(() => {
     queryCalls.length = 0;
     queryError = null;
@@ -78,7 +88,7 @@ describe("projectCostBudgetRepository supplier cost totals", () => {
       {
         method: "select",
         args: [
-          "id,cost_category_id,amount::text,created_at,cost_category:finance_cost_categories!project_cost_events_category_tenant_fkey(code,name)",
+          "id,cost_category_id,amount::text,event_direction,created_at,cost_category:finance_cost_categories!project_cost_events_category_tenant_fkey(code,name)",
         ],
       },
       { method: "eq", args: ["tenant_id", "tenant-1"] },

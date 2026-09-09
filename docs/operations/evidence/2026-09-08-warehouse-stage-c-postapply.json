@@ -1,0 +1,58 @@
+{
+  "candidate": "983b775ef67bdc3ccd1ee223ace00351dc2fa552",
+  "checked_at": "2026-09-08T08:17:44.059467+00:00",
+  "host_assertion": "VM-0-11-ubuntu",
+  "transaction_read_only": "on",
+  "statement_timeout": "15s",
+  "psql_exit_code": 0,
+  "migration_count": 599,
+  "stage_c_applied": 4,
+  "function_acl_pass": true,
+  "function_acl_common": { "present": true, "security_definer": true, "search_path": "pg_catalog, public", "public_execute": false, "anon_execute": false, "authenticated_execute": false },
+  "service_execute_true": [
+    "public.command_warehouse_material_order(uuid,uuid,text,text,integer,jsonb,uuid,uuid,text)",
+    "public.get_warehouse_material_order(uuid,text,uuid,uuid,uuid)",
+    "public.list_warehouse_material_orders(uuid,text,uuid,uuid,uuid,uuid,text,text,integer,integer)",
+    "public.list_warehouse_material_order_items(uuid,text,uuid,uuid,uuid,integer,integer)",
+    "public.list_warehouse_material_projects(uuid,uuid,uuid,text,integer,integer)",
+    "public.get_warehouse_material_settings(uuid,uuid,uuid)",
+    "public.set_tenant_supplier_rollout_settings(jsonb,uuid,text)"
+  ],
+  "service_execute_false": [
+    "public.__gooes_material_guard_document()",
+    "public.__gooes_material_assert_actor(uuid,uuid,uuid)",
+    "public.__gooes_material_assert_project(uuid,uuid,uuid,text)",
+    "public.__gooes_material_order_summary(uuid,text,uuid)",
+    "public.__gooes_set_supplier_rollout_settings_v2(jsonb,uuid,text)"
+  ],
+  "list_orders_plan_cache_mode": "force_custom_plan",
+  "table_acl_pass": true,
+  "table_acl_common": { "present": true, "rls_enabled": true, "rls_forced": true, "public_any": false, "anon_any": false, "authenticated_any": false, "service_any": false },
+  "tables_checked": ["warehouse_issue_orders","warehouse_issue_order_items","warehouse_return_orders","warehouse_return_order_items","warehouse_material_command_events"],
+  "sequence_acl": { "name": "warehouse_material_order_number_seq", "present": true, "public_any": false, "anon_any": false, "authenticated_any": false, "service_any": false },
+  "materials_column": { "not_null": true, "default_expression": "false" },
+  "settings_state": { "rows": 1, "enabled_rows": 0, "null_rows": 0, "invalid_parent_rows": 0 },
+  "facts": { "issue_orders": 0, "issue_items": 0, "return_orders": 0, "return_items": 0, "events": 0, "cost_rows": 4, "cost_non_purchase_rows": 0, "cost_non_increase_rows": 0, "inventory_rows": 0 },
+  "validated_constraints": [
+    "inventory_transactions_material_issue_fkey",
+    "inventory_transactions_material_return_fkey",
+    "inventory_transactions_material_source_check",
+    "project_cost_events_material_issue_fkey",
+    "project_cost_events_material_return_fkey",
+    "project_cost_events_source_identity_check",
+    "tenant_supplier_settings_materials_parent_check"
+  ],
+  "immutable_triggers_enabled_O": {
+    "warehouse_issue_order_items": "material_immutable -> __gooes_material_guard_document()",
+    "warehouse_issue_orders": "material_immutable -> __gooes_material_guard_document()",
+    "warehouse_material_command_events": "warehouse_material_events_immutable -> prevent_inventory_fact_mutation()",
+    "warehouse_return_order_items": "material_immutable -> __gooes_material_guard_document()",
+    "warehouse_return_orders": "material_immutable -> __gooes_material_guard_document()"
+  },
+  "c3_definition_matches_predicted_hash": true,
+  "c3_definition_md5": "cadf7fae090ec378cf80315a9f436289",
+  "c2_direction_patch_matches": { "search_finance_project_risk_ids": 2, "__gooes_submit_supplier_purchase_batch_destinations_v2": 1, "__gooes_review_supplier_purchase_batch_destinations_v2": 1, "__gooes_supplier_purchase_batch_budget_preflight": 1 },
+  "c2_direction_patch_pass": true,
+  "c1_source_lookup": { "issue_lookup_present": true, "return_lookup_present": true },
+  "scope": "Read-only catalog and aggregate verification. No business RPC called; no flags changed; no business write. Does not constitute enabled-tenant issue/return business acceptance."
+}

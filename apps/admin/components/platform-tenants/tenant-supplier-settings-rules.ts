@@ -9,7 +9,7 @@ export const SUPPLIER_ROLLOUT_FLAGS = [
   "warehouse_procurement_enabled",
 ] as const;
 
-export type SupplierRolloutFlag = typeof SUPPLIER_ROLLOUT_FLAGS[number];
+export type SupplierRolloutFlag = typeof SUPPLIER_ROLLOUT_FLAGS[number] | "warehouse_materials_enabled";
 type SupplierRolloutSettings = Pick<
   TenantSupplierSettings,
   "module_enabled" | SupplierRolloutFlag
@@ -20,6 +20,7 @@ export function canToggleSupplierRolloutFlag(
   flag: SupplierRolloutFlag,
 ): boolean {
   if (!settings.module_enabled) return false;
+  if (flag === "warehouse_materials_enabled") return true;
   const index = SUPPLIER_ROLLOUT_FLAGS.indexOf(flag);
   const previousEnabled = SUPPLIER_ROLLOUT_FLAGS
     .slice(0, index)
@@ -33,5 +34,5 @@ export function canToggleSupplierRolloutFlag(
 export function hasEnabledSupplierRolloutFlags(
   settings: Pick<TenantSupplierSettings, SupplierRolloutFlag>,
 ): boolean {
-  return SUPPLIER_ROLLOUT_FLAGS.some((flag) => settings[flag]);
+  return settings.warehouse_materials_enabled === true || SUPPLIER_ROLLOUT_FLAGS.some((flag) => settings[flag]);
 }

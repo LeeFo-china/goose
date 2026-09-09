@@ -17,6 +17,12 @@ const settings = {
 };
 
 describe("tenant supplier settings UI rollout rules", () => {
+  test("materials is independent of purchase rollout but prevents module disable", () => {
+    const materials = { ...settings, warehouse_materials_enabled: true };
+    expect(hasEnabledSupplierRolloutFlags(materials)).toBe(true);
+    expect(canToggleSupplierRolloutFlag(settings, "warehouse_materials_enabled")).toBe(true);
+    expect(canToggleSupplierRolloutFlag({ ...materials, module_enabled: false }, "warehouse_materials_enabled")).toBe(false);
+  });
   test("only enables the current legal next or previous switch", () => {
     expect(SUPPLIER_ROLLOUT_FLAGS).toEqual([
       "ownership_reads_enabled",

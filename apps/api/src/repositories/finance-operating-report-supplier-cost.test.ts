@@ -59,6 +59,15 @@ mock.module("@/utils/supabase/index", () => ({
 }));
 
 describe("finance operating report supplier cost query", () => {
+  test("carries the cost direction to period aggregators", async () => {
+    const { financeOperatingReportRepository } = await import("./finance-operating-report");
+    rows = [{ ...rows[0] as Record<string, unknown>, event_direction: "decrease" }];
+    const result = await financeOperatingReportRepository.listSupplierCostRows({
+      tenantId: "tenant-1", dateFrom: "2026-06-01", dateTo: "2026-06-30", sourceLimit: 100,
+    });
+    expect(result[0]).toMatchObject({ amount: "0.01", event_direction: "decrease" });
+    expect(calls[0]?.select).toContain("event_direction");
+  });
   beforeEach(() => {
     calls.length = 0;
     rows = Array.from({ length: 1_001 }, (_, index) => ({

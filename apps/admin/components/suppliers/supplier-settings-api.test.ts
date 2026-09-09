@@ -32,3 +32,19 @@ test("warehouse command freezes serialized payload and version for uncertain ret
     warehouse_procurement_enabled: true, expected_version: 6, require_active_contract_for_new_order: false,
   });
 });
+
+test("materials command freezes its independent flag and preserves it during other changes", () => {
+  const current: TenantSupplierSettings = {
+    tenant_id: "test", module_enabled: true, require_active_contract_for_new_order: false,
+    ownership_reads_enabled: false, private_supplier_writes_enabled: false,
+    private_catalog_writes_enabled: false, procurement_snapshot_v1_enabled: false,
+    purchase_batch_workflow_enabled: false, warehouse_procurement_enabled: false,
+    version: 1, enabled_at: null, enabled_by_employee_id: null, created_at: "", updated_at: "",
+  };
+  const request = settingsApi.createPlatformSupplierSettingsRequest({ tenantId: "test", current,
+    intent: { moduleEnabled: true, warehouseMaterialsEnabled: true }, idempotencyKey: "material-key" });
+  expect(JSON.parse(request.body)).toMatchObject({ warehouse_materials_enabled: true, warehouse_procurement_enabled: false });
+  const next = settingsApi.createPlatformSupplierSettingsRequest({ tenantId: "test", current: { ...current, warehouse_materials_enabled: true },
+    intent: { moduleEnabled: true, ownershipReadsEnabled: true }, idempotencyKey: "other-key" });
+  expect(JSON.parse(next.body)).toMatchObject({ warehouse_materials_enabled: true });
+});

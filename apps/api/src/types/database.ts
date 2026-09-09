@@ -5075,6 +5075,8 @@ export type Database = {
           unit_cost: number
           value_delta: number
           warehouse_id: string
+          warehouse_issue_item_id: string | null
+          warehouse_return_item_id: string | null
         }
         Insert: {
           cost_category_id?: string | null
@@ -5092,6 +5094,8 @@ export type Database = {
           unit_cost: number
           value_delta: number
           warehouse_id: string
+          warehouse_issue_item_id?: string | null
+          warehouse_return_item_id?: string | null
         }
         Update: {
           cost_category_id?: string | null
@@ -5109,6 +5113,8 @@ export type Database = {
           unit_cost?: number
           value_delta?: number
           warehouse_id?: string
+          warehouse_issue_item_id?: string | null
+          warehouse_return_item_id?: string | null
         }
         Relationships: [
           {
@@ -5124,6 +5130,37 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "employees"
             referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "inventory_transactions_material_issue_fkey"
+            columns: [
+              "warehouse_issue_item_id",
+              "tenant_id",
+              "warehouse_id",
+              "project_id",
+              "cost_category_id",
+            ]
+            isOneToOne: false
+            referencedRelation: "warehouse_issue_order_items"
+            referencedColumns: [
+              "id",
+              "tenant_id",
+              "warehouse_id",
+              "project_id",
+              "cost_category_id",
+            ]
+          },
+          {
+            foreignKeyName: "inventory_transactions_material_return_fkey"
+            columns: [
+              "warehouse_return_item_id",
+              "tenant_id",
+              "warehouse_id",
+              "project_id",
+            ]
+            isOneToOne: false
+            referencedRelation: "warehouse_return_order_items"
+            referencedColumns: ["id", "tenant_id", "warehouse_id", "project_id"]
           },
           {
             foreignKeyName: "inventory_transactions_project_tenant_fkey"
@@ -9853,19 +9890,23 @@ export type Database = {
           created_at: string
           created_by_employee_id: string
           currency: string
+          event_direction: string
           id: string
           occurred_at: string
           project_id: string
           purchase_requisition_id: string | null
           source_id: string
           source_type: string
-          supplier_id: string
-          supplier_purchase_order_id: string
-          supplier_purchase_order_item_id: string
-          supplier_purchase_order_receipt_id: string
-          supplier_purchase_order_receipt_item_id: string
+          supplier_id: string | null
+          supplier_purchase_order_id: string | null
+          supplier_purchase_order_item_id: string | null
+          supplier_purchase_order_receipt_id: string | null
+          supplier_purchase_order_receipt_item_id: string | null
           tenant_id: string
-          tenant_supplier_id: string
+          tenant_supplier_id: string | null
+          warehouse_id: string | null
+          warehouse_issue_item_id: string | null
+          warehouse_return_item_id: string | null
         }
         Insert: {
           accepted_quantity: number
@@ -9874,19 +9915,23 @@ export type Database = {
           created_at?: string
           created_by_employee_id: string
           currency?: string
+          event_direction?: string
           id?: string
           occurred_at: string
           project_id: string
           purchase_requisition_id?: string | null
           source_id: string
           source_type?: string
-          supplier_id: string
-          supplier_purchase_order_id: string
-          supplier_purchase_order_item_id: string
-          supplier_purchase_order_receipt_id: string
-          supplier_purchase_order_receipt_item_id: string
+          supplier_id?: string | null
+          supplier_purchase_order_id?: string | null
+          supplier_purchase_order_item_id?: string | null
+          supplier_purchase_order_receipt_id?: string | null
+          supplier_purchase_order_receipt_item_id?: string | null
           tenant_id: string
-          tenant_supplier_id: string
+          tenant_supplier_id?: string | null
+          warehouse_id?: string | null
+          warehouse_issue_item_id?: string | null
+          warehouse_return_item_id?: string | null
         }
         Update: {
           accepted_quantity?: number
@@ -9895,19 +9940,23 @@ export type Database = {
           created_at?: string
           created_by_employee_id?: string
           currency?: string
+          event_direction?: string
           id?: string
           occurred_at?: string
           project_id?: string
           purchase_requisition_id?: string | null
           source_id?: string
           source_type?: string
-          supplier_id?: string
-          supplier_purchase_order_id?: string
-          supplier_purchase_order_item_id?: string
-          supplier_purchase_order_receipt_id?: string
-          supplier_purchase_order_receipt_item_id?: string
+          supplier_id?: string | null
+          supplier_purchase_order_id?: string | null
+          supplier_purchase_order_item_id?: string | null
+          supplier_purchase_order_receipt_id?: string | null
+          supplier_purchase_order_receipt_item_id?: string | null
           tenant_id?: string
-          tenant_supplier_id?: string
+          tenant_supplier_id?: string | null
+          warehouse_id?: string | null
+          warehouse_issue_item_id?: string | null
+          warehouse_return_item_id?: string | null
         }
         Relationships: [
           {
@@ -9934,6 +9983,37 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "supplier_purchase_order_items"
             referencedColumns: ["id", "tenant_id", "supplier_purchase_order_id"]
+          },
+          {
+            foreignKeyName: "project_cost_events_material_issue_fkey"
+            columns: [
+              "warehouse_issue_item_id",
+              "tenant_id",
+              "warehouse_id",
+              "project_id",
+              "cost_category_id",
+            ]
+            isOneToOne: false
+            referencedRelation: "warehouse_issue_order_items"
+            referencedColumns: [
+              "id",
+              "tenant_id",
+              "warehouse_id",
+              "project_id",
+              "cost_category_id",
+            ]
+          },
+          {
+            foreignKeyName: "project_cost_events_material_return_fkey"
+            columns: [
+              "warehouse_return_item_id",
+              "tenant_id",
+              "warehouse_id",
+              "project_id",
+            ]
+            isOneToOne: false
+            referencedRelation: "warehouse_return_order_items"
+            referencedColumns: ["id", "tenant_id", "warehouse_id", "project_id"]
           },
           {
             foreignKeyName: "project_cost_events_order_tenant_supplier_fkey"
@@ -20003,6 +20083,7 @@ export type Database = {
           tenant_id: string
           updated_at: string
           version: number
+          warehouse_materials_enabled: boolean
           warehouse_procurement_enabled: boolean
         }
         Insert: {
@@ -20019,6 +20100,7 @@ export type Database = {
           tenant_id: string
           updated_at?: string
           version?: number
+          warehouse_materials_enabled?: boolean
           warehouse_procurement_enabled?: boolean
         }
         Update: {
@@ -20035,6 +20117,7 @@ export type Database = {
           tenant_id?: string
           updated_at?: string
           version?: number
+          warehouse_materials_enabled?: boolean
           warehouse_procurement_enabled?: boolean
         }
         Relationships: [
@@ -21588,6 +21671,407 @@ export type Database = {
             columns: ["warehouse_id", "tenant_id"]
             isOneToOne: false
             referencedRelation: "warehouses"
+            referencedColumns: ["id", "tenant_id"]
+          },
+        ]
+      }
+      warehouse_issue_order_items: {
+        Row: {
+          amount: number | null
+          cost_category_id: string | null
+          cost_category_name: string | null
+          id: string
+          issue_order_id: string
+          line_no: number
+          project_id: string
+          quantity: number
+          supplier_sku_id: string
+          tenant_id: string
+          unit_cost: number | null
+          warehouse_id: string
+        }
+        Insert: {
+          amount?: number | null
+          cost_category_id?: string | null
+          cost_category_name?: string | null
+          id?: string
+          issue_order_id: string
+          line_no: number
+          project_id: string
+          quantity: number
+          supplier_sku_id: string
+          tenant_id: string
+          unit_cost?: number | null
+          warehouse_id: string
+        }
+        Update: {
+          amount?: number | null
+          cost_category_id?: string | null
+          cost_category_name?: string | null
+          id?: string
+          issue_order_id?: string
+          line_no?: number
+          project_id?: string
+          quantity?: number
+          supplier_sku_id?: string
+          tenant_id?: string
+          unit_cost?: number | null
+          warehouse_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "warehouse_issue_order_items_cost_category_id_tenant_id_fkey"
+            columns: ["cost_category_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "finance_cost_categories"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "warehouse_issue_order_items_issue_order_id_tenant_id_wareh_fkey"
+            columns: [
+              "issue_order_id",
+              "tenant_id",
+              "warehouse_id",
+              "project_id",
+            ]
+            isOneToOne: false
+            referencedRelation: "warehouse_issue_orders"
+            referencedColumns: ["id", "tenant_id", "warehouse_id", "project_id"]
+          },
+          {
+            foreignKeyName: "warehouse_issue_order_items_supplier_sku_id_fkey"
+            columns: ["supplier_sku_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_skus"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      warehouse_issue_orders: {
+        Row: {
+          cancelled_at: string | null
+          completed_at: string | null
+          created_at: string
+          created_by_employee_id: string
+          id: string
+          order_no: string
+          project_id: string
+          reason: string | null
+          status: string
+          submitted_at: string | null
+          tenant_id: string
+          updated_at: string
+          updated_by_employee_id: string
+          version: number
+          warehouse_id: string
+        }
+        Insert: {
+          cancelled_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by_employee_id: string
+          id?: string
+          order_no?: string
+          project_id: string
+          reason?: string | null
+          status?: string
+          submitted_at?: string | null
+          tenant_id: string
+          updated_at?: string
+          updated_by_employee_id: string
+          version?: number
+          warehouse_id: string
+        }
+        Update: {
+          cancelled_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by_employee_id?: string
+          id?: string
+          order_no?: string
+          project_id?: string
+          reason?: string | null
+          status?: string
+          submitted_at?: string | null
+          tenant_id?: string
+          updated_at?: string
+          updated_by_employee_id?: string
+          version?: number
+          warehouse_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "warehouse_issue_orders_created_by_employee_id_tenant_id_fkey"
+            columns: ["created_by_employee_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "warehouse_issue_orders_project_id_tenant_id_fkey"
+            columns: ["project_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "warehouse_issue_orders_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "warehouse_issue_orders_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "warehouse_issue_orders_updated_by_employee_id_tenant_id_fkey"
+            columns: ["updated_by_employee_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "warehouse_issue_orders_warehouse_id_tenant_id_fkey"
+            columns: ["warehouse_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "warehouses"
+            referencedColumns: ["id", "tenant_id"]
+          },
+        ]
+      }
+      warehouse_material_command_events: {
+        Row: {
+          actor_employee_id: string
+          actor_user_id: string
+          command: string
+          created_at: string
+          document_type: string
+          id: string
+          idempotency_key: string
+          order_id: string
+          request_fingerprint: string
+          result: Json
+          tenant_id: string
+        }
+        Insert: {
+          actor_employee_id: string
+          actor_user_id: string
+          command: string
+          created_at?: string
+          document_type: string
+          id?: string
+          idempotency_key: string
+          order_id: string
+          request_fingerprint: string
+          result: Json
+          tenant_id: string
+        }
+        Update: {
+          actor_employee_id?: string
+          actor_user_id?: string
+          command?: string
+          created_at?: string
+          document_type?: string
+          id?: string
+          idempotency_key?: string
+          order_id?: string
+          request_fingerprint?: string
+          result?: Json
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "warehouse_material_command_eve_actor_employee_id_tenant_id_fkey"
+            columns: ["actor_employee_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "warehouse_material_command_events_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "warehouse_material_command_events_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      warehouse_return_order_items: {
+        Row: {
+          amount: number | null
+          id: string
+          line_no: number
+          original_issue_item_id: string
+          original_issue_order_id: string
+          project_id: string
+          quantity: number
+          return_order_id: string
+          tenant_id: string
+          unit_cost: number | null
+          warehouse_id: string
+        }
+        Insert: {
+          amount?: number | null
+          id?: string
+          line_no: number
+          original_issue_item_id: string
+          original_issue_order_id: string
+          project_id: string
+          quantity: number
+          return_order_id: string
+          tenant_id: string
+          unit_cost?: number | null
+          warehouse_id: string
+        }
+        Update: {
+          amount?: number | null
+          id?: string
+          line_no?: number
+          original_issue_item_id?: string
+          original_issue_order_id?: string
+          project_id?: string
+          quantity?: number
+          return_order_id?: string
+          tenant_id?: string
+          unit_cost?: number | null
+          warehouse_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "warehouse_return_order_items_original_issue_item_id_tenant_fkey"
+            columns: [
+              "original_issue_item_id",
+              "tenant_id",
+              "original_issue_order_id",
+            ]
+            isOneToOne: false
+            referencedRelation: "warehouse_issue_order_items"
+            referencedColumns: ["id", "tenant_id", "issue_order_id"]
+          },
+          {
+            foreignKeyName: "warehouse_return_order_items_return_order_id_tenant_id_ori_fkey"
+            columns: [
+              "return_order_id",
+              "tenant_id",
+              "original_issue_order_id",
+              "warehouse_id",
+              "project_id",
+            ]
+            isOneToOne: false
+            referencedRelation: "warehouse_return_orders"
+            referencedColumns: [
+              "id",
+              "tenant_id",
+              "original_issue_order_id",
+              "warehouse_id",
+              "project_id",
+            ]
+          },
+        ]
+      }
+      warehouse_return_orders: {
+        Row: {
+          cancelled_at: string | null
+          completed_at: string | null
+          created_at: string
+          created_by_employee_id: string
+          id: string
+          order_no: string
+          original_issue_order_id: string
+          project_id: string
+          reason: string | null
+          status: string
+          tenant_id: string
+          updated_at: string
+          updated_by_employee_id: string
+          version: number
+          warehouse_id: string
+        }
+        Insert: {
+          cancelled_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by_employee_id: string
+          id?: string
+          order_no?: string
+          original_issue_order_id: string
+          project_id: string
+          reason?: string | null
+          status?: string
+          tenant_id: string
+          updated_at?: string
+          updated_by_employee_id: string
+          version?: number
+          warehouse_id: string
+        }
+        Update: {
+          cancelled_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by_employee_id?: string
+          id?: string
+          order_no?: string
+          original_issue_order_id?: string
+          project_id?: string
+          reason?: string | null
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+          updated_by_employee_id?: string
+          version?: number
+          warehouse_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "warehouse_return_orders_created_by_employee_id_tenant_id_fkey"
+            columns: ["created_by_employee_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "warehouse_return_orders_original_issue_order_id_tenant_id__fkey"
+            columns: [
+              "original_issue_order_id",
+              "tenant_id",
+              "warehouse_id",
+              "project_id",
+            ]
+            isOneToOne: false
+            referencedRelation: "warehouse_issue_orders"
+            referencedColumns: ["id", "tenant_id", "warehouse_id", "project_id"]
+          },
+          {
+            foreignKeyName: "warehouse_return_orders_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "warehouse_return_orders_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "warehouse_return_orders_updated_by_employee_id_tenant_id_fkey"
+            columns: ["updated_by_employee_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
             referencedColumns: ["id", "tenant_id"]
           },
         ]
@@ -23330,6 +23814,31 @@ export type Database = {
           p_admin_name: string
           p_admin_phone: string
           p_operator_employee_id?: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      __gooes_material_assert_actor: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_tenant_id: string
+        }
+        Returns: undefined
+      }
+      __gooes_material_assert_project: {
+        Args: {
+          p_actor_employee_id: string
+          p_permission: string
+          p_project_id: string
+          p_tenant_id: string
+        }
+        Returns: undefined
+      }
+      __gooes_material_order_summary: {
+        Args: {
+          p_document_type: string
+          p_order_id: string
           p_tenant_id: string
         }
         Returns: Json
@@ -25879,6 +26388,20 @@ export type Database = {
         }
         Returns: Json
       }
+      command_warehouse_material_order: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_command: string
+          p_document_type: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_order_id: string
+          p_payload: Json
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       complete_douyin_authorization_event: {
         Args: {
           p_access_token_ciphertext: string
@@ -27623,6 +28146,24 @@ export type Database = {
           nav_position: string
         }[]
       }
+      get_warehouse_material_order: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_document_type: string
+          p_order_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      get_warehouse_material_settings: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       get_wechat_mini_session_credential: {
         Args: {
           p_oauth_identity_id: string
@@ -28359,6 +28900,44 @@ export type Database = {
           asset: Json
           total_count: number
         }[]
+      }
+      list_warehouse_material_order_items: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_document_type: string
+          p_order_id: string
+          p_page?: number
+          p_page_size?: number
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      list_warehouse_material_orders: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_document_type: string
+          p_keyword?: string
+          p_page?: number
+          p_page_size?: number
+          p_project_id?: string
+          p_status?: string
+          p_tenant_id: string
+          p_warehouse_id?: string
+        }
+        Returns: Json
+      }
+      list_warehouse_material_projects: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_keyword?: string
+          p_page?: number
+          p_page_size?: number
+          p_tenant_id: string
+        }
+        Returns: Json
       }
       list_wechat_login_memberships: {
         Args: { p_user_id: string }
@@ -30120,6 +30699,14 @@ export type Database = {
         Returns: Json
       }
       set_tenant_supplier_rollout_settings:
+        | {
+            Args: {
+              p_actor_user_id: string
+              p_idempotency_key: string
+              p_request: Json
+            }
+            Returns: Json
+          }
         | {
             Args: {
               p_actor_employee_id: string

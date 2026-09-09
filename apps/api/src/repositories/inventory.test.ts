@@ -20,12 +20,112 @@ const SOURCE_DOCUMENT = {
   receipt_id: '70000000-0000-4000-8000-000000000001', receipt_no: 'RK-001',
   purchase_order_id: '80000000-0000-4000-8000-000000000001', order_no: 'PO-001',
 };
+const TRANSFER_SOURCE_DOCUMENT = {
+  transfer_order_id: '90000000-0000-4000-8000-000000000001', transfer_order_no: 'WT-001',
+  source_warehouse_id: WAREHOUSE_ID, destination_warehouse_id: '20000000-0000-4000-8000-000000000002',
+};
 
 process.env.SUPABASE_URL ??= 'http://127.0.0.1:54321';
 process.env.SUPABASE_PUBLISH ??= 'test-publish-key';
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= 'test-service-role-key';
 
 describe('InventoryRepository', () => {
+  test.each(['transfer_out', 'transfer_in'] as const)('preserves complete %s source with one paginated RPC', async (transactionType) => {
+    const { InventoryRepository } = await import('./inventory');
+    const calls: Record<string, unknown>[] = [];
+    const repository = new InventoryRepository({ rpc: async (_name, params) => {
+      calls.push(params);
+      return { data: { items: [{ ...TRANSACTION, transaction_type: transactionType,
+        source_type: `warehouse_${transactionType}_item`, source_document: TRANSFER_SOURCE_DOCUMENT }],
+        total: 1, page: 1, page_size: 20 }, error: null };
+    } });
+    const result = await repository.listTransactions({ tenant_id: TENANT_ID, transaction_type: transactionType, page: 1, pageSize: 20 });
+    expect(result.list[0]?.source_document).toEqual(TRANSFER_SOURCE_DOCUMENT);
+    expect(calls).toEqual([{ p_tenant_id: TENANT_ID, p_warehouse_id: null, p_supplier_sku_id: null,
+      p_transaction_type: transactionType, p_page: 1, p_page_size: 20 }]);
+  });
+
+  test('rejects incomplete, malformed, mixed or extra transfer source fields', async () => {
+    const { InventoryRepository } = await import('./inventory');
+    const invalid = [
+      { transfer_order_id: TRANSFER_SOURCE_DOCUMENT.transfer_order_id },
+      ...['transfer_order_id', 'source_warehouse_id', 'destination_warehouse_id'].map((key) => ({
+        ...TRANSFER_SOURCE_DOCUMENT, [key]: 'invalid-uuid',
+      })),
+      { ...TRANSFER_SOURCE_DOCUMENT, transfer_order_no: '' },
+      { ...TRANSFER_SOURCE_DOCUMENT, ...SOURCE_DOCUMENT },
+      { ...TRANSFER_SOURCE_DOCUMENT, issue_order_id: WAREHOUSE_ID, issue_order_no: 'WI-001' },
+      { ...TRANSFER_SOURCE_DOCUMENT, return_order_id: SKU_ID, return_order_no: 'WR-001' },
+      { ...TRANSFER_SOURCE_DOCUMENT, extra: true },
+    ];
+    for (const source_document of invalid) {
+      const repository = new InventoryRepository({ rpc: async () => ({ data: {
+        items: [{ ...TRANSACTION, transaction_type: 'transfer_out', source_type: 'warehouse_transfer_out_item', source_document }],
+        total: 1, page: 1, page_size: 20,
+      }, error: null }) });
+      await expect(repository.listTransactions({ tenant_id: TENANT_ID, page: 1, pageSize: 20 })).rejects.toBeInstanceOf(AppError);
+    }
+  });
+
+  const issueSource = { issue_order_id: WAREHOUSE_ID, issue_order_no: 'WI-001' };
+  const returnSource = { ...issueSource, return_order_id: SKU_ID, return_order_no: 'WR-001' };
+  test.each(['transfer_out', 'transfer_in'] as const)('%s rejects complete legacy source shapes', async (transaction_type) => {
+    const { InventoryRepository } = await import('./inventory');
+    for (const source_document of [SOURCE_DOCUMENT, issueSource, returnSource]) {
+      const repository = new InventoryRepository({ rpc: async () => ({ data: {
+        items: [{ ...TRANSACTION, transaction_type, source_type: `warehouse_${transaction_type}_item`, source_document }],
+        total: 1, page: 1, page_size: 20,
+      }, error: null }) });
+      await expect(repository.listTransactions({ tenant_id: TENANT_ID, page: 1, pageSize: 20 })).rejects.toBeInstanceOf(AppError);
+    }
+  });
+
+  test.each(['purchase_receipt', 'project_issue', 'project_return'])('%s rejects a transfer document', async (transaction_type) => {
+    const { InventoryRepository } = await import('./inventory');
+    const repository = new InventoryRepository({ rpc: async () => ({ data: {
+      items: [{ ...TRANSACTION, transaction_type, source_document: TRANSFER_SOURCE_DOCUMENT }], total: 1, page: 1, page_size: 20,
+    }, error: null }) });
+    await expect(repository.listTransactions({ tenant_id: TENANT_ID, page: 1, pageSize: 20 })).rejects.toBeInstanceOf(AppError);
+  });
+
+  test.each([
+    ['transfer_out', 'warehouse_transfer_in_item'], ['transfer_in', 'warehouse_transfer_out_item'],
+    ['transfer_out', 'supplier_purchase_receipt_item'], ['transfer_in', 'supplier_purchase_receipt_item'],
+    ['purchase_receipt', 'warehouse_transfer_out_item'], ['purchase_receipt', 'warehouse_transfer_in_item'],
+  ])('rejects mismatched %s / %s even when the document is unresolved', async (transaction_type, source_type) => {
+    const { InventoryRepository } = await import('./inventory');
+    for (const source_document of [TRANSFER_SOURCE_DOCUMENT, null]) {
+      const repository = new InventoryRepository({ rpc: async () => ({ data: {
+        items: [{ ...TRANSACTION, transaction_type, source_type, source_document }], total: 1, page: 1, page_size: 20,
+      }, error: null }) });
+      await expect(repository.listTransactions({ tenant_id: TENANT_ID, page: 1, pageSize: 20 })).rejects.toBeInstanceOf(AppError);
+    }
+  });
+
+  test.each(['transfer_out', 'transfer_in'])('keeps matching %s unresolved sources nullable', async (transaction_type) => {
+    const { InventoryRepository } = await import('./inventory');
+    for (const source_document of [null, undefined]) {
+      const repository = new InventoryRepository({ rpc: async () => ({ data: {
+        items: [{ ...TRANSACTION, transaction_type, source_type: `warehouse_${transaction_type}_item`, source_document }],
+        total: 1, page: 1, page_size: 20,
+      }, error: null }) });
+      expect((await repository.listTransactions({ tenant_id: TENANT_ID, page: 1, pageSize: 20 })).list[0]?.source_document).toBeNull();
+    }
+  });
+
+  test('preserves issue and return source links and rejects partial or mixed sources', async () => {
+    const { InventoryRepository } = await import('./inventory');
+    const issue = { issue_order_id: WAREHOUSE_ID, issue_order_no: 'WI-001' };
+    const returned = { ...issue, return_order_id: SKU_ID, return_order_no: 'WR-001' };
+    for (const source of [issue, returned, { ...issue, receipt_id: SKU_ID }, { return_order_id: SKU_ID }]) {
+      const repository = new InventoryRepository({ rpc: async () => ({
+        data: { items: [{ ...TRANSACTION, source_document: source }], total: 1, page: 1, page_size: 20 }, error: null,
+      }) });
+      const result = repository.listTransactions({ tenant_id: TENANT_ID, page: 1, pageSize: 20 });
+      if (source === issue || source === returned) expect((await result).list[0]?.source_document).toEqual(source as typeof issue | typeof returned);
+      else await expect(result).rejects.toBeInstanceOf(AppError);
+    }
+  });
   test('returns a complete source document without a second query', async () => {
     const { InventoryRepository } = await import('./inventory');
     let calls = 0;

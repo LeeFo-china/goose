@@ -2,9 +2,9 @@ import type {
   FinanceOperatingReportSupplierCostRow,
 } from "@/repositories/finance-operating-report";
 import {
-  addMoneyCents,
   moneyCentsToSafeNumber,
 } from "@/utils/fixed-point-money";
+import { projectCostEventCents } from "@/utils/project-cost-direction";
 
 export function aggregateSupplierCostCentsBy(
   rows: FinanceOperatingReportSupplierCostRow[],
@@ -15,11 +15,7 @@ export function aggregateSupplierCostCentsBy(
     const key = getKey(row);
     totals.set(
       key,
-      addMoneyCents(
-        totals.get(key) ?? BigInt(0),
-        row.amount,
-        context(rows),
-      ),
+      (totals.get(key) ?? BigInt(0)) + projectCostEventCents(row.amount, row.event_direction, context(rows)),
     );
   }
   return totals;

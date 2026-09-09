@@ -150,6 +150,8 @@ export const SettingsSchema = z.object({
   procurement_snapshot_v1_enabled: z.boolean(),
   purchase_batch_workflow_enabled: z.boolean().default(false),
   warehouse_procurement_enabled: z.boolean().default(false),
+  warehouse_materials_enabled: z.boolean().default(false),
+  warehouse_transfers_enabled: z.boolean().optional(),
   enabled_by_employee_id: z.uuid().nullable(),
   enabled_at: nullableString,
   ...auditFields,

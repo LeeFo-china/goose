@@ -1,0 +1,181 @@
+{
+  "candidate": "5585923ee22b25800a5e3808411f3dab44be9fb5",
+  "environment": "development",
+  "checked_at_utc": "2026-09-08T05:45:36.960616+00:00",
+  "read_only": true,
+  "targets": [
+    {
+      "id": "c040be4b-61a8-4966-9d7e-27e42fa942aa",
+      "tenant_id": "992b842f-231b-46bb-b494-9b0f5cd5c192",
+      "employee_id": "db285789-726e-45e6-8fb4-cd878b467a1c",
+      "code": "WH-000004",
+      "hash": "4103ef24183be8d47d90e7561ce9db22"
+    },
+    {
+      "id": "1ae564fe-915a-40b7-9245-133d80c60961",
+      "tenant_id": "1116dec1-9c13-46a8-940b-48465e1db6e2",
+      "employee_id": "26bafdfb-4133-484a-b9e1-8c7beb59c638",
+      "code": "WH-000024",
+      "hash": "ff2066f5bf7a0e7e76e44876c8715e46"
+    },
+    {
+      "id": "402b619f-d22f-4fbc-ae18-6bd84a54333d",
+      "tenant_id": "c7264018-d4fb-410a-b342-3ffa755a6523",
+      "employee_id": "cedc1fc7-d3c0-41a7-8221-4dd5a21b7035",
+      "code": "WH-000026",
+      "hash": "64118381064d0691523e6f42b03cec60"
+    },
+    {
+      "id": "f1ba1d8a-b0db-42f2-a87e-8bcbd9e2601a",
+      "tenant_id": "77ba4a82-2cf8-452f-93d4-79e41dcc4340",
+      "employee_id": "a9176c33-99d3-458c-9bc4-93fe54e19982",
+      "code": "WH-000032",
+      "hash": "baecc026272ffb676fa0e9c9e59f1d81"
+    }
+  ],
+  "parents": {
+    "tenants_missing": 4,
+    "employees_missing": 4,
+    "matched_employee_ids_any_tenant": 0
+  },
+  "warehouse_command_events": 0,
+  "inbound_references": [
+    {
+      "table": "inventory_balances",
+      "constraint": "inventory_balances_warehouse_tenant_fkey",
+      "rows": 0
+    },
+    {
+      "table": "supplier_payable_events",
+      "constraint": "supplier_payable_events_warehouse_tenant_fkey",
+      "rows": 0
+    },
+    {
+      "table": "warehouse_command_events",
+      "constraint": "warehouse_command_events_warehouse_tenant_fkey",
+      "rows": 0
+    },
+    {
+      "table": "supplier_purchase_batches",
+      "constraint": "supplier_purchase_batches_warehouse_tenant_fkey",
+      "rows": 0
+    },
+    {
+      "table": "supplier_purchase_requisitions",
+      "constraint": "supplier_purchase_requisitions_warehouse_tenant_fkey",
+      "rows": 0
+    },
+    {
+      "table": "supplier_purchase_orders",
+      "constraint": "supplier_purchase_orders_warehouse_tenant_fkey",
+      "rows": 0
+    },
+    {
+      "table": "inventory_transactions",
+      "constraint": "inventory_transactions_warehouse_tenant_fkey",
+      "rows": 0
+    },
+    {
+      "table": "supplier_payment_requests",
+      "constraint": "supplier_payment_requests_warehouse_tenant_fkey",
+      "rows": 0
+    },
+    {
+      "table": "supplier_payments",
+      "constraint": "supplier_payments_warehouse_tenant_fkey",
+      "rows": 0
+    }
+  ],
+  "unconstrained_warehouse_id_columns": 0,
+  "triggers": [
+    {
+      "table": "employees",
+      "constraint": "warehouses_created_by_tenant_fkey",
+      "enabled": "O",
+      "function": "\"RI_FKey_restrict_del\"()"
+    },
+    {
+      "table": "employees",
+      "constraint": "warehouses_created_by_tenant_fkey",
+      "enabled": "O",
+      "function": "\"RI_FKey_noaction_upd\"()"
+    },
+    {
+      "table": "warehouses",
+      "constraint": "warehouses_created_by_tenant_fkey",
+      "enabled": "O",
+      "function": "\"RI_FKey_check_ins\"()"
+    },
+    {
+      "table": "warehouses",
+      "constraint": "warehouses_created_by_tenant_fkey",
+      "enabled": "O",
+      "function": "\"RI_FKey_check_upd\"()"
+    },
+    {
+      "table": "tenants",
+      "constraint": "warehouses_tenant_id_fkey",
+      "enabled": "O",
+      "function": "\"RI_FKey_restrict_del\"()"
+    },
+    {
+      "table": "tenants",
+      "constraint": "warehouses_tenant_id_fkey",
+      "enabled": "O",
+      "function": "\"RI_FKey_noaction_upd\"()"
+    },
+    {
+      "table": "warehouses",
+      "constraint": "warehouses_tenant_id_fkey",
+      "enabled": "O",
+      "function": "\"RI_FKey_check_ins\"()"
+    },
+    {
+      "table": "warehouses",
+      "constraint": "warehouses_tenant_id_fkey",
+      "enabled": "O",
+      "function": "\"RI_FKey_check_upd\"()"
+    },
+    {
+      "table": "employees",
+      "constraint": "warehouses_updated_by_tenant_fkey",
+      "enabled": "O",
+      "function": "\"RI_FKey_restrict_del\"()"
+    },
+    {
+      "table": "employees",
+      "constraint": "warehouses_updated_by_tenant_fkey",
+      "enabled": "O",
+      "function": "\"RI_FKey_noaction_upd\"()"
+    },
+    {
+      "table": "warehouses",
+      "constraint": "warehouses_updated_by_tenant_fkey",
+      "enabled": "O",
+      "function": "\"RI_FKey_check_ins\"()"
+    },
+    {
+      "table": "warehouses",
+      "constraint": "warehouses_updated_by_tenant_fkey",
+      "enabled": "O",
+      "function": "\"RI_FKey_check_upd\"()"
+    }
+  ],
+  "known_code_defect": {
+    "file": "apps/api/src/scripts/supplier-purchasable-sku-smoke-fixture.ts",
+    "settings_insert_line": 165,
+    "cleanup_line": 226,
+    "residual_check_line": 275,
+    "mechanism": "settings seed creates default warehouse; replica cleanup omits warehouse; residual count omits warehouse"
+  },
+  "provenance": "现存数据和已复现代码缺陷吻合，但 UUID 未在仓库记录中命中、指定时窗容器日志匹配 0，不能证明四次历史执行均来自该脚本。",
+  "local_reproduction": {
+    "exit_code": 0,
+    "output": "{\"default_warehouse_rows\" : 1, \"parent_tenant_rows\" : 0, \"parent_employee_rows\" : 0, \"orphan_warehouses\" : 1, \"fk_catalog_validated\" : true}\nREPRO_CONFIRMED: omitted warehouse cleanup leaves orphan; restore FK rejects it\n",
+    "scope": "本机无网络自动删除容器；最小依赖表＋原 migration 中真实 warehouses DDL／默认仓库 trigger；复现相关清理 SQL 顺序，不冒充完整 smoke 已运行。"
+  },
+  "migration_count": 594,
+  "migration_latest": "20260908010000",
+  "remote_mutations": 0,
+  "repair_implemented": false
+}

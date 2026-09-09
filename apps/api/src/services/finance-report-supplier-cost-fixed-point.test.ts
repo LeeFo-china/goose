@@ -25,6 +25,21 @@ const emptyCandidates = {
 };
 
 describe("finance report supplier cost fixed point aggregation", () => {
+  test("return-only periods reduce net expense in every cost report", async () => {
+    const services = createServices([
+      { ...supplierCostRow("return-1", "3.34"), event_direction: "decrease" },
+    ]);
+    const monthly = await services.monthly.getMonthlyOverview(authContext, { month: "2026-06" });
+    const operating = await services.operating.getOperatingReport(authContext, {
+      date_from: "2026-06-01", date_to: "2026-06-30", group_by: "project",
+    });
+    const ranking = await services.specialized.getProjectRanking(authContext, rankingQuery());
+    const categories = await services.specialized.getCostCategorySummary(authContext, categoryQuery());
+    expect(monthly.summary.expense_amount).toBe(-3.34);
+    expect(operating.summary.expense_amount).toBe(-3.34);
+    expect(ranking.list[0]?.expense_amount).toBe(-3.34);
+    expect(categories.summary.expense_amount).toBe(-3.34);
+  });
   test("keeps repeated cents exact and excludes cost events from ledger count", async () => {
     const rows = [
       supplierCostRow("cost-1", "0.01"),

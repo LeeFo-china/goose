@@ -2,13 +2,17 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { assertInventoryScanBound, parseInventoryPlanNotices } from "./warehouse-inventory-plan-notices";
+import { MATERIAL_TYPE_SECTIONS, syncSelectedDatabaseTypes } from "./warehouse-material-type-sync";
+import { runWarehouseMaterialHttpSmoke } from "./warehouse-material-http-smoke";
 
 const image = "public.ecr.aws/supabase/postgres:17.6.1.106";
 const sourceContainer = "supabase_db_gooes";
 const container = `gooes-stage-b-database-${randomUUID()}`;
 const migrationDirectory = "supabase/migrations";
+const generateMaterialTypes = process.argv.includes("--generate-material-types");
+const materialApiSmoke = process.argv.includes("--material-api-smoke");
 
 function docker(args: string[], input?: string, timeout = 30_000): string {
   return execFileSync("docker", args, {
@@ -138,7 +142,7 @@ try {
   docker([
     "run", "--rm", "--detach", "--network", "none", "--name", container,
     "--user", "postgres", "--entrypoint", "/bin/sh", image, "-c",
-    "initdb -D /tmp/stage-b-pg -A trust --no-locale >/dev/null && exec postgres -D /tmp/stage-b-pg -k /tmp -h '' -F -c shared_preload_libraries=pg_net,pg_stat_statements,supabase_vault -c wal_level=logical",
+    "initdb -D /tmp/stage-b-pg -A trust --no-locale >/dev/null && exec postgres -D /tmp/stage-b-pg -k /tmp -h 127.0.0.1 -F -c shared_preload_libraries=pg_net,pg_stat_statements,supabase_vault -c wal_level=logical",
   ]);
   let ready = false;
   for (let attempt = 0; attempt < 40; attempt++) {
@@ -149,8 +153,18 @@ try {
   sql(schema);
   sql(functionAcls);
   console.log(`PASS restored schema-only baseline ${baseline} (${versions.size} migrations)`);
-  const fixtures = process.argv.slice(2);
+  const fixtures = process.argv.slice(2).filter((arg) => !["--generate-material-types", "--material-api-smoke"].includes(arg));
   for (const name of pending) {
+    if (name === "20260908235654_warehouse_transfer_rollout_command.sql" &&
+      fixtures.includes("scripts/fixtures/warehouse-stage-b/transfer-rollout.sql")) {
+      sql(readFileSync("scripts/fixtures/warehouse-stage-b/transfer-rollout-before.sql", "utf8"));
+      console.log("PASS genuine pre-transfer rollout typed/JSON receipts saved before core extension");
+    }
+    if (name === "20260908015230_create_warehouse_project_material_commands.sql" &&
+      fixtures.includes("scripts/fixtures/warehouse-stage-b/material-rollout.sql")) {
+      sql(readFileSync("scripts/fixtures/warehouse-stage-b/material-rollout-before.sql", "utf8"));
+      console.log("PASS genuine pre-C synthetic rollout receipt saved before material schema migration");
+    }
     if (name === "20260908010000_extend_warehouse_procurement_rollout_command.sql" &&
       fixtures.includes("scripts/fixtures/warehouse-stage-b/rollout-command.sql")) {
       sql(readFileSync("scripts/fixtures/warehouse-stage-b/rollout-command-before.sql", "utf8"));
@@ -172,7 +186,40 @@ try {
     }
     console.log(`PASS ${fixture}`);
   }
-  console.log("Procurement-domain schema replay passed; NOT full migration history/data or API acceptance.");
+  if (materialApiSmoke) {
+    // Historical projects legitimately allow a null name. Exercise the real SQL
+    // -> strict repository -> HTTP fallback using only our synthetic project.
+    sql("UPDATE public.projects SET name=NULL WHERE id=(SELECT project_id FROM public.stage_c_material_fixture)");
+    const snapshotQuery = `SELECT jsonb_build_object(
+      'quantity',b.quantity_on_hand::text,'value',b.inventory_value::text,
+      'net_cost',(SELECT sum(CASE event_direction WHEN 'decrease' THEN -amount ELSE amount END)::text
+        FROM public.project_cost_events WHERE tenant_id=f.tenant_id),
+      'payables',(SELECT count(*) FROM public.supplier_payable_events WHERE tenant_id=f.tenant_id),
+      'transactions',(SELECT count(*) FROM public.inventory_transactions WHERE tenant_id=f.tenant_id),
+      'cost_events',(SELECT count(*) FROM public.project_cost_events WHERE tenant_id=f.tenant_id),
+      'commands',(SELECT count(*) FROM public.warehouse_material_command_events WHERE tenant_id=f.tenant_id))
+      FROM public.stage_c_material_fixture f JOIN public.inventory_balances b ON b.tenant_id=f.tenant_id
+        AND b.warehouse_id=f.warehouse_id AND b.supplier_sku_id=f.sku_id`;
+    const before = JSON.parse(sql(snapshotQuery));
+    await runWarehouseMaterialHttpSmoke(container, sql("SELECT row_to_json(f) FROM public.stage_c_material_fixture f"));
+    assert.deepEqual(JSON.parse(sql(snapshotQuery)), { ...before, transactions: before.transactions + 3,
+      cost_events: before.cost_events + 3, commands: before.commands + 7 },
+    "Real HTTP issue/return must reconcile stock/net costs, add only exact facts and leave supplier payables unchanged");
+    console.log("PASS HTTP-driven SQL reconciliation: stock/net cost restored, exactly 3 inventory/cost facts and 7 commands, no payable added");
+  }
+  if (generateMaterialTypes) {
+    // Shares only the disposable container's offline loopback. No host network,
+    // port, credentials or production data; options verified against this image.
+    const generated = docker(["run", "--rm", "--network", `container:${container}`,
+      "--env", "PG_META_DB_HOST=127.0.0.1", "--env", "PG_META_GENERATE_TYPES=typescript",
+      "--env", "PG_META_GENERATE_TYPES_INCLUDED_SCHEMAS=public",
+      "--env", "PG_META_GENERATE_TYPES_DETECT_ONE_TO_ONE_RELATIONSHIPS=true",
+      "public.ecr.aws/supabase/postgres-meta:v0.96.4"], undefined, 60_000);
+    const target = "apps/api/src/types/database.ts";
+    writeFileSync(target, syncSelectedDatabaseTypes(readFileSync(target, "utf8"), generated, MATERIAL_TYPE_SECTIONS));
+    console.log("PASS generated and synced only Stage C database type entries from isolated real schema");
+  }
+  console.log("Procurement-domain isolated verification passed; NOT full migration history/data, real-environment or end-to-end login acceptance.");
 } finally {
   if (launchAttempted) {
     const inspection = spawnSync("docker", ["container", "inspect", container], {

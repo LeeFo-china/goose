@@ -1,0 +1,77 @@
+{
+  "candidate": "5585923ee22b25800a5e3808411f3dab44be9fb5",
+  "environment": "development",
+  "host": "VM-0-11-ubuntu",
+  "backup_completed_at_utc": "2026-09-08T05:16:33Z",
+  "cleanup_completed_at_utc": "2026-09-08T05:26:57Z",
+  "backup_directory": "/var/tmp/gooes-stage-c-dev-backup.0ziWKo5I",
+  "snapshot": "0000003D-0000142F-1",
+  "database_dump": {
+    "bytes": 8444822,
+    "sha256": "c6b3945f575d42cfe079c199ceb83ce461f6dce375c3abffeb126e1ed09b591e"
+  },
+  "roles_sql": {
+    "bytes": 6846,
+    "sha256": "6523e90693ff46892c14bc39f03668b3e0fc3444d710f1d9d384b18b55b48b4b"
+  },
+  "source_counts": {
+    "tables": 325,
+    "manifest_lines": 327,
+    "sha256": "d68fb442632af002190d064deeeadfcc0dd62e9a461c4a2af87e12882be41030",
+    "read_only": "on"
+  },
+  "vault_key": {
+    "included": true,
+    "bytes": 64,
+    "mode": "0600",
+    "matches_source": true,
+    "contents_disclosed": false
+  },
+  "migration_count": 594,
+  "migration_latest": "20260908010000",
+  "restore": {
+    "image": "sha256:f371b5f3f2ac0a05703f33d6e6134515fb2498cab708fb948a0aeb7481467c00",
+    "image_tag": "supabase/postgres:17.6.1.136",
+    "network": "none",
+    "ports": [],
+    "root_filesystem_read_only": true,
+    "memory_limit_bytes": 1073741824,
+    "pgdata_tmpfs_limit_bytes": 536870912,
+    "cpus": 1,
+    "roles_final_restore_exit_code": 0,
+    "database_final_restore_exit_code": 1,
+    "single_transaction": true,
+    "rolled_back": true,
+    "error_constraint": "warehouses_created_by_tenant_fkey",
+    "restored_history_exists_after_failure": false,
+    "restored_warehouses_exists_after_failure": false
+  },
+  "source_orphans": {
+    "read_only": "on",
+    "warehouses": 5,
+    "employees": 39,
+    "orphan_created_by": 4,
+    "orphan_updated_by": 4,
+    "orphan_manager": 0
+  },
+  "archive_orphans": {
+    "archive_employees": 39,
+    "archive_warehouses": 5,
+    "archive_orphan_created_by": 4,
+    "archive_orphan_updated_by": 4,
+    "archive_orphan_manager": 0
+  },
+  "root_cause": "源库及备份均有 4 个仓库的创建人、更新人引用无法匹配同租户员工；在完整恢复重建外键时被拒绝。历史失效引用如何产生尚未定位。",
+  "temporary_restore_containers_remaining": 0,
+  "backup_bytes_retained_approx": "8.8 MiB",
+  "disk_available_before_bytes": 4168630272,
+  "disk_available_after_bytes": 4157370368,
+  "live_services_healthy": [
+    "supabase-db",
+    "gooes-api-dev",
+    "gooes-admin-dev"
+  ],
+  "backup_restore_gate": "FAIL",
+  "remote_stage_c_migrations_applied": 0,
+  "real_business_data_mutated": false
+}

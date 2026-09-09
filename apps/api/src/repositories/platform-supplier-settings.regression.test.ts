@@ -26,6 +26,62 @@ const setting = {
 };
 
 describe("PlatformSuppliersRepository settings command", () => {
+  test("transfer column expansion accepts only the known boolean and keeps legacy rows valid", async () => {
+    const { SettingsSchema: platformSchema } = await import("./platform-supplier-records");
+    const { SettingsSchema: tenantSchema } = await import("./tenant-suppliers-mappers");
+    for (const schema of [platformSchema, tenantSchema]) {
+      expect(schema.safeParse(setting).success).toBe(true);
+      for (const enabled of [false, true]) {
+        expect(schema.safeParse({ ...setting, warehouse_transfers_enabled: enabled }).success).toBe(true);
+      }
+      expect(schema.safeParse({ ...setting, warehouse_transfers_enabled: "false" }).success).toBe(false);
+      expect(schema.safeParse({ ...setting, unrelated_flag: false }).success).toBe(false);
+    }
+  });
+
+  test("rollout RPC expanded current and historical snapshots parse after transfer migration", async () => {
+    const { PlatformSuppliersRepository } = await import("./platform-suppliers");
+    const expanded = { ...setting, warehouse_transfers_enabled: false };
+    const rpc = mock(async () => ({ data: {
+      status: "updated", idempotent: true, setting: expanded,
+      previous_setting: expanded, version: 2,
+    }, error: null }));
+    const repository = new PlatformSuppliersRepository(() => ({ rpc } as never));
+    const result = await repository.setTenantSupplierSettings({
+      tenant_id: TENANT_ID, module_enabled: false, require_active_contract_for_new_order: false,
+      ownership_reads_enabled: false, private_supplier_writes_enabled: false, private_catalog_writes_enabled: false,
+      procurement_snapshot_v1_enabled: false, purchase_batch_workflow_enabled: false,
+      expected_version: 1, actor_employee_id: ACTOR_EMPLOYEE_ID, actor_user_id: ACTOR_USER_ID,
+      idempotency_key: "transfer-schema-expansion",
+    });
+    expect(result.setting).toMatchObject({ warehouse_transfers_enabled: false });
+    expect(result.previous_setting).toMatchObject({ warehouse_transfers_enabled: false });
+  });
+
+  test("materials JSON overload preserves absent procurement and original request identity", async () => {
+    const { PlatformSuppliersRepository } = await import("./platform-suppliers");
+    const rpc = mock(async () => ({ data: {
+      status: "updated", idempotent: false,
+      setting: { ...setting, module_enabled: true, warehouse_materials_enabled: true },
+      previous_setting: setting, version: 2,
+    }, error: null }));
+    const repository = new PlatformSuppliersRepository(() => ({ rpc } as never));
+    const request = {
+      tenant_id: TENANT_ID, module_enabled: true, require_active_contract_for_new_order: false,
+      ownership_reads_enabled: false, private_supplier_writes_enabled: false,
+      private_catalog_writes_enabled: false, procurement_snapshot_v1_enabled: false,
+      purchase_batch_workflow_enabled: false, warehouse_materials_enabled: true,
+      expected_version: 1, actor_employee_id: ACTOR_EMPLOYEE_ID, reason: undefined,
+    };
+    const result = await repository.setTenantSupplierSettings({ ...request,
+      actor_user_id: ACTOR_USER_ID, idempotency_key: "materials-enable-1",
+    });
+    expect(result.setting).toMatchObject({ warehouse_materials_enabled: true });
+    expect(rpc).toHaveBeenCalledWith("set_tenant_supplier_rollout_settings", {
+      p_request: { ...request, reason: null }, p_actor_user_id: ACTOR_USER_ID,
+      p_idempotency_key: "materials-enable-1",
+    });
+  });
   test("returns all raw rollout flags from platform settings reads", async () => {
     const { PlatformSuppliersRepository } = await import("./platform-suppliers");
     const maybeSingle = mock(async () => ({ data: setting, error: null }));
@@ -52,6 +108,7 @@ describe("PlatformSuppliersRepository settings command", () => {
       "procurement_snapshot_v1_enabled",
       "purchase_batch_workflow_enabled",
       "warehouse_procurement_enabled",
+      "warehouse_transfers_enabled",
     ]) {
       expect(selectedColumns).toContain(flag);
     }

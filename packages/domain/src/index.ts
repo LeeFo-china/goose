@@ -45,6 +45,8 @@ export * from './tenant';
 export * from './virtual-product';
 export * from './location';
 export * from './warehouse';
+export * from './warehouse-material';
+export * from './warehouse-transfer';
 export * from './workflow';
 export * from './wechat-pay-applyment-readiness';
 export * from './wechat-pay-settlement-rule';
