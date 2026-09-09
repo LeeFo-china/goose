@@ -48,30 +48,33 @@ BEGIN
   IF result->>'warehouse_name' IS NULL OR result->>'item_count' IS NULL
     OR result->>'counted_count' IS NULL OR result->>'difference_count' IS NULL
     OR result ? 'total_amount' OR result ? 'net_amount'
-    OR jsonb_typeof(result->'gain_amount')<>'string' OR jsonb_typeof(result->'loss_amount')<>'string' THEN
+    OR jsonb_typeof(result->'gain_amount') IS DISTINCT FROM 'string'
+    OR jsonb_typeof(result->'loss_amount') IS DISTINCT FROM 'string' THEN
     RAISE EXCEPTION 'Stocktake completed summary mismatch: %',result;
   END IF;
   result:=public.get_warehouse_stocktake_order(f.tenant_id,mixed_id,f.actor_user_id,f.actor_employee_id);
   completed_summary:=result;
-  IF result->>'item_count'<>'3' OR result->>'counted_count'<>'3' OR result->>'difference_count'<>'2'
-    OR result->>'gain_amount'<>'15.00' OR result->>'loss_amount'<>'0.01' THEN
+  IF result->>'item_count' IS DISTINCT FROM '3' OR result->>'counted_count' IS DISTINCT FROM '3'
+    OR result->>'difference_count' IS DISTINCT FROM '2' OR result->>'gain_amount' IS DISTINCT FROM '15.00'
+    OR result->>'loss_amount' IS DISTINCT FROM '0.01' THEN
     RAISE EXCEPTION 'Stocktake mixed gain/loss summary mismatch: %',result;
   END IF;
   result:=public.get_warehouse_stocktake_order(f.tenant_id,noop_id,f.actor_user_id,f.actor_employee_id);
-  IF result->>'difference_count'<>'0' OR result->>'gain_amount'<>'0.00' OR result->>'loss_amount'<>'0.00' THEN
+  IF result->>'difference_count' IS DISTINCT FROM '0' OR result->>'gain_amount' IS DISTINCT FROM '0.00'
+    OR result->>'loss_amount' IS DISTINCT FROM '0.00' THEN
     RAISE EXCEPTION 'Stocktake completed zero-side summary mismatch: %',result;
   END IF;
 
   result:=public.list_warehouse_stocktake_order_items(f.tenant_id,mixed_id,f.actor_user_id,f.actor_employee_id,1,20);
   completed_items:=result;
-  IF result->>'total'<>'3' OR jsonb_array_length(result->'items')<>3
-    OR jsonb_typeof(result->'items'->0->'book_quantity')<>'string'
-    OR jsonb_typeof(result->'items'->0->'book_value')<>'string'
-    OR jsonb_typeof(result->'items'->0->'book_unit_cost')<>'string'
-    OR jsonb_typeof(result->'items'->0->'counted_quantity')<>'string'
-    OR jsonb_typeof(result->'items'->0->'difference_quantity')<>'string'
-    OR jsonb_typeof(result->'items'->0->'unit_cost')<>'string'
-    OR jsonb_typeof(result->'items'->0->'amount')<>'string'
+  IF result->>'total' IS DISTINCT FROM '3' OR jsonb_array_length(result->'items') IS DISTINCT FROM 3
+    OR jsonb_typeof(result->'items'->0->'book_quantity') IS DISTINCT FROM 'string'
+    OR jsonb_typeof(result->'items'->0->'book_value') IS DISTINCT FROM 'string'
+    OR jsonb_typeof(result->'items'->0->'book_unit_cost') IS DISTINCT FROM 'string'
+    OR jsonb_typeof(result->'items'->0->'counted_quantity') IS DISTINCT FROM 'string'
+    OR jsonb_typeof(result->'items'->0->'difference_quantity') IS DISTINCT FROM 'string'
+    OR jsonb_typeof(result->'items'->0->'unit_cost') IS DISTINCT FROM 'string'
+    OR jsonb_typeof(result->'items'->0->'amount') IS DISTINCT FROM 'string'
     OR result->'items'->0->>'sku_name' IS NULL OR result->'items'->0->>'sku_code' IS NULL THEN
     RAISE EXCEPTION 'Stocktake item wire model mismatch: %',result;
   END IF;
@@ -89,29 +92,38 @@ BEGIN
     RAISE EXCEPTION 'Stocktake exact signed item values mismatch: %',result;
   END IF;
   result:=public.list_warehouse_stocktake_order_items(f.tenant_id,order_id,f.actor_user_id,f.actor_employee_id,99,20);
-  IF result->'items'<>'[]'::jsonb OR (result->>'total')::integer<1 THEN RAISE EXCEPTION 'Stocktake empty item page lost total: %',result; END IF;
+  IF result->'items' IS DISTINCT FROM '[]'::jsonb OR coalesce((result->>'total')::integer,0)<1 THEN RAISE EXCEPTION 'Stocktake empty item page lost total: %',result; END IF;
 
   PERFORM public.stage_d2_command(draft_id,'save_draft',0,public.stage_d2_draft(ARRAY[f.sku_id]),'stocktake-read-draft');
   draft_summary:=public.get_warehouse_stocktake_order(f.tenant_id,draft_id,f.actor_user_id,f.actor_employee_id);
   draft_items:=public.list_warehouse_stocktake_order_items(f.tenant_id,draft_id,f.actor_user_id,f.actor_employee_id);
-  IF draft_summary->'gain_amount'<>'null'::jsonb OR draft_summary->'loss_amount'<>'null'::jsonb
-    OR draft_items->'items'->0->'book_quantity'<>'null'::jsonb
-    OR draft_items->'items'->0->'counted_quantity'<>'null'::jsonb
-    OR draft_items->'items'->0->'difference_quantity'<>'null'::jsonb THEN
+  IF draft_summary->'gain_amount' IS DISTINCT FROM 'null'::jsonb OR draft_summary->'loss_amount' IS DISTINCT FROM 'null'::jsonb
+    OR draft_items->'items'->0->'book_quantity' IS DISTINCT FROM 'null'::jsonb
+    OR draft_items->'items'->0->'counted_quantity' IS DISTINCT FROM 'null'::jsonb
+    OR draft_items->'items'->0->'difference_quantity' IS DISTINCT FROM 'null'::jsonb THEN
     RAISE EXCEPTION 'Draft NULL snapshot mismatch: %, %',draft_summary,draft_items;
   END IF;
   INSERT INTO stocktake_wire_evidence VALUES(jsonb_build_object('completedSummary',completed_summary,
     'completedItems',completed_items,'draftSummary',draft_summary,'draftItems',draft_items));
 
+  result:=public.list_warehouse_stocktake_orders(f.tenant_id,f.actor_user_id,f.actor_employee_id,NULL,NULL,
+    completed_summary->>'order_no',1,20);
+  IF (SELECT x FROM jsonb_array_elements(result->'items') x WHERE x->>'id'=mixed_id::text)
+      IS DISTINCT FROM completed_summary THEN RAISE EXCEPTION 'Completed list/get projection mismatch: %',result; END IF;
+  result:=public.list_warehouse_stocktake_orders(f.tenant_id,f.actor_user_id,f.actor_employee_id,NULL,NULL,
+    draft_summary->>'order_no',1,20);
+  IF (SELECT x FROM jsonb_array_elements(result->'items') x WHERE x->>'id'=draft_id::text)
+      IS DISTINCT FROM draft_summary THEN RAISE EXCEPTION 'Draft list/get projection mismatch: %',result; END IF;
+
   result:=public.list_warehouse_stocktake_orders(f.tenant_id,f.actor_user_id,f.actor_employee_id,NULL,NULL,NULL,99,20);
-  IF result->'items'<>'[]'::jsonb OR (result->>'total')::integer<1 THEN RAISE EXCEPTION 'Stocktake empty order page lost total: %',result; END IF;
+  IF result->'items' IS DISTINCT FROM '[]'::jsonb OR coalesce((result->>'total')::integer,0)<1 THEN RAISE EXCEPTION 'Stocktake empty order page lost total: %',result; END IF;
   result:=public.list_warehouse_stocktake_orders(f.tenant_id,f.actor_user_id,f.actor_employee_id,NULL,NULL,NULL,NULL,NULL);
-  IF result->>'page'<>'1' OR result->>'pageSize'<>'20' THEN RAISE EXCEPTION 'Stocktake paging defaults mismatch: %',result; END IF;
+  IF result->>'page' IS DISTINCT FROM '1' OR result->>'pageSize' IS DISTINCT FROM '20' THEN RAISE EXCEPTION 'Stocktake paging defaults mismatch: %',result; END IF;
   result:=public.list_warehouse_stocktake_orders(f.tenant_id,f.actor_user_id,f.actor_employee_id,NULL,NULL,NULL,1,100);
-  IF result->>'pageSize'<>'100' THEN RAISE EXCEPTION 'Stocktake max page size mismatch: %',result; END IF;
+  IF result->>'pageSize' IS DISTINCT FROM '100' THEN RAISE EXCEPTION 'Stocktake max page size mismatch: %',result; END IF;
   result:=public.list_warehouse_stocktake_orders(f.tenant_id,f.actor_user_id,f.actor_employee_id,f.warehouse_id,'completed','盘点',1,100);
   IF (result->>'total')::integer<1 OR EXISTS(SELECT 1 FROM jsonb_array_elements(result->'items') x
-    WHERE x->>'warehouse_id'<>f.warehouse_id::text OR x->>'status'<>'completed') THEN
+    WHERE x->>'warehouse_id' IS DISTINCT FROM f.warehouse_id::text OR x->>'status' IS DISTINCT FROM 'completed') THEN
     RAISE EXCEPTION 'Stocktake filters mismatch: %',result;
   END IF;
   IF (public.list_warehouse_stocktake_orders(f.tenant_id,f.actor_user_id,f.actor_employee_id,NULL,NULL,'  ',1,20)->>'total')
@@ -163,14 +175,14 @@ BEGIN
   PERFORM public.get_warehouse_stocktake_order(f.tenant_id,completed_id,f.actor_user_id,f.actor_employee_id);
   PERFORM public.list_warehouse_stocktake_orders(f.tenant_id,f.actor_user_id,f.actor_employee_id);
   PERFORM public.list_warehouse_stocktake_order_items(f.tenant_id,completed_id,f.actor_user_id,f.actor_employee_id);
-  IF public.get_warehouse_stocktake_settings(f.tenant_id,f.actor_user_id,f.actor_employee_id)->>'warehouse_stocktakes_enabled'<>'false' THEN
+  IF public.get_warehouse_stocktake_settings(f.tenant_id,f.actor_user_id,f.actor_employee_id)->>'warehouse_stocktakes_enabled' IS DISTINCT FROM 'false' THEN
     RAISE EXCEPTION 'Disabled stocktake setting remained effective';
   END IF;
   UPDATE public.tenant_supplier_settings SET warehouse_stocktakes_enabled=false,warehouse_transfers_enabled=false,
     warehouse_materials_enabled=false,warehouse_procurement_enabled=false,purchase_batch_workflow_enabled=false,
     procurement_snapshot_v1_enabled=false,private_catalog_writes_enabled=false,private_supplier_writes_enabled=false,
     ownership_reads_enabled=false,module_enabled=false WHERE tenant_id=f.tenant_id;
-  IF public.get_warehouse_stocktake_settings(f.tenant_id,f.actor_user_id,f.actor_employee_id)->>'warehouse_stocktakes_enabled'<>'false' THEN
+  IF public.get_warehouse_stocktake_settings(f.tenant_id,f.actor_user_id,f.actor_employee_id)->>'warehouse_stocktakes_enabled' IS DISTINCT FROM 'false' THEN
     RAISE EXCEPTION 'Closed parent module remained effective';
   END IF;
   PERFORM public.get_warehouse_stocktake_order(f.tenant_id,completed_id,f.actor_user_id,f.actor_employee_id);
