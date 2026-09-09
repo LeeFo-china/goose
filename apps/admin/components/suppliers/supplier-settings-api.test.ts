@@ -5,6 +5,29 @@ import type { TenantSupplierSettings } from "./supplier-types";
 const originalFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = originalFetch; });
 
+test("transfer flag merges independently and old frozen bodies remain byte-identical", async () => {
+  const current: TenantSupplierSettings = {
+    tenant_id: "test", module_enabled: true, require_active_contract_for_new_order: false,
+    ownership_reads_enabled: false, private_supplier_writes_enabled: false,
+    private_catalog_writes_enabled: false, procurement_snapshot_v1_enabled: false,
+    purchase_batch_workflow_enabled: false, warehouse_procurement_enabled: false,
+    version: 1, enabled_at: null, enabled_by_employee_id: null, created_at: "", updated_at: "",
+  };
+  const build = (intent: settingsApi.PlatformModuleIntent, settings = current) =>
+    settingsApi.createPlatformSupplierSettingsRequest({ tenantId: "test", current: settings, intent, idempotencyKey: "transfer-key" });
+  const enabled = build({ moduleEnabled: true, warehouseTransfersEnabled: true });
+  expect(JSON.parse(enabled.body)).toMatchObject({ warehouse_transfers_enabled: true, warehouse_materials_enabled: false, warehouse_procurement_enabled: false });
+  expect(JSON.parse(build({ moduleEnabled: true }, { ...current, warehouse_transfers_enabled: true }).body).warehouse_transfers_enabled).toBe(true);
+  expect(JSON.parse(build({ moduleEnabled: true, warehouseTransfersEnabled: false }, { ...current, warehouse_transfers_enabled: true }).body).warehouse_transfers_enabled).toBe(false);
+  expect(JSON.parse(build({ moduleEnabled: true }).body).warehouse_transfers_enabled).toBe(false);
+  const legacyBody = '{"module_enabled":true,"expected_version":1}';
+  let actual: RequestInit | undefined;
+  globalThis.fetch = (async (_url, init) => { actual = init; return Response.json({ success: true, data: current }); }) as typeof fetch;
+  await settingsApi.updatePlatformTenantSupplierModule({ tenantId: "test", idempotencyKey: "old-key", body: legacyBody });
+  expect(actual?.body).toBe(legacyBody);
+  expect(actual?.headers).toMatchObject({ 'Idempotency-Key': 'old-key' });
+});
+
 test("warehouse command freezes serialized payload and version for uncertain retries", async () => {
   const current: TenantSupplierSettings = {
     tenant_id: "test", module_enabled: true, require_active_contract_for_new_order: false,

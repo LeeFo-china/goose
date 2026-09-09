@@ -36,6 +36,7 @@ export function createSupplierRolloutSettings(level = 0, version = 0) {
     purchase_batch_workflow_enabled: level >= 6,
     warehouse_procurement_enabled: level >= 7,
     warehouse_materials_enabled: false,
+    warehouse_transfers_enabled: false,
     enabled_by_employee_id: level >= 1
       ? mockSupplierRolloutSession.employee.id
       : null,

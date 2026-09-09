@@ -67,6 +67,16 @@ function SourceDocument({
   const source = row.source_document;
   if (!source)
     return <span className="text-muted-foreground">来源单据不可用</span>;
+  // 调拨历史与本库存页面使用相同的 stock.view 权限，不依赖项目或采购权限。
+  if ('transfer_order_id' in source)
+    return (
+      <Link
+        className="block max-w-64 break-words text-primary underline-offset-4 hover:underline"
+        href={`/warehouse-transfers?order_id=${encodeURIComponent(source.transfer_order_id)}`}
+      >
+        调拨单 {source.transfer_order_no}
+      </Link>
+    );
   if ('issue_order_id' in source) {
     const documents =
       'return_order_id' in source
