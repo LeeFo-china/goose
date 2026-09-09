@@ -17,7 +17,7 @@
 **Create:** `apps/admin/components/warehouse-stocktakes/stocktake-{rules,api,command-state,command}.ts`、相邻 `.test.ts`；`stocktake-{workspace,list,detail,draft,counts,parts}.tsx`、相邻静态渲染测试；`apps/admin/app/(console)/warehouse-stocktakes/page.tsx`。
 **Modify as needed:** 从 `components/warehouse-transfers/transfer-command-state.ts` / `transfer-command.ts` 提取完全相同的存储/生命周期机制至 `components/inventory/frozen-inventory-command.ts` / `use-frozen-inventory-command.ts`，原调拨保留领域适配和兼容导出；共用分页至 `components/inventory/inventory-document-pager.tsx`，调拨维持原具名默认label。不复制整套请求引擎。
 
-- [ ] 写入真实规则测试并执行RED：
+- [x] 写入真实规则测试并执行RED：
 
 ```ts
 import { expect, test } from 'bun:test';
@@ -33,11 +33,13 @@ test('实盘零合法，空白不是零且禁止精度溢出', () => {
 
 Run `cd apps/admin && bun test components/warehouse-stocktakes`，预期新能力缺失导致失败；然后最小实现规则，补齐非有限分页、大小写SKU去重、精确差异、原因边界、权限矩阵与版本上限用例。
 
-- [ ] 为API/命令恢复写RED：原始body/path/key、全部六动作目标状态/下一版本、错误或不完整回执不能确认；UUID与API z.uuid一致；完整明细校验≤100、total/list/order.item_count一致、唯一行/SKU、tenant/order/warehouse身份一致；卸载/同scope新实例/更新命令/存储异常安全。保留新重试403等未知性。
-- [ ] 以 `WarehouseStocktakeOrderSummary` / `WarehouseStocktakeItem` 等 `@gooes/domain` 真实导出实现。接口 `readStocktake<T>(path,signal?)`、`sendStocktake(path,body,key)`、`loadCompleteStocktakeItems(order,signal?)`；草稿和录入禁止Number数量/价格，不发送客户端成本。
-- [ ] 为草稿/实盘/权限渲染写RED再接入页面。Props使用Domain，不制造另一套单据模型。草稿保存body严格契约；counts分批提交仅非空已填项，明确零；所有未保存数据离开/分页前防丢失。详情每页20、编辑完整最多100；录入可采用有界完整100行表单以避免分页丢失，详情仍分页。
-- [ ] 工作区按账号/租户/员工scope重建；所有异步读abort/stale guard，unknown冻结且只能原样retry，配置失败新写failclosed，原成功重试允许在开关关闭时继续。所有六动作和冲突/终态按设计实现。确认对话框有标题说明，加载Skeleton、空态Empty、错误StatusAlert，响应式表格局部滚动。
-- [ ] `cd apps/admin && bun test components/warehouse-stocktakes components/warehouse-transfers` →全通过；`bun run typecheck` 和 `bun run check:file-size` →0错误。记录RED/GREEN证据，提交 `feat: 接入盘点后台工作台`。独立SPEC通过后再质量复核，修复所有重要问题。
+- [x] 为API/命令恢复写RED：原始body/path/key、全部六动作目标状态/下一版本、错误或不完整回执不能确认；UUID与API z.uuid一致；完整明细校验≤100、total/list/order.item_count一致、唯一行/SKU、tenant/order/warehouse身份一致；卸载/同scope新实例/更新命令/存储异常安全。保留新重试403等未知性。
+- [x] 以 `WarehouseStocktakeOrderSummary` / `WarehouseStocktakeItem` 等 `@gooes/domain` 真实导出实现。接口 `readStocktake<T>(path,signal?)`、`sendStocktake(path,body,key)`、`loadCompleteStocktakeItems(order,signal?)`；草稿和录入禁止Number数量/价格，不发送客户端成本。
+- [x] 为草稿/实盘/权限渲染写RED再接入页面。Props使用Domain，不制造另一套单据模型。草稿保存body严格契约；counts分批提交仅非空已填项，明确零；所有未保存数据离开/分页前防丢失。详情每页20、编辑完整最多100；录入可采用有界完整100行表单以避免分页丢失，详情仍分页。
+- [x] 工作区按账号/租户/员工scope重建；所有异步读abort/stale guard，unknown冻结且只能原样retry，配置失败新写failclosed，原成功重试允许在开关关闭时继续。所有六动作和冲突/终态按设计实现。确认对话框有标题说明，加载Skeleton、空态Empty、错误StatusAlert，响应式表格局部滚动。
+- [x] `cd apps/admin && bun test components/warehouse-stocktakes components/warehouse-transfers` →全通过；`bun run typecheck` 和 `bun run check:file-size` →0错误。记录RED/GREEN证据，提交 `feat: 接入盘点后台工作台`。独立SPEC通过后再质量复核，修复所有重要问题。
+
+Task 1完成：ab0de645 + a285dc1，SPEC/质量通过，37 tests/229 assertions；原调拨E2E32项通过。未保存保护的浏览器历史/外部router.push边界见验收记录，不据此宣称全站导航均被拦截。
 
 ## Task 2: 平台开关、库存来源与浏览器回归
 
