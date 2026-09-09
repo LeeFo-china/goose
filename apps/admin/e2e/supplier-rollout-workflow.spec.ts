@@ -33,6 +33,7 @@ type MockState = {
     purchase_batch_workflow_enabled: boolean;
     warehouse_procurement_enabled: boolean;
     warehouse_materials_enabled: boolean;
+    warehouse_transfers_enabled: boolean;
   };
   mutations: MutationJournalEntry[];
   settingsReadCount: number;
@@ -84,6 +85,33 @@ test.describe("租户供应商灰度确定性交互", () => {
   test.beforeEach(async ({ page, request }) => {
     await resetMock(request);
     await loginAsPlatformAdmin(page);
+  });
+
+  test("调拨开关独立、冻结重试且关闭模块前必须关闭", async ({ page, request }, testInfo) => {
+    await request.post(`${mockBackendBaseUrl}/__test/reset`, { data: { level: 1, version: 1 } });
+    await page.goto('/e2e-harness/supplier-rollout?level=1');
+    const transfer = page.getByRole('switch', { name: '仓库调拨', exact: true });
+    await expect(transfer).toBeEnabled();
+    await expect(page.getByRole('switch', { name: '仓库采购', exact: true })).toBeDisabled();
+    await request.post(`${mockBackendBaseUrl}/__test/failure-next`, { data: { status: 503, commit: true } });
+    await transfer.click();
+    await expect(page.getByText('操作结果尚未确认', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: '重试本次操作', exact: true }).click();
+    await expect(transfer).toBeChecked();
+    await expectVersion(request, 2);
+    const state = await readState(request);
+    expect(state.settings).toMatchObject({ warehouse_transfers_enabled: true, warehouse_materials_enabled: false, warehouse_procurement_enabled: false });
+    expect(state.mutations).toHaveLength(2);
+    expect(state.mutations[0].payload).toEqual(state.mutations[1].payload);
+    expect(state.mutations[0].idempotencyKey).toBe(state.mutations[1].idempotencyKey);
+    await expect(page.getByRole('button', { name: '停用供应商模块', exact: true })).toBeDisabled();
+    await transfer.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: testInfo.outputPath('transfers-independent.png'), fullPage: true });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await transfer.click();
+    await expect(transfer).not.toBeChecked();
+    await expectVersion(request, 3);
+    await expect(page.getByRole('button', { name: '停用供应商模块', exact: true })).toBeEnabled();
   });
 
   test("领退料开关独立于采购链，未知结果重放原请求且阻止带子开关停用模块", async ({ page, request }, testInfo) => {
@@ -250,6 +278,7 @@ test.describe("租户供应商灰度确定性交互", () => {
         "purchase_batch_workflow_enabled",
         "warehouse_procurement_enabled",
         "warehouse_materials_enabled",
+        "warehouse_transfers_enabled",
         "expected_version",
       ]) {
         expect(mutation.payload).toHaveProperty(field);

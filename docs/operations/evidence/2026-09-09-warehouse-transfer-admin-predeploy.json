@@ -1,0 +1,86 @@
+{
+  "environment": "development",
+  "host": "VM-0-11-ubuntu",
+  "stage": "predeploy",
+  "facts": {
+    "items": 0,
+    "orders": 0,
+    "commands": 0,
+    "history_count": 604,
+    "history_latest": "20260908235954",
+    "supplier_events": {
+      "md5": "acd9a914eba20cc0da52626989eaa8e8",
+      "count": 132
+    },
+    "enabled_transfers": 0,
+    "function_metadata": [
+      {
+        "anon": false,
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "signature": "__gooes_set_supplier_rollout_settings_v2(jsonb,uuid,text)",
+        "service_role": false,
+        "authenticated": false,
+        "definition_md5": "78ac42749a98b1bfd855de54e45bd32a",
+        "security_definer": true
+      },
+      {
+        "anon": false,
+        "config": [
+          "search_path=pg_catalog, public",
+          "plan_cache_mode=force_custom_plan"
+        ],
+        "signature": "list_inventory_transactions(uuid,uuid,uuid,text,integer,integer)",
+        "service_role": true,
+        "authenticated": false,
+        "definition_md5": "a35081e1232ffed975efeec4a18399ef",
+        "security_definer": true
+      },
+      {
+        "anon": false,
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "signature": "set_tenant_supplier_rollout_settings(jsonb,uuid,text)",
+        "service_role": true,
+        "authenticated": false,
+        "definition_md5": "d461a13918350fdd6340244a94ff7fa4",
+        "security_definer": true
+      },
+      {
+        "anon": false,
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "signature": "set_tenant_supplier_rollout_settings(uuid,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,integer,uuid,uuid,text,text)",
+        "service_role": true,
+        "authenticated": false,
+        "definition_md5": "e05dcd81f12ba919ea695fe6f8bf6519",
+        "security_definer": true
+      },
+      {
+        "anon": false,
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "signature": "set_tenant_supplier_rollout_settings(uuid,boolean,boolean,boolean,boolean,boolean,boolean,boolean,integer,uuid,uuid,text,text)",
+        "service_role": true,
+        "authenticated": false,
+        "definition_md5": "e953ec6d1ac70334ea5f7b857711bb45",
+        "security_definer": true
+      },
+      {
+        "anon": false,
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "signature": "set_tenant_supplier_rollout_settings(uuid,boolean,boolean,boolean,boolean,boolean,boolean,integer,uuid,uuid,text,text)",
+        "service_role": true,
+        "authenticated": false,
+        "definition_md5": "603133b60a69beff29295b9b6167999f",
+        "security_definer": true
+      }
+    ]
+  }
+}
