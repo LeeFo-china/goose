@@ -1,0 +1,236 @@
+{
+  "release": {
+    "conclusion": "success",
+    "headSha": "b6d8e06696df4cdfc71ec162ac230913662683e3",
+    "jobs": [
+      {
+        "conclusion": "success",
+        "name": "Prepare immutable development release",
+        "status": "completed"
+      },
+      {
+        "conclusion": "success",
+        "name": "Build immutable development images / Validate image build request",
+        "status": "completed"
+      },
+      {
+        "conclusion": "success",
+        "name": "Build immutable development images / Build admin",
+        "status": "completed"
+      },
+      {
+        "conclusion": "success",
+        "name": "Build immutable development images / Build social-video-worker",
+        "status": "completed"
+      },
+      {
+        "conclusion": "success",
+        "name": "Build immutable development images / Build api",
+        "status": "completed"
+      },
+      {
+        "conclusion": "success",
+        "name": "Build immutable development images / Build web",
+        "status": "completed"
+      },
+      {
+        "conclusion": "success",
+        "name": "Build immutable development images / Build h5",
+        "status": "completed"
+      },
+      {
+        "conclusion": "skipped",
+        "name": "Build immutable development images / Verify production images from production runner",
+        "status": "completed"
+      },
+      {
+        "conclusion": "success",
+        "name": "Verify development migration history / verify",
+        "status": "completed"
+      },
+      {
+        "conclusion": "success",
+        "name": "Deploy API / Deploy dev",
+        "status": "completed"
+      },
+      {
+        "conclusion": "success",
+        "name": "Require build, migration, and API readiness",
+        "status": "completed"
+      },
+      {
+        "conclusion": "success",
+        "name": "Deploy admin / Deploy dev",
+        "status": "completed"
+      },
+      {
+        "conclusion": "success",
+        "name": "Require remaining services readiness",
+        "status": "completed"
+      },
+      {
+        "conclusion": "success",
+        "name": "Summarize development release",
+        "status": "completed"
+      }
+    ],
+    "status": "completed",
+    "updatedAt": "2026-09-09T14:50:20Z",
+    "url": "https://github.com/LeeFo-china/goose/actions/runs/34365480455"
+  },
+  "services": [
+    {
+      "name": "/gooes-api-dev",
+      "state": "running",
+      "health": "healthy",
+      "revision": "b6d8e06696df4cdfc71ec162ac230913662683e3",
+      "run_id": "34365480455",
+      "image": "useccr.ccs.tencentyun.com/america_goose/goose-api@sha256:78765381e18c4b78a42adaee200bf50efd443779b447a211452c642829991438"
+    },
+    {
+      "name": "/gooes-admin-dev",
+      "state": "running",
+      "health": "healthy",
+      "revision": "b6d8e06696df4cdfc71ec162ac230913662683e3",
+      "run_id": "34365480455",
+      "image": "useccr.ccs.tencentyun.com/america_goose/goose-admin@sha256:9198d913e7dc7c70b5f94648e88da42098ff544bfdb4e091c069042d1f53a847"
+    }
+  ],
+  "http_checks": [
+    {
+      "name": "admin_login",
+      "status": 200,
+      "expected": 200,
+      "pass": true
+    },
+    {
+      "name": "api_root",
+      "status": 200,
+      "expected": 200,
+      "pass": true
+    },
+    {
+      "name": "stocktake_unauth",
+      "status": 401,
+      "expected": 401,
+      "pass": true,
+      "code": "TOKEN_MISSING"
+    },
+    {
+      "name": "inventory_unauth",
+      "status": 401,
+      "expected": 401,
+      "pass": true,
+      "code": "TOKEN_MISSING"
+    }
+  ],
+  "checks": {
+    "business_and_authorization_unchanged": true,
+    "legacy_settings_unchanged": true,
+    "adjustment_disabled": true,
+    "no_role_grants": true
+  },
+  "postrelease": {
+    "latest": "20260909134749",
+    "readonly": "on",
+    "checked_at": "2026-09-09T14:51:01.923255+00:00",
+    "migrations": 611,
+    "lock_waiters": 0,
+    "target_settings": {
+      "version": 24,
+      "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b",
+      "created_at": "2026-07-24T08:50:22.960468+00:00",
+      "enabled_at": "2026-07-24T08:50:22.960468+00:00",
+      "updated_at": "2026-09-09T13:05:11.555282+00:00",
+      "module_enabled": true,
+      "enabled_by_employee_id": "b19aa3b4-4f47-4f4a-89ca-7187fc455f4f",
+      "ownership_reads_enabled": true,
+      "warehouse_materials_enabled": true,
+      "warehouse_transfers_enabled": false,
+      "warehouse_stocktakes_enabled": false,
+      "warehouse_adjustments_enabled": false,
+      "warehouse_procurement_enabled": true,
+      "private_catalog_writes_enabled": true,
+      "private_supplier_writes_enabled": true,
+      "procurement_snapshot_v1_enabled": true,
+      "purchase_batch_workflow_enabled": true,
+      "require_active_contract_for_new_order": false
+    },
+    "adjustment_table": "warehouse_adjustment_orders",
+    "long_transactions": 0,
+    "settings_legacy_hash": "47d5b9b5b2ae063b27ab30fec906ee70",
+    "adjustment_permissions": 2,
+    "adjustment_role_grants": 0,
+    "adjustment_enabled_tenants": 0,
+    "business_and_authorization": {
+      "warehouses": {
+        "md5": "d979170cf33645f04454166a37058569",
+        "count": 2
+      },
+      "employee_roles": {
+        "md5": "0b49e0a6393c9d2f228426aa27a16496",
+        "count": 34
+      },
+      "role_permissions": {
+        "md5": "a63137add94ca884a8e300e5251c0841",
+        "count": 1597
+      },
+      "supplier_payments": {
+        "md5": "d41d8cd98f00b204e9800998ecf8427e",
+        "count": 0
+      },
+      "inventory_balances": {
+        "md5": "f6cbbdaf66b266a83ad0ab581885d154",
+        "count": 2
+      },
+      "project_cost_events": {
+        "md5": "de288f3c65d5e387a4750387b7780ca4",
+        "count": 7
+      },
+      "finance_ledger_entries": {
+        "md5": "b7d575ad20aadbb73e3d1a234b284054",
+        "count": 20
+      },
+      "inventory_transactions": {
+        "md5": "0fd8b316697a7e681c9d417adae55fba",
+        "count": 10
+      },
+      "warehouse_issue_orders": {
+        "md5": "b248de47e88c0c9f711d40268777eeee",
+        "count": 1
+      },
+      "supplier_command_events": {
+        "md5": "0c27031a94838d9865e988e2d7ea8029",
+        "count": 131
+      },
+      "supplier_payable_events": {
+        "md5": "a555c42133bf7a7975f3285f3a245b07",
+        "count": 5
+      },
+      "warehouse_return_orders": {
+        "md5": "f0dc564fbf021f6eec440e7ea87446a0",
+        "count": 2
+      },
+      "warehouse_transfer_orders": {
+        "md5": "0103527a9ba9dc1ce4663a24447c2822",
+        "count": 2
+      },
+      "warehouse_stocktake_orders": {
+        "md5": "075c50bf155215e569dd1b529bccb2d2",
+        "count": 2
+      },
+      "employee_permission_overrides": {
+        "md5": "36b70b31a34f9434892036d5935b884f",
+        "count": 6
+      },
+      "warehouse_stocktake_order_items": {
+        "md5": "e0d07d98bbb2c1998f5e5d72afe97eea",
+        "count": 2
+      },
+      "warehouse_stocktake_command_events": {
+        "md5": "d695ee6d9964524080a5abef893f9c6a",
+        "count": 10
+      }
+    }
+  }
+}
