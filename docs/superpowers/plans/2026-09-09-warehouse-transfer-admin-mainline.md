@@ -43,4 +43,4 @@
 - [x] 固定新提交及唯一 release 分支。重查远端 main、DEV 容器、活动 workflow、migration 对齐与只读业务基线，通过既有 `release-dev.yml` 的 `service=api,admin` 发布 DEV。核对 workflow、容器 revision/digest、健康。回滚仅重发已记录的前版本，不回滚业务数据。
 - [ ] 回到 Task 3；正常 Chrome 登录，不读取凭证、不手工赋权。只有真实正向/反向调拨、库存价值守恒、财务隔离及关闭开关通过后，才标记 D1 完成并进入 D2。
 
-Task 4发布结果：候选 `240e7a78` / run `34307897288` 成功，API/Admin实际容器revision/digest/健康及API加载权限均已核验；发布前后业务摘要一致。短信已发送一次，Chrome仍待用户完成正常平台登录。D1真实验收未完成，D2未进入；详见 `docs/operations/evidence/2026-09-09-warehouse-transfer-permissions-release.md`。
+Task 4发布结果：候选 `240e7a78` / run `34307897288` 成功，API/Admin实际容器revision/digest/健康及API加载权限均已核验；发布前后业务摘要一致。后续用户指出DEV免验证码，已核对现有实现并在Chrome空验证码正常提交一次，原页面已进入dashboard。不要再要求验证码。当前页面接管/读取持续超时，尚未核验登录后身份或执行真实调拨；原页面已handoff保留，开关false、测试库存1/88元未变。D1真实验收未完成，D2未进入；详见 `docs/operations/evidence/2026-09-09-warehouse-transfer-permissions-release.md`。
