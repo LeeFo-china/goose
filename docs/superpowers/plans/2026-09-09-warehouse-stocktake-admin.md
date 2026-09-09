@@ -71,7 +71,7 @@ Task 2完成：5da8d98a，独立SPEC→质量通过，无待修问题。74 tests
 **Create only if needed:** 使用 `supabase migration new grant_qingtian_warehouse_stocktake_permissions` 产生目标租户既有角色的两项权限迁移与有界验收测试，不修改其他租户。名称保留warehouse以进入既有领域隔离SQL runner；仅观察真实缺失后实施。
 **Create:** `docs/operations/evidence/2026-09-09-warehouse-stocktake-admin-live-acceptance.md`。
 
-- [ ] 只读核实DEV远端身份、当前migration list与发布工作流参数，确认四份已提交D2迁移及其他实际待执行项；核实晴天适格员工的真实SQL权限。不得打印token/password/env。
+- [x] 只读核实DEV远端身份、当前migration list与发布工作流参数，确认四份已提交D2迁移及其他实际待执行项；核实晴天适格员工的真实SQL权限。不得打印token/password/env。
 - [ ] 如缺manage/approve，遵循已验收D1限定授权模式以migration加入两项权限；先隔离SQL回归，说明精确撤回路径。记录待apply列表，再通过仓库DEV工作流apply。
 
 已确认的授权范围：仅租户`3eebca47-961f-4899-b976-a3d3208d326b`、既有active system_admin角色`e72850fe-dbba-427f-9109-f1779080a239`，两个stocktake manage/approve access_scope=all。沿用D1目标姓名/归属/状态/权限元数据守卫；无目标租户时no-op，已有较窄权限时failclosed而非扩大，ON CONFLICT不更新原行，不清除deny。隔离测试使用真实migration字节与同一目标键的合成数据，证明前置拒绝、仅两项新增、回放不变、普通/外租户/停用/deny拒绝以及守卫失败完整回滚。该授权夹具单独运行，避免污染通用“无自动授权”契约。

@@ -1,0 +1,161 @@
+{
+  "role": {
+    "id": "e72850fe-dbba-427f-9109-f1779080a239",
+    "code": "system_admin",
+    "status": "active",
+    "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b"
+  },
+  "tenant": {
+    "id": "3eebca47-961f-4899-b976-a3d3208d326b",
+    "name": "固始晴天装饰工程有限公司",
+    "status": "active"
+  },
+  "balances": [
+    {
+      "value": "0.00",
+      "version": 3,
+      "quantity": "0.0000",
+      "unit_cost": "0.0000",
+      "warehouse_id": "7b5af333-fcdf-4f92-9ac2-1ccbc77bedce"
+    },
+    {
+      "value": "88.00",
+      "version": 6,
+      "quantity": "1.0000",
+      "unit_cost": "88.0000",
+      "warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90"
+    }
+  ],
+  "database": "postgres",
+  "employee": {
+    "id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826",
+    "status": "active",
+    "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b"
+  },
+  "readonly": "on",
+  "settings": {
+    "version": 22,
+    "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b",
+    "created_at": "2026-07-24T08:50:22.960468+00:00",
+    "enabled_at": "2026-07-24T08:50:22.960468+00:00",
+    "updated_at": "2026-09-09T06:05:10.012395+00:00",
+    "module_enabled": true,
+    "enabled_by_employee_id": "b19aa3b4-4f47-4f4a-89ca-7187fc455f4f",
+    "ownership_reads_enabled": true,
+    "warehouse_materials_enabled": true,
+    "warehouse_transfers_enabled": false,
+    "warehouse_procurement_enabled": true,
+    "private_catalog_writes_enabled": true,
+    "private_supplier_writes_enabled": true,
+    "procurement_snapshot_v1_enabled": true,
+    "purchase_batch_workflow_enabled": true,
+    "require_active_contract_for_new_order": false
+  },
+  "versions": {
+    "local_count": 610,
+    "remote_count": 605,
+    "remote_latest": "20260909045512",
+    "pending": [
+      "20260909064815",
+      "20260909080239",
+      "20260909085915",
+      "20260909085927",
+      "20260909111954"
+    ]
+  },
+  "checked_at": "2026-09-09T11:18:07.237196+00:00",
+  "manage_allowed": false,
+  "approve_allowed": false,
+  "stocktake_grants": [],
+  "compatibility": {
+    "readonly": "on",
+    "checked_at": "2026-09-09T11:22:20.75499+00:00",
+    "lock_waiters": 0,
+    "business_facts": {
+      "warehouses": {
+        "md5": "d979170cf33645f04454166a37058569",
+        "count": 2
+      },
+      "supplier_payments": {
+        "md5": "d41d8cd98f00b204e9800998ecf8427e",
+        "count": 0
+      },
+      "project_cost_events": {
+        "md5": "de288f3c65d5e387a4750387b7780ca4",
+        "count": 7
+      },
+      "finance_ledger_entries": {
+        "md5": "b7d575ad20aadbb73e3d1a234b284054",
+        "count": 20
+      },
+      "warehouse_issue_orders": {
+        "md5": "b248de47e88c0c9f711d40268777eeee",
+        "count": 1
+      },
+      "supplier_command_events": {
+        "md5": "600d3d180b3a074beaab40dbfbacf564",
+        "count": 129
+      },
+      "supplier_payable_events": {
+        "md5": "a555c42133bf7a7975f3285f3a245b07",
+        "count": 5
+      },
+      "warehouse_return_orders": {
+        "md5": "f0dc564fbf021f6eec440e7ea87446a0",
+        "count": 2
+      },
+      "warehouse_transfer_orders": {
+        "md5": "0103527a9ba9dc1ce4663a24447c2822",
+        "count": 2
+      }
+    },
+    "employee_roles": {
+      "md5": "0b49e0a6393c9d2f228426aa27a16496",
+      "count": 34
+    },
+    "long_transactions": 0,
+    "stocktake_objects": 0,
+    "employee_overrides": {
+      "md5": "36b70b31a34f9434892036d5935b884f",
+      "count": 6
+    },
+    "rollout_anchor_counts": [
+      {
+        "count": 1,
+        "anchor": 1
+      },
+      {
+        "count": 1,
+        "anchor": 2
+      },
+      {
+        "count": 1,
+        "anchor": 3
+      },
+      {
+        "count": 1,
+        "anchor": 4
+      },
+      {
+        "count": 1,
+        "anchor": 5
+      },
+      {
+        "count": 1,
+        "anchor": 6
+      },
+      {
+        "count": 1,
+        "anchor": 7
+      }
+    ],
+    "stocktake_permissions": 0,
+    "inventory_anchor_count": 1,
+    "other_role_permissions": {
+      "md5": "76164303e3ac2d8e3b20dcb70ca82a78",
+      "count": 1595
+    },
+    "inventory_materialized_page": true
+  },
+  "scope": "Readonly DEV pre-apply; no business or migration writes performed"
+}
