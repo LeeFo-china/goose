@@ -5,6 +5,8 @@ export const INVENTORY_TRANSACTION_TYPE_VALUES = [
   'supplier_return',
   'adjustment_in',
   'adjustment_out',
+  'transfer_out',
+  'transfer_in',
 ] as const;
 
 export type InventoryTransactionType =
@@ -17,4 +19,6 @@ export const INVENTORY_TRANSACTION_TYPE_LABELS = {
   supplier_return: '供应商退货',
   adjustment_in: '库存调增',
   adjustment_out: '库存调减',
+  transfer_out: '调拨出库',
+  transfer_in: '调拨入库',
 } as const satisfies Record<InventoryTransactionType, string>;

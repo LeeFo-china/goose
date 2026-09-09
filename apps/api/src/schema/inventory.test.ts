@@ -9,6 +9,13 @@ const WAREHOUSE_ID = '20000000-0000-4000-8000-000000000001';
 const SKU_ID = '30000000-0000-4000-8000-000000000001';
 
 describe('inventory schemas', () => {
+  test.each(['transfer_out', 'transfer_in'])('accepts %s with warehouse/SKU filters and bounded pagination', (transactionType) => {
+    expect(InventoryTransactionListQuerySchema.parse({
+      transactionType, warehouseId: WAREHOUSE_ID, supplierSkuId: SKU_ID, page: '2', pageSize: '1',
+    })).toEqual({ transactionType, warehouseId: WAREHOUSE_ID, supplierSkuId: SKU_ID, page: 2, pageSize: 1 });
+    expect(InventoryTransactionListQuerySchema.safeParse({ transactionType, pageSize: 101 }).success).toBe(false);
+  });
+
   test('normalizes balance list pagination and keyword', () => {
     expect(InventoryBalanceListQuerySchema.parse({})).toEqual({
       page: 1,
