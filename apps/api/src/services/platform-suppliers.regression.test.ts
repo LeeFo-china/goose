@@ -80,6 +80,36 @@ function auth(permissionCodes: string[], isPlatformAdmin = true): AuthContext {
 }
 
 describe("PlatformSuppliersService regression boundaries", () => {
+  test("stocktake flag is merged at current version and stale replay preserves omission", async () => {
+    const { service, repository, audit } = await createHarness();
+    repository.getTenantSupplierSettings.mockImplementation(async () => ({ ...settings,
+      module_enabled: true, warehouse_stocktakes_enabled: true, version: 8 }));
+    const request = { ...settings, tenantId: TENANT_ID, module_enabled: false,
+      expected_version: 8, reason: '停用', idempotencyKey: 'stocktake-disable-module' };
+    await expect(service.setTenantSupplierSettings(auth(['platform.supplier.manage']), request))
+      .rejects.toMatchObject({ code: 'SUPPLIER_ROLLOUT_ORDER_INVALID' });
+    expect(repository.setTenantSupplierSettings).not.toHaveBeenCalled();
+    repository.setTenantSupplierSettings.mockImplementation(async () => ({ status: 'updated', idempotent: true,
+      setting: settings, previous_setting: null, version: 1 }));
+    await service.setTenantSupplierSettings(auth(['platform.supplier.manage']), { ...request, expected_version: 0 });
+    expect(repository.setTenantSupplierSettings.mock.calls[0]?.[0]).not.toHaveProperty('warehouse_stocktakes_enabled');
+    expect(audit.recordBestEffort).not.toHaveBeenCalled();
+  });
+
+  test("explicit stocktake flag is forwarded and audited independently", async () => {
+    const { service, repository, audit } = await createHarness();
+    repository.getTenantSupplierSettings.mockImplementation(async () => ({ ...settings, module_enabled: true }));
+    await service.setTenantSupplierSettings(auth(['platform.supplier.manage']), { ...settings,
+      tenantId: TENANT_ID, module_enabled: true, warehouse_stocktakes_enabled: true,
+      expected_version: 1, idempotencyKey: 'stocktake-enable' });
+    expect(repository.setTenantSupplierSettings.mock.calls[0]?.[0]).toMatchObject({ warehouse_stocktakes_enabled: true });
+    expect(audit.recordBestEffort).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({
+        from: expect.objectContaining({ warehouse_stocktakes_enabled: false }),
+        to: expect.objectContaining({ warehouse_stocktakes_enabled: true }),
+      }),
+    }));
+  });
   test("transfer flag is forwarded and audited only by platform managers", async () => {
     const { service, repository, audit } = await createHarness();
     repository.getTenantSupplierSettings.mockImplementation(async () => ({ ...settings, module_enabled: true }));

@@ -64,7 +64,7 @@ const REGION_SELECT = "id,supplier_id,region_code,region_level,status,valid_from
 const ADDRESS_SELECT = "id,supplier_id,address_type,province,city,district,region_code,address_detail,longitude,latitude,is_default,status,version,created_by_employee_id,updated_by_employee_id,created_at,updated_at";
 const CONTACT_SELECT = "id,supplier_id,contact_type,name,phone,email,is_public,is_primary,status,version,created_by_employee_id,updated_by_employee_id,created_at,updated_at";
 const EVENT_SELECT = "id,tenant_id,resource_type,resource_id,command,from_state,to_state,reason,actor_user_id,actor_employee_id,idempotency_key,result_version,created_at";
-const SETTINGS_SELECT = "tenant_id,module_enabled,require_active_contract_for_new_order,ownership_reads_enabled,private_supplier_writes_enabled,private_catalog_writes_enabled,procurement_snapshot_v1_enabled,purchase_batch_workflow_enabled,warehouse_procurement_enabled,warehouse_materials_enabled,warehouse_transfers_enabled,enabled_by_employee_id,enabled_at,version,created_at,updated_at";
+const SETTINGS_SELECT = "tenant_id,module_enabled,require_active_contract_for_new_order,ownership_reads_enabled,private_supplier_writes_enabled,private_catalog_writes_enabled,procurement_snapshot_v1_enabled,purchase_batch_workflow_enabled,warehouse_procurement_enabled,warehouse_materials_enabled,warehouse_transfers_enabled,warehouse_stocktakes_enabled,enabled_by_employee_id,enabled_at,version,created_at,updated_at";
 const mutationStatus = z.object({
   status: z.enum([
     "created", "updated", "supplier_not_found", "state_conflict",
