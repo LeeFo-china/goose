@@ -3,7 +3,7 @@ import { AppError } from '@/errors/app-error';
 import { STOCKTAKE_ACTOR, STOCKTAKE_ITEM, STOCKTAKE_ORDER, STOCKTAKE_SUMMARY } from './warehouse-stocktake-test-fixtures';
 import { WarehouseStocktakesRepository } from './warehouse-stocktakes';
 import { WarehouseStocktakeOrderSchema } from './warehouse-stocktake-records';
-import { WarehouseStocktakeCommandResultSchema, WarehouseStocktakeItemSchema,
+import { WarehouseStocktakeCommandResultSchema, WarehouseStocktakeItemSchema, WarehouseStocktakeSummarySchema,
   parseStocktakePage, parseStocktakeRecord } from './warehouse-stocktake-records';
 
 test('stocktake repository sends exact RPC envelopes and parses reads and commands', async () => {
@@ -76,4 +76,21 @@ const STOCKTAKE_ID = STOCKTAKE_ACTOR.tenant_id;
 test('stocktake receipt rejects status and audit timestamp mismatches', () => {
   expect(WarehouseStocktakeOrderSchema.safeParse({ ...STOCKTAKE_ORDER, status: 'completed', completed_at: null }).success).toBe(false);
   expect(WarehouseStocktakeOrderSchema.safeParse({ ...STOCKTAKE_ORDER, status: 'draft', completed_at: '2026-09-09T01:00:00Z' }).success).toBe(false);
+});
+
+test('stocktake summaries expose amounts only for completed orders', () => {
+  for (const status of ['draft', 'counting', 'submitted', 'cancelled'] as const) {
+    const timestamps = status === 'counting' ? { started_at: 'now' }
+      : status === 'submitted' ? { started_at: 'now', submitted_at: 'now' }
+        : status === 'cancelled' ? { cancelled_at: 'now' } : {};
+    const summary = { ...STOCKTAKE_SUMMARY, status, ...timestamps };
+    expect(WarehouseStocktakeSummarySchema.safeParse(summary).success).toBe(true);
+    expect(WarehouseStocktakeSummarySchema.safeParse({ ...summary, gain_amount: '100.00' }).success).toBe(false);
+    expect(WarehouseStocktakeSummarySchema.safeParse({ ...summary, loss_amount: '0.00' }).success).toBe(false);
+  }
+  const completed = { ...STOCKTAKE_SUMMARY, status: 'completed', started_at: 'now', submitted_at: 'now',
+    completed_at: 'now', gain_amount: '100.00', loss_amount: '0.00' };
+  expect(WarehouseStocktakeSummarySchema.safeParse(completed).success).toBe(true);
+  expect(WarehouseStocktakeSummarySchema.safeParse({ ...completed, gain_amount: null }).success).toBe(false);
+  expect(WarehouseStocktakeSummarySchema.safeParse({ ...completed, loss_amount: null }).success).toBe(false);
 });

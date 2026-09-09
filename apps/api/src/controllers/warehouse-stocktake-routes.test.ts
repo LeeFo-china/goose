@@ -67,6 +67,15 @@ test('stocktake HTTP validates and forwards all four reads and six commands', as
       expect(response.statusCode).toBe(200);
       expect(commandSpy).toHaveBeenLastCalledWith(context, STOCKTAKE_ID, command, payload, 'key');
     }
+    const validCommandCallCount = commandSpy.mock.calls.length;
+    for (const path of ['save-draft', 'start', 'record-counts', 'submit', 'complete', 'cancel']) {
+      const payload = path === 'save-draft' ? STOCKTAKE_DRAFT : path === 'record-counts' ? STOCKTAKE_COUNTS : { expected_version: 1 };
+      for (const query of ['force=true', `actor_user_id=${STOCKTAKE_ID}`]) {
+        expect((await app.inject({ method: 'POST', url: `/warehouse-stocktakes/${STOCKTAKE_ID}/${path}?${query}`,
+          headers: { 'idempotency-key': 'key' }, payload })).statusCode).toBe(400);
+      }
+    }
+    expect(commandSpy).toHaveBeenCalledTimes(validCommandCallCount);
     const invalid: InjectOptions[] = [
       { method: 'POST', url: `/warehouse-stocktakes/${STOCKTAKE_ID}/start`, payload: { expected_version: 1 } },
       { method: 'POST', url: `/warehouse-stocktakes/${STOCKTAKE_ID}/start`, headers: { 'idempotency-key': 'x'.repeat(121) }, payload: { expected_version: 1 } },
