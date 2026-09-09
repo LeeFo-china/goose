@@ -3,6 +3,19 @@ import { PermissionCodeConfig, PERMISSION_CODE_VALUES } from "./permission";
 import type { PermissionCode } from "./permission";
 
 describe("domain permissions", () => {
+  test.each([
+    ["inventory.transfer.manage", "管理仓库调拨", "manage"],
+    ["inventory.transfer.approve", "确认仓库调拨", "approve"],
+  ] as const)("registers warehouse transfer permission %s", (code, label, action) => {
+    expect(PERMISSION_CODE_VALUES).toContain(code as PermissionCode);
+    expect(PermissionCodeConfig[code as PermissionCode]).toEqual({
+      label,
+      module: "inventory",
+      resource: "transfer",
+      action,
+    });
+  });
+
   test("exposes tenant and platform service trial permissions", () => {
     const expectedPermissions = {
       "billing.service_trial.apply": {
