@@ -124,16 +124,19 @@ export function InventoryWorkspace({
             库存流水
           </TabsTrigger>
         </TabsList>
-        {canViewMaterials && (
-          <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Button asChild size="sm" variant="outline">
+            <Link href="/warehouse-transfers">仓库调拨</Link>
+          </Button>
+          {canViewMaterials && <>
             <Button asChild size="sm" variant="outline">
               <Link href="/warehouse-issues">项目领料</Link>
             </Button>
             <Button asChild size="sm" variant="outline">
               <Link href="/warehouse-returns">项目退料</Link>
             </Button>
-          </div>
-        )}
+          </>}
+        </div>
         <TabsContent
           value={state.tab}
           className="mt-0 flex min-h-0 flex-1 flex-col"

@@ -299,6 +299,12 @@ export const tenantNavGroups: AdminMenuGroup[] = [
         icon: PackageSearch,
         permission: "inventory.stock.view",
       },
+      {
+        href: "/warehouse-transfers",
+        label: "仓库调拨",
+        icon: RefreshCw,
+        permission: "inventory.stock.view",
+      },
     ],
   },
   {

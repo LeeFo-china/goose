@@ -47,6 +47,12 @@ export type InventoryTransaction = InventoryRow & {
         issue_order_id: string;
         issue_order_no: string;
       }
+    | {
+        transfer_order_id: string;
+        transfer_order_no: string;
+        source_warehouse_id: string;
+        destination_warehouse_id: string;
+      }
     | null;
 };
 

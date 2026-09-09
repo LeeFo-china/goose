@@ -17,6 +17,14 @@ const settings = {
 };
 
 describe("tenant supplier settings UI rollout rules", () => {
+  test("transfers is independent of procurement and materials but blocks module disable", () => {
+    const transfers = { ...settings, warehouse_transfers_enabled: true };
+    expect(hasEnabledSupplierRolloutFlags(transfers)).toBe(true);
+    expect(canToggleSupplierRolloutFlag(settings, "warehouse_transfers_enabled")).toBe(true);
+    expect(canToggleSupplierRolloutFlag({ ...transfers, module_enabled: false }, "warehouse_transfers_enabled")).toBe(false);
+    expect(canToggleSupplierRolloutFlag(transfers, "warehouse_materials_enabled")).toBe(true);
+    expect(canToggleSupplierRolloutFlag(transfers, "ownership_reads_enabled")).toBe(true);
+  });
   test("materials is independent of purchase rollout but prevents module disable", () => {
     const materials = { ...settings, warehouse_materials_enabled: true };
     expect(hasEnabledSupplierRolloutFlags(materials)).toBe(true);
