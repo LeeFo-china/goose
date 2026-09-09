@@ -34,7 +34,9 @@ Modify `components/suppliers/supplier-types.ts`、`supplier-settings-api.ts`、`
 Create `apps/admin/e2e/warehouse-transfers-{mock-backend.mjs,workflow.spec.ts}`、`playwright.warehouse-transfers.config.ts`；按既有e2e fixture会话/分页/错误协议实现，不修改生产认证。视共享数据拆独立fixture文件。
 
 - [x] 先静态检查，再运行桌面+375px Playwright：草稿→提交→完成、取消、只读/无权限/开关关闭、库存不足/409、未知结果重试、详情分页与不完整禁止编辑、来源链接、源仓切换、会话隔离；断言实际请求body/key和UI，不只断言mock状态。
-- [ ] 回归库存及rollout受影响测试，截图审查布局/键盘/文本/横向溢出；无失败后固定release SHA，推送功能/新release分支。
-- [ ] 检查DEV604条对齐及磁盘，发布Admin（本批无API变更时不重发API），等待workflow完成及容器SHA/HTTP验证。
+- [x] 回归库存及rollout受影响测试，截图审查布局/键盘/文本/横向溢出；无失败后固定release SHA，推送功能/新release分支。
+- [x] 检查DEV604条对齐及磁盘，发布Admin（本批无API变更时不重发API），等待workflow完成及容器SHA/HTTP验证。
 - [ ] Chrome真实会话只读核对租户/员工权限/仓库/SKU条件。具备权限时通过UI开启目标租户测试开关并用明确测试库存执行正常闭环/反向调拨，读取库存价值守恒与无项目成本/应付变化；结束关闭开关。缺少任一必要权限时不自动授权，只记录阻塞。
-- [ ] 记录真实/模拟测试边界、发布证据、未完用例与D1状态；提交文档，保留工作树，不进入D2直到D1验收条件满足。
+- [x] 记录真实/模拟测试边界、发布证据、未完用例与D1状态；提交文档，保留工作树，不进入D2直到D1验收条件满足。
+
+发布结果：`e20387a1` / run `34298832069` success；40项单测、60项本地浏览器回归通过。Chrome接管/导航超时，真实租户业务验收待恢复连接后继续；调拨开关保持关闭。证据见 `docs/operations/evidence/2026-09-09-warehouse-transfer-admin-dev-release.md`。
