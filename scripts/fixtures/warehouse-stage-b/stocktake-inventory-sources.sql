@@ -1,33 +1,56 @@
 -- Depends on material-workflow, transfer-workflow and stocktake-workflow.
 BEGIN;
+CREATE TEMP TABLE stocktake_inventory_wire(payload jsonb);
 DO $test$
-DECLARE f public.stage_d2_fixture%ROWTYPE; result jsonb; row_data jsonb; total integer;
+DECLARE f public.stage_d2_fixture%ROWTYPE; result jsonb; row_data jsonb; expected jsonb; direction text;
+  before_close jsonb; first_id text; expected_total bigint;
 BEGIN
   SELECT * INTO STRICT f FROM public.stage_d2_fixture;
-  result:=public.list_inventory_transactions(f.tenant_id,f.warehouse_id,NULL,NULL,1,100);
-  SELECT count(*) INTO total FROM jsonb_array_elements(result->'items') x WHERE x->>'source_type'='warehouse_stocktake_item';
-  IF total<2 THEN RAISE EXCEPTION 'both stocktake directions absent: %',result; END IF;
-  FOR row_data IN SELECT value FROM jsonb_array_elements(result->'items') LOOP
-    IF row_data->>'source_type'='warehouse_stocktake_item' AND
-      (NOT (row_data->'source_document' ?& ARRAY['stocktake_order_id','stocktake_order_no'])
-       OR (SELECT count(*) FROM jsonb_object_keys(row_data->'source_document'))<>2
-       OR row_data->>'transaction_type' NOT IN ('adjustment_in','adjustment_out')) THEN
-      RAISE EXCEPTION 'stocktake source projection mismatch: %',row_data;
-    END IF;
+  FOREACH direction IN ARRAY ARRAY['adjustment_in','adjustment_out'] LOOP
+    result:=public.list_inventory_transactions(f.tenant_id,f.warehouse_id,NULL,direction,1,100);
+    IF NOT EXISTS(SELECT 1 FROM jsonb_array_elements(result->'items') x WHERE x->>'source_type'='warehouse_stocktake_item') THEN
+      RAISE EXCEPTION 'stocktake direction absent: %, %',direction,result; END IF;
+    FOR row_data IN SELECT value FROM jsonb_array_elements(result->'items') x WHERE x->>'source_type'='warehouse_stocktake_item' LOOP
+      SELECT jsonb_build_object('stocktake_order_id',o.id,'stocktake_order_no',o.order_no) INTO STRICT expected
+      FROM public.warehouse_stocktake_order_items i JOIN public.warehouse_stocktake_orders o
+        ON o.id=i.stocktake_order_id AND o.tenant_id=i.tenant_id AND o.warehouse_id=i.warehouse_id
+      WHERE i.id=(row_data->>'source_id')::uuid AND i.tenant_id=f.tenant_id AND i.warehouse_id=f.warehouse_id
+        AND i.supplier_sku_id=(row_data->>'supplier_sku_id')::uuid AND o.status='completed'
+        AND direction=CASE WHEN i.difference_quantity>0 THEN 'adjustment_in' ELSE 'adjustment_out' END;
+      IF row_data->'source_document' IS DISTINCT FROM expected OR row_data->>'transaction_type' IS DISTINCT FROM direction
+        OR row_data->>'warehouse_id' IS DISTINCT FROM f.warehouse_id::text THEN RAISE EXCEPTION 'stocktake exact source mismatch: %, %',row_data,expected; END IF;
+    END LOOP;
   END LOOP;
-  result:=public.list_inventory_transactions(f.tenant_id,f.warehouse_id,NULL,NULL,99,1);
-  IF result->'items'<>'[]'::jsonb OR (result->>'total')::integer<2 THEN RAISE EXCEPTION 'empty page lost total'; END IF;
+  INSERT INTO stocktake_inventory_wire SELECT jsonb_build_object('items',jsonb_agg(x ORDER BY x->>'transaction_type'))
+    FROM jsonb_array_elements(public.list_inventory_transactions(f.tenant_id,f.warehouse_id,NULL,NULL,1,100)->'items') x
+    WHERE x->>'source_type'='warehouse_stocktake_item' AND x->>'transaction_type' IN ('adjustment_in','adjustment_out');
+  SELECT count(*) INTO expected_total FROM public.inventory_transactions WHERE tenant_id=f.tenant_id
+    AND warehouse_id=f.warehouse_id AND supplier_sku_id=f.sku_id AND transaction_type='adjustment_out';
+  IF expected_total<2 THEN RAISE EXCEPTION 'fixture lacks two filtered stocktake facts'; END IF;
+  result:=public.list_inventory_transactions(f.tenant_id,f.warehouse_id,f.sku_id,'adjustment_out',1,1);
+  IF result->>'page_size' IS DISTINCT FROM '1' OR (result->>'total')::bigint IS DISTINCT FROM expected_total
+    OR jsonb_array_length(result->'items')<>1 OR result->'items'->0->>'warehouse_id' IS DISTINCT FROM f.warehouse_id::text
+    OR result->'items'->0->>'supplier_sku_id' IS DISTINCT FROM f.sku_id::text
+    OR result->'items'->0->>'transaction_type' IS DISTINCT FROM 'adjustment_out' THEN
+    RAISE EXCEPTION 'stocktake warehouse/SKU pagination failed: %',result; END IF;
+  first_id:=result->'items'->0->>'id';
+  result:=public.list_inventory_transactions(f.tenant_id,f.warehouse_id,f.sku_id,'adjustment_out',2,1);
+  IF (result->>'total')::bigint IS DISTINCT FROM expected_total OR jsonb_array_length(result->'items')<>1
+    OR result->'items'->0->>'id' IS NULL OR result->'items'->0->>'id' IS NOT DISTINCT FROM first_id THEN RAISE EXCEPTION 'stocktake pagination repeated row'; END IF;
+  result:=public.list_inventory_transactions(f.tenant_id,f.warehouse_id,f.sku_id,'adjustment_out',999,1);
+  IF result->'items' IS DISTINCT FROM '[]'::jsonb OR (result->>'total')::bigint IS DISTINCT FROM expected_total THEN RAISE EXCEPTION 'empty page lost exact total'; END IF;
+  before_close:=public.list_inventory_transactions(f.tenant_id,f.warehouse_id,NULL,NULL,1,100);
   UPDATE public.tenant_supplier_settings SET warehouse_stocktakes_enabled=false WHERE tenant_id=f.tenant_id;
   result:=public.list_inventory_transactions(f.tenant_id,f.warehouse_id,NULL,NULL,1,100);
-  IF NOT EXISTS(SELECT 1 FROM jsonb_array_elements(result->'items') x
-    WHERE x->>'source_type'='warehouse_stocktake_item' AND x->'source_document'<>'null'::jsonb) THEN
-    RAISE EXCEPTION 'disabled flag hid historical source'; END IF;
+  IF result IS DISTINCT FROM before_close THEN RAISE EXCEPTION 'disabled flag changed complete history'; END IF;
   IF EXISTS(SELECT 1 FROM jsonb_array_elements(result->'items') x WHERE
     CASE x->>'source_type'
       WHEN 'warehouse_stocktake_item' THEN NOT (x->'source_document' ? 'stocktake_order_id')
       WHEN 'warehouse_transfer_out_item' THEN NOT (x->'source_document' ? 'transfer_order_id')
       WHEN 'warehouse_transfer_in_item' THEN NOT (x->'source_document' ? 'transfer_order_id')
       ELSE false END) THEN RAISE EXCEPTION 'warehouse source regression'; END IF;
+  result:=public.list_inventory_transactions(gen_random_uuid(),f.warehouse_id,NULL,NULL,1,20);
+  IF result->>'total' IS DISTINCT FROM '0' OR result->'items' IS DISTINCT FROM '[]'::jsonb THEN RAISE EXCEPTION 'stocktake tenant isolation failed'; END IF;
 END;
 $test$;
 -- Exercise the actual lateral SQL independently from ledger FK/trigger guards.
@@ -60,6 +83,12 @@ BEGIN
     IF result IS NOT NULL THEN RAISE EXCEPTION 'forged stocktake source resolved: %',forged; END IF;
   END LOOP;
   UPDATE public.tenant_supplier_settings SET warehouse_stocktakes_enabled=true WHERE tenant_id=f.tenant_id;
+  -- Ten thousand unrelated draft documents make whole-table source scans visible.
+  INSERT INTO public.warehouse_stocktake_orders(tenant_id,warehouse_id,reason,created_by_employee_id,updated_by_employee_id)
+    SELECT f.tenant_id,f.warehouse_id,'Inventory source load',f.actor_employee_id,f.actor_employee_id FROM generate_series(1,10000);
+  INSERT INTO public.warehouse_stocktake_order_items(tenant_id,stocktake_order_id,warehouse_id,line_no,supplier_sku_id)
+    SELECT o.tenant_id,o.id,o.warehouse_id,1,f.second_sku_id FROM public.warehouse_stocktake_orders o
+    WHERE o.tenant_id=f.tenant_id AND o.reason='Inventory source load';
   DECLARE
     unfinished_id uuid:=public.stage_d2_prepare(f.second_sku_id,
       ((SELECT quantity_on_hand FROM public.inventory_balances WHERE tenant_id=f.tenant_id
@@ -110,6 +139,13 @@ BEGIN
   DEALLOCATE stocktake_inventory_page;
 END;
 $plans$;
+WITH RECURSIVE nodes(label,node) AS(
+  SELECT label,plan->0->'Plan' FROM stocktake_inventory_plans UNION ALL
+  SELECT n.label,c.value FROM nodes n CROSS JOIN LATERAL jsonb_array_elements(coalesce(n.node->'Plans','[]')) c
+) SELECT 'EVIDENCE stocktake inventory plan '||label||': '||jsonb_build_object('node',node->>'Node Type',
+  'relation',node->>'Relation Name','index',node->>'Index Name','actual_rows',node->'Actual Rows',
+  'loops',node->'Actual Loops','removed',node->'Rows Removed by Filter','recheck',node->'Rows Removed by Index Recheck')::text
+  FROM nodes WHERE node->>'Relation Name' IN ('warehouse_stocktake_orders','warehouse_stocktake_order_items');
 DO $bounds$
 DECLARE bad jsonb;
 BEGIN
@@ -121,11 +157,10 @@ BEGIN
       coalesce((node->>'Rows Removed by Filter')::numeric,0))*(node->>'Actual Loops')::numeric) rows
     FROM nodes WHERE node->>'Relation Name' IN ('warehouse_stocktake_orders','warehouse_stocktake_order_items')
     GROUP BY label,page_size,node->>'Relation Name')
-  -- The plan has two stocktake order nodes (existing UNION arms can each expose
-  -- the relation); both remain linearly bounded by the materialized page.
-  SELECT jsonb_agg(to_jsonb(touched)) INTO bad FROM touched WHERE rows>page_size*2;
+  SELECT jsonb_agg(to_jsonb(touched)) INTO bad FROM touched WHERE rows>page_size;
   IF bad IS NOT NULL THEN RAISE EXCEPTION 'stocktake lookup exceeded materialized page: %',bad; END IF;
 END;
 $bounds$;
+SELECT 'EVIDENCE stocktake inventory wire: '||payload::text FROM stocktake_inventory_wire;
 ROLLBACK;
 SELECT 'EVIDENCE stocktake inventory sources: exact gain/loss projection, forged tenant/source/SKU/warehouse/type/direction and unfinished guards, pagination total/empty page, historical visibility after disable, transfer regression, actual SQL page-bounded lookup at 1/20/100/empty';
