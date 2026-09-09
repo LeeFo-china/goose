@@ -49,6 +49,17 @@ test('恢复冻结命令验证精确路径、UUID、版本，未知存储不可�
   ])
     expect(parseStoredStocktakeCommand(value)).toBeNull();
 });
+test('非空路径前缀的盘点命令不可恢复且保持锁写', () => {
+  const raw = JSON.stringify({ ...command, path: 'unexpected/warehouse-stocktakes/' + id + '/start' });
+  expect(parseStoredStocktakeCommand(raw)).toBeNull();
+  const restored = restoreFrozenInventoryCommand(
+    { getItem: () => raw },
+    'scope',
+    parseStoredStocktakeCommand,
+  );
+  expect(restored.ready).toBe(false);
+  expect(restored.pending).toBeNull();
+});
 test('旧实例或StrictMode旧owner不能删除同scope的原请求或新命令', () => {
   const lifecycle = createStocktakeCommandLifecycle();
   const old = lifecycle.activate();
