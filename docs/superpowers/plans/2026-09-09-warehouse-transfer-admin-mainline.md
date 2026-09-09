@@ -19,13 +19,15 @@
 
 ## Task 2：固定候选与 DEV Admin 发布
 
-- [ ] 发布前重查 main、DEV 容器 SHA、活动 workflow、磁盘和只读业务基线，防止集成期间再有覆盖。
+- [x] 发布前重查 main、DEV 容器 SHA、活动 workflow、磁盘和只读业务基线，防止集成期间再有覆盖。
 - [x] 确认 migration list Local/Remote 对齐；本批无 migration，不执行 apply。
-- [ ] 集成提交后推送功能分支和唯一固定 release 分支，通过 `gh workflow run release-dev.yml --ref <固定候选分支> -f service=admin -f operation=release` 仅发布 Admin。不合并 main、不触发生产。
-- [ ] 等待 workflow success，并核对实际 Admin SHA/digest/健康、API 仍为发布前版本、迁移门禁与业务基线。回滚只能通过既有流程重发发布前固定 SHA，不做数据回滚。
+- [x] 集成提交后推送功能分支和唯一固定 release 分支，通过 `gh workflow run release-dev.yml --ref release/warehouse-transfer-admin-mainline-dev-20260909 -f service=admin -f operation=release` 仅发布 Admin。不合并 main、不触发生产。
+- [x] 等待 workflow success，并核对实际 Admin SHA/digest/健康、API 仍为发布前版本、迁移门禁与业务基线。回滚只能通过既有流程重发发布前固定 SHA，不做数据回滚。
 
 ## Task 3：真实 Chrome 验收
 
 - [ ] Chrome 访问调拨页不再 404，核对指定租户、既有权限员工与明确测试 SKU。
 - [ ] 具备现有权限时正常 UI 配置测试开关和双仓，执行正常/反向调拨，核对数量/价值守恒和项目成本/应付/付款未变化；结束关闭开关。不得自动赋权或直接 SQL 修库。
 - [ ] 记录实际结果与未完成门禁。D1 真实验收未满足不得进入 D2。
+
+最新状态：`4e522bef` / run `34305784359` DEV Admin 发布成功，Chrome 调拨页404已消除；API保留43cb38bf、库存及财务十组摘要未变。真实验收发现共享 `PERMISSION_CODE_VALUES` 遗漏两个调拨权限，导致已有 system_admin 风清扬仍为217项、无法写调拨。用户已提供平台账号，已填写登录表单但未提交；测试开关未开启、无业务写入。后续需用户确认扩展到 Domain 权限注册与 DEV API/Admin 发布，不通过员工赋权绕过。
