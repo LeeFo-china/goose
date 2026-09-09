@@ -33,4 +33,13 @@ RAG 本轮查询返回 502，依据本地设计、代码及 SQL 验证；未同�
 
 ## 执行结果
 
-待冻结候选版本后执行 workflow plan → apply → CLI 对齐 → API/Admin DEV release；最终结果在发布后补记。
+- 冻结分支 `release/warehouse-transfer-integration-dev-20260909`，不可变 SHA `0f350b0175feb84d0e69d1cdb7eab49f9e8f133f`；功能分支已推送，无 main 合并。
+- [Migration plan 34294121418](https://github.com/LeeFo-china/goose/actions/runs/34294121418) success：602 → 602，仅 `20260908235654 20260908235954` 待执行。
+- [Migration apply 34294179710](https://github.com/LeeFo-china/goose/actions/runs/34294179710) success：恰好应用上述两条，602 → 604，latest `20260908235954`。
+- 重新运行 Supabase CLI migration list，保存 `2026-09-09-warehouse-transfer-integration-history.txt`；去除 CLI 版本更新提示（不改动表格数据）后，既有 `verify-migration-history.mjs` 判定 Local/Remote 604 条全量对齐且目标存在。没有放宽校验脚本。
+- apply 后摘要见 `2026-09-09-warehouse-transfer-integration-postapply.json`：10 组业务 count/md5 和 supplier events 完全不变；调拨启用数/单据/明细/命令/角色和员工授权仍全 0；无长事务/锁等待。只有预期两个函数 definition hash 改变，所有 wrappers 定义和函数权限/config 不变。
+- [API/Admin DEV release 34294327062](https://github.com/LeeFo-china/goose/actions/runs/34294327062) **success**，发布流程的完整 migration history 门禁通过。
+- API/Admin 容器均 healthy，revision 均为固定 SHA `0f350b0175feb84d0e69d1cdb7eab49f9e8f133f`，run 标签均为 `34294327062`。API image `sha256:0e64e389d54f4709f2f03436eb7a386f8ebceb86f8ab0172c7d3fac007f16896`；Admin image `sha256:efebda0608e5e1b72556de853fe0df86b0f664fc2dd1849b63cd69cf035f87a4`。
+- HTTP：`https://api-dev.goodcms.cn/` 200、`https://admin-dev.goodcms.cn/login` 200，未认证 `/api/inventory/transactions?page=1&pageSize=20` 与 `/api/warehouse-transfers?page=1&pageSize=20` 均 401。此检查不替代授权员工真实业务 E2E。
+- 发布后再次只读核验：10 组业务摘要仍与发布前完全一致；metadata 与 apply 后一致；604 migrations，调拨启用数及单据仍 0，无锁等待/长事务。证据见 `2026-09-09-warehouse-transfer-integration-postrelease.json`。
+- 最终磁盘 82%，可用 11360194560 bytes；未执行人工清理。保留功能分支/工作树和旧冻结分支；本批发布证据作为后续 docs commit，不移动已部署冻结 SHA。

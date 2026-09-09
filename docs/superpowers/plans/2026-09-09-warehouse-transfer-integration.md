@@ -37,7 +37,7 @@ Files: `apps/api/src/schema/platform-suppliers.ts`、`services/supplier-rollout-
 - [x] `bun run check`（apps/api）、`bun run build`（packages/domain），受影响 Admin 类型检查。SQL runner `bun scripts/verify-warehouse-stage-b-database.ts scripts/fixtures/warehouse-stage-b/material-workflow.sql scripts/fixtures/warehouse-stage-b/transfer-contract.sql scripts/fixtures/warehouse-stage-b/transfer-workflow.sql scripts/fixtures/warehouse-stage-b/transfer-inventory-sources.sql scripts/fixtures/warehouse-stage-b/transfer-rollout.sql`。实际扩展执行 9 组，见证据文档；来源 fixture 必须在追加事实的 transfer-concurrency 之前运行。
 - [x] 只读确认 DEV 磁盘/镜像/备份占用，不删除未确认目标。记录容量是否满足发布；不将容量风险当作功能失败。
 - [x] 独立审查、diff check、分批提交推送 feature。记录来源/设置实现与 Admin 仍未完成的界限。
-- [ ] 满足容量与兼容门禁才冻结新 release、plan、apply、migration list、API/Admin DEV release；否则明确交付已验证代码与未 apply/未发布状态。不启用租户调拨。
+- [x] 满足容量与兼容门禁才冻结新 release、plan、apply、migration list、API/Admin DEV release；否则明确交付已验证代码与未 apply/未发布状态。不启用租户调拨。
 
 ## 执行记录（2026-09-09）
 
@@ -45,3 +45,4 @@ Files: `apps/api/src/schema/platform-suppliers.ts`、`services/supplier-rollout-
 - Task 2 全部完成，SPEC/质量审查通过；提交 `01b0e767`。升级前真实旧 typed/JSON 回执在升级后原样重放，不改变设置。
 - 最新集成：API 83 tests / 2062 assertions；Domain 1 test / 5 assertions；API check、Domain build、Admin check 均通过。离线 PostgreSQL 9 组 fixture 通过，含并发、安全和实际 SQL EXPLAIN。
 - 不代表真实租户 E2E 完成。Admin 尚未接入 transfer source 显示/跳转及调拨页面；在下一批完成并验收前，必须保持调拨开关 false，不创建真实调拨单据。
+- DEV apply 两条成功，604 条 Local/Remote 对齐；API/Admin 发布 run `34294327062` success，固定 SHA `0f350b0175feb84d0e69d1cdb7eab49f9e8f133f`，容器 healthy。详见 [发布证据](../../operations/evidence/2026-09-09-warehouse-transfer-integration-dev-release.md)。
