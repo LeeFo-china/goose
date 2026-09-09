@@ -28,4 +28,12 @@ bun scripts/verify-warehouse-stage-b-database.ts scripts/fixtures/warehouse-stag
 
 完整 `supabase migration list` 返回605行，其中604条 Local/Remote相同，唯一 pending 为20260909045512。main仍为43cb38bf；实际DEV API/Admin均healthy、revision240e7a78、run34307897288，磁盘剩余约9.5GB。应用代码及workflow相对当前镜像无差异，本次只发布数据库授权，不重建相同镜像。
 
-仅使用既有 DEV workflow 固定ref plan/apply；不操作生产、不合并main、不移动既有发布分支。必要回退先关闭目标开关、保留所有库存财务和审计，再经新前向migration仅撤销本次新增的精确两条角色权限。不直接SQL修库，不修改已应用迁移。应用成功及真实验收结果须另附证据，不由本记录预先推断。
+仅使用既有 DEV workflow 固定ref plan/apply；不操作生产、不合并main、不移动既有发布分支。必要回退先关闭目标开关、保留所有库存财务和审计，再经新前向migration仅撤销本次新增的精确两条角色权限。不直接SQL修库，不修改已应用迁移。
+
+## DEV apply 及独立核验
+
+固定候选 `release/qingtian-transfer-role-grant-dev-20260909` / `710b332282b2f10b2f561b20db197e5f39a8a6eb`：plan run `34313728673` 与 apply run `34313874471` 均 success、相同 SHA。plan 唯一 pending `20260909045512`；apply `before_count=604`、`after_count=605`、`applied_count=1`、`applied_versions=20260909045512`。未重新发布无变化的 API/Admin。
+
+05:15Z 三组只读 SQL 后核验见 `2026-09-09-qingtian-transfer-grant-postapply.json`：目标角色仅新增两条 all，两项实际 helper 均 true；其他角色1593条、员工绑定34条、覆盖6条及公共 helper 定义摘要不变。程序逐项比较十组业务摘要与库存快照均相同，开关仍 false/version18、单据/回执/调拨事实0、库存1箱/88元。
+
+再次通过受控 DEV 连接执行完整 `supabase migration list`，只移除表外 CLI 升级提示，原始605条表格保留于 `2026-09-09-qingtian-transfer-grant-migration-history.txt`。命令 `node scripts/verify-migration-history.mjs docs/operations/evidence/2026-09-09-qingtian-transfer-grant-migration-history.txt supabase/migrations 20260909045512` 退出0：`migration_history_aligned=true`、`target_migration_present=true`。这仅确认授权发布，不替代待完成的 Chrome 正反向调拨与交叉命令并发门禁。
