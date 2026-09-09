@@ -93,13 +93,26 @@ function verifyWarehouseRolloutMigrationRollback(migration: string): void {
   console.log("PASS injected warehouse migration failure rolled back definitions/ACLs/config/history; no new overload/core leaked");
 }
 
-function verifyTransferTenantGrantMigration(migration: string): void {
-  const snapshotQuery = "SELECT public.stage_d_transfer_grant_snapshot()";
+type TenantGrantKind = "transfer" | "stocktake";
+const tenantGrantMigrations: Record<TenantGrantKind, string> = {
+  transfer: "20260909045512_grant_qingtian_warehouse_transfer_permissions.sql",
+  stocktake: "20260909111954_grant_qingtian_warehouse_stocktake_permissions.sql",
+};
+function tenantGrantPrefix(kind: TenantGrantKind): string {
+  return kind === "transfer" ? "stage_d_transfer_grant" : "stage_d2_stocktake_grant";
+}
+
+function verifyTenantGrantMigration(migration: string, kind: TenantGrantKind): void {
+  const prefix = tenantGrantPrefix(kind);
+  const snapshotQuery = `SELECT public.${prefix}_snapshot()`;
   const before = JSON.parse(sql(snapshotQuery));
   assert.match(migration, /^BEGIN;$/m);
+  assert.equal((migration.match(/^COMMIT;\s*$/gm) ?? []).length, 1,
+    "Tenant grant migration must contain one final COMMIT for failure injection");
   assert.match(migration, /COMMIT;\s*$/);
-  const tenant = "(SELECT tenant_id FROM public.stage_d_transfer_grant_fixture)";
-  const role = "(SELECT role_id FROM public.stage_d_transfer_grant_fixture)";
+  const tenant = `(SELECT tenant_id FROM public.${prefix}_fixture)`;
+  const role = `(SELECT role_id FROM public.${prefix}_fixture)`;
+  const errorPrefix = `QINGTIAN_${kind.toUpperCase()}_GRANT_`;
   // Prep is inside the migration transaction; every expected failure disconnects
   // before COMMIT, rolling back the adversarial fixture edit and all grants.
   const cases = [
@@ -109,26 +122,26 @@ function verifyTransferTenantGrantMigration(migration: string): void {
     ["wrong role code", `UPDATE public.roles SET code='wrong_role' WHERE id=${role}`, "ROLE_MISMATCH"],
     ["inactive role", `UPDATE public.roles SET status='inactive' WHERE id=${role}`, "ROLE_MISMATCH"],
     ["foreign role", `UPDATE public.roles SET tenant_id=NULL WHERE id=${role}`, "ROLE_MISMATCH"],
-    ["missing permission", "DELETE FROM public.permissions WHERE code='inventory.transfer.approve'", "PERMISSION_MISMATCH"],
-    ["inactive permission", "UPDATE public.permissions SET status='inactive' WHERE code='inventory.transfer.approve'", "PERMISSION_MISMATCH"],
-    ["wrong permission metadata", "UPDATE public.permissions SET action='wrong' WHERE code='inventory.transfer.approve'", "PERMISSION_MISMATCH"],
+    ["missing permission", `DELETE FROM public.permissions WHERE code='inventory.${kind}.approve'`, "PERMISSION_MISMATCH"],
+    ["inactive permission", `UPDATE public.permissions SET status='inactive' WHERE code='inventory.${kind}.approve'`, "PERMISSION_MISMATCH"],
+    ["wrong permission metadata", `UPDATE public.permissions SET action='wrong' WHERE code='inventory.${kind}.approve'`, "PERMISSION_MISMATCH"],
     ["existing narrow scope", `INSERT INTO public.role_permissions(role_id,permission_id,access_scope)
-      SELECT ${role},id,'self' FROM public.permissions WHERE code='inventory.transfer.manage'`, "SCOPE_MISMATCH"],
+      SELECT ${role},id,'self' FROM public.permissions WHERE code='inventory.${kind}.manage'`, "SCOPE_MISMATCH"],
     ["failure before commit", "", "INJECTED_FAILURE"],
   ] as const;
   for (const [label, preparation, expected] of cases) {
     let probe = migration.replace(/^BEGIN;$/m, () => `BEGIN;\n${preparation};`);
     if (expected === "INJECTED_FAILURE") probe = probe.replace(/^COMMIT;\s*$/m,
-      () => "DO $$ BEGIN RAISE EXCEPTION 'QINGTIAN_TRANSFER_GRANT_INJECTED_FAILURE'; END $$;\nCOMMIT;");
+      () => `DO $$ BEGIN RAISE EXCEPTION '${errorPrefix}INJECTED_FAILURE'; END $$;\nCOMMIT;`);
     const result = spawnSync("docker", ["exec", "-i", container, "psql", "-h", "/tmp", "-U", "postgres",
       "-d", "postgres", "-X", "-qAt", "-v", "ON_ERROR_STOP=1"], {
       input: probe, encoding: "utf8", timeout: 60_000, maxBuffer: 64 * 1024 * 1024,
     });
     assert.equal(result.error, undefined, `${label} probe could not execute`);
     assert.equal(result.status, 3, `${label} must fail before COMMIT`);
-    assert.match(result.stderr, new RegExp(`ERROR:  QINGTIAN_TRANSFER_GRANT_${expected}`));
+    assert.match(result.stderr, new RegExp(`ERROR:  ${errorPrefix}${expected}`));
     assert.deepEqual(JSON.parse(sql(snapshotQuery)), before, `${label} failed to roll back all state`);
-    console.log(`PASS transfer tenant grant ${label}: fail closed and exact snapshot restored`);
+    console.log(`PASS ${kind} tenant grant ${label}: fail closed and exact snapshot restored`);
   }
 }
 
@@ -193,34 +206,31 @@ try {
   sql(functionAcls);
   console.log(`PASS restored schema-only baseline ${baseline} (${versions.size} migrations)`);
   const fixtures = process.argv.slice(2).filter((arg) => !["--generate-material-types", "--material-api-smoke"].includes(arg));
+  const selectedGrants = (Object.keys(tenantGrantMigrations) as TenantGrantKind[]).filter((kind) =>
+    fixtures.includes(`scripts/fixtures/warehouse-stage-b/${kind}-tenant-grant.sql`));
+  assert.ok(selectedGrants.length <= 1, "Transfer and stocktake tenant grant fixtures must run separately");
+  const selectedGrant = selectedGrants[0];
+
   for (const name of pending) {
     if (name === "20260909064815_warehouse_stocktake_atomic_commands.sql" &&
       fixtures.includes("scripts/fixtures/warehouse-stage-b/stocktake-rollout.sql")) {
       sql(readFileSync("scripts/fixtures/warehouse-stage-b/stocktake-rollout-before.sql", "utf8"));
       console.log("PASS genuine pre-stocktake-column typed/JSON receipts saved before stocktake core migration");
     }
-    if (name === "20260909045512_grant_qingtian_warehouse_transfer_permissions.sql" &&
-      fixtures.includes("scripts/fixtures/warehouse-stage-b/transfer-tenant-grant.sql")) {
-      const migration = readFileSync(`${migrationDirectory}/${name}`, "utf8");
+    if (selectedGrant && name === tenantGrantMigrations[selectedGrant]) {
       const absentSnapshotQuery = "SELECT jsonb_build_object(" + ["tenants", "roles", "permissions", "role_permissions",
-        "employee_roles", "employee_permission_overrides", "tenant_supplier_settings", "inventory_transactions",
-        "warehouses", "inventory_balances", "project_cost_events", "supplier_payable_events", "supplier_payments", "finance_ledger_entries"].map((table) =>
-        `'${table}',(SELECT jsonb_agg(to_jsonb(t) ORDER BY to_jsonb(t)::text) FROM public.${table} t)`).join(",") + ")";
+        "employee_roles", "employees", "employee_permission_overrides", "tenant_supplier_settings", "supplier_command_events",
+        "inventory_transactions", "warehouses", "inventory_balances", "project_cost_events", "supplier_payable_events",
+        "supplier_payments", "finance_ledger_entries"].map((table) =>
+        `'${table}',(SELECT jsonb_agg(to_jsonb(t) ORDER BY to_jsonb(t)::text) FROM public.${table} t)`).join(",") +
+        ", 'functions',(SELECT jsonb_agg(jsonb_build_object('signature',p.oid::regprocedure::text," +
+        "'definition',pg_get_functiondef(p.oid),'acl',p.proacl::text,'owner',p.proowner,'config',p.proconfig) ORDER BY p.oid)" +
+        " FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.prokind='f'))";
       assert.equal(sql("SELECT count(*) FROM public.tenants WHERE id='3eebca47-961f-4899-b976-a3d3208d326b'"), "0");
       const absentSnapshot = sql(absentSnapshotQuery);
-      sql(migration);
+      sql(readFileSync(`${migrationDirectory}/${name}`, "utf8"));
       assert.equal(sql(absentSnapshotQuery), absentSnapshot, "Absent target must leave all scoped state unchanged");
-      console.log("PASS exact transfer tenant grant migration with absent target is a no-op");
-      sql(readFileSync("scripts/fixtures/warehouse-stage-b/transfer-tenant-grant-before.sql", "utf8"));
-      console.log("PASS synthetic target has no transfer role grants; real helper/assertion deny before migration");
-      verifyTransferTenantGrantMigration(migration);
-      sql(migration);
-      const granted = sql("SELECT public.stage_d_transfer_grant_snapshot()");
-      sql(migration);
-      assert.equal(sql("SELECT public.stage_d_transfer_grant_snapshot()"), granted,
-        "Replayed target grant migration must not change any row or function");
-      console.log("PASS transfer tenant grant exact migration replay unchanged");
-      console.log(`PASS isolated migration ${name}`);
+      console.log(`PASS exact ${selectedGrant} tenant grant migration with absent target is a no-op`);
       continue;
     }
     if (name === "20260908235654_warehouse_transfer_rollout_command.sql" &&
@@ -241,6 +251,29 @@ try {
     }
     sql(readFileSync(`${migrationDirectory}/${name}`, "utf8"));
     console.log(`PASS isolated migration ${name}`);
+  }
+  // Historical targeted grants share the same approved tenant keys. Keep the
+  // normal chain tenant-free, then exercise only the selected grant at the end;
+  // later grants must never contaminate an earlier grant's synthetic snapshot.
+  if (selectedGrant) {
+    const migration = readFileSync(`${migrationDirectory}/${tenantGrantMigrations[selectedGrant]}`, "utf8");
+    sql(readFileSync(`scripts/fixtures/warehouse-stage-b/${selectedGrant}-tenant-grant-before.sql`, "utf8"));
+    const red = spawnSync("docker", ["exec", "-i", container, "psql", "-h", "/tmp", "-U", "postgres",
+      "-d", "postgres", "-X", "-qAt", "-v", "ON_ERROR_STOP=1"], {
+      input: readFileSync(`scripts/fixtures/warehouse-stage-b/${selectedGrant}-tenant-grant.sql`, "utf8"),
+      encoding: "utf8", timeout: 60_000, maxBuffer: 64 * 1024 * 1024,
+    });
+    assert.equal(red.error, undefined, "Pre-grant negative control could not execute");
+    assert.equal(red.status, 3, "Post-grant fixture must fail before the grant exists");
+    assert.match(red.stderr, new RegExp(`ERROR:  ${selectedGrant} grant helper expected t`));
+    console.log(`PASS RED: ${selectedGrant} post-grant assertion rejects genuinely missing authorization`);
+    verifyTenantGrantMigration(migration, selectedGrant);
+    sql(migration);
+    const snapshotQuery = `SELECT public.${tenantGrantPrefix(selectedGrant)}_snapshot()`;
+    const granted = sql(snapshotQuery);
+    sql(migration);
+    assert.equal(sql(snapshotQuery), granted, "Replayed target grant migration must not change any row or function");
+    console.log(`PASS ${selectedGrant} tenant grant exact migration replay unchanged`);
   }
   for (const fixture of fixtures) {
     assert.match(fixture, /^scripts\/fixtures\/warehouse-stage-b\/[a-z0-9-]+\.sql$/,
