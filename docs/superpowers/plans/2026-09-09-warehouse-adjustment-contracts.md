@@ -20,7 +20,7 @@
 - Create `apps/api/src/schema/warehouse-adjustments.ts`：严格输入与分页schema。
 - Create `apps/api/src/schema/warehouse-adjustments.test.ts`：精度、零/格式、原因、唯一SKU、版本、注入与分页测试。
 
-- [ ] 写Domain测试并执行`bun test packages/domain/src/warehouse-adjustment.test.ts`，必须因根导出缺失断言RED，而非模块解析失败：
+- [x] 写Domain测试并执行`bun test packages/domain/src/warehouse-adjustment.test.ts`，必须因根导出缺失断言RED，而非模块解析失败：
 
 ```ts
 import { expect, test } from 'bun:test';
@@ -40,7 +40,7 @@ test('手工调整独立状态、中文标签与展示动作从根出口导出',
 });
 ```
 
-- [ ] RED后新增Domain文件并在index追加`export * from './warehouse-adjustment';`：
+- [x] RED后新增Domain文件并在index追加`export * from './warehouse-adjustment';`：
 
 ```ts
 export const WAREHOUSE_ADJUSTMENT_STATUS_VALUES = ['draft', 'submitted', 'completed', 'cancelled'] as const;
@@ -75,7 +75,7 @@ export interface WarehouseAdjustmentCommandInput {
 }
 ```
 
-- [ ] 定向Domain测试GREEN，执行`cd packages/domain && bun run build`。先写如下API测试，允许schema暂放`export {};`使导出断言失败；执行`cd apps/api && bun test src/schema/warehouse-adjustments.test.ts --test-name-pattern '明确导出'`取得真实RED，不能以缺少文件或拼写异常代替：
+- [x] 定向Domain测试GREEN，执行`cd packages/domain && bun run build`。先写如下API测试，允许schema暂放`export {};`使导出断言失败；执行`cd apps/api && bun test src/schema/warehouse-adjustments.test.ts --test-name-pattern '明确导出'`取得真实RED，不能以缺少文件或拼写异常代替：
 
 ```ts
 import { expect, test } from 'bun:test';
@@ -202,7 +202,7 @@ test('列表明细和设置有独立分页与筛选白名单', async () => {
 });
 ```
 
-- [ ] API RED后实施以下完整schema，不修改公共分页或旧业务：
+- [x] API RED后实施以下完整schema，不修改公共分页或旧业务：
 
 ```ts
 import { WAREHOUSE_ADJUSTMENT_STATUS_VALUES } from '@gooes/domain';
@@ -252,8 +252,8 @@ export type WarehouseAdjustmentCommandInput = z.infer<typeof WarehouseAdjustment
 export type WarehouseAdjustmentListQuery = z.infer<typeof WarehouseAdjustmentListQuerySchema>;
 ```
 
-- [ ] 运行全量该契约测试GREEN；补充发现的真实边界且必须先RED。核对DTO赋值与实际Zod导出，不用Number或any。任何快照/计价/权限验证留在后续数据库批次，不伪称本schema能完成库存业务。
-- [ ] 执行以下最小静态/构建/原契约回归，全部退出0后自检并仅提交上述5个文件，提交信息`feat: 增加仓库手工调整请求契约`：
+- [x] 运行全量该契约测试GREEN；补充发现的真实边界且必须先RED。核对DTO赋值与实际Zod导出，不用Number或any。任何快照/计价/权限验证留在后续数据库批次，不伪称本schema能完成库存业务。
+- [x] 执行以下最小静态/构建/原契约回归，全部退出0后自检并仅提交上述5个文件，提交信息`feat: 增加仓库手工调整请求契约`：
 
 ```sh
 bun test packages/domain/src/warehouse-adjustment.test.ts packages/domain/src/warehouse-stocktake.test.ts packages/domain/src/warehouse-transfer.test.ts packages/domain/src/warehouse-material.test.ts
@@ -268,10 +268,12 @@ bun run build
 
 ## Task 2：证据与收尾（主代理）
 
-- [ ] 主代理fresh重跑定向测试、类型/构建/大小检查，验证没有新增路由、数据库、权限或开关。
-- [ ] 新增`docs/operations/evidence/2026-09-09-warehouse-adjustment-contracts.md`，记录实际RED/GREEN、版本/数量边界、审查结果与本批未接入限制；更新MVP进度和设计首批进度。
-- [ ] 勾选本计划，验证diff与本地文档链接，提交证据到feature并push；最终clean且远端SHA一致，不合并main、不建PR、不移动D1/D2.1固定release。
-- [ ] 下一批另立数据库计划：新migration、原子保存/提交快照/完成/取消、独立权限定义及默认关闭开关、真实SQL并发/回滚/财务隔离验证；本轮不apply不开发发布。
+- [x] 主代理fresh重跑定向测试、类型/构建/大小检查，验证没有新增路由、数据库、权限或开关。
+- [x] 新增`docs/operations/evidence/2026-09-09-warehouse-adjustment-contracts.md`，记录实际RED/GREEN、版本/数量边界、审查结果与本批未接入限制；更新MVP进度和设计首批进度。
+- [x] 勾选本计划，验证diff与本地文档链接，提交证据到feature并push；最终clean且远端SHA一致，不合并main、不建PR、不移动D1/D2.1固定release。
+- [x] 已明确下一批交接范围（非本轮已实施）：另立数据库计划，覆盖新migration、原子保存/提交快照/完成/取消、独立权限定义及默认关闭开关、真实SQL并发/回滚/财务隔离验证；本轮不apply不开发发布。
+
+执行记录：实现提交 `19e64460`；独立SPEC后质量审查均通过，主代理fresh验证全绿。实际命令、范围与后续限制见[请求契约验证记录](../../operations/evidence/2026-09-09-warehouse-adjustment-contracts.md)。
 
 ## 自检
 
