@@ -1,0 +1,69 @@
+{
+  "business_facts_identical": true,
+  "admin_revision": "4e522befa55ed28811a3565955c8a82e23150400",
+  "api_revision": "43cb38bf87a544e3f305f413da70a109003eec13",
+  "run_id": 34305784359,
+  "business": {
+    "checked_at": "2026-09-09T03:14:41.71158+00:00",
+    "lock_waiters": 0,
+    "source_types": [
+      "supplier_purchase_receipt_item",
+      "warehouse_issue_item",
+      "warehouse_return_item"
+    ],
+    "history_count": 604,
+    "business_facts": {
+      "warehouses": {
+        "md5": "e4d4603c47cdd509b4ee01a4e9916588",
+        "count": 1
+      },
+      "supplier_payments": {
+        "md5": "d41d8cd98f00b204e9800998ecf8427e",
+        "count": 0
+      },
+      "inventory_balances": {
+        "md5": "fb4e569539229781e4ec5111fa38eb7a",
+        "count": 1
+      },
+      "project_cost_events": {
+        "md5": "de288f3c65d5e387a4750387b7780ca4",
+        "count": 7
+      },
+      "finance_ledger_entries": {
+        "md5": "87db489033a31eec29a0cb9627bee1f2",
+        "count": 21
+      },
+      "inventory_transactions": {
+        "md5": "15385227e3631f2e07ede21dff8c35c1",
+        "count": 4
+      },
+      "warehouse_issue_orders": {
+        "md5": "b248de47e88c0c9f711d40268777eeee",
+        "count": 1
+      },
+      "supplier_payable_events": {
+        "md5": "a555c42133bf7a7975f3285f3a245b07",
+        "count": 5
+      },
+      "warehouse_return_orders": {
+        "md5": "f0dc564fbf021f6eec440e7ea87446a0",
+        "count": 2
+      },
+      "tenant_supplier_settings": {
+        "md5": "26b6bd47d8c1b973f22fbaafb2854d31",
+        "count": 1
+      }
+    },
+    "history_latest": "20260908235954",
+    "transfer_objects": [
+      "warehouse_transfer_command_events",
+      "warehouse_transfer_order_items",
+      "warehouse_transfer_orders"
+    ],
+    "long_transactions": 0,
+    "transfer_permissions": 2,
+    "transfer_role_grants": 0,
+    "invalid_existing_sources": 0,
+    "transfer_employee_grants": 0
+  }
+}
