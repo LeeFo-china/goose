@@ -46,4 +46,16 @@ GitHub只读检查时无本批进行中的发布任务；远端main43cb38bf、fe
 
 ## 待完成门禁
 
-晴天限定权限迁移验证、固定DEV plan/apply、完整migration list对齐、API/Admin开发发布及Chrome盘盈/盘亏业务恢复验收尚待完成。Chrome标签可列出，但DOM读取及claim均超时，已向用户请求将验收页切到前台并确认扩展提示；尚未因此进行业务写入。D2.2手工调整不在本批。
+限定授权实现`eb657a65`，migration `20260909111954_grant_qingtian_warehouse_stocktake_permissions.sql`，独立SPEC→质量均通过，无待修问题。先真实缺权RED，再两项授权GREEN；D1/D2各11项守卫/注入失败回滚、无目标no-op、精确重放和权限/身份拒绝均通过。runner仅按批准时序封闭参数化，不改变生产迁移字节。
+
+主代理fresh最小TS检查后执行17组完整业务SQL链，再单独执行stocktake-tenant-grant.sql，全部退出0；实施者另行D1独立夹具和互斥负控通过。五份SQL全部经实际DEV workflow atomic history renderer离线检查通过。精确命令：
+
+```sh
+bunx tsc --noEmit --skipLibCheck --target ES2022 --module ESNext --moduleResolution bundler --types bun scripts/verify-warehouse-stage-b-database.ts
+bun scripts/verify-warehouse-stage-b-database.ts scripts/fixtures/warehouse-stage-b/stocktake-tenant-grant.sql
+bun scripts/verify-warehouse-stage-b-database.ts scripts/fixtures/warehouse-stage-b/transfer-tenant-grant.sql
+```
+
+最新只读preapply.json记录Local610/Remote605、五项pending及库存/财务/授权基线；仍无任何远端写入。新固定候选分支计划为`release/warehouse-stocktake-admin-dev-20260909`，不移动D1分支。
+
+固定DEV plan/apply、完整migration list对齐、API/Admin开发发布及Chrome盘盈/盘亏业务恢复验收尚待完成。Chrome标签可列出，但DOM读取及claim均超时，已向用户请求将验收页切到前台并确认扩展提示；尚未因此进行业务写入。D2.2手工调整不在本批。
