@@ -1,0 +1,42 @@
+{
+  "settings": {
+    "version": 17,
+    "module_enabled": true,
+    "warehouse_transfers_enabled": true
+  },
+  "checked_at": "2026-09-09T04:25:51.141713+00:00",
+  "sku_totals": {
+    "value": 88,
+    "quantity": 1
+  },
+  "orders_total": 0,
+  "invalid_pairs": 0,
+  "orders_sample": null,
+  "commands_total": 0,
+  "warehouses_total": 2,
+  "warehouses_sample": [
+    {
+      "id": "7b5af333-fcdf-4f92-9ac2-1ccbc77bedce",
+      "name": "DEV 调拨验收分仓 20260909",
+      "status": "active",
+      "is_default": false
+    },
+    {
+      "id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+      "name": "公司仓库",
+      "status": "active",
+      "is_default": true
+    }
+  ],
+  "sku_balances_sample": [
+    {
+      "warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+      "inventory_value": 88,
+      "quantity_on_hand": 1,
+      "average_unit_cost": 88
+    }
+  ],
+  "unknown_source_types": 0,
+  "test_sku_transfer_facts": 0,
+  "test_sku_transfer_pairs": 0
+}
