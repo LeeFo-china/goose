@@ -4,6 +4,15 @@ import type { PermissionCode } from "./permission";
 
 describe("domain permissions", () => {
   test.each([
+    ["inventory.adjustment.manage", "管理仓库手工调整", "manage"],
+    ["inventory.adjustment.approve", "确认仓库手工调整", "approve"],
+  ] as const)("registers warehouse adjustment permission %s", (code, label, action) => {
+    expect(PERMISSION_CODE_VALUES).toContain(code as PermissionCode);
+    expect(PermissionCodeConfig[code as PermissionCode]).toEqual({
+      label, module: "inventory", resource: "adjustment", action,
+    });
+  });
+  test.each([
     ["inventory.stocktake.manage", "管理仓库盘点", "manage"],
     ["inventory.stocktake.approve", "确认仓库盘点", "approve"],
   ] as const)("registers warehouse stocktake permission %s", (code, label, action) => {
