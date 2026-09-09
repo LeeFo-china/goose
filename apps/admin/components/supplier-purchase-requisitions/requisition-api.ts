@@ -43,6 +43,7 @@ export type RequisitionFilters = {
 export function loadRequisitions(
   page: number,
   filters: RequisitionFilters = {},
+  signal?: AbortSignal,
 ) {
   const query = new URLSearchParams({
     page: String(normalizePage(page)),
@@ -61,14 +62,14 @@ export function loadRequisitions(
   }
   return requestBackendJson<RequisitionPage>(
     `${REQUISITION_PATH}?${query}`,
-    { fallbackMessage: "采购申请加载失败" },
+    { signal, fallbackMessage: "采购申请加载失败" },
   );
 }
 
-export function loadRequisition(requisitionId: string) {
+export function loadRequisition(requisitionId: string, signal?: AbortSignal) {
   return requestBackendJson<RequisitionDetail>(
     requisitionPath(requisitionId),
-    { fallbackMessage: "采购申请详情加载失败" },
+    { signal, fallbackMessage: "采购申请详情加载失败" },
   );
 }
 
@@ -76,6 +77,7 @@ export function loadRequisitionItems(
   requisitionId: string,
   page = 1,
   pageSize = MAX_ITEM_PAGE_SIZE,
+  signal?: AbortSignal,
 ) {
   const query = new URLSearchParams({
     page: String(normalizePage(page)),
@@ -83,23 +85,31 @@ export function loadRequisitionItems(
   });
   return requestBackendJson<RequisitionItemPage>(
     `${requisitionPath(requisitionId)}/items?${query}`,
-    { fallbackMessage: "采购申请明细加载失败" },
+    { signal, fallbackMessage: "采购申请明细加载失败" },
   );
 }
 
-export function loadRequisitionProjects(page: number, keyword = "") {
+export function loadRequisitionProjects(
+  page: number,
+  keyword = "",
+  signal?: AbortSignal,
+) {
   return requestBackendJson<PageData<ProjectOption>>(
     `/supplier-purchase-requisition-project-options?${optionQuery(page, keyword)}`,
-    { fallbackMessage: "项目选项加载失败" },
+    { signal, fallbackMessage: "项目选项加载失败" },
   );
 }
 
-export function loadRequisitionRelationships(page: number, keyword = "") {
+export function loadRequisitionRelationships(
+  page: number,
+  keyword = "",
+  signal?: AbortSignal,
+) {
   return requestBackendJson<PageData<PurchaseOrderSupplierOption>>(
     `/supplier-purchase-requisition-supplier-options?${
       optionQuery(page, keyword)
     }`,
-    { fallbackMessage: "合作供应商加载失败" },
+    { signal, fallbackMessage: "合作供应商加载失败" },
   );
 }
 
@@ -107,6 +117,7 @@ export function loadRequisitionCatalog(
   tenantSupplierId: string,
   page: number,
   keyword = "",
+  signal?: AbortSignal,
 ) {
   const query = new URLSearchParams({
     tenantSupplierId,
@@ -116,18 +127,21 @@ export function loadRequisitionCatalog(
   if (keyword.trim()) query.set("keyword", keyword.trim());
   return requestBackendJson<PurchaseOrderCatalogPage>(
     `/supplier-purchase-requisition-catalog?${query}`,
-    { fallbackMessage: "可采购目录加载失败" },
+    { signal, fallbackMessage: "可采购目录加载失败" },
   );
 }
 
-export function loadRequisitionCostCategories(page: number) {
+export function loadRequisitionCostCategories(
+  page: number,
+  signal?: AbortSignal,
+) {
   const query = new URLSearchParams({
     page: String(normalizePage(page)),
     pageSize: "100",
   });
   return requestBackendJson<FinanceCostCategoryListData>(
     `/supplier-purchase-requisition-cost-categories?${query}`,
-    { fallbackMessage: "成本分类加载失败" },
+    { signal, fallbackMessage: "成本分类加载失败" },
   );
 }
 

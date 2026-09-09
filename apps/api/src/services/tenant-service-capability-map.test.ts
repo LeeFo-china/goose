@@ -67,6 +67,7 @@ describe("tenant service capability map", () => {
     ["GET", "/supplier-purchase-batch-project-options", "read"],
     ["GET", "/supplier-purchase-batch-cost-categories", "read"],
     ["GET", "/supplier-purchase-batch-catalog", "read"],
+    ["GET", "/supplier-purchase-batch-category-options", "read"],
     ["GET", "/supplier-purchase-batches", "read"],
     ["GET", "/supplier-purchase-batches/:id/export.xlsx", "read"],
     ["POST", "/supplier-purchase-orders/:id/share-link", "write"],

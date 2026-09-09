@@ -26,6 +26,7 @@ const listOrders = mock(async () => emptyPage);
 const listProjectOptions = mock(async () => emptyPage);
 const listCostCategories = mock(async () => emptyPage);
 const listCatalog = mock(async () => emptyPage);
+const listCatalogCategories = mock(async () => emptyPage);
 const saveDraft = mock(async () => ({ status: "saved" }));
 const submit = mock(async () => ({ status: "submitted" }));
 const review = mock(async () => ({ status: "ordered" }));
@@ -47,6 +48,7 @@ mock.module("@/services/supplier-purchase-batches", () => ({
     listProjectOptions,
     listCostCategories,
     listCatalog,
+    listCatalogCategories,
     saveDraft,
     submit,
     review,
@@ -81,6 +83,7 @@ describe("SupplierPurchaseBatchesController", () => {
       listProjectOptions,
       listCostCategories,
       listCatalog,
+      listCatalogCategories,
       saveDraft,
       submit,
       review,
@@ -90,7 +93,7 @@ describe("SupplierPurchaseBatchesController", () => {
     ]) fn.mockClear();
   });
 
-  test("registers exactly fourteen supplier purchase batch routes", async () => {
+  test("registers exactly fifteen supplier purchase batch routes", async () => {
     const value = await controller();
     const routes: Array<{ method: string; path: string }> = [];
 
@@ -103,6 +106,10 @@ describe("SupplierPurchaseBatchesController", () => {
       { method: "GET", path: "/supplier-purchase-batch-project-options" },
       { method: "GET", path: "/supplier-purchase-batch-cost-categories" },
       { method: "GET", path: "/supplier-purchase-batch-catalog" },
+      {
+        method: "GET",
+        path: "/supplier-purchase-batch-category-options",
+      },
       { method: "GET", path: "/supplier-purchase-batches" },
       { method: "GET", path: "/supplier-purchase-batches/:id" },
       { method: "GET", path: "/supplier-purchase-batches/:id/items" },
@@ -219,7 +226,7 @@ describe("SupplierPurchaseBatchesController", () => {
     });
   });
 
-  test("parses and wraps the three auxiliary pages", async () => {
+  test("parses and wraps the auxiliary pages", async () => {
     const value = await controller();
 
     await value.listProjectOptions({
@@ -242,6 +249,9 @@ describe("SupplierPurchaseBatchesController", () => {
         keyword: "瓷砖",
       },
     } as never);
+    await value.listCatalogCategories({
+      query: { page: "3", pageSize: "20", keyword: "主材" },
+    } as never);
 
     expect(listProjectOptions).toHaveBeenCalledWith(auth, {
       page: 2,
@@ -261,6 +271,11 @@ describe("SupplierPurchaseBatchesController", () => {
       pageSize: 20,
       keyword: "瓷砖",
     });
+    expect(listCatalogCategories).toHaveBeenCalledWith(auth, {
+      page: 3,
+      pageSize: 20,
+      keyword: "主材",
+    });
     expect(response).toEqual({ data: emptyPage, message: "success" });
 
     await expect(value.listProjectOptions({
@@ -275,6 +290,19 @@ describe("SupplierPurchaseBatchesController", () => {
       statusCode: 400,
       code: "VALIDATION_ERROR",
     });
+    await expect(value.listCatalogCategories({
+      query: { pageSize: "101" },
+    } as never)).rejects.toMatchObject({
+      statusCode: 400,
+      code: "VALIDATION_ERROR",
+    });
+    await expect(value.listCatalogCategories({
+      query: { keyword: "超".repeat(81) },
+    } as never)).rejects.toMatchObject({
+      statusCode: 400,
+      code: "VALIDATION_ERROR",
+    });
+    expect(listCatalogCategories).toHaveBeenCalledTimes(1);
   });
 
   test("passes validated mutations and idempotency keys", async () => {

@@ -4,6 +4,7 @@ import { Errors } from "@/errors/error-factory";
 import {
   SupplierPurchaseBatchCancelSchema,
   SupplierPurchaseBatchCatalogQuerySchema,
+  SupplierPurchaseBatchCategoryOptionQuerySchema,
   SupplierPurchaseBatchCostCategoryQuerySchema,
   SupplierPurchaseBatchDraftSchema,
   SupplierPurchaseBatchItemListQuerySchema,
@@ -62,6 +63,18 @@ class SupplierPurchaseBatchesController extends TenantBaseController {
     );
     return ResponseHandler.success(
       await supplierPurchaseBatchesService.listCatalog(auth, query),
+    );
+  }
+
+  @Get("/supplier-purchase-batch-category-options")
+  async listCatalogCategories(request: FastifyRequest) {
+    const auth = await this.getRequiredTenantContext(request);
+    const query = this.parse(
+      SupplierPurchaseBatchCategoryOptionQuerySchema,
+      request.query,
+    );
+    return ResponseHandler.success(
+      await supplierPurchaseBatchesService.listCatalogCategories(auth, query),
     );
   }
 

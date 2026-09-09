@@ -136,6 +136,8 @@ export type BatchLine = {
   category_name?: string;
   supplier_name?: string;
   sku_code?: string;
+  unit_price?: string;
+  purchase_unit_name?: string;
 };
 export type BatchDraft = BatchDestination & {
   reason: string;

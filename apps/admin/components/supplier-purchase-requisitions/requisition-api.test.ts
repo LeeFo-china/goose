@@ -112,6 +112,23 @@ describe("采购申请 API 契约", () => {
     ]);
   });
 
+  test("所有采购申请读取请求都向 fetch 转发取消信号", async () => {
+    const calls = installSuccessFetch();
+    const controller = new AbortController();
+
+    await loadRequisitions(1, {}, controller.signal);
+    await loadRequisition("request-1", controller.signal);
+    await loadRequisitionItems("request-1", 1, 20, controller.signal);
+    await loadRequisitionProjects(1, "", controller.signal);
+    await loadRequisitionRelationships(1, "", controller.signal);
+    await loadRequisitionCatalog("relationship-1", 1, "", controller.signal);
+    await loadRequisitionCostCategories(1, controller.signal);
+
+    expect(calls).toHaveLength(7);
+    expect(calls.every(({ init }) => init?.signal === controller.signal))
+      .toBe(true);
+  });
+
   test("六类 mutation 使用 POST、冻结幂等键和严格 body", async () => {
     const calls = installSuccessFetch();
     const attempt = (scope: string): SupplierCommandAttempt => ({

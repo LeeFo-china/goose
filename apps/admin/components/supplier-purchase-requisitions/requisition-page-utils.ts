@@ -109,9 +109,9 @@ export function validateRequisitionDraft(
   }
   const reason = draft.reason.trim();
   if (!reason) {
-    errors.reason = "请填写临时采购原因";
+    errors.reason = "请选择或填写采购用途";
   } else if (reason.length > 500) {
-    errors.reason = "临时采购原因不能超过 500 个字符";
+    errors.reason = "采购用途不能超过 500 个字符";
   }
   if (draft.items.length === 0) {
     errors.items = "采购申请至少需要一行商品";

@@ -60,7 +60,7 @@ describe("采购申请页面规则", () => {
     });
   });
 
-  test("草稿要求项目、供应商、原因、分类和一至一百个唯一 SKU", () => {
+  test("草稿要求项目、供应商、采购用途、分类和一至一百个唯一 SKU", () => {
     expect(validateRequisitionDraft({
       projectId: "",
       tenantSupplierId: "",
@@ -70,7 +70,7 @@ describe("采购申请页面规则", () => {
     })).toEqual({
       projectId: "请选择项目",
       tenantSupplierId: "请选择合作供应商",
-      reason: "请填写临时采购原因",
+      reason: "请选择或填写采购用途",
       items: "采购申请至少需要一行商品",
     });
 
@@ -366,34 +366,33 @@ describe("采购申请页面边界", () => {
     const editorFields = readSource("./requisition-editor-fields.tsx");
     const editorLines = readSource("./requisition-editor-lines.tsx");
     const saveFlow = readSource("./use-requisition-draft-save.ts");
-    const editorSurface = editor + editorFields + editorLines + saveFlow;
+    const catalogFlow = readSource("./use-requisition-catalog.ts");
+    const editorSurface = editor + editorFields + editorLines +
+      readSource("./requisition-editor-workbench.tsx") +
+      readSource("./requisition-editor-parts.tsx") + saveFlow + catalogFlow;
     const api = readSource("./requisition-api.ts");
 
-    expect(editor).toContain("<SheetTitle>");
-    expect(editor).toContain("<SheetDescription>");
-    expect(editor).toContain("<SheetFooter");
-    expect(editorSurface).toContain("项目");
-    expect(editorSurface).toContain("合作供应商");
-    expect(editorSurface).toContain("成本分类");
+    expect(editorSurface).toContain("<ProcurementWorkbenchLayout");
+    expect(editorSurface).toContain("<ProcurementConfirmDialog");
+    expect(editor).toContain("setDirty(false)");
     expect(editorSurface).toContain("采购数量");
-    expect(editorSurface).toContain("临时采购原因");
+    expect(editorSurface).toContain("ProcurementPurposeField");
     expect(editorSurface).toContain("期望到货日期");
-    expect(editor).toContain("loadRequisitionCatalog");
+    expect(catalogFlow).toContain("loadRequisitionCatalog");
     expect(editor).toContain("onLoadMoreCostCategories");
     expect(saveFlow).toContain("resolveSupplierCommandAttempt");
     expect(saveFlow).toContain("allocateResourceId: true");
     expect(editor).toContain("draftRequestVersion");
-    expect(editor).toContain("catalogRequestVersion");
-    expect(editor).toContain("saving || attempt");
-    expect(editor).toContain("放弃本次重试并刷新");
-    expect(editor).toMatch(
-      /onSupplierChange=\{\(value\) => \{[\s\S]*?setCatalog\(emptyCatalog\)/,
-    );
+    expect(catalogFlow).toContain("requestVersion");
+    expect(editor).toContain("if (saving || attempt) return");
+    expect(editorSurface).toContain("放弃本次重试并刷新");
+    expect(editor).toContain("requestContextChange");
+    expect(editor).toContain("applyContextChange");
+    expect(editorSurface).toContain("更换采购范围？");
     expect(editor).toContain("quantity: item.quantity");
     expect(editor).not.toContain("quantity: Number(item.quantity)");
-    expect(editor).toContain(
-      '{ supplierSkuId, costCategoryId: "", quantity: "1" }',
-    );
+    expect(editor).toContain('costCategoryId: ""');
+    expect(editor).toContain('quantity: "1"');
     expect(editorLines).toContain('type="text"');
     expect(editorLines).toContain('inputMode="decimal"');
     expect(saveFlow).toContain("createRequisitionDraft");

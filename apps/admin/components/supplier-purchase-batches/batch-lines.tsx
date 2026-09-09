@@ -1,161 +1,221 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useId, useRef } from "react";
+import { Trash2 } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
+
+import { BatchCostCategoryPicker } from "./batch-cost-category-picker";
+import { batchMoney } from "./batch-page-parts";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { loadBatchCategories } from "./batch-api";
-import { BatchOptionPicker } from "./batch-option-picker";
+  batchLineReferenceMoney,
+  batchSelectionValidation,
+} from "./batch-rules";
 import type { BatchLine } from "./batch-types";
 
 export function BatchLines(
-  { lines, disabled, onChange }: {
+  { lines, disabled, recentlyAddedSkuId, onChange }: {
     lines: BatchLine[];
     disabled: boolean;
+    recentlyAddedSkuId?: string | null;
     onChange: (lines: BatchLine[]) => void;
   },
 ) {
-  const [categorySku, setCategorySku] = useState<string | null>(null);
-  const current = lines.find((line) => line.supplier_sku_id === categorySku);
+  const validationId = useId();
+  const recentlyAddedRow = useRef<HTMLElement | null>(null);
+  const validation = batchSelectionValidation(lines);
+
+  useEffect(() => {
+    if (!recentlyAddedSkuId || !recentlyAddedRow.current) return;
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")
+      .matches ?? false;
+    recentlyAddedRow.current.scrollIntoView({
+      block: "nearest",
+      behavior: reduceMotion ? "auto" : "smooth",
+    });
+  }, [recentlyAddedSkuId]);
+
   return (
-    <Card className="shadow-none">
-      <CardHeader>
-        <CardTitle className="text-base">
-          已选商品（{lines.length} / 100）
-        </CardTitle>
-        <p className="text-sm text-muted-foreground">
-          最多 20 家供应商。成本类目用于采购归类；仓库补货不占用项目预算。
-        </p>
-      </CardHeader>
-      <CardContent className="p-0">
-        {lines.length
-          ? (
-            <Table className="min-w-[640px]">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>商品 / 供应商</TableHead>
-                  <TableHead>采购数量</TableHead>
-                  <TableHead>成本类目</TableHead>
-                  <TableHead className="text-right">操作</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {lines.map((line) => (
-                  <TableRow key={line.supplier_sku_id}>
-                    <TableCell>
-                      <div>{line.name}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {line.supplier_name || "供应商已冻结"}
+    <div className="flex min-h-full flex-col bg-background">
+      <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-background px-4 py-3">
+        <div>
+          <h3 className="text-base font-semibold">已选商品</h3>
+          <p className="text-xs text-muted-foreground">
+            成本类目用于采购归类
+          </p>
+        </div>
+        <span className="text-sm font-medium tabular-nums">
+          {lines.length} / 100
+        </span>
+      </div>
+      {validation.list.length
+        ? (
+          <ul
+            role="alert"
+            className="space-y-1 border-b px-4 py-2 text-xs font-medium text-destructive"
+          >
+            {validation.list.map((message) => <li key={message}>{message}</li>)}
+          </ul>
+        )
+        : null}
+      {lines.length
+        ? (
+          <div className="min-w-0 divide-y">
+            {lines.map((line, index) => {
+              const lineValidation = validation.lines[index] ?? {};
+              const money = batchLineReferenceMoney(line);
+              const quantityErrorId = `${validationId}-${index}-quantity`;
+              const duplicateErrorId = `${validationId}-${index}-duplicate`;
+              const recentlyAdded = line.supplier_sku_id ===
+                recentlyAddedSkuId;
+              return (
+                <article
+                  key={`${line.supplier_sku_id}:${index}`}
+                  ref={recentlyAdded ? recentlyAddedRow : undefined}
+                  aria-describedby={lineValidation.duplicateSku
+                    ? duplicateErrorId
+                    : undefined}
+                  className={cn(
+                    "min-w-0 space-y-3 px-4 py-4 transition-colors duration-200 motion-reduce:transition-none",
+                    recentlyAdded &&
+                      "bg-primary/5 ring-1 ring-inset ring-primary/20",
+                  )}
+                >
+                  <div className="flex min-w-0 items-start gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <h4 className="break-words text-sm font-semibold leading-5">
+                          {line.name}
+                        </h4>
+                        {recentlyAdded
+                          ? (
+                            <span
+                              role="status"
+                              aria-live="polite"
+                              className="text-xs font-medium text-primary"
+                            >
+                              刚刚加入
+                            </span>
+                          )
+                          : null}
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        className="w-28"
-                        aria-label={`${line.name}采购数量`}
-                        inputMode="decimal"
-                        value={line.quantity}
+                      <p className="mt-1 break-words text-xs leading-5 text-muted-foreground">
+                        {line.supplier_name || "供应商已冻结"}
+                        {line.sku_code ? ` · SKU ${line.sku_code}` : ""}
+                      </p>
+                      {lineValidation.duplicateSku
+                        ? (
+                          <p
+                            id={duplicateErrorId}
+                            className="mt-1 text-xs font-medium text-destructive"
+                          >
+                            {lineValidation.duplicateSku}
+                          </p>
+                        )
+                        : null}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      disabled={disabled}
+                      aria-label={`移除${line.name}`}
+                      className="size-11 shrink-0 text-muted-foreground hover:text-destructive md:size-8"
+                      onClick={() =>
+                        onChange(lines.filter((item) => item !== line))}
+                    >
+                      <Trash2 className="size-4" aria-hidden="true" />
+                    </Button>
+                  </div>
+                  <div className="grid min-w-0 grid-cols-[minmax(7rem,0.8fr)_minmax(0,1.2fr)] items-start gap-3">
+                    <label className="min-w-0 space-y-1 text-xs font-medium">
+                      <span>采购数量</span>
+                      <div className="flex min-w-0 items-center gap-2">
+                        <Input
+                          className="min-w-0 tabular-nums"
+                          aria-label={`${line.name}采购数量`}
+                          aria-invalid={Boolean(lineValidation.quantity)}
+                          aria-describedby={lineValidation.quantity
+                            ? quantityErrorId
+                            : undefined}
+                          inputMode="decimal"
+                          value={line.quantity}
+                          disabled={disabled}
+                          onChange={(event) =>
+                            onChange(lines.map((item) =>
+                              item === line
+                                ? { ...item, quantity: event.target.value }
+                                : item
+                            ))}
+                        />
+                        <span className="shrink-0 font-normal text-muted-foreground">
+                          {line.purchase_unit_name || "单位"}
+                        </span>
+                      </div>
+                      {lineValidation.quantity
+                        ? (
+                          <p
+                            id={quantityErrorId}
+                            className="font-normal text-destructive"
+                          >
+                            {lineValidation.quantity}
+                          </p>
+                        )
+                        : null}
+                    </label>
+                    <div className="min-w-0 space-y-1 text-xs font-medium">
+                      <span>成本类目</span>
+                      <BatchCostCategoryPicker
+                        line={line}
+                        label={`${line.name}${
+                          line.sku_code ? ` · SKU ${line.sku_code}` : ""
+                        }`}
                         disabled={disabled}
-                        onChange={(event) =>
+                        onChange={(category) =>
                           onChange(lines.map((item) =>
                             item === line
-                              ? { ...item, quantity: event.target.value }
+                              ? {
+                                ...item,
+                                cost_category_id: category.id,
+                                category_name: category.name,
+                              }
                               : item
                           ))}
                       />
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={disabled}
-                        onClick={() => setCategorySku(line.supplier_sku_id)}
-                      >
-                        {line.cost_category_id
-                          ? line.category_name || "已选类目 · 更改"
-                          : "请选择成本类目"}
-                      </Button>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        disabled={disabled}
-                        onClick={() =>
-                          onChange(lines.filter((item) => item !== line))}
-                      >
-                        移除
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )
-          : (
-            <p className="p-5 text-sm text-muted-foreground">
-              从采购目录中选择商品后，填写数量和成本类目。
+                    </div>
+                  </div>
+                  <dl className="grid grid-cols-2 gap-3 text-xs">
+                    <div className="min-w-0">
+                      <dt className="text-muted-foreground">参考单价</dt>
+                      <dd className="mt-1 truncate font-medium tabular-nums">
+                        {money.unitPrice
+                          ? `${batchMoney(money.unitPrice)} / ${
+                            line.purchase_unit_name || "单位"
+                          }`
+                          : "—"}
+                      </dd>
+                    </div>
+                    <div className="min-w-0 text-right">
+                      <dt className="text-muted-foreground">估算小计</dt>
+                      <dd className="mt-1 truncate font-medium tabular-nums">
+                        {money.subtotal ? batchMoney(money.subtotal) : "—"}
+                      </dd>
+                    </div>
+                  </dl>
+                </article>
+              );
+            })}
+          </div>
+        )
+        : (
+          <div className="flex min-h-40 flex-1 items-center justify-center px-5 py-10 text-center">
+            <p className="text-sm text-muted-foreground">
+              从左侧商品目录加入商品
             </p>
-          )}
-      </CardContent>
-      <Dialog
-        open={Boolean(current)}
-        onOpenChange={(open) => {
-          if (!open) setCategorySku(null);
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>选择成本类目</DialogTitle>
-            <DialogDescription>
-              为当前商品选择有效的采购成本类目。
-            </DialogDescription>
-          </DialogHeader>
-          {current
-            ? (
-              <BatchOptionPicker
-                id="batch-cost-category"
-                label="成本类目"
-                value={current.cost_category_id
-                  ? {
-                    id: current.cost_category_id,
-                    name: current.category_name || "已选类目",
-                  }
-                  : null}
-                load={loadBatchCategories}
-                onChange={(category) => {
-                  onChange(lines.map((line) =>
-                    line === current
-                      ? {
-                        ...line,
-                        cost_category_id: category.id,
-                        category_name: category.name,
-                      }
-                      : line
-                  ));
-                  setCategorySku(null);
-                }}
-              />
-            )
-            : null}
-        </DialogContent>
-      </Dialog>
-    </Card>
+          </div>
+        )}
+    </div>
   );
 }

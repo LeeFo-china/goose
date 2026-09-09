@@ -1,53 +1,13 @@
+import { expect, test } from "@playwright/test";
+
 import {
-  type APIRequestContext,
-  expect,
-  type Page,
-  test,
-} from "@playwright/test";
+  batchBackend as backend,
+  openBatchPage as open,
+  startBatchDraft as newDraft,
+} from "./supplier-purchase-batch-workflow-helpers";
 import { ids } from "./supplier-purchase-batch-fixture.mjs";
 
 // Browser UI contract acceptance, not real backend integration.
-const backend = "http://127.0.0.1:3986";
-async function open(
-  page: Page,
-  request: APIRequestContext,
-  scenario = "empty",
-  role = "manager",
-  detail = false,
-) {
-  expect(
-    (await request.post(`${backend}/__test/reset?scenario=${scenario}`)).ok(),
-  ).toBe(true);
-  expect(
-    (await page.request.post("/api/auth/login", {
-      data: { phone: role, code: "" },
-    })).ok(),
-  ).toBe(true);
-  await page.goto(
-    `/supplier-purchase-batches${
-      detail ? `?purchase_batch_id=${ids.batch}` : ""
-    }`,
-  );
-}
-async function newDraft(page: Page, destination = "project") {
-  await page.getByRole("button", { name: "新建批次" }).click();
-  const editor = page.getByRole("dialog", { name: "新建采购批次" });
-  if (destination === "warehouse") {
-    await editor.getByRole("tab", { name: "仓库补货" }).click();
-    await expect(editor.getByLabel("启用仓库", { exact: true })).toContainText(
-      "补货仓22",
-    );
-  } else {
-    await editor.getByLabel("采购项目", { exact: true }).click();
-    await page.getByRole("option", { name: "采购项目01", exact: true }).click();
-  }
-  await editor.getByLabel("采购原因（必填）").fill("统一采购材料");
-  await editor.getByRole("row").filter({ hasText: "采购商品02" }).getByRole(
-    "button",
-    { name: "选择", exact: true },
-  ).click();
-  return editor;
-}
 test("异步项目选择不产生 React Portal 或控制台错误", async ({ page, request }) => {
   const errors: string[] = [];
   page.on("console", (message) => {
@@ -66,7 +26,7 @@ test("项目多供应商保存冻结金额与拆单预览，提交、撤回、�
   const editor = await newDraft(page);
   await editor.getByRole("row").filter({ hasText: "采购商品03" }).getByRole(
     "button",
-    { name: "选择", exact: true },
+    { name: "加入采购商品03", exact: true },
   ).click();
   await editor.getByRole("button", { name: "保存草稿", exact: true }).click();
   const detail = page.getByRole("dialog", { name: /采购批次 ·/ });
@@ -94,19 +54,21 @@ test("仓库补货自动查后页默认仓库，目录分页与无默认类目�
   const editor = await newDraft(page, "warehouse");
   await editor.getByRole("row").filter({ hasText: "采购商品01" }).getByRole(
     "button",
-    { name: "选择", exact: true },
+    { name: "加入采购商品01", exact: true },
   ).click();
   await editor.getByRole("button", { name: "保存草稿", exact: true }).click();
   await expect(editor.getByText("请为每个商品选择成本类目")).toBeVisible();
-  await editor.getByRole("button", { name: "请选择成本类目", exact: true })
+  await editor.getByRole("button", {
+    name: /采购商品01.*成本类目：选择成本类目/,
+  })
     .click();
-  const category = page.getByRole("dialog", { name: "选择成本类目" });
+  const category = page.getByRole("dialog", {
+    name: /采购商品01.*成本类目选择/,
+  });
   await category.getByRole("button", { name: "下一页", exact: true }).click();
   await category.getByLabel("成本类目", { exact: true }).click();
   await page.getByRole("option", { name: "材料类目23", exact: true }).click();
-  const catalog = editor.locator("div.rounded-lg").filter({
-    has: page.getByRole("heading", { name: "可采购商品" }),
-  }).first();
+  const catalog = editor.getByRole("region", { name: "可采购商品" });
   await catalog.getByRole("button", { name: "下一页", exact: true }).click();
   await expect(catalog.getByText("采购商品23 · 标准规格")).toBeVisible();
   await editor.getByRole("button", { name: "保存草稿", exact: true }).click();
@@ -316,6 +278,10 @@ test("键盘切换目的地清空旧商品，唯一仓库自动选择且零仓�
   const editor = await newDraft(page);
   await editor.getByRole("tab", { name: "项目采购" }).focus();
   await page.keyboard.press("ArrowRight");
+  await page.getByRole("alertdialog", { name: "更换采购范围？" }).getByRole(
+    "button",
+    { name: "清空并更换", exact: true },
+  ).click();
   await expect(editor.getByRole("tab", { name: "仓库补货" })).toHaveAttribute(
     "aria-selected",
     "true",
@@ -323,10 +289,12 @@ test("键盘切换目的地清空旧商品，唯一仓库自动选择且零仓�
   await expect(editor.getByLabel("启用仓库", { exact: true })).toContainText(
     "补货仓01",
   );
-  await expect(editor.getByRole("heading", { name: "已选商品（0 / 100）" }))
+  await expect(editor.getByRole("heading", { name: "已选商品" }))
     .toBeVisible();
   await editor.getByRole("button", { name: "关闭", exact: true }).last()
     .click();
+  await page.getByRole("alertdialog", { name: "放弃未保存的更改？" })
+    .getByRole("button", { name: "放弃更改", exact: true }).click();
   await request.post(`${backend}/__test/reset?scenario=no-warehouses`);
   await page.reload();
   await page.getByRole("button", { name: "新建批次" }).click();
@@ -358,6 +326,81 @@ test("开关或工作流关闭仅禁止新仓库补货，不隐藏历史；只�
     }),
   ).toHaveCount(0);
 });
+
+test(
+  "采购工作台在桌面与窄屏保持目录、上下文和保存入口可操作",
+  async ({ page, request }, testInfo) => {
+    await page.setViewportSize({ width: 1200, height: 768 });
+    await open(page, request);
+    const editor = await newDraft(page);
+    const catalog = editor.getByRole("region", { name: "可采购商品" });
+    const toolbar = editor.getByRole("search", { name: "商品目录工具栏" });
+    const desktopToolbar = await toolbar.boundingBox();
+    const desktopCatalog = await catalog.boundingBox();
+    expect(desktopToolbar).not.toBeNull();
+    expect(desktopCatalog).not.toBeNull();
+    expect(desktopToolbar!.height).toBeLessThan(desktopCatalog!.height);
+    expect(await toolbar.evaluate((node) => getComputedStyle(node).position))
+      .toBe("sticky");
+    await toolbar.getByRole("button", { name: "商品分类：全部分类" }).click();
+    await expect(page.getByRole("dialog", { name: "筛选商品分类" }))
+      .toBeVisible();
+    await page.keyboard.press("Escape");
+    await catalog.getByRole("row").filter({ hasText: "采购商品01" })
+      .getByRole("button", { name: "加入采购商品01", exact: true }).click();
+    await page.screenshot({
+      path: testInfo.outputPath("batch-workbench-1200x768.png"),
+    });
+
+    await page.setViewportSize({ width: 375, height: 812 });
+    expect(await toolbar.evaluate((node) => getComputedStyle(node).position))
+      .toBe("static");
+    const mobileToolbar = await toolbar.boundingBox();
+    const mobileCatalog = await catalog.boundingBox();
+    expect(mobileToolbar).not.toBeNull();
+    expect(mobileCatalog).not.toBeNull();
+    expect(mobileToolbar!.height).toBeLessThan(mobileCatalog!.height);
+    await catalog.getByRole("row").filter({ hasText: "采购商品03" })
+      .getByRole("button", { name: "加入采购商品03", exact: true }).click();
+    await expect(editor.getByRole("button", { name: /采购商品01.*成本类目：选择成本类目/ })).toHaveCount(1);
+    await expect(editor.getByRole("button", { name: /采购商品02.*成本类目：材料类目01/ })).toHaveCount(1);
+    await expect(editor.getByRole("button", { name: /采购商品03.*成本类目：材料类目01/ })).toHaveCount(1);
+    const firstCategoryTrigger = editor.getByRole("button", { name: /采购商品01.*成本类目：选择成本类目/ });
+    await firstCategoryTrigger.click();
+    const controlledDialogId = await firstCategoryTrigger.getAttribute("aria-controls");
+    expect(controlledDialogId).toBeTruthy();
+    const firstCategoryDialog = page.getByRole("dialog", { name: /采购商品01.*成本类目选择/ });
+    await expect(firstCategoryDialog).toHaveAttribute("id", controlledDialogId!);
+    await page.keyboard.press("Escape");
+    await expect(editor.getByRole("button", { name: "保存草稿", exact: true }))
+      .toBeInViewport();
+    await page.screenshot({
+      path: testInfo.outputPath("batch-workbench-375x812.png"),
+    });
+
+    await page.setViewportSize({ width: 375, height: 667 });
+    await editor.getByRole("button", { name: "其他", exact: true }).click();
+    await editor.getByPlaceholder("一句话说明采购用途").fill("临时采购");
+    await editor.getByRole("button", { name: /补充信息/ }).click();
+    await editor.getByPlaceholder("补充到货、搬运或现场要求").fill(
+      "到货前联系",
+    );
+    await expect(editor.getByRole("button", { name: "保存草稿", exact: true }))
+      .toBeInViewport();
+    const saveBox = await editor.getByRole("button", {
+      name: "保存草稿",
+      exact: true,
+    }).boundingBox();
+    expect(saveBox).not.toBeNull();
+    expect(saveBox!.y + saveBox!.height).toBeLessThanOrEqual(667);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+    ).toBe(true);
+    await page.screenshot({
+      path: testInfo.outputPath("batch-workbench-375x667-expanded.png"),
+    });
+  },
+);
 
 test(
   "目录快速搜索后的旧响应不会覆盖新商品；桌面与窄屏截图",

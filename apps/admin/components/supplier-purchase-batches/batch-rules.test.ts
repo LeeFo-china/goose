@@ -1,9 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import {
   batchAccess,
+  batchContextChangeRequiresConfirmation,
+  batchLineReferenceMoney,
+  batchSelectionValidation,
   changeDestination,
   draftPayload,
+  newBatchDraft,
   revisionDetails,
+  validateBatchDraft,
   warehouseCreationBlocker,
 } from "./batch-rules";
 import { findInitialWarehouse } from "./batch-warehouse-default";
@@ -20,6 +25,15 @@ const settings = {
   purchase_batch_workflow_enabled: true,
   warehouse_procurement_enabled: true,
 };
+const validLines = [{
+  supplier_sku_id: "sku",
+  quantity: "2.5",
+  cost_category_id: "category",
+  supplier_id: "supplier",
+  name: "瓷砖",
+  unit_price: "88.00",
+  purchase_unit_name: "箱",
+}];
 
 describe("batch creation permissions", () => {
   test("settings permission is independent, and its absence does not disable project creation", () => {
@@ -82,6 +96,142 @@ test("changing destination clears SKU quantities, category and stale server pric
   expect(changed.warehouse_id).toBeNull();
   expect(changed.lines).toEqual([]);
   expect(changed.reason).toBe("装修采购");
+});
+
+test("labels required reason as purchase purpose without changing payload", () => {
+  const draft = { ...newBatchDraft(), project_id: "project" };
+  expect(validateBatchDraft(draft)).toEqual({
+    message: "请选择或填写采购用途",
+    field: "reason",
+  });
+  const payload = draftPayload({
+    ...draft,
+    reason: " 项目备料 ",
+    lines: validLines,
+  }, 0);
+  expect(payload.reason).toBe("项目备料");
+  expect(payload.items).toEqual([{
+    supplier_sku_id: "sku",
+    quantity: "2.5",
+    cost_category_id: "category",
+  }]);
+  expect(payload).not.toHaveProperty("purpose");
+});
+
+test("requires confirmation only before changing a context with selected products", () => {
+  expect(batchContextChangeRequiresConfirmation(newBatchDraft())).toBe(false);
+  expect(batchContextChangeRequiresConfirmation({
+    ...newBatchDraft(),
+    lines: validLines,
+  })).toBe(true);
+});
+
+test("calculates line reference money with BigInt precision and preserves unknown prices", () => {
+  expect(batchLineReferenceMoney({
+    ...validLines[0],
+    quantity: "90071992547409.91",
+    unit_price: "1.00",
+  })).toEqual({
+    unitPrice: "1.00",
+    subtotal: "90071992547409.91",
+  });
+  expect(batchLineReferenceMoney({
+    ...validLines[0],
+    unit_price: undefined,
+  })).toEqual({ unitPrice: null, subtotal: null });
+});
+
+test("marks every duplicated SKU and keeps line and collection errors separate", () => {
+  const duplicated = batchSelectionValidation([
+    { ...validLines[0], quantity: "0" },
+    { ...validLines[0], supplier_sku_id: "SKU" },
+  ]);
+  expect(duplicated.lines).toEqual([
+    {
+      duplicateSku: "同一 SKU 不能重复添加",
+      quantity: "采购数量必须大于 0，最多 4 位小数",
+    },
+    { duplicateSku: "同一 SKU 不能重复添加" },
+  ]);
+  expect(duplicated.list).toEqual([]);
+
+  const overSupplierLimit = batchSelectionValidation(
+    Array.from({ length: 21 }, (_, index) => ({
+      ...validLines[0],
+      supplier_sku_id: `sku-${index}`,
+      supplier_id: `supplier-${index}`,
+    })),
+  );
+  expect(overSupplierLimit.list).toEqual([
+    "每批最多选择 20 家供应商",
+  ]);
+});
+
+test("returns field-aware validation for every batch draft boundary", () => {
+  const validDraft = {
+    ...newBatchDraft(),
+    project_id: "project",
+    reason: "项目备料",
+    lines: validLines,
+  };
+  expect(validateBatchDraft(validDraft)).toBeNull();
+  expect(validateBatchDraft({ ...validDraft, project_id: null })).toEqual({
+    message: "请先选择采购项目或仓库",
+    field: "destination",
+  });
+  expect(validateBatchDraft({
+    ...validDraft,
+    reason: ` ${"用".repeat(501)} `,
+  })).toEqual({
+    message: "采购用途不能超过 500 字",
+    field: "reason",
+  });
+  expect(validateBatchDraft({
+    ...validDraft,
+    remark: "注".repeat(501),
+  })).toEqual({ message: "备注不能超过 500 字", field: "remark" });
+  expect(validateBatchDraft({ ...validDraft, lines: [] })).toEqual({
+    message: "请选择 1–100 个商品 SKU",
+    field: "items",
+  });
+  expect(validateBatchDraft({
+    ...validDraft,
+    lines: Array.from({ length: 101 }, (_, index) => ({
+      ...validLines[0],
+      supplier_sku_id: `sku-${index}`,
+    })),
+  })).toEqual({
+    message: "请选择 1–100 个商品 SKU",
+    field: "items",
+  });
+  expect(validateBatchDraft({
+    ...validDraft,
+    lines: Array.from({ length: 21 }, (_, index) => ({
+      ...validLines[0],
+      supplier_sku_id: `sku-${index}`,
+      supplier_id: `supplier-${index}`,
+    })),
+  })).toEqual({ message: "每批最多选择 20 家供应商", field: "items" });
+  expect(validateBatchDraft({
+    ...validDraft,
+    lines: [validLines[0], {
+      ...validLines[0],
+      supplier_sku_id: "SKU",
+    }],
+  })).toEqual({ message: "同一 SKU 不能重复添加", field: "items" });
+  expect(validateBatchDraft({
+    ...validDraft,
+    lines: [{ ...validLines[0], cost_category_id: "" }],
+  })).toEqual({ message: "请为每个商品选择成本类目", field: "items" });
+  for (const quantity of ["0", "-1", "1.00000", "123456789012345"]) {
+    expect(validateBatchDraft({
+      ...validDraft,
+      lines: [{ ...validLines[0], quantity }],
+    })).toEqual({
+      message: "采购数量必须大于 0，最多 4 位小数",
+      field: "items",
+    });
+  }
 });
 
 test("save payload contains identity and quantities, never client commercial values", () => {

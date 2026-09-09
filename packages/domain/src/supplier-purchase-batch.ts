@@ -24,6 +24,11 @@ export const SUPPLIER_PURCHASE_BATCH_COMMAND_TYPE_VALUES = [
   "withdraw",
 ] as const;
 
+export const SUPPLIER_PURCHASE_PURPOSE_PRESETS = {
+  project: ["项目备料", "现场补料"],
+  warehouse: ["仓库补货"],
+} as const satisfies Record<"project" | "warehouse", readonly string[]>;
+
 export type SupplierPurchaseBatchStatus =
   (typeof SUPPLIER_PURCHASE_BATCH_STATUS_VALUES)[number];
 
@@ -32,3 +37,6 @@ export type SupplierPurchaseBatchCommandStatus =
 
 export type SupplierPurchaseBatchCommandType =
   (typeof SUPPLIER_PURCHASE_BATCH_COMMAND_TYPE_VALUES)[number];
+
+export type SupplierPurchasePurposePreset =
+  (typeof SUPPLIER_PURCHASE_PURPOSE_PRESETS)[keyof typeof SUPPLIER_PURCHASE_PURPOSE_PRESETS][number];

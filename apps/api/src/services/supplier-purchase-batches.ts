@@ -3,12 +3,13 @@ import { assertProcurementDestinationAccess, assertWarehouseProcurementEnabled, 
 import { supplierPurchaseBatchWorkflowRepository } from "@/repositories/supplier-purchase-batch-workflow";
 import { supplierPurchaseBatchesRepository } from "@/repositories/supplier-purchase-batches";
 import { workflowTaskRepository } from "@/repositories/workflow-tasks";
-import type { SupplierPurchaseBatchCancelInput, SupplierPurchaseBatchCatalogQuery, SupplierPurchaseBatchCostCategoryQuery, SupplierPurchaseBatchDraftInput, SupplierPurchaseBatchItemListQuery, SupplierPurchaseBatchListQuery, SupplierPurchaseBatchOrderListQuery, SupplierPurchaseBatchProjectOptionQuery, SupplierPurchaseBatchRequisitionListQuery, SupplierPurchaseBatchReviewInput, SupplierPurchaseBatchSubmitInput, SupplierPurchaseBatchWithdrawInput } from "@/schema/supplier-purchase-batches";
+import type { SupplierPurchaseBatchCancelInput, SupplierPurchaseBatchCatalogQuery, SupplierPurchaseBatchCategoryOptionQuery, SupplierPurchaseBatchCostCategoryQuery, SupplierPurchaseBatchDraftInput, SupplierPurchaseBatchItemListQuery, SupplierPurchaseBatchListQuery, SupplierPurchaseBatchOrderListQuery, SupplierPurchaseBatchProjectOptionQuery, SupplierPurchaseBatchRequisitionListQuery, SupplierPurchaseBatchReviewInput, SupplierPurchaseBatchSubmitInput, SupplierPurchaseBatchWithdrawInput } from "@/schema/supplier-purchase-batches";
 import type { AuthContext } from "@/services/authorization";
 import {
   deriveSupplierPurchaseBatchActions,
   supplierPurchaseBatchAccessService,
 } from "@/services/supplier-purchase-batch-access";
+import { supplierPurchaseBatchCatalogService } from "@/services/supplier-purchase-batch-catalog";
 import { resolveSupplierPurchaseBatchDraftCostCategories } from "@/services/supplier-purchase-batch-cost-category-resolution";
 import { resolveSupplierPurchaseBatchProjectOptionWindow } from "@/services/supplier-purchase-batch-project-option-window";
 import { assertLegacySupplierPurchaseBatchReviewSelf, assertSupplierPurchaseBatchReviewVersion, adaptWorkflowReviewResult, executeSupplierPurchaseBatchReview } from
@@ -17,7 +18,6 @@ import { supplierPurchaseBatchWorkflowRuntime } from "@/services/supplier-purcha
 import { workflowTaskSupplierPurchaseBatchBridge } from "@/services/workflow-task-supplier-purchase-batch-bridge";
 import { SupplierPurchaseBatchWorkflowProjectionService, supplierPurchaseBatchWorkflowProjectionService, type SupplierPurchaseBatchWorkflowProjectionDependencies } from "@/services/supplier-purchase-batch-workflow-projection";
 import { attachSupplierPurchaseBatchPagePersonnel, attachSupplierPurchaseBatchPersonnel, attachSupplierPurchaseOrderPagePersonnel, loadSupplierPurchaseBatchCurrentApprovers } from "@/services/supplier-purchase-personnel-projection";
-
 type BatchAccessPort = Pick<typeof supplierPurchaseBatchAccessService,
   "requireActorScope" | "requireView" | "requireManage" | "requireApprove" |
   "requireFinanceBudgetManage" | "getVisibleProjectIds" |
@@ -37,7 +37,6 @@ type BatchWorkflowTaskReadPort = Pick<
   typeof workflowTaskRepository,
   "listPendingBySubjectIds"
 >;
-
 export type SupplierPurchaseBatchesServiceDependencies = {
   destination?: ProcurementDestinationPort;
   access?: BatchAccessPort;
@@ -59,7 +58,6 @@ type ActorScope = {
   authUserId: string;
   employeeId: string;
 };
-
 export class SupplierPurchaseBatchesService {
   private readonly destination: ProcurementDestinationPort;
   private readonly access: BatchAccessPort;
@@ -270,6 +268,8 @@ export class SupplierPurchaseBatchesService {
         : {}),
     });
   }
+
+  listCatalogCategories(auth: AuthContext, query: SupplierPurchaseBatchCategoryOptionQuery) { return supplierPurchaseBatchCatalogService.listCategoryOptions(auth, query); }
 
   async saveDraft(
     auth: AuthContext,

@@ -7,6 +7,7 @@ import {
   project,
   projectOptions,
   relationship,
+  serviceAccess,
 } from "./supplier-purchase-requisition-mock-fixture.mjs";
 import {
   cancel,
@@ -216,6 +217,10 @@ const server = createServer(async (request, response) => {
     }
     if (request.method === "GET" && url.pathname === "/admin/auth/me") {
       return sendData(response, currentSession(state));
+    }
+    if (request.method === "GET" &&
+      url.pathname === "/employee/service-access") {
+      return sendData(response, serviceAccess);
     }
     if (request.method === "GET" &&
       url.pathname === "/supplier-purchase-requisition-project-options") {

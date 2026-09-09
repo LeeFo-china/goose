@@ -1,5 +1,22 @@
 export const now = "2026-07-30T10:00:00.000Z";
 
+export const serviceAccess = {
+  accessStatus: "workspace_available",
+  accessMode: "paid",
+  accessLevel: "read_write",
+  canEnterWorkspace: true,
+  readonly: false,
+  trialId: null,
+  trialStatus: null,
+  startsAt: null,
+  endsAt: null,
+  evaluatedAt: now,
+  title: "平台技术服务可用",
+  message: "当前企业可正常使用工作台。",
+  primaryAction: { key: "enter_workspace", label: "进入工作台" },
+  secondaryAction: null,
+};
+
 export const ids = {
   tenant: "34000000-0000-4000-8000-000000000001",
   requester: "34000000-0000-4000-8000-000000000002",

@@ -7,6 +7,7 @@ export default defineConfig({
   testDir: "./e2e",
   testMatch: [
     "supplier-purchase-batch-workflow.spec.ts",
+    "supplier-purchase-batch-workbench.spec.ts",
     "supplier-purchase-batch-recovery.spec.ts",
   ],
   timeout: 60_000,

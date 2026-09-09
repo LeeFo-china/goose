@@ -256,7 +256,6 @@ describe("SupplierPurchaseBatchesService reads", () => {
       page: 3,
       pageSize: 20,
     });
-
     expect(deps.access.requireView).toHaveBeenCalledTimes(1);
     expect(deps.access.requireManage).toHaveBeenCalledTimes(2);
     expect(deps.access.assertProjectUpdate).toHaveBeenCalledWith(

@@ -13,6 +13,10 @@ import { batchMoney } from "./batch-page-parts";
 import { draftError, newBatchDraft } from "./batch-rules";
 import type { BatchDetail as Detail } from "./batch-types";
 import { BatchRevisionNotice } from "./batch-revision-notice";
+import { BatchCatalogFilters } from "./batch-catalog-filters";
+import { BatchCatalogAddAction } from "./batch-catalog";
+import { BatchCostCategoryPicker } from "./batch-cost-category-picker";
+import { BatchEditorContext, BatchEditorFooter } from "./batch-editor-parts";
 
 test("revision notice identifies the frozen revision version, not the latest batch version", () => {
   const html = renderToStaticMarkup(
@@ -114,5 +118,236 @@ test("missing default cost category is actionable and blocks save", () => {
     renderToStaticMarkup(
       <BatchLines lines={lines} disabled={false} onChange={() => {}} />,
     ),
-  ).toContain("请选择成本类目");
+  ).toContain("选择成本类目");
+});
+
+test("selected products stay visible in the workbench with unit and compact category action", () => {
+  const line = {
+    supplier_sku_id: "sku",
+    supplier_id: "supplier",
+    supplier_name: "建材供应商",
+    name: "瓷砖 · 米白 600×600",
+    sku_code: "SKU-001",
+    cost_category_id: "",
+    quantity: "2",
+    unit_price: "88.00",
+    purchase_unit_name: "箱",
+  };
+  const html = renderToStaticMarkup(
+    <BatchLines lines={[line]} disabled={false} onChange={() => {}} />,
+  );
+  expect(html).toContain("已选商品");
+  expect(html).toContain("1 / 100");
+  expect(html).toContain("建材供应商");
+  expect(html).toContain("SKU-001");
+  expect(html).toContain("箱");
+  expect(html).toContain("参考单价");
+  expect(html).toContain("¥88.00 / 箱");
+  expect(html).toContain("估算小计");
+  expect(html).toContain("¥176.00");
+  expect(html).toContain("选择成本类目");
+
+  const empty = renderToStaticMarkup(
+    <BatchLines lines={[]} disabled={false} onChange={() => {}} />,
+  );
+  expect(empty).toContain("从左侧商品目录加入商品");
+});
+
+test("selected lines expose local errors and recent-add feedback without motion dependency", () => {
+  const line = {
+    supplier_sku_id: "sku",
+    supplier_id: "supplier",
+    supplier_name: "建材供应商",
+    name: "瓷砖",
+    sku_code: "SKU-001",
+    cost_category_id: "category",
+    category_name: "主材",
+    quantity: "0",
+    unit_price: "88.00",
+    purchase_unit_name: "箱",
+  };
+  const html = renderToStaticMarkup(
+    <BatchLines
+      lines={[line, { ...line, supplier_sku_id: "SKU" }]}
+      disabled={false}
+      recentlyAddedSkuId="sku"
+      onChange={() => {}}
+    />,
+  );
+  expect(html).toContain('aria-invalid="true"');
+  expect(html).toContain("采购数量必须大于 0，最多 4 位小数");
+  expect(html.match(/同一 SKU 不能重复添加/g)?.length).toBe(2);
+  expect(html).toContain("刚刚加入");
+  expect(html).toContain('aria-live="polite"');
+  expect(html).toContain("motion-reduce:transition-none");
+
+  const collectionError = renderToStaticMarkup(
+    <BatchLines
+      lines={Array.from({ length: 21 }, (_, index) => ({
+        ...line,
+        supplier_sku_id: `sku-${index}`,
+        supplier_id: `supplier-${index}`,
+        quantity: "1",
+      }))}
+      disabled={false}
+      onChange={() => {}}
+    />,
+  );
+  expect(collectionError).toContain("每批最多选择 20 家供应商");
+  expect(collectionError).toContain('role="alert"');
+});
+
+test("unknown catalog prices stay visibly unknown", () => {
+  const html = renderToStaticMarkup(
+    <BatchLines
+      lines={[{
+        supplier_sku_id: "sku",
+        supplier_id: "supplier",
+        name: "瓷砖",
+        cost_category_id: "category",
+        quantity: "1",
+      }]}
+      disabled={false}
+      onChange={() => {}}
+    />,
+  );
+  expect(html.match(/—/g)?.length).toBe(2);
+});
+
+test("cost category picker exposes a warning-labelled popover trigger", () => {
+  const line = {
+    supplier_sku_id: "sku",
+    supplier_id: "supplier",
+    name: "瓷砖",
+    cost_category_id: "",
+    quantity: "1",
+  };
+  const html = renderToStaticMarkup(
+    <BatchCostCategoryPicker
+      line={line}
+      label="瓷砖 · SKU SKU-001"
+      disabled={false}
+      onChange={() => {}}
+    />,
+  );
+  expect(html).toContain("选择成本类目");
+  expect(html).toContain("尚未选择成本类目");
+  expect(html).toContain('aria-haspopup="dialog"');
+  expect(html).toContain(
+    'aria-label="瓷砖 · SKU SKU-001的成本类目：选择成本类目"',
+  );
+  expect(html).toContain("min-h-11");
+});
+
+test("multiple category pickers keep product-specific accessible names and ids", () => {
+  const line = {
+    supplier_sku_id: "sku",
+    supplier_id: "supplier",
+    name: "瓷砖",
+    cost_category_id: "",
+    quantity: "1",
+  };
+  const html = renderToStaticMarkup(
+    <>
+      <BatchCostCategoryPicker
+        line={line}
+        label="瓷砖 · SKU SKU-001"
+        disabled={false}
+        onChange={() => {}}
+      />
+      <BatchCostCategoryPicker
+        line={{ ...line, supplier_sku_id: "sku-2", name: "木工板" }}
+        label="木工板 · SKU SKU-002"
+        disabled={false}
+        onChange={() => {}}
+      />
+    </>,
+  );
+  expect(html).toContain("瓷砖 · SKU SKU-001的成本类目");
+  expect(html).toContain("木工板 · SKU SKU-002的成本类目");
+  const ids = [...html.matchAll(/ id="([^"]+)"/g)].map((match) => match[1]);
+  expect(new Set(ids).size).toBe(ids.length);
+});
+
+test("catalog filters expose controlled category and supplier reset actions", () => {
+  const html = renderToStaticMarkup(
+    <BatchCatalogFilters
+      value={{
+        category: { id: "category", name: "主材" },
+        supplier: { id: "supplier", name: "建材供应商" },
+      }}
+      disabled={false}
+      onChange={() => {}}
+    />,
+  );
+
+  expect(html).toContain("商品分类");
+  expect(html).toContain("供应商");
+  expect(html).toContain('aria-label="商品分类：主材"');
+  expect(html).toContain('aria-label="供应商：建材供应商"');
+  expect(html).toContain('aria-label="清除商品分类筛选"');
+  expect(html).toContain('aria-label="清除供应商筛选"');
+  expect(html).not.toContain("搜索商品分类");
+});
+
+test("editor context is bounded on mobile and footer actions remain compact", () => {
+  const context = renderToStaticMarkup(
+    <BatchEditorContext
+      draft={{ ...newBatchDraft(), project_id: "project" }}
+      project={{ id: "project", name: "采购项目" }}
+      warehouse={null}
+      warehouseBlocker={null}
+      disabled={false}
+      validation={null}
+      onDestinationChange={() => {}}
+      onProjectChange={() => {}}
+      onWarehouseChange={() => {}}
+      onReasonChange={() => {}}
+      onDeliveryDateChange={() => {}}
+      onRemarkChange={() => {}}
+    />,
+  );
+  expect(context).toContain("max-h-[min(14rem,40dvh)]");
+  expect(context).toContain("overflow-y-auto");
+  expect(context).toContain("lg:grid-cols-");
+  expect(context).toContain("min-h-11");
+
+  const footer = renderToStaticMarkup(
+    <BatchEditorFooter
+      summary={{
+        itemCount: 1,
+        supplierCount: 1,
+        missingCategoryCount: 0,
+        referenceAmount: "88.00",
+      }}
+      loading={false}
+      disabled={false}
+      destinationReady
+      commandBusy={false}
+      hasPendingCommand={false}
+      canRetry={false}
+      onClose={() => {}}
+      onRetry={() => {}}
+      onSave={() => {}}
+    />,
+  );
+  expect(footer).toContain("保存草稿");
+  expect(footer).toContain("min-h-11");
+});
+
+test("catalog limit reasons remain visible beside an unfocusable disabled action", () => {
+  const html = renderToStaticMarkup(
+    <BatchCatalogAddAction
+      productName="瓷砖"
+      selected={false}
+      disabled={true}
+      disabledReason="每个批次最多选择 100 个 SKU"
+      onAdd={() => {}}
+    />,
+  );
+
+  expect(html).toContain("每个批次最多选择 100 个 SKU");
+  expect(html).toContain("aria-describedby=");
+  expect(html).toContain('disabled=""');
+  expect(html).not.toContain("title=");
 });
