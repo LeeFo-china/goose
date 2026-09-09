@@ -70,4 +70,3 @@ BEGIN
 END;
 $verify$;
 SELECT 'PASS full-schema exact migration: four audit/deletes, other warehouses and nonempty facts unchanged' AS result;
-
