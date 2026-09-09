@@ -59,3 +59,15 @@ bun scripts/verify-warehouse-stage-b-database.ts scripts/fixtures/warehouse-stag
 最新只读preapply.json记录Local610/Remote605、五项pending及库存/财务/授权基线；仍无任何远端写入。新固定候选分支计划为`release/warehouse-stocktake-admin-dev-20260909`，不移动D1分支。
 
 固定DEV plan/apply、完整migration list对齐、API/Admin开发发布及Chrome盘盈/盘亏业务恢复验收尚待完成。Chrome标签可列出，但DOM读取及claim均超时，已向用户请求将验收页切到前台并确认扩展提示；尚未因此进行业务写入。D2.2手工调整不在本批。
+
+## 19:31 CST：DEV迁移已应用，发布进行中
+
+固定候选`release/warehouse-stocktake-admin-dev-20260909` → `daee511b352d8bead83327ca286a538ebc97322e`，已连同feature推送；main与D1固定分支未移动。
+
+- [DEV plan 34345780164](https://github.com/LeeFo-china/goose/actions/runs/34345780164)成功，605→605，恰好五项pending、applied0。
+- [DEV apply 34345868138](https://github.com/LeeFo-china/goose/actions/runs/34345868138)成功，605→610，应用且仅应用`20260909064815 / 20260909080239 / 20260909085915 / 20260909085927 / 20260909111954`。
+- fresh `supabase migration list`退出0，完整610行保存于`2026-09-09-warehouse-stocktake-admin-migration-list.txt`；`node scripts/verify-migration-history.mjs <该文件> supabase/migrations 20260909111954`退出0，两个校验字段true。
+- guarded只读postapply.json：3个盘点表、2项权限定义；目标角色仅manage/approve all，目标员工SQL helper均true。非目标1595行授权、34行员工角色、6行override及晴天9类业务/财务摘要逐项count/md5不变。库存仍公司仓1箱/88元/version6、分仓0/0/version3；配置version22，所有旧字段未变，新盘点flag=false。
+- [DEV release 34345983716](https://github.com/LeeFo-china/goose/actions/runs/34345983716)已提交`service=api,admin`、`operation=release`，同一固定SHA；本节写入时仍进行中，尚不宣称服务部署完成。
+
+以上完成了apply和历史对齐门禁，取代前文对应“待完成”状态；真实Chrome业务验收仍未执行。
