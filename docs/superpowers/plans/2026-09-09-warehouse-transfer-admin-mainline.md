@@ -40,5 +40,7 @@
 - [x] 先运行上述测试，确认缺少注册及系统管理员 403 的 RED；API 测试前确保 Domain dist 为当前源码构建。
 - [x] 仅修改 `packages/domain/src/permission.ts`，在值数组和配置中加入 `inventory.transfer.manage`（管理仓库调拨）及 `inventory.transfer.approve`（确认仓库调拨），配置 module=inventory、resource=transfer、action=manage/approve，与数据库一致。
 - [x] 运行 Domain build/permission tests、API typecheck/受影响授权与调拨测试、Admin check/相关权限组件测试；静态通过后串行运行调拨 E2E。独立 SPEC 后 quality 审查。
-- [ ] 固定新提交及唯一 release 分支。重查远端 main、DEV 容器、活动 workflow、migration 对齐与只读业务基线，通过既有 `release-dev.yml` 的 `service=api,admin` 发布 DEV。核对 workflow、容器 revision/digest、健康。回滚仅重发已记录的前版本，不回滚业务数据。
+- [x] 固定新提交及唯一 release 分支。重查远端 main、DEV 容器、活动 workflow、migration 对齐与只读业务基线，通过既有 `release-dev.yml` 的 `service=api,admin` 发布 DEV。核对 workflow、容器 revision/digest、健康。回滚仅重发已记录的前版本，不回滚业务数据。
 - [ ] 回到 Task 3；正常 Chrome 登录，不读取凭证、不手工赋权。只有真实正向/反向调拨、库存价值守恒、财务隔离及关闭开关通过后，才标记 D1 完成并进入 D2。
+
+Task 4发布结果：候选 `240e7a78` / run `34307897288` 成功，API/Admin实际容器revision/digest/健康及API加载权限均已核验；发布前后业务摘要一致。短信已发送一次，Chrome仍待用户完成正常平台登录。D1真实验收未完成，D2未进入；详见 `docs/operations/evidence/2026-09-09-warehouse-transfer-permissions-release.md`。

@@ -29,3 +29,16 @@
 - Chrome已正常连接，DEV平台登录页已向用户提供的账号发送一次验证码，页面明确提示「验证码已发送」。未提交验证码或登录，未启用调拨开关、创建仓库或调拨单。
 - 等待用户验证码或正常登录后，继续指定租户既有员工的正向/反向调拨、数量价值守恒及财务隔离验证，结束关闭测试开关。
 - D1真实闭环尚未通过，不标记D1完成，不进入D2。
+
+## 发布结果
+
+- 固定候选 `240e7a7835eadc8b8bf38faecdf71f3967fd82f2`（含修复及发布前证据），唯一固定分支 `release/warehouse-transfer-permissions-dev-20260909`；旧固定分支未移动。
+- [Release Dev 34307897288](https://github.com/LeeFo-china/goose/actions/runs/34307897288)，输入 `service=api,admin operation=release`。`gh run watch --exit-status` 返回0；构建、迁移校验、API部署、Admin部署及最终汇总均success。其他服务未部署。
+- 同次 migration evidence 下载后通过 `verify-dev-migration-evidence.mjs`；API/Admin 镜像 manifest 中 SHA、run id、digest 与守卫主机实际容器完全一致。
+- API running/healthy，revision `240e7a78`，run `34307897288`，digest `sha256:ab6ce01208c050bbe1f382d82e645823d6ce45401b5ab07e514e924cc3d4e985`。
+- Admin running/healthy，同 revision/run，digest `sha256:895935fcc35b7a477f786e545e70d645be04621a76e9bac4776f86f7bb349449`。
+- API容器内只读导入 `@gooes/domain`，两项调拨权限 registered 均 true、配置与修复一致。API根路径、Admin登录页均 HTTP200；这不替代有身份的业务验收。
+- `2026-09-09T03:47:19Z` 发布后只读检查：十组业务count/md5与发布前完全一致（`business_facts_identical=true`），历史仍604、最新 `20260908235954`、无锁等待/长事务。见 `2026-09-09-warehouse-transfer-permissions-after.json`。
+- 磁盘84%，可用10,208,403,456 bytes；未清理数据或镜像。远端main仍43cb38bf，功能分支未合并main，后续main自动发布存在覆盖风险，需在新批次发布前重查。
+- Chrome最后复核仍为平台登录页、验证码为空。仅发送一次验证码，不反复发送，不读取任何凭证或绕过短信。需用户正常完成登录后继续真实验收；这不是待批准的权限请求。
+- 已增加并成功执行只读 `2026-09-09-warehouse-transfer-acceptance-readonly.sql`：限定测试租户/SKU、详情最多20条，包含两种合法调拨来源及成对数量/价值守恒检查。旧发布基线查询的 `invalid_existing_sources` 不含调拨类型，真实调拨后不能误用该旧字段判失败。
