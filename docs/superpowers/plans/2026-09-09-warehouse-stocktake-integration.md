@@ -81,17 +81,18 @@ test('registers all stocktake endpoints', async () => {
 
 ## Task 3: 库存来源与平台开关
 
-文件：`apps/api/src/repositories/inventory.ts`及test；新 CLI migration `warehouse_stocktake_inventory_sources`、`warehouse_stocktake_rollout_command`；fixtures `stocktake-inventory-sources.sql`、`stocktake-rollout-before.sql`、`stocktake-rollout.sql`；runner添加精确 prefixture hook。修改API `schema/platform-suppliers.ts`、`services/supplier-rollout-settings.ts`、`services/platform-suppliers.ts`、`repositories/platform-supplier-settings-command.ts`、`platform-supplier-records.ts`、`platform-suppliers.ts`及第二处真实settingsselect；对应regression tests。无Admin改动。
+文件：`apps/api/src/repositories/inventory.ts`及test；新 CLI migration `warehouse_stocktake_inventory_sources`、`warehouse_stocktake_rollout_command`；fixtures `stocktake-inventory-sources.sql`、`stocktake-rollout-before.sql`、`stocktake-rollout.sql`；runner添加精确 prefixture hook。修改API `schema/platform-suppliers.ts`、`services/supplier-rollout-settings.ts`、`services/platform-suppliers.ts`、`services/platform-supplier-service-utils.ts` 的真实audit状态投影、`repositories/platform-supplier-settings-command.ts`、`platform-supplier-records.ts`、`platform-suppliers.ts`及第二处真实settingsselect；对应regression tests。无Admin改动。
 
-- [ ] 测试先行加入盘点来源两方向、畸形/混合/错误类型及老receipt/issue/return/transfer/adjustment兼容；显式开关走JSON、缺省走原typed、历史回执缺字段保持不变、module-only依赖、字段省略保留。运行目标Bun测试确认预期RED。
-- [ ] source_document增加strict `{stocktake_order_id:uuid,stocktake_order_no:string}`；stocktake source只允许adjustment_in/out，非stocktake source不接受stocktake document，null只允许匹配类型。SQL参考D1唯一anchor替换，页后JOIN完成order+item+同tenant/warehouse/SKU+正确difference方向，保留ACL/config。
-- [ ] rollout测试先用历史typed/JSON命令产生真实receipt并存payload/receipt；runner在 `20260909064815_warehouse_stocktake_atomic_commands.sql` 前执行before fixture（早于新增盘点列，旧回执中该字段确实缺失），只在参数包含post fixture时触发。前置夹具断言列和回执字段均不存在；后置夹具验证扩列和core扩展后的旧回放。新SQL patch已有私有core的7个唯一片段：变量、白名单、boolean flags、行锁后省略值/依赖、insert列、insert值、update。不可改变旧fingerprint或wrapper签名。
-- [ ] TS新字段可选boolean；effective=module_enabled && field===true；current merge保留省略；command JSON分支条件加 `input.warehouse_stocktakes_enabled !== undefined`；旧typedbranch不动，旧response parser用 optional不default以保持receipt。
-- [ ] SQL验证版本/冲突/开关/依赖/错误类型/字段省略/真实旧回放及来源跨租户/关闭历史/页后有界；静态绿灯后运行 runner包括新fixtures与C/D1回归。
-- [ ] API typecheck、Domain build；自检并提交 `feat: integrate stocktake sources and rollout settings`。
+- [x] 盘点来源/有效开关先有目标Bun预期RED；其余兼容、显式JSON/原typed、省略/旧回执及完整SQL验收在实现复核时补入，顺序差异详见证据，不宣称全部先RED。最终全部要求通过SPEC与quality。
+- [x] source_document增加strict `{stocktake_order_id:uuid,stocktake_order_no:string}`；stocktake source只允许adjustment_in/out，非stocktake source不接受stocktake document，null只允许匹配类型。SQL参考D1唯一anchor替换，页后JOIN完成order+item+同tenant/warehouse/SKU+正确difference方向，保留ACL/config。
+- [x] rollout测试先用历史typed/JSON命令产生真实receipt并存payload/receipt；runner在 `20260909064815_warehouse_stocktake_atomic_commands.sql` 前执行before fixture（早于新增盘点列，旧回执中该字段确实缺失），只在参数包含post fixture时触发。前置夹具断言列和回执字段均不存在；后置夹具验证扩列和core扩展后的旧回放。新SQL patch已有私有core的7个唯一片段：变量、白名单、boolean flags、行锁后省略值/依赖、insert列、insert值、update。不可改变旧fingerprint或wrapper签名。
+- [x] TS新字段可选boolean；effective=module_enabled && field===true；current merge保留省略；command JSON分支条件加 `input.warehouse_stocktakes_enabled !== undefined`；旧typedbranch不动，旧response parser用 optional不default以保持receipt。
+- [x] 平台新命令audit的settingsState before/after包括盘点状态，重放仍跳过audit。该既有helper在父级全路径核查中补入范围，不改变旧SQL回执内容。
+- [x] SQL验证版本/冲突/开关/依赖/错误类型/字段省略/真实旧回放及来源跨租户/关闭历史/页后有界；静态绿灯后运行 runner包括新fixtures与C/D1回归。
+- [x] API typecheck、Domain build；自检并提交 `feat: integrate stocktake sources and rollout settings`。
 
 ## Final verification and handoff
 
-- [ ] 父代理刷新 Domain build/API typecheck/本批所有 Bun tests、SQL fixtures；结果记录到 `docs/operations/evidence/2026-09-09-warehouse-stocktake-integration.md`，说明SQLASCII/schema-only边界及没有DEV/UI验收。
-- [ ] 独立最终质量审查，核对安全/精度/历史读/幂等/性能和所有规格项；修复后复审。
-- [ ] 更新总体D2设计进度，git diff --check，提交证据，push当前开发分支。验证 clean HEAD=origin，固定release仍710b332282b2f10b2f561b20db197e5f39a8a6eb；不创建PR/merge/apply/真实授权。
+- [x] 父代理刷新 Domain build/API typecheck/本批所有 Bun tests、SQL fixtures；结果记录到 `docs/operations/evidence/2026-09-09-warehouse-stocktake-integration.md`，说明SQLASCII/schema-only边界及没有DEV/UI验收。
+- [x] 独立最终质量审查，核对安全/精度/历史读/幂等/性能和所有规格项；修复后复审。
+- [x] 更新总体D2设计进度，git diff --check，代码 e3766666 已push当前开发分支；证据随最终文档提交归档。交付前最后再次验证 clean HEAD=origin及固定release仍710b332282b2f10b2f561b20db197e5f39a8a6eb；不创建PR/merge/apply/真实授权。
