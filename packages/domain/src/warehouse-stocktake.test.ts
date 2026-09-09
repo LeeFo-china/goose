@@ -17,3 +17,13 @@ test('warehouse stocktake states, labels, and display actions are exported', asy
     cancelled: [],
   });
 });
+
+test('warehouse stocktake response contracts accept the real read-model shape', async () => {
+  const order: import('./warehouse-stocktake').WarehouseStocktakeOrder = {
+    id: 'id', tenant_id: 'tenant', warehouse_id: 'warehouse', order_no: 'WS-1', status: 'counting', version: 1,
+    reason: '盘点', created_by_employee_id: 'employee', updated_by_employee_id: 'employee', created_at: 'now',
+    updated_at: 'now', started_at: 'now', submitted_at: null, completed_at: null, cancelled_at: null,
+  };
+  const result: import('./warehouse-stocktake').WarehouseStocktakeCommandResult = { status: 'counting', order };
+  expect(result.order.started_at).toBe('now');
+});

@@ -126,6 +126,8 @@ describe("tenant service capability map", () => {
     ["HEAD", "/warehouses/:id", "read"],
     ["POST", "/warehouses", "write"],
     ["PATCH", "/warehouses/:id", "write"],
+    ["GET", "/warehouse-stocktakes", "read"],
+    ["POST", "/warehouse-stocktakes/:id/complete", "write"],
   ] as const)("classifies warehouse route %s %s as an independent procurement surface", async (
     method,
     url,
