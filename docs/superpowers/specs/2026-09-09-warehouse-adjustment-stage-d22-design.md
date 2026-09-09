@@ -2,7 +2,7 @@
 
 日期：2026-09-09。承接已验收D2.1，用户“执行”及此前统一常规确认授权用于本任务内的保守设计与分批实施；不扩大到生产、Orange、额外授权或直接修库。基线a09455c0，仍使用既有feature隔离工作树；D1/D2.1固定release分支不移动。
 
-首批进度：请求契约已实现（`19e64460`），Domain/API回归、类型及构建检查通过，详见[契约验证记录](../../operations/evidence/2026-09-09-warehouse-adjustment-contracts.md)。尚无数据库原子命令、HTTP接入、Admin或DEV发布，不代表D2.2完整功能已完成。
+实施进度：请求契约已实现（`19e64460`），详见[契约验证记录](../../operations/evidence/2026-09-09-warehouse-adjustment-contracts.md)；数据库四个原子命令及权限定义已实现（`4362ec06`），独立13个SQL夹具及Domain/API回归、类型、构建检查通过，详见[数据库验证记录](../../operations/evidence/2026-09-09-warehouse-adjustment-database.md)。尚无HTTP接入、Admin或DEV apply/发布，不代表D2.2完整功能已完成。下文保留首批设计范围，数据库细化见[数据库设计](2026-09-09-warehouse-adjustment-database-design.md)。
 
 ## 1. 范围与方案
 
@@ -10,7 +10,7 @@
 
 备选“直接填目标库存”会混淆盘点且易覆盖审批期间正常业务；备选“人工数量/金额/成本均可调”需要额外估价、金额调整和财务策略。本阶段均不采用。仓库既有“无需用户选择库存成本”及独立单据约定来自仓库采购MVP与D2.1设计；LightRAG本轮查询502，未取得额外历史依据。
 
-本轮仅交付状态、展示动作、Domain请求DTO和严格API输入schema；不注册HTTP端点、不加数据库对象/权限/开关、不开发Admin、不apply或发布。后续拆为数据库原子命令、API读取/命令接入、Admin与DEV验收三个批次，各有单独计划。当前无视觉布局决策，不开启可视化设计工具。
+首批仅交付状态、展示动作、Domain请求DTO和严格API输入schema；不注册HTTP端点、不加数据库对象/权限/开关、不开发Admin、不apply或发布。其后拆为数据库原子命令、API读取/命令接入、Admin与DEV验收三个批次，各有单独计划。当前无视觉布局决策，不开启可视化设计工具。
 
 ## 2. 状态与命令
 
