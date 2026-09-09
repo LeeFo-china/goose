@@ -1,5 +1,6 @@
 -- Independent backend transactions. B must wait on A before A may commit.
-CREATE FUNCTION public.stage_d_cross_schedule(p_a text,p_b text,p_early_commit boolean DEFAULT false)
+CREATE FUNCTION public.stage_d_cross_schedule(p_a text,p_b text,p_early_commit boolean DEFAULT false,
+  p_wait_for_timeout boolean DEFAULT false)
 RETURNS jsonb LANGUAGE plpgsql AS $$
 DECLARE a jsonb; b jsonb; a_pid integer; b_pid integer; deadline timestamptz;
   lock_evidence jsonb;
@@ -7,7 +8,8 @@ BEGIN
   PERFORM extensions.dblink_connect('cross-a','host=/tmp dbname=postgres user=postgres application_name=cross-a');
   PERFORM extensions.dblink_connect('cross-b','host=/tmp dbname=postgres user=postgres application_name=cross-b');
   PERFORM extensions.dblink_exec('cross-a','SET statement_timeout=''8s''');
-  PERFORM extensions.dblink_exec('cross-b','SET statement_timeout=''8s''');
+  PERFORM extensions.dblink_exec('cross-b',CASE WHEN p_wait_for_timeout THEN 'SET statement_timeout=''500ms'''
+    ELSE 'SET statement_timeout=''8s''' END);
   SELECT pid INTO a_pid FROM extensions.dblink('cross-a','SELECT pg_backend_pid()') AS t(pid integer);
   SELECT pid INTO b_pid FROM extensions.dblink('cross-b','SELECT pg_backend_pid()') AS t(pid integer);
   IF a_pid=b_pid OR pg_backend_pid() IN (a_pid,b_pid) THEN RAISE EXCEPTION 'Connections are not independent'; END IF;
@@ -30,6 +32,12 @@ BEGIN
     -- Poll actual lock state with a deadline; delay alone never qualifies as concurrency.
     PERFORM pg_sleep(0.01);
   END LOOP;
+  IF p_wait_for_timeout THEN
+    -- After observing B blocked by A, retain A's uncommitted business write.
+    -- The real B statement_timeout must escape dblink_get_result as 57014.
+    SELECT result INTO b FROM extensions.dblink_get_result('cross-b') AS t(result jsonb);
+    RAISE EXCEPTION 'Timeout control unexpectedly returned a result: %',b;
+  END IF;
   PERFORM extensions.dblink_exec('cross-a','COMMIT');
   SELECT result INTO STRICT b FROM extensions.dblink_get_result('cross-b') AS t(result jsonb);
   PERFORM * FROM extensions.dblink_get_result('cross-b') AS t(result jsonb);
@@ -37,7 +45,7 @@ BEGIN
   PERFORM extensions.dblink_disconnect('cross-a');
   PERFORM extensions.dblink_disconnect('cross-b');
   RETURN jsonb_build_object('a',a,'b',b,'lock',lock_evidence);
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN query_canceled OR OTHERS THEN
   -- Disconnect rolls back every still-open remote transaction, including B on
   -- the negative path. Re-raise the original error; never convert it to success.
   IF 'cross-a'=ANY(COALESCE(extensions.dblink_get_connections(),ARRAY[]::text[])) THEN
@@ -79,6 +87,41 @@ BEGIN
 END;
 $$;
 SELECT 'EVIDENCE cross-command negative control: A committed early; exact P9002 CROSS_COMMAND_EXPECTED_LOCK_WAIT; B rolled back; both connections closed; real reverse restored stock';
+
+CREATE TABLE public.stage_d_cross_timeout(a uuid,b uuid);
+INSERT INTO public.stage_d_cross_timeout VALUES(public.stage_d_transfer_prepare(false,'0.1'),public.stage_d_transfer_prepare(true,'0.1'));
+DO $$
+DECLARE n public.stage_d_cross_timeout%ROWTYPE; f public.stage_c_material_fixture%ROWTYPE;
+  rejected boolean:=false; started_at timestamptz:=clock_timestamp(); financial_before jsonb; balances_before jsonb;
+BEGIN
+  SELECT * INTO STRICT n FROM public.stage_d_cross_timeout;
+  SELECT * INTO STRICT f FROM public.stage_c_material_fixture;
+  financial_before:=public.stage_d_transfer_financial_snapshot(f.tenant_id);
+  SELECT jsonb_agg(to_jsonb(b) ORDER BY id) INTO balances_before FROM public.inventory_balances b WHERE tenant_id=f.tenant_id;
+  BEGIN
+    PERFORM public.stage_d_cross_schedule(format('SELECT public.stage_d_race_complete(%L)',n.a),
+      format('SELECT public.stage_d_race_complete(%L)',n.b),false,true);
+  EXCEPTION WHEN SQLSTATE '57014' THEN
+    IF SQLERRM<>'canceling statement due to statement timeout' THEN RAISE; END IF;
+    rejected:=true;
+  END;
+  IF NOT rejected THEN RAISE EXCEPTION 'Timeout control did not preserve original 57014'; END IF;
+  IF extensions.dblink_get_connections() IS NOT NULL THEN
+    RAISE EXCEPTION 'Timeout control leaked dblink connections after 57014';
+  END IF;
+  IF clock_timestamp()-started_at>=interval '8 seconds'
+    OR (SELECT count(*) FROM public.warehouse_transfer_orders WHERE id IN (n.a,n.b) AND status='submitted' AND version=2)<>2
+    OR EXISTS(SELECT 1 FROM public.warehouse_transfer_command_events WHERE order_id IN (n.a,n.b) AND command='complete')
+    OR EXISTS(SELECT 1 FROM public.warehouse_transfer_order_items WHERE transfer_order_id IN (n.a,n.b) AND amount IS NOT NULL)
+    OR EXISTS(SELECT 1 FROM public.inventory_transactions tx JOIN public.warehouse_transfer_order_items i
+      ON i.id=tx.source_id WHERE i.transfer_order_id IN (n.a,n.b))
+    OR public.stage_d_transfer_financial_snapshot(f.tenant_id) IS DISTINCT FROM financial_before
+    OR (SELECT jsonb_agg(to_jsonb(b) ORDER BY id) FROM public.inventory_balances b WHERE tenant_id=f.tenant_id) IS DISTINCT FROM balances_before THEN
+    RAISE EXCEPTION 'Timeout control exceeded deadline or failed to roll back uncommitted business writes';
+  END IF;
+END;
+$$;
+SELECT 'EVIDENCE cross-command timeout: observed B Lock before actual 500ms statement_timeout; original 57014 preserved; both connections closed; A and B business writes rolled back within 8s';
 
 CREATE FUNCTION public.stage_d_cross_assert_inventory(p_tenant uuid) RETURNS void LANGUAGE plpgsql AS $$
 BEGIN
