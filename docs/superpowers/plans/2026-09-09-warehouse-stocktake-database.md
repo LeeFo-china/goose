@@ -12,7 +12,7 @@
 
 文件：新migration `supabase/migrations/20260909064815_warehouse_stocktake_atomic_commands.sql`（CLI已生成空文件）；新 `scripts/fixtures/warehouse-stage-b/stocktake-contract.sql`、`stocktake-workflow.sql`、`stocktake-security.sql`、`stocktake-concurrency.sql`；改 `packages/domain/src/permission.ts`、`permission.test.ts`。不改既有migration、runner、角色默认权限、HTTP或Admin。
 
-- [ ] 先写契约SQL并跑真实RED。最小存在性断言：
+- [x] 先写契约SQL并跑真实RED。最小存在性断言：
 
 ```sql
 DO $$ BEGIN
@@ -27,20 +27,20 @@ END $$;
 
 运行 `bun scripts/verify-warehouse-stage-b-database.ts scripts/fixtures/warehouse-stage-b/stocktake-contract.sql`；期望恢复既有schema成功后明确missing table，非依赖或恢复错误。Domain权限测试先追加stocktake.manage/approve断言再执行 `bun test packages/domain/src/permission.test.ts`，期望缺失定义RED。
 
-- [ ] migration按设计创建三表/序号、复合FK、状态/有限numeric/原因/时间约束、索引、默认关闭开关及权限定义。orders(id,tenant_id,warehouse_id,status,version,reason,审计时间和员工)；items(id,tenant_id,stocktake_order_id,warehouse_id,line_no,sku,snapshot_at,book_balance_id/version/quantity/value/unit_cost,counted_quantity,difference_reason,difference_quantity,unit_cost,amount)；events沿用transfer的actor/key唯一回执。权限仅定义并同步Domain：
+- [x] migration按设计创建三表/序号、复合FK、状态/有限numeric/原因/时间约束、索引、默认关闭开关及权限定义。orders(id,tenant_id,warehouse_id,status,version,reason,审计时间和员工)；items(id,tenant_id,stocktake_order_id,warehouse_id,line_no,sku,snapshot_at,book_balance_id/version/quantity/value/unit_cost,counted_quantity,difference_reason,difference_quantity,unit_cost,amount)；events沿用transfer的actor/key唯一回执。权限仅定义并同步Domain：
 
 ```ts
 'inventory.stocktake.manage': {
-  name: '管理仓库盘点', module: 'inventory', resource: 'stocktake', action: 'manage',
+  label: '管理仓库盘点', module: 'inventory', resource: 'stocktake', action: 'manage',
 },
 'inventory.stocktake.approve': {
-  name: '确认仓库盘点', module: 'inventory', resource: 'stocktake', action: 'approve',
+  label: '确认仓库盘点', module: 'inventory', resource: 'stocktake', action: 'approve',
 },
 ```
 
 按permission.ts已安装实际定义补充其要求字段，不添加角色授权。
 
-- [ ] 先在workflow/security夹具写命令行为期望，再实现命令。签名和返回见设计，关键分支执行顺序固定：
+- [x] 先在workflow/security夹具写命令行为期望，再实现命令。签名和返回见设计，关键分支执行顺序固定：
 
 ```sql
 -- 幂等：身份/权限、严格payload、UTF8指纹、actor/key事务锁、已有回执匹配/返回。
@@ -70,13 +70,15 @@ v_amount := CASE WHEN v_difference=0 THEN 0
 
 SQL独立拒绝未知字段/数字JSON/非规范十进制/超100/重复SKU/空白原因，稳定WAREHOUSE_STOCKTAKE错误；禁止先numeric强转让精度静默舍入。新来源FK与触发器验证冻结差额/金额/成本及项目字段为空。RLS和函数ACL覆盖PUBLIC、anon、authenticated、service_role。
 
-- [ ] workflow测试复用material-workflow合成身份，在独立测试仓建立合成账实基线；覆盖盘盈、盘亏、清空尾差、零成本正库存、零库存盘盈拒绝、无差异不造流水/余额、分批未盘、注入第二条流水失败整体回滚、重放不重复、财务全快照隔离。security测试越权/跨租户/版本/开关/不可变/源绑定/payload边界。
-- [ ] concurrency复用现有dblink模式。A完成持事务，B异步命令；必须观察B wait_event_type=Lock再提交A。覆盖两单过时、同key重放、调拨和盘点正反竞争、不存在余额创建竞争和数量恢复但版本冲突；异常路径断开连接并无悬挂事务。不把串行负测记为真实竞争。
-- [ ] 依次执行SPEC审查、质量审查；修复后重跑，精确提交本单元文件，不混入主线程文档。
+- [x] workflow测试复用material-workflow合成身份，在独立测试仓建立合成账实基线；覆盖盘盈、盘亏、清空尾差、零成本正库存、零库存盘盈拒绝、无差异不造流水/余额、分批未盘、注入第二条流水失败整体回滚、重放不重复、财务全快照隔离。security测试越权/跨租户/版本/开关/不可变/源绑定/payload边界。
+- [x] concurrency复用现有dblink模式。A完成持事务，B异步命令；必须观察B wait_event_type=Lock再提交A。覆盖两单过时、同key重放、调拨和盘点正反竞争、不存在余额创建竞争和数量恢复但版本冲突；异常路径断开连接并无悬挂事务。不把串行负测记为真实竞争。
+- [x] 依次执行SPEC审查、质量审查；修复后重跑，精确提交本单元文件，不混入主线程文档。
 
 ## Task 2：主线程独立验证及收尾
 
-- [ ] 读取实际diff核对设计、来源约束、锁序及兼容性，不只信任实施报告。运行：
+最终实现 `d5a526dc`，初版 `8e2937ed`。SPEC发现的UUID/UTF16两个P2已用新增失败测试定位后修复，复审通过；后续独立质量审查无问题。主线程扩展为10个SQL夹具（加入原material-security/transfer-security）全部通过，5组实际Lock竞争及串行/超时负控通过；Domain23项/API41项、构建/typecheck通过。额外UTF8只读诊断80项trim、149项UUID、53项UTF16边界通过，不能替代未来UTF8真实业务/API验收。完整证据见 `../../operations/evidence/2026-09-09-warehouse-stocktake-database.md`。
+
+- [x] 读取实际diff核对设计、来源约束、锁序及兼容性，不只信任实施报告。运行：
 
 ```sh
 bun test packages/domain/src/permission.test.ts packages/domain/src/warehouse-stocktake.test.ts
@@ -89,5 +91,5 @@ bun scripts/verify-warehouse-stage-b-database.ts scripts/fixtures/warehouse-stag
 git diff --check
 ```
 
-- [ ] 写 `docs/operations/evidence/2026-09-09-warehouse-stocktake-database.md`，记录真实RED/GREEN、审查、未完成接入/发布及风险。更新本计划进度，提交文档、推送现有feature分支，保留worktree；不合并main、不移动D1固定release分支。
-- [ ] 不执行远端apply或开发发布。下一批有界读取/Domain响应/API兼容/开关配置；兼容完成并审查待执行migration后才可开发apply和migration list对齐验收。
+- [x] 写 `docs/operations/evidence/2026-09-09-warehouse-stocktake-database.md`，记录真实RED/GREEN、审查、未完成接入/发布及风险。更新本计划进度，提交文档、推送现有feature分支，保留worktree；不合并main、不移动D1固定release分支。
+- [x] 不执行远端apply或开发发布。下一批有界读取/Domain响应/API兼容/开关配置；兼容完成并审查待执行migration后才可开发apply和migration list对齐验收。
