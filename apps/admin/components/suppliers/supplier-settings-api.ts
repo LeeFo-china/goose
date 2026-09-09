@@ -12,6 +12,7 @@ export type PlatformModuleIntent = {
   warehouseProcurementEnabled?: boolean;
   warehouseMaterialsEnabled?: boolean;
   warehouseTransfersEnabled?: boolean;
+  warehouseStocktakesEnabled?: boolean;
   reason?: string;
 };
 
@@ -65,6 +66,9 @@ export function createPlatformSupplierSettingsRequest({
           intent.warehouseMaterialsEnabled ?? current.warehouse_materials_enabled ?? false,
         warehouse_transfers_enabled:
           intent.warehouseTransfersEnabled ?? current.warehouse_transfers_enabled ?? false,
+        // undefined is omitted for legacy reads; an explicit false remains false.
+        warehouse_stocktakes_enabled:
+          intent.warehouseStocktakesEnabled ?? current.warehouse_stocktakes_enabled,
         expected_version: current.version,
         ...(intent.reason ? { reason: intent.reason } : {}),
       }),

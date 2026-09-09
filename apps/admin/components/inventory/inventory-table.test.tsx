@@ -43,6 +43,24 @@ const common = {
   canViewPurchaseOrders: false,
 };
 
+test('盘盈盘亏来源链接只依赖库存查看，空来源不误入采购', () => {
+  for (const direction of ['adjustment_in', 'adjustment_out'] as const) {
+    const row = { ...transaction, transaction_type: direction, source_document: {
+      stocktake_order_id: 'stocktake-id', stocktake_order_no: 'PD001',
+    } };
+    const markup = renderToStaticMarkup(<InventoryTable {...common} canViewMaterials={false}
+      tab="transactions" balances={[]} transactions={[row]} />);
+    expect(markup).toContain('盘点单 PD001');
+    expect(markup).toContain('/warehouse-stocktakes?order_id=stocktake-id');
+    expect(markup).not.toContain('采购单');
+    expect(markup).not.toContain('undefined');
+    const missing = renderToStaticMarkup(<InventoryTable {...common} tab="transactions"
+      balances={[]} transactions={[{ ...row, source_document: null }]} />);
+    expect(missing).toContain('来源单据不可用');
+    expect(missing).not.toContain('undefined');
+  }
+});
+
 test('调拨两个方向显示调拨单链接，不依赖采购或项目权限', () => {
   for (const direction of ['transfer_out', 'transfer_in'] as const) {
     const row = { ...transaction, transaction_type: direction, source_document: {

@@ -305,6 +305,12 @@ export const tenantNavGroups: AdminMenuGroup[] = [
         icon: RefreshCw,
         permission: "inventory.stock.view",
       },
+      {
+        href: "/warehouse-stocktakes",
+        label: "仓库盘点",
+        icon: ClipboardCheck,
+        permission: "inventory.stock.view",
+      },
     ],
   },
   {
