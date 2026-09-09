@@ -1,0 +1,50 @@
+{
+  "release": {
+    "run_id": 34345983716,
+    "url": "https://github.com/LeeFo-china/goose/actions/runs/34345983716",
+    "status": "completed",
+    "conclusion": "success",
+    "completed_by": "2026-09-09T11:38:38Z",
+    "sha": "daee511b352d8bead83327ca286a538ebc97322e"
+  },
+  "services": [
+    {
+      "name": "/gooes-api-dev",
+      "state": "running",
+      "health": "healthy",
+      "revision": "daee511b352d8bead83327ca286a538ebc97322e",
+      "run_id": "34345983716",
+      "image": "useccr.ccs.tencentyun.com/america_goose/goose-api@sha256:8ed2ea5fe1aa7c2966d126631c0c10bce34e509c0412409ccde5db7921f96a32"
+    },
+    {
+      "name": "/gooes-admin-dev",
+      "state": "running",
+      "health": "healthy",
+      "revision": "daee511b352d8bead83327ca286a538ebc97322e",
+      "run_id": "34345983716",
+      "image": "useccr.ccs.tencentyun.com/america_goose/goose-admin@sha256:74eb583b8a5a9491bbffc393365aa9ac4e49c13e80bac7a25c85dbeae7e80555"
+    }
+  ],
+  "http_checks": [
+    "admin_login status=200 time=2.135098",
+    "api_root status=200 time=1.821910",
+    "{\"success\":false,\"message\":\"缺少登录凭证\",\"code\":\"TOKEN_MISSING\",\"requestId\":\"req-a\"}",
+    "stocktake_unauth status=401"
+  ],
+  "last_successful_inventory_settings_snapshot_at": "2026-09-09T11:30:46.825087+00:00",
+  "inventory_settings_snapshot_file": "2026-09-09-warehouse-stocktake-admin-postapply.json",
+  "business_authorization_hashes_rechecked_at": "2026-09-09T11:39:50.024994+00:00",
+  "business_authorization_hashes_unchanged": true,
+  "final_inventory_settings_reread": {
+    "status": "blocked",
+    "reason": "SSH banner: Exceeded MaxStartups; connection closed/reset before authentication. No server configuration changes.",
+    "returned_snapshot": false
+  },
+  "chrome": {
+    "status": "blocked",
+    "reason": "Tabs listing succeeds; DOM, visible DOM and claim timed out.",
+    "business_commands_sent": 0,
+    "inventory_tab_handoff": true
+  },
+  "scope": "DEV API/Admin only; live stocktake business acceptance incomplete; D2.2 manual adjustment not started"
+}

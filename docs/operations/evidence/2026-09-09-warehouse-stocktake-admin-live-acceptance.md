@@ -1,5 +1,7 @@
 # D2.1 盘点 Admin 与 DEV 验收记录
 
+最新结论：Admin实现、双重审核、92项本地页面回归、5项DEV apply、完整610项迁移对齐及API/Admin开发发布已完成。固定发布版本`daee511b`，实际双容器同SHA且healthy，外部入口200。Chrome真实盘盈/盘亏及业务反向恢复验收仍被页面控制超时阻断；最后一次库存/开关复读另遇SSH MaxStartups限制，不能将本记录标为D2.1完整验收。最近成功库存快照是19:30 CST，公司仓1箱/88元、分仓0/0、盘点false/version22。D2.2未开始。
+
 ## 进行中：只读预检
 
 用户已授权本批 Admin、apply、DEV发布与晴天租户验收，以及常规确认。2026-09-09 18:19–18:23 CST 预检；此节不表示已apply或已发布。
@@ -71,3 +73,13 @@ bun scripts/verify-warehouse-stage-b-database.ts scripts/fixtures/warehouse-stag
 - [DEV release 34345983716](https://github.com/LeeFo-china/goose/actions/runs/34345983716)已提交`service=api,admin`、`operation=release`，同一固定SHA；本节写入时仍进行中，尚不宣称服务部署完成。
 
 以上完成了apply和历史对齐门禁，取代前文对应“待完成”状态；真实Chrome业务验收仍未执行。
+
+## 发布最终结论与保留门禁
+
+[Release Dev 34345983716](https://github.com/LeeFo-china/goose/actions/runs/34345983716)最终completed/success，19:38 CST完成API/Admin部署、迁移证据门禁、顺序就绪门禁及发布摘要。独立SSH inspect核对两容器均running/healthy、revision均`daee511b352d8bead83327ca286a538ebc97322e`、run_id均34345983716；实际镜像digest分别API `8ed2ea5fe1aa7c2966d126631c0c10bce34e509c0412409ccde5db7921f96a32`、Admin `74eb583b8a5a9491bbffc393365aa9ac4e49c13e80bac7a25c85dbeae7e80555`。DEV磁盘9.2GB可用。curl的Admin登录200、API根200、盘点分页接口无登录401/TOKEN_MISSING，无业务写入。结构化结果见`2026-09-09-warehouse-stocktake-admin-release.json`。
+
+19:39:50 CST成功完成发布后只读财务/授权摘要复核：9类业务表count/md5、非目标role_permissions、employee_roles、employee_overrides与preapply完全一致。库存/配置的最后复读在SSH认证前被关闭，`ssh -v ... true`明确返回`Exceeded MaxStartups`；单独连接和等待后仍未取得该快照。未调整sshd、防火墙或安全上限，也未把连接失败当作数据库错误。库存/开关最新成功证据仍为19:30:46 postapply，不声称取得了19:39之后的余额快照。
+
+Chrome技能要求的session finalize已成功，将`盘点开发验收`组原库存标签作为handoff保留，未导航用户的抖音资料页。此前页面读取/claim多次超时，尚无新的页面控制成功证据，本轮Chrome发送业务命令0；没有创建真实盘点单，也没有需要反向恢复的本轮库存操作。等用户将验收页切前台、确认扩展控制并恢复连接后，重新读取最新设置/库存，再进行已授权的最小盘盈、盘亏、来源追溯与反向恢复。不得依据本地HTTP fixture通过而跳过该门禁或进入D2.2。
+
+本地最终相关74 tests/405 assertions再次通过，git diff/JSON/完整history验证通过。按已授权DEV发布方式保留feature及worktree，不合并main、不建PR、不移动固定release分支；只有发布后的证据文档继续落在feature。
