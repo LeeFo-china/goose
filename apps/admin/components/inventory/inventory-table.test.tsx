@@ -43,6 +43,21 @@ const common = {
   canViewPurchaseOrders: false,
 };
 
+test('调拨两个方向显示调拨单链接，不依赖采购或项目权限', () => {
+  for (const direction of ['transfer_out', 'transfer_in'] as const) {
+    const row = { ...transaction, transaction_type: direction, source_document: {
+      transfer_order_id: 'transfer-id', transfer_order_no: 'DB001',
+      source_warehouse_id: 'source-id', destination_warehouse_id: 'destination-id',
+    } };
+    const markup = renderToStaticMarkup(<InventoryTable {...common} canViewMaterials={false}
+      tab="transactions" balances={[]} transactions={[row]} />);
+    expect(markup).toContain('调拨单 DB001');
+    expect(markup).toContain('/warehouse-transfers?order_id=transfer-id');
+    expect(markup).not.toContain('supplier-purchase-orders');
+    expect(markup).not.toContain('undefined');
+  }
+});
+
 test('领退料来源按项目成本查看权限链接，不借用采购权限', () => {
   const row: InventoryTransaction = {
     ...transaction,
