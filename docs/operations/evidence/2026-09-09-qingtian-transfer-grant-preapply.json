@@ -1,0 +1,134 @@
+{
+  "roles": {
+    "target": {
+      "id": "e72850fe-dbba-427f-9109-f1779080a239",
+      "code": "system_admin",
+      "status": "active",
+      "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b",
+      "tenant_name": "固始晴天装饰工程有限公司",
+      "tenant_status": "active"
+    },
+    "checked_at": "2026-09-09T05:07:32.448709+00:00",
+    "employee_roles": {
+      "md5": "0b49e0a6393c9d2f228426aa27a16496",
+      "count": 34
+    },
+    "manage_allowed": false,
+    "approve_allowed": false,
+    "employee_overrides": {
+      "md5": "36b70b31a34f9434892036d5935b884f",
+      "count": 6
+    },
+    "target_role_grants": [],
+    "permission_helper_md5": "13517c88abd2190103aae0dc76517e0c",
+    "other_role_permissions": {
+      "md5": "97039e57a93b1bf8e27ea3ea4fe230d0",
+      "count": 1593
+    }
+  },
+  "business": {
+    "checked_at": "2026-09-09T05:07:32.546675+00:00",
+    "lock_waiters": 0,
+    "source_types": [
+      "supplier_purchase_receipt_item",
+      "warehouse_issue_item",
+      "warehouse_return_item"
+    ],
+    "history_count": 604,
+    "business_facts": {
+      "warehouses": {
+        "md5": "d979170cf33645f04454166a37058569",
+        "count": 2
+      },
+      "supplier_payments": {
+        "md5": "d41d8cd98f00b204e9800998ecf8427e",
+        "count": 0
+      },
+      "inventory_balances": {
+        "md5": "fb4e569539229781e4ec5111fa38eb7a",
+        "count": 1
+      },
+      "project_cost_events": {
+        "md5": "de288f3c65d5e387a4750387b7780ca4",
+        "count": 7
+      },
+      "finance_ledger_entries": {
+        "md5": "87db489033a31eec29a0cb9627bee1f2",
+        "count": 21
+      },
+      "inventory_transactions": {
+        "md5": "15385227e3631f2e07ede21dff8c35c1",
+        "count": 4
+      },
+      "warehouse_issue_orders": {
+        "md5": "b248de47e88c0c9f711d40268777eeee",
+        "count": 1
+      },
+      "supplier_payable_events": {
+        "md5": "a555c42133bf7a7975f3285f3a245b07",
+        "count": 5
+      },
+      "warehouse_return_orders": {
+        "md5": "f0dc564fbf021f6eec440e7ea87446a0",
+        "count": 2
+      },
+      "tenant_supplier_settings": {
+        "md5": "915b55ec9a4613f05b77db9b8a3f5785",
+        "count": 1
+      }
+    },
+    "history_latest": "20260908235954",
+    "transfer_objects": [
+      "warehouse_transfer_command_events",
+      "warehouse_transfer_order_items",
+      "warehouse_transfer_orders"
+    ],
+    "long_transactions": 0,
+    "transfer_permissions": 2,
+    "transfer_role_grants": 0,
+    "invalid_existing_sources": 0,
+    "transfer_employee_grants": 0
+  },
+  "stock": {
+    "settings": {
+      "version": 18,
+      "module_enabled": true,
+      "warehouse_transfers_enabled": false
+    },
+    "checked_at": "2026-09-09T05:07:34.123264+00:00",
+    "sku_totals": {
+      "value": 88,
+      "quantity": 1
+    },
+    "orders_total": 0,
+    "invalid_pairs": 0,
+    "orders_sample": null,
+    "commands_total": 0,
+    "warehouses_total": 2,
+    "warehouses_sample": [
+      {
+        "id": "7b5af333-fcdf-4f92-9ac2-1ccbc77bedce",
+        "name": "DEV 调拨验收分仓 20260909",
+        "status": "active",
+        "is_default": false
+      },
+      {
+        "id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+        "name": "公司仓库",
+        "status": "active",
+        "is_default": true
+      }
+    ],
+    "sku_balances_sample": [
+      {
+        "warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+        "inventory_value": 88,
+        "quantity_on_hand": 1,
+        "average_unit_cost": 88
+      }
+    ],
+    "unknown_source_types": 0,
+    "test_sku_transfer_facts": 0,
+    "test_sku_transfer_pairs": 0
+  }
+}
