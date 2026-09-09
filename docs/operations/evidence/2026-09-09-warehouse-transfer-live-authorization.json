@@ -1,0 +1,43 @@
+{
+  "actor": {
+    "id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826",
+    "status": "active",
+    "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b"
+  },
+  "roles": [
+    {
+      "id": "e72850fe-dbba-427f-9109-f1779080a239",
+      "code": "system_admin",
+      "status": "active",
+      "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b"
+    }
+  ],
+  "checked_at": "2026-09-09T04:39:30.501639+00:00",
+  "permissions": [
+    {
+      "code": "inventory.stock.view",
+      "status": "active",
+      "employee_allows": 0,
+      "employee_denies": 0,
+      "database_allowed": true,
+      "matching_role_grants": 1
+    },
+    {
+      "code": "inventory.transfer.approve",
+      "status": "active",
+      "employee_allows": 0,
+      "employee_denies": 0,
+      "database_allowed": false,
+      "matching_role_grants": 0
+    },
+    {
+      "code": "inventory.transfer.manage",
+      "status": "active",
+      "employee_allows": 0,
+      "employee_denies": 0,
+      "database_allowed": false,
+      "matching_role_grants": 0
+    }
+  ],
+  "database_helper": "CREATE OR REPLACE FUNCTION public.__gooes_has_tenant_procurement_permission(p_tenant_id uuid, p_employee_id uuid, p_permission_code text)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\n  SELECT EXISTS (\n    SELECT 1 FROM public.employees AS employee\n    JOIN public.permissions AS permission ON permission.code=p_permission_code AND permission.status='active'\n    WHERE employee.id=p_employee_id AND employee.tenant_id=p_tenant_id AND employee.status='active'\n      AND NOT EXISTS(SELECT 1 FROM public.employee_permission_overrides AS denied\n        WHERE denied.employee_id=employee.id AND denied.permission_id=permission.id AND denied.effect='deny')\n      AND (EXISTS(SELECT 1 FROM public.employee_permission_overrides AS allowed\n        WHERE allowed.employee_id=employee.id AND allowed.permission_id=permission.id AND allowed.effect='allow')\n        OR EXISTS(SELECT 1 FROM public.employee_roles AS binding\n          JOIN public.roles AS role ON role.id=binding.role_id AND role.status='active'\n            AND (role.tenant_id=p_tenant_id OR role.tenant_id IS NULL)\n          JOIN public.role_permissions AS granted ON granted.role_id=role.id AND granted.permission_id=permission.id\n          WHERE binding.employee_id=employee.id))\n  );\n$function$\n"
+}
