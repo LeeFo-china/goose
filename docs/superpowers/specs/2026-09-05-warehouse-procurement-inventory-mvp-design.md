@@ -6,7 +6,7 @@
 
 **范围：** Gooes API、Admin、Domain、Supabase migration 和对接文档；不改动 Orange 仓库
 
-**实施进度（2026-09-09）：** 项目领料/退料已通过[阶段C开发验收](../../operations/evidence/2026-09-09-warehouse-stage-c-dev-acceptance.md)，调拨已通过[晴天真实租户验收](../../operations/evidence/2026-09-09-warehouse-transfer-granted-live-acceptance.md)。盘点API/Admin、DEV apply/发布和晴天Chrome真实盘盈/反向盘亏验收已完成，公司仓恢复1箱/88元，开关恢复关闭，财务及非目标权限摘要不变；见[盘点最新记录](../../operations/evidence/2026-09-09-warehouse-stocktake-admin-live-acceptance.md)。手工调整D2.2已完成[首批请求契约](../../operations/evidence/2026-09-09-warehouse-adjustment-contracts.md)和[数据库原子命令隔离验证](../../operations/evidence/2026-09-09-warehouse-adjustment-database.md)，API接入/Admin及DEV apply/发布/真实验收待后续批次实施，阶段D整体尚未完成。下文保留原首期设计范围，不将领域预留值视为已开放功能，DEV验收不等同生产开放。
+**实施进度（2026-09-09）：** 项目领料/退料已通过[阶段C开发验收](../../operations/evidence/2026-09-09-warehouse-stage-c-dev-acceptance.md)，调拨已通过[晴天真实租户验收](../../operations/evidence/2026-09-09-warehouse-transfer-granted-live-acceptance.md)。盘点API/Admin、DEV apply/发布和晴天Chrome真实盘盈/反向盘亏验收已完成，公司仓恢复1箱/88元，开关恢复关闭，财务及非目标权限摘要不变；见[盘点最新记录](../../operations/evidence/2026-09-09-warehouse-stocktake-admin-live-acceptance.md)。手工调整D2.2已完成[首批请求契约](../../operations/evidence/2026-09-09-warehouse-adjustment-contracts.md)和[数据库原子命令隔离验证](../../operations/evidence/2026-09-09-warehouse-adjustment-database.md)，本轮已完成[DEV数据库apply与API/Admin发布](../../operations/evidence/2026-09-09-warehouse-adjustment-dev-release.md)，611/611迁移对齐，开关关闭且未新增授权；手工调整API接入/Admin及真实验收待后续批次实施，阶段D整体尚未完成。下文保留原首期设计范围，不将领域预留值视为已开放功能，DEV验收不等同生产开放。
 
 ## 1. 背景
 
