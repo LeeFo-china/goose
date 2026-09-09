@@ -22,6 +22,7 @@ export function parseStoredStocktakeCommand(raw: string): StocktakeCommand | nul
     const parts = command.path.split('/');
     if (
       parts.length !== 4 ||
+      parts[0] !== '' ||
       parts[1] !== 'warehouse-stocktakes' ||
       !stocktakeUuid.safeParse(parts[2]).success
     )
