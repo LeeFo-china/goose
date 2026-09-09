@@ -83,7 +83,7 @@ const InventoryTransactionRecordSchema = z.object({
   if (documentIsStocktake) return hasStocktakeSource && isStocktake;
   if (hasStocktakeSource) return false;
   return isTransfer === documentIsTransfer;
-}, { message: "调拨流水类型与来源单据不一致", path: ["source_document"] });
+}, { message: "库存流水类型与来源单据不一致", path: ["source_document"] });
 
 const InventoryBalancePageSchema = z.object({
   items: z.array(InventoryBalanceRecordSchema),

@@ -56,6 +56,13 @@ describe('InventoryRepository', () => {
         transaction_type, source_type, source_document }], total: 1, page: 1, page_size: 20 }, error: null }) });
       await expect(repository.listTransactions({ tenant_id: TENANT_ID, page: 1, pageSize: 20 })).rejects.toBeInstanceOf(AppError);
     }
+    const wrongType = new InventoryRepository({ rpc: async () => ({ data: { items: [{ ...TRANSACTION,
+      transaction_type: 'purchase_receipt', source_type: 'warehouse_stocktake_item',
+      source_document: STOCKTAKE_SOURCE_DOCUMENT }], total: 1, page: 1, page_size: 20 }, error: null }) });
+    await expect(wrongType.listTransactions({ tenant_id: TENANT_ID, page: 1, pageSize: 20 })).rejects.toMatchObject({
+      code: 'DB_ERROR',
+      details: expect.arrayContaining([expect.objectContaining({ message: '库存流水类型与来源单据不一致' })]),
+    });
   });
 
   test('allows unresolved matching stocktake and legacy adjustment sources', async () => {
