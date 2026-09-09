@@ -155,6 +155,11 @@ try {
   console.log(`PASS restored schema-only baseline ${baseline} (${versions.size} migrations)`);
   const fixtures = process.argv.slice(2).filter((arg) => !["--generate-material-types", "--material-api-smoke"].includes(arg));
   for (const name of pending) {
+    if (name === "20260908235654_warehouse_transfer_rollout_command.sql" &&
+      fixtures.includes("scripts/fixtures/warehouse-stage-b/transfer-rollout.sql")) {
+      sql(readFileSync("scripts/fixtures/warehouse-stage-b/transfer-rollout-before.sql", "utf8"));
+      console.log("PASS genuine pre-transfer rollout typed/JSON receipts saved before core extension");
+    }
     if (name === "20260908015230_create_warehouse_project_material_commands.sql" &&
       fixtures.includes("scripts/fixtures/warehouse-stage-b/material-rollout.sql")) {
       sql(readFileSync("scripts/fixtures/warehouse-stage-b/material-rollout-before.sql", "utf8"));

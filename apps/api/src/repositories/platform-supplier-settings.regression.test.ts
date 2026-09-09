@@ -108,6 +108,7 @@ describe("PlatformSuppliersRepository settings command", () => {
       "procurement_snapshot_v1_enabled",
       "purchase_batch_workflow_enabled",
       "warehouse_procurement_enabled",
+      "warehouse_transfers_enabled",
     ]) {
       expect(selectedColumns).toContain(flag);
     }

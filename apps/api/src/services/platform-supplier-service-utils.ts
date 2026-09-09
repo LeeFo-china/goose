@@ -140,6 +140,7 @@ export function settingsState(input: {
   purchase_batch_workflow_enabled: boolean;
   warehouse_procurement_enabled?: boolean;
   warehouse_materials_enabled?: boolean;
+  warehouse_transfers_enabled?: boolean;
   version: number;
 }) {
   return {
@@ -153,6 +154,7 @@ export function settingsState(input: {
     purchase_batch_workflow_enabled: input.purchase_batch_workflow_enabled,
     warehouse_procurement_enabled: input.warehouse_procurement_enabled ?? false,
     warehouse_materials_enabled: input.warehouse_materials_enabled ?? false,
+    warehouse_transfers_enabled: input.warehouse_transfers_enabled ?? false,
     version: input.version,
   };
 }

@@ -80,6 +80,35 @@ function auth(permissionCodes: string[], isPlatformAdmin = true): AuthContext {
 }
 
 describe("PlatformSuppliersService regression boundaries", () => {
+  test("transfer flag is forwarded and audited only by platform managers", async () => {
+    const { service, repository, audit } = await createHarness();
+    repository.getTenantSupplierSettings.mockImplementation(async () => ({ ...settings, module_enabled: true }));
+    const request = { ...settings, tenantId: TENANT_ID, module_enabled: true,
+      warehouse_transfers_enabled: true, expected_version: 1, idempotencyKey: "transfer-enable" };
+    for (const context of [auth([]), auth(["platform.supplier.manage"], false),
+      { ...auth(["platform.supplier.manage"]), tenantId: TENANT_ID }]) {
+      await expect(service.setTenantSupplierSettings(context, request)).rejects.toMatchObject({ statusCode: 403 });
+    }
+    expect(repository.setTenantSupplierSettings).not.toHaveBeenCalled();
+    await service.setTenantSupplierSettings(auth(["platform.supplier.manage"]), request);
+    expect(repository.setTenantSupplierSettings.mock.calls[0]?.[0]).toMatchObject({ warehouse_transfers_enabled: true });
+    expect(audit.recordBestEffort).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({ to: expect.objectContaining({ warehouse_transfers_enabled: true }) }),
+    }));
+  });
+
+  test("omitted enabled transfer blocks module disable but stale requests still reach replay", async () => {
+    const { service, repository, audit } = await createHarness();
+    repository.getTenantSupplierSettings.mockImplementation(async () => ({ ...settings, module_enabled: true, warehouse_transfers_enabled: true, version: 8 }));
+    const request = { ...settings, tenantId: TENANT_ID, expected_version: 8, reason: "停用", idempotencyKey: "transfer-disable-module" };
+    await expect(service.setTenantSupplierSettings(auth(["platform.supplier.manage"]), request)).rejects.toMatchObject({ code: "SUPPLIER_ROLLOUT_ORDER_INVALID" });
+    expect(repository.setTenantSupplierSettings).not.toHaveBeenCalled();
+    repository.setTenantSupplierSettings.mockImplementation(async () => ({ status: "updated", idempotent: true, setting: settings, previous_setting: null, version: 1 }));
+    await service.setTenantSupplierSettings(auth(["platform.supplier.manage"]), { ...request, expected_version: 0 });
+    expect(repository.setTenantSupplierSettings.mock.calls[0]?.[0]).not.toHaveProperty("warehouse_transfers_enabled");
+    expect(audit.recordBestEffort).not.toHaveBeenCalled();
+  });
+
   test("module disable preserves omitted materials and rejects only current-version invalid targets", async () => {
     const { service, repository, audit } = await createHarness();
     repository.getTenantSupplierSettings.mockImplementation(async () => ({

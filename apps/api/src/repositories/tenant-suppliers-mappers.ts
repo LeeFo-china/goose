@@ -33,6 +33,7 @@ export const SETTINGS_SELECT = [
   "private_catalog_writes_enabled", "procurement_snapshot_v1_enabled",
   "purchase_batch_workflow_enabled", "warehouse_procurement_enabled",
   "warehouse_materials_enabled",
+  "warehouse_transfers_enabled",
   "enabled_by_employee_id", "enabled_at", "version", "created_at", "updated_at",
 ].join(",");
 export const CONTRACT_SELECT = [

@@ -383,6 +383,7 @@ export const PlatformTenantSupplierSettingsCommandSchema = z.object({
   purchase_batch_workflow_enabled: z.boolean(),
   warehouse_procurement_enabled: z.boolean().optional(),
   warehouse_materials_enabled: z.boolean().optional(),
+  warehouse_transfers_enabled: z.boolean().optional(),
   expected_version: initializableExpectedVersion,
   reason: SupplierCommandSchema.shape.reason,
 }).strict().superRefine((input, context) => {

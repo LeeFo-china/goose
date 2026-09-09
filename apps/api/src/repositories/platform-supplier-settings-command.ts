@@ -1,7 +1,7 @@
 import type { PlatformTenantSupplierSettingsCommand } from "@/schema/platform-suppliers";
 
 export function supplierSettingsCommandArgs(input: PlatformTenantSupplierSettingsCommand): Record<string, unknown> {
-  if (input.warehouse_materials_enabled !== undefined) {
+  if (input.warehouse_materials_enabled !== undefined || input.warehouse_transfers_enabled !== undefined) {
     const { actor_user_id, idempotency_key, ...request } = input;
     return {
       p_request: Object.fromEntries(Object.entries({ ...request, reason: input.reason ?? null })
