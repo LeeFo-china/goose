@@ -76,6 +76,8 @@ Task 2完成：5da8d98a，独立SPEC→质量通过，无待修问题。74 tests
 
 已确认的授权范围：仅租户`3eebca47-961f-4899-b976-a3d3208d326b`、既有active system_admin角色`e72850fe-dbba-427f-9109-f1779080a239`，两个stocktake manage/approve access_scope=all。沿用D1目标姓名/归属/状态/权限元数据守卫；无目标租户时no-op，已有较窄权限时failclosed而非扩大，ON CONFLICT不更新原行，不清除deny。隔离测试使用真实migration字节与同一目标键的合成数据，证明前置拒绝、仅两项新增、回放不变、普通/外租户/停用/deny拒绝以及守卫失败完整回滚。该授权夹具单独运行，避免污染通用“无自动授权”契约。
 
+夹具时序边界：D1/D2限定授权共享既有runner的封闭参数化探针，所选migration先在无租户正常链验证no-op；全链完成后才创建该项synthetic tenant并重放真实migration、守卫失败及幂等检查。D1/D2 grant fixture互斥选择并分别运行，防止D1合成晴天租户被后续D2授权污染。生产migration顺序和字节不变，不引入新测试框架。
+
 回退边界：先关闭盘点开关，保留新增表、审计、原始单据及库存事实；授权撤回须另写前向migration，仅撤回本次新增的两行。若已生成盘点流水，不直接回退到不认识盘点来源的旧API镜像，以免历史库存读取失败；优先保持兼容读取并关闭新写或发前向修复。
 - [ ] `supabase migration list`证明Local/Remote对齐。新固定release分支指向审核通过提交（不移动D1分支），push并dispatch DEV；跟踪workflow最终结论、部署SHA及健康端点。失败定位根因，不盲目重复。
 - [ ] 使用Chrome技能bootstrap和真实UI登录、平台开盘点、切换晴天合适员工。先截图/读库存基线，再最小盘盈/盘亏与业务反向单恢复，验收版本/单据/金额/数量/流水来源。期间发现并发变化不强制过账。
