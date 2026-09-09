@@ -62,7 +62,7 @@ LEFT JOIN totals t ON t.stocktake_order_id=p.id;
 
 文件：修改 `packages/domain/src/warehouse-stocktake.ts` 及测试；新增 `apps/api/src/repositories/warehouse-stocktake-records.ts`、`warehouse-stocktakes.ts` 和测试，`services/warehouse-stocktake-errors.ts`、`warehouse-stocktakes.ts` 和测试，`controllers/warehouse-stocktakes/index.ts`、`controllers/warehouse-stocktake-routes.test.ts`；修改 `routes/index.ts`、`services/tenant-service-capability-map.ts` 及相应断言；fixture DTO 可集中 `apps/api/src/test-fixtures/warehouse-stocktakes.ts`（参照真实 transfer fixture 位置再落位，不新增测试框架）。不修改已有请求契约。
 
-- [ ] 先写实际 Domain/strict parser/route registry 断言，动态import能判断缺失导出而不是编译错误：
+- [x] Domain/strict parser/route registry 断言已交付；实施顺序并非所有验收先RED，具体差异见证据 Task 2，不将下列原计划示例视作全部实际执行记录：
 
 ```ts
 test('registers all stocktake endpoints', async () => {
@@ -71,13 +71,13 @@ test('registers all stocktake endpoints', async () => {
 });
 ```
 
-- [ ] `bun test src/controllers/warehouse-stocktake-routes.test.ts` 在 apps/api 运行确认RED，然后实现真实 Fastify inject 功能测试替换存在性断言。
-- [ ] Domain增加 WarehouseStocktakeOrder（表字段）、WarehouseStocktakeOrderSummary（上述count与gain/loss）、WarehouseStocktakeItem（表字段含 nullable string decimals、SKU名称代码）、WarehouseStocktakeSettings、WarehouseStocktakeCommandResult；命令result仅status和原始Order，不错要求Summary字段。
-- [ ] records严格 schema，非负 decimal `/^(?:0|[1-9]\d{0,13})(?:\.\d{1,4})?$/`；signed差异加可选负号；金额16整2小数，汇总18整2小数；所有字段严格 nullable 符合真实SQL。parseRPC errors包装 Errors.dbError；repository每方法一次RPC，默认分页及最大100由 PaginationQuerySchema 验证。
-- [ ] service注入 Pick 仓储5方法；requireScope要求tenant/employee/user及权限；settings任一三权限；6命令按command选已有 Draft/Counts/Command schema，提取expected_version，不预读。错误表覆盖 SQL现有全部 WAREHOUSE_STOCKTAKE_* 错误（rg实际文本），未知保持原始包装。
-- [ ] controller4GET6POST；路径 record-counts映射record_counts；getRequiredTenantContext、requireSupplierIdempotencyKey、Errors.fromZod、ResponseHandler.success；总路由与 capability registry 注册 singleton，不暴露 PATCH/DELETE。
-- [ ] 测试 strict response数字/精度/null、分页映射、每方法1RPC、所有命令payload/actor/key、无项目权限依赖、SQLdeny即使system_admin派生权限、稳定错误；Fastify inject验证真实controllers六POST四GET、未知字段/页界/头校验、命令回执重放路径无mutable preread。
-- [ ] root `bun test packages/domain/src/warehouse-stocktake.test.ts`、`bun run --cwd packages/domain build`；apps/api `bun test src/schema/warehouse-stocktakes.test.ts src/repositories/warehouse-stocktakes.test.ts src/services/warehouse-stocktakes.test.ts src/controllers/warehouse-stocktake-routes.test.ts`、`bun run typecheck`。修复后提交 `feat: expose warehouse stocktake APIs`。
+- [x] HTTP最终使用真实 Fastify inject 覆盖全部端点；审查发现的POST query缺口有独立RED/GREEN（最初完整HTTP覆盖为实现后补充，未执行此处原计划的文件存在性RED）。
+- [x] Domain增加 WarehouseStocktakeOrder（表字段）、WarehouseStocktakeOrderSummary（上述count与gain/loss）、WarehouseStocktakeItem（表字段含 nullable string decimals、SKU名称代码）、WarehouseStocktakeSettings、WarehouseStocktakeCommandResult；命令result仅status和原始Order，不错要求Summary字段。
+- [x] records严格 schema，非负 decimal `/^(?:0|[1-9]\d{0,13})(?:\.\d{1,4})?$/`；signed差异加可选负号；金额16整2小数，汇总18整2小数；所有字段严格 nullable 符合真实SQL。parseRPC errors包装 Errors.dbError；repository每方法一次RPC，默认分页及最大100由 PaginationQuerySchema 验证。
+- [x] service注入 Pick 仓储5方法；requireScope要求tenant/employee/user及权限；settings任一三权限；6命令按command选已有 Draft/Counts/Command schema，提取expected_version，不预读。错误表覆盖 SQL现有全部 WAREHOUSE_STOCKTAKE_* 错误（rg实际文本），未知保持原始包装。
+- [x] controller4GET6POST；路径 record-counts映射record_counts；getRequiredTenantContext、requireSupplierIdempotencyKey、Errors.fromZod、ResponseHandler.success；总路由与 capability registry 注册 singleton，不暴露 PATCH/DELETE。
+- [x] 测试 strict response数字/精度/null、分页映射、每方法1RPC、所有命令payload/actor/key、无项目权限依赖、SQLdeny即使system_admin派生权限、稳定错误；Fastify inject验证真实controllers六POST四GET、未知字段/页界/头校验、命令回执重放路径无mutable preread。system_admin 边界单列 `apps/api/src/services/authorization/system-admin-warehouse-stocktake-permissions.test.ts`，最终命令一并运行；各测试须可独立运行，不依赖其他文件先初始化测试环境。
+- [x] root `bun test packages/domain/src/warehouse-stocktake.test.ts`、`bun run --cwd packages/domain build`；apps/api `bun test src/schema/warehouse-stocktakes.test.ts src/repositories/warehouse-stocktakes.test.ts src/services/warehouse-stocktakes.test.ts src/controllers/warehouse-stocktake-routes.test.ts`、`bun run typecheck`。修复后提交 `feat: expose warehouse stocktake APIs`。
 
 ## Task 3: 库存来源与平台开关
 
@@ -85,7 +85,7 @@ test('registers all stocktake endpoints', async () => {
 
 - [ ] 测试先行加入盘点来源两方向、畸形/混合/错误类型及老receipt/issue/return/transfer/adjustment兼容；显式开关走JSON、缺省走原typed、历史回执缺字段保持不变、module-only依赖、字段省略保留。运行目标Bun测试确认预期RED。
 - [ ] source_document增加strict `{stocktake_order_id:uuid,stocktake_order_no:string}`；stocktake source只允许adjustment_in/out，非stocktake source不接受stocktake document，null只允许匹配类型。SQL参考D1唯一anchor替换，页后JOIN完成order+item+同tenant/warehouse/SKU+正确difference方向，保留ACL/config。
-- [ ] rollout测试先用历史typed/JSON命令产生真实receipt并存payload/receipt；runner在新rollout migration前执行before fixture，只在参数包含post fixture时触发。新SQL patch已有私有core的7个唯一片段：变量、白名单、boolean flags、行锁后省略值/依赖、insert列、insert值、update。不可改变旧fingerprint或wrapper签名。
+- [ ] rollout测试先用历史typed/JSON命令产生真实receipt并存payload/receipt；runner在 `20260909064815_warehouse_stocktake_atomic_commands.sql` 前执行before fixture（早于新增盘点列，旧回执中该字段确实缺失），只在参数包含post fixture时触发。前置夹具断言列和回执字段均不存在；后置夹具验证扩列和core扩展后的旧回放。新SQL patch已有私有core的7个唯一片段：变量、白名单、boolean flags、行锁后省略值/依赖、insert列、insert值、update。不可改变旧fingerprint或wrapper签名。
 - [ ] TS新字段可选boolean；effective=module_enabled && field===true；current merge保留省略；command JSON分支条件加 `input.warehouse_stocktakes_enabled !== undefined`；旧typedbranch不动，旧response parser用 optional不default以保持receipt。
 - [ ] SQL验证版本/冲突/开关/依赖/错误类型/字段省略/真实旧回放及来源跨租户/关闭历史/页后有界；静态绿灯后运行 runner包括新fixtures与C/D1回归。
 - [ ] API typecheck、Domain build；自检并提交 `feat: integrate stocktake sources and rollout settings`。
