@@ -1,6 +1,6 @@
 # D2.1 盘点 Admin 与 DEV 验收记录
 
-最新结论：Admin实现、双重审核、92项本地页面回归、5项DEV apply、完整610项迁移对齐及API/Admin开发发布已完成。固定发布版本`daee511b`，实际双容器同SHA且healthy，外部入口200。Chrome真实盘盈/盘亏及业务反向恢复验收仍被页面控制超时阻断；最后一次库存/开关复读另遇SSH MaxStartups限制，不能将本记录标为D2.1完整验收。最近成功库存快照是19:30 CST，公司仓1箱/88元、分仓0/0、盘点false/version22。D2.2未开始。
+最新结论：D2.1本批DEV验收完成。Admin实现、双重审核、92项本地页面回归、5项DEV apply、完整610项迁移对齐及API/Admin开发发布已完成；固定版本`daee511b`不变。2026-09-09恢复Chrome后，晴天风清扬真实完成盘盈`WS-0000000001`及反向盘亏`WS-0000000002`，公司仓恢复1箱/88元、库存version8，分仓仍0/0/version3；盘点开关恢复false/设置version24。财务、原领退料/调拨及非目标权限摘要不变，关闭后历史读取正常。D2.2手工调整未开始，阶段D整体尚未完成。以下旧节保留当时的排障与发布过程，以文末真实验收结果为准。
 
 ## 进行中：只读预检
 
@@ -83,3 +83,34 @@ bun scripts/verify-warehouse-stage-b-database.ts scripts/fixtures/warehouse-stag
 Chrome技能要求的session finalize已成功，将`盘点开发验收`组原库存标签作为handoff保留，未导航用户的抖音资料页。此前页面读取/claim多次超时，尚无新的页面控制成功证据，本轮Chrome发送业务命令0；没有创建真实盘点单，也没有需要反向恢复的本轮库存操作。等用户将验收页切前台、确认扩展控制并恢复连接后，重新读取最新设置/库存，再进行已授权的最小盘盈、盘亏、来源追溯与反向恢复。不得依据本地HTTP fixture通过而跳过该门禁或进入D2.2。
 
 本地最终相关74 tests/405 assertions再次通过，git diff/JSON/完整history验证通过。按已授权DEV发布方式保留feature及worktree，不合并main、不建PR、不移动固定release分支；只有发布后的证据文档继续落在feature。
+
+## 19:52–21:12 CST：Chrome真实验收与反向恢复完成
+
+本轮没有代码、migration或服务变更，也没有重复apply/发布。19:52:07 guarded只读查询恢复，确认610项历史、目标身份/两项权限、设置version22及公司仓1箱/88元/version6。旧Chrome验收页读取/刷新超时后，按技能排障，在已选浏览器中新建验收页恢复操作，未修改扩展、安全配置或用户正在使用的其他页面。新页显示风清扬权限221；先查看库存截图与关闭态新建禁用，再进行业务写入。浏览器每步响应约30秒，过程中出现控制客户端遥测超时，不等同产品请求失败；每个业务动作均得到明确成功回执，无未知请求重放或重复提交。
+
+平台超管通过DEV手机号登录，在晴天详情仅开启仓库盘点，20:10:32设置22→23；再正常退出并登录风清扬。所有业务操作经真实Admin表单与确认框执行，不读取浏览器token、不用直接SQL写入或绕过接口。两张单均绑定公司仓`99565a46-0275-4cb5-bc2a-0e31abda7e90`及SKU`732e2b3b-cb7e-4e40-a4e2-228c22bf985c`（`E2E-SKU-0823222632-B`），原因明确“DEV验收、无实物变动、恢复原基线”。
+
+| 验收 | 单号 / ID | 冻结账面 | 实盘 / 差异 | 最终过账 |
+| --- | --- | --- | --- | --- |
+| 模拟盘盈 | WS-0000000001 / 94364c81-444f-46bc-a9dd-4d57bbf30efb | 1箱 / 88元 / 库存版本6 | 2箱 / +1箱 | +1箱、+88元；20:36:25完成 |
+| 反向盘亏恢复 | WS-0000000002 / b3672bab-2b6f-43c2-b9af-7410fd435569 | 2箱 / 176元 / 库存版本7 | 1箱 / -1箱 | -1箱、-88元；20:55:14完成 |
+
+两单均依次经过save_draft v1 → start v2 → record_counts v3 → submit v4 → complete v5；每单恰好5个不可变审计事件。未录入时明确“未录入”且无提交入口；全部实盘保存后才可提交；完成态无编辑/取消/完成按钮。数量与成本由真实快照和服务端计价生成，单价始终88元，没有客户端价格输入。草稿、开始和提交阶段未产生库存流水；非零差异完成时每单恰好1条流水。
+
+- 盘盈明细`b7b4d0e9-9b89-4dde-bc27-a8bde10f6ed1` → 流水`4807174f-2e4c-496b-b5bd-363ef81ef194`，adjustment_in，+1/+88。
+- 盘亏明细`f08ec79d-cff2-4a00-85ba-e45baa0bf6c8` → 流水`c000b760-fca7-40cf-98a0-5ab269a321c4`，adjustment_out，-1/-88。
+- 两条source_type均warehouse_stocktake_item，source_id与明细外键一致。库存页显示公司仓1/88/88、分仓0/0/0；公司仓流水8条，原采购、领退料及调拨历史仍可读。两条盘点来源href分别包含正确order_id；点击盘亏来源实际打开WS-0000000002完成态。
+- 21:05:11平台仅关闭盘点，设置23→24。21:05:42只读最终快照确认false、公司仓1箱/88元/version8、分仓0/0/version3；原设置所有字段除version/updated_at外与19:52基线一致。21:12:43审计复读确认本轮仅两个rollout事件，分别开启和关闭，其他开关未改。
+- 20:05:34与21:08:39财务/业务count及md5逐项相同：仓库2、项目成本7、应付5、付款0、财务台账20、领料1、退料2、调拨2；非目标role_permissions1595、employee_roles34、employee_overrides6摘要相同。supplier_command_events129→131只对应上述两次开关审计，盘点动作独立记在10条stocktake事件中。
+- 最后恢复风清扬登录，从已观察的盘盈来源深链打开WS-0000000001：关闭提示、新建禁用和已完成v5历史详情同时存在。实际桌面截图已在会话中查看，未将截图另存仓库；页面内容清楚，无溢出。Chrome按技能finalize，保留该结果页为deliverable。
+
+结构化证据：[库存/单据/审计/财务与自动比对](2026-09-09-warehouse-stocktake-live-results.json)、[15份已观察页面DOM摘录](2026-09-09-warehouse-stocktake-live-dom.json)、[有界只读证据SQL](2026-09-09-warehouse-stocktake-live-checks.sql)。库存/配置查询复用本批已有preflight守卫，迁移历史仍610且逐版本与本轮基线一致；完整CLI Local/Remote对齐表沿用本批已保留的migration-list.txt，本轮没有重新apply。JSON比对覆盖设置恢复、余额恢复、两单各5动作、两流水净零与来源一致、财务与授权摘要不变，全部true。
+
+本轮fresh最小回归命令：
+
+```sh
+cd apps/admin
+bun test components/warehouse-stocktakes components/warehouse-transfers components/platform-tenants/tenant-supplier-settings-rules.test.ts components/inventory/inventory-table.test.tsx
+```
+
+结果52 pass、0 fail、321 assertions、11 files。既有92项桌面/375px HTTP fixture与完整SQL并发/异常用例的证据保留于前节；本轮live仅最小盘盈、反向盘亏、来源追溯与开关恢复，没有在DEV额外制造快照冲突、取消单、无成本盘盈或跨租户攻击用例，不宣称这些边界本轮重新实测。无本轮残留草稿/进行中/待确认单，未删除审计或回退库存版本。D2.2需单独设计实施；不将本次DEV验收等同生产开放。

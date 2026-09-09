@@ -80,11 +80,11 @@ Task 2完成：5da8d98a，独立SPEC→质量通过，无待修问题。74 tests
 
 回退边界：先关闭盘点开关，保留新增表、审计、原始单据及库存事实；授权撤回须另写前向migration，仅撤回本次新增的两行。若已生成盘点流水，不直接回退到不认识盘点来源的旧API镜像，以免历史库存读取失败；优先保持兼容读取并关闭新写或发前向修复。
 - [x] `supabase migration list`证明Local/Remote对齐。新固定release分支指向审核通过提交（不移动D1分支），push并dispatch DEV；跟踪workflow最终结论、部署SHA及健康端点。失败定位根因，不盲目重复。
-- [ ] 使用Chrome技能bootstrap和真实UI登录、平台开盘点、切换晴天合适员工。先截图/读库存基线，再最小盘盈/盘亏与业务反向单恢复，验收版本/单据/金额/数量/流水来源。期间发现并发变化不强制过账。
-- [ ] 记录命令、迁移状态、workflow URLs/SHA、单据ID与库存前后证据、开关最终状态；不把mock当live结果。最终fresh复验、文档提交push，工作树干净。明确手工调整D2.2仍未开始。
+- [x] 使用Chrome技能bootstrap和真实UI登录、平台开盘点、切换晴天合适员工。先截图/读库存基线，再最小盘盈/盘亏与业务反向单恢复，验收版本/单据/金额/数量/流水来源。期间发现并发变化不强制过账。
+- [x] 记录命令、迁移状态、workflow URLs/SHA、单据ID与库存前后证据、开关最终状态；不把mock当live结果。最终fresh复验、文档提交push，工作树干净。明确手工调整D2.2仍未开始。
 
 ## 计划自检
 
-最终检查点：代码、DEV apply及发布完成，候选daee511b、migration610项对齐，release34345983716成功。最后两个live/完整业务记录checkbox保留未勾选：Chrome控制超时，真实盘点验收未执行；最后库存/设置复读另遇SSH MaxStartups，最近成功快照保留于postapply证据。未进入D2.2，不清理worktree，恢复连接后从最新库存/设置重新验收，不重复apply或重发同一版本。
+最终检查点：代码、DEV apply及发布完成，候选daee511b、migration610项对齐，release34345983716成功。Chrome恢复后从19:52新基线开始，真实完成盘盈WS-0000000001与反向盘亏WS-0000000002，各5动作/完成v5；公司仓恢复1箱/88元/库存version8，盘点开关恢复false/设置version24。来源导航、关闭后历史读取及财务/非目标权限摘要不变通过；本轮fresh52 tests/321 assertions通过。完整结果、15份DOM摘录和只读SQL写入evidence，结构化不变量及本地链接检查、完整history校验与diff检查通过；文档提交留在feature，不改变固定发布分支。未进入D2.2，不清理worktree，不重复apply或重发同一版本。
 
 设计中的UI、权限、精度和恢复由Task1覆盖，导航/平台与浏览器由Task2覆盖，apply/release/真实租户由Task3覆盖。暂无需新依赖或后端状态机修改。Task1期间主代理只读准备DEV目标与Chrome就绪，避免任务串行等待；不在审核前apply/发布。
