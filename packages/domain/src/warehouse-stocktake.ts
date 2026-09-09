@@ -42,3 +42,58 @@ export interface WarehouseStocktakeCountsInput {
 export interface WarehouseStocktakeCommandInput {
   expected_version: number;
 }
+
+export interface WarehouseStocktakeOrder {
+  id: string;
+  tenant_id: string;
+  warehouse_id: string;
+  order_no: string;
+  status: WarehouseStocktakeStatus;
+  version: number;
+  reason: string;
+  created_by_employee_id: string;
+  updated_by_employee_id: string;
+  created_at: string;
+  updated_at: string;
+  started_at: string | null;
+  submitted_at: string | null;
+  completed_at: string | null;
+  cancelled_at: string | null;
+}
+
+export interface WarehouseStocktakeOrderSummary extends WarehouseStocktakeOrder {
+  warehouse_name: string;
+  item_count: number;
+  counted_count: number;
+  difference_count: number;
+  gain_amount: string | null;
+  loss_amount: string | null;
+}
+
+export interface WarehouseStocktakeItem {
+  id: string;
+  tenant_id: string;
+  stocktake_order_id: string;
+  warehouse_id: string;
+  line_no: number;
+  supplier_sku_id: string;
+  snapshot_at: string | null;
+  book_balance_id: string | null;
+  book_balance_version: number | null;
+  book_quantity: string | null;
+  book_value: string | null;
+  book_unit_cost: string | null;
+  counted_quantity: string | null;
+  difference_reason: string | null;
+  difference_quantity: string | null;
+  unit_cost: string | null;
+  amount: string | null;
+  sku_name: string;
+  sku_code: string;
+}
+
+export interface WarehouseStocktakeSettings { warehouse_stocktakes_enabled: boolean }
+export interface WarehouseStocktakeCommandResult {
+  status: 'saved' | 'counting' | 'submitted' | 'completed' | 'cancelled';
+  order: WarehouseStocktakeOrder;
+}
