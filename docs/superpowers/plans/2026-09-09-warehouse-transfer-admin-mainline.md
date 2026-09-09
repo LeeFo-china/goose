@@ -30,4 +30,15 @@
 - [ ] 具备现有权限时正常 UI 配置测试开关和双仓，执行正常/反向调拨，核对数量/价值守恒和项目成本/应付/付款未变化；结束关闭开关。不得自动赋权或直接 SQL 修库。
 - [ ] 记录实际结果与未完成门禁。D1 真实验收未满足不得进入 D2。
 
-最新状态：`4e522bef` / run `34305784359` DEV Admin 发布成功，Chrome 调拨页404已消除；API保留43cb38bf、库存及财务十组摘要未变。真实验收发现共享 `PERMISSION_CODE_VALUES` 遗漏两个调拨权限，导致已有 system_admin 风清扬仍为217项、无法写调拨。用户已提供平台账号，已填写登录表单但未提交；测试开关未开启、无业务写入。后续需用户确认扩展到 Domain 权限注册与 DEV API/Admin 发布，不通过员工赋权绕过。
+最新状态：`4e522bef` / run `34305784359` DEV Admin 发布成功，Chrome 调拨页404已消除；API保留43cb38bf、库存及财务十组摘要未变。真实验收发现共享 `PERMISSION_CODE_VALUES` 遗漏两个调拨权限，导致已有 system_admin 风清扬仍为217项、无法写调拨。用户已提供平台账号，已填写登录表单但未提交；测试开关未开启、无业务写入。用户已授权扩展到以下权限注册修复与 DEV API/Admin 发布，不通过员工赋权绕过。
+
+## Task 4：调拨权限注册根因修复（用户已授权，先于 Task 3 写验收）
+
+设计：数据库现有 `20260908185501` 已注册两项调拨权限，服务严格检查权限正确；缺失在共享枚举，系统管理员登录上下文从枚举派生。选择补齐枚举及配置，保持鉴权与角色规则不变。手工赋权、服务绕过检查都不能修复该派生链路，排除。无数据库、依赖、采购工作台和 Orange 改动。
+
+- [x] 在 `packages/domain/src/permission.test.ts` 验证两项权限存在且配置标签与 migration 一致；新增 `apps/api/src/services/authorization/system-admin-warehouse-transfer-permissions.test.ts`，真实 `buildAuthContext` 到 `WarehouseTransfersService.command`，仅替代 repository 边界。覆盖 manage/approve 正向和普通/停用/无租户员工拒绝，拒绝时不触达 RPC。
+- [x] 先运行上述测试，确认缺少注册及系统管理员 403 的 RED；API 测试前确保 Domain dist 为当前源码构建。
+- [x] 仅修改 `packages/domain/src/permission.ts`，在值数组和配置中加入 `inventory.transfer.manage`（管理仓库调拨）及 `inventory.transfer.approve`（确认仓库调拨），配置 module=inventory、resource=transfer、action=manage/approve，与数据库一致。
+- [x] 运行 Domain build/permission tests、API typecheck/受影响授权与调拨测试、Admin check/相关权限组件测试；静态通过后串行运行调拨 E2E。独立 SPEC 后 quality 审查。
+- [ ] 固定新提交及唯一 release 分支。重查远端 main、DEV 容器、活动 workflow、migration 对齐与只读业务基线，通过既有 `release-dev.yml` 的 `service=api,admin` 发布 DEV。核对 workflow、容器 revision/digest、健康。回滚仅重发已记录的前版本，不回滚业务数据。
+- [ ] 回到 Task 3；正常 Chrome 登录，不读取凭证、不手工赋权。只有真实正向/反向调拨、库存价值守恒、财务隔离及关闭开关通过后，才标记 D1 完成并进入 D2。
