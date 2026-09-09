@@ -1,0 +1,19 @@
+# D2.1 盘点后端接入验证记录
+
+日期：2026-09-09；实施前基线 a43f5349，设计 620f53a8，计划 aeb9a23d。当前记录随实施更新，以下仅列已执行结果，不代表全部完成或已发布。
+
+## 实施前检查
+
+复用隔离工作树 `warehouse-project-material-stage-c` / `feature/warehouse-transfer-admin-mainline`，起点干净。固定 D1 release 分支仍为 `710b332282b2f10b2f561b20db197e5f39a8a6eb`。根工作区已有 `.artifacts/`、`docs/marketing/` 未跟踪内容，未修改。Orange 未访问或修改。
+
+GoodCMS RAG 查询失败：login/server 502。依据本仓库 D1 已验收代码与 D2 命令设计。
+
+父代理基线验证：
+
+- Domain permission/warehouse-stocktake：23 pass，280 assertions；Domain build 退出0，149504 bytes，外部 Zod identity 检查通过。
+- API stocktake schema + inventory repository：27 pass，257 assertions；API typecheck 退出0。
+- 扩展 C/D1/平台开关/路由回归：97 pass、1 fail、464 assertions。失败为 `supplier-rollout-settings.test.ts` 的 `normalizes invalid tenant-visible combinations fail closed`：实际输出含 `warehouse_transfers_enabled:false`，旧 disabled 期望对象遗漏该字段。已用 `git show a43f5349` 核实生产和测试均在本批之前如此。根因为 D1 开关扩展未同步该旧测试期望；不删除正确的生产关闭字段。本批 Task 3 添加盘点开关时同步维护完整关闭期望和独立开关依赖断言，再重新验证。
+
+## 验证边界
+
+本批 SQL runner 仅从本地源容器读取 schema/元数据，在无网络临时 PostgreSQL 测试库应用采购域 migration 和合成数据。已有 runner 使用 SQL_ASCII；不是完整历史升级、真实 DEV 或浏览器登录验收。没有 apply 远端 migration、开启晴天盘点、增授员工/角色权限或发布服务。Admin 盘点页面、来源展示/跳转及平台开关控件仍属于后续批次；真实开放前必须一起接入验证，不能把后端 source_document 扩展单独作为 UI 已完成的证据。

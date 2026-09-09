@@ -54,7 +54,7 @@ FROM page p JOIN public.warehouses w ON w.id=p.warehouse_id AND w.tenant_id=p.te
 LEFT JOIN totals t ON t.stocktake_order_id=p.id;
 ```
 
-- [ ] 详情同 Summary；items 所有8个 numeric 字段（book_quantity/book_value/book_unit_cost/counted_quantity/difference_quantity/unit_cost/amount，实际7项）显式 `::text`，其余 to_jsonb 行和 sku_name/sku_code，NULL 不转零。校验字段计数按真实7项，不增加字段。
+- [ ] 详情同 Summary；items 所有7个 numeric 字段（book_quantity/book_value/book_unit_cost/counted_quantity/difference_quantity/unit_cost/amount）显式 `::text`，其余 to_jsonb 行和 sku_name/sku_code，NULL 不转零。
 - [ ] 扩展 fixture：ACL、假身份、deny、跨租户 notfound、关闭后历史、页边界、筛选/总数/空页、NULL和正负小数、完成gain/loss0与非零。performance插入回滚10,000单据/20,000明细，提取实际 RPC SQL EXPLAIN，20单页<=40明细行访问，测试无筛选/warehouse/warehouse+status及缓存计划；必要时函数force_custom_plan或索引新 migration。
 - [ ] 同命令重新运行绿灯，记录 RED/GREEN 和 EXPLAIN；自检提交 `feat: add bounded warehouse stocktake read models`。
 
