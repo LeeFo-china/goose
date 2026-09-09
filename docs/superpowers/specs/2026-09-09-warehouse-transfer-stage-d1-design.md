@@ -52,6 +52,7 @@ Domain 维护状态、标签、动作和草稿／命令 DTO。API Zod schema 采
 - 扩展库存流水类型与调拨明细外键，确保每个明细每个方向唯一，保持既有来源兼容。
 - 新增租户级 `warehouse_transfers_enabled`，默认关闭；独立于领退料开关，不自动打开任何租户。
 - 新增 `inventory.transfer.manage` 与 `inventory.transfer.approve` 权限定义；不自动给员工或角色授权。历史及成本读取仍要求 `inventory.stock.view`，仓库调拨不要求项目权限。
+- 2026-09-09 真实验收后用户确认的唯一例外：通过独立 migration，仅为固始晴天装饰工程有限公司（`3eebca47-961f-4899-b976-a3d3208d326b`）既有 system_admin 角色（`e72850fe-dbba-427f-9109-f1779080a239`）初始化上述两项角色权限，scope=`all`。不向其他租户／角色扩展、不新增员工绑定或 allow、不移除 deny、不修改通用鉴权；详见 `../plans/2026-09-09-qingtian-transfer-role-grant.md`。
 - 所有新增表强制 RLS、同租户复合外键及受控 RPC 权限；普通客户端不能直接写库存事实。
 
 数据库批次的具体 SQL、索引和验证计划须在修改前继续细化；本请求契约批次不预先应用部分数据库结构。
