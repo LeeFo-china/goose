@@ -49,8 +49,8 @@ Task 1完成：ab0de645 + a285dc1，SPEC/质量通过，37 tests/229 assertions�
 
 实施时确认的测试职责拆分：新增`warehouse-stocktakes-recovery.spec.ts`承载恢复/会话隔离，`warehouse-stocktakes-helpers.ts`承载共用页面操作；主workflow保留正常流程，config显式匹配两份spec。避免单文件超过既有预算，不增加功能或通用测试引擎。
 
-- [ ] 对库存两个adjustment方向写渲染RED：断言 `href="/warehouse-stocktakes?order_id=…"` 与“盘点单”；无采购/项目权限仍可链接，null来源不出现采购undefined。菜单和入口只用stock.view。
-- [ ] 平台规则/请求RED：module=true且其他子开关false可开盘点；盘点true不能关模块；查看员工开关disabled；已知true在其他设置请求中保留；旧响应缺失且无意图省略新字段；明确false发送false；冻结body不变。
+- [x] 对库存两个adjustment方向写渲染RED：断言 `href="/warehouse-stocktakes?order_id=…"` 与“盘点单”；无采购/项目权限仍可链接，null来源不出现采购undefined。菜单和入口只用stock.view。
+- [x] 平台规则/请求RED：module=true且其他子开关false可开盘点；盘点true不能关模块；查看员工开关disabled；已知true在其他设置请求中保留；旧响应缺失且无意图省略新字段；明确false发送false；冻结body不变。
 
 ```ts
 expect(JSON.parse(build({ moduleEnabled: true }, currentWithStocktake).body)
@@ -59,9 +59,11 @@ expect(Object.hasOwn(JSON.parse(build({ moduleEnabled: true }, legacyCurrent).bo
   'warehouse_stocktakes_enabled')).toBe(false);
 ```
 
-- [ ] 实现上述最小字段、来源分支、菜单及独立控件，现有冻结请求不补字段。修改模块关闭说明包括盘点。
-- [ ] 写真实页面E2E及完整HTTP fixture：复用transfer fixture认证结构和本地harness，不测试mock自身。覆盖完整状态链(含显式0/差异原因)、取消、25行详情分页与完整编辑、只读/manage/approve/denied、配置失败/非法/关闭、unknown/非法成功/429原body字节和key重放、刷新/员工切换隔离、版本冲突手动再确认、SNAPSHOT_CONFLICT取消重盘、COST_BASIS_REQUIRED不给输入价格、迟到列表响应、来源跳转。平台独立开关与回执重试在既有supplier-rollout suite增加用例。
-- [ ] 首先 `bun run typecheck`；然后 `bunx playwright test --config playwright.warehouse-stocktakes.config.ts` (桌面+375px)、`bunx playwright test --config playwright.supplier-rollout.config.ts` 和调拨回归。预期全部通过。检查截图和页面宽度、对话框可达性；`bun run build` →成功。保存证据并提交 `feat: 接通盘点灰度开关与来源导航`，按SPEC→质量两轮审核。
+- [x] 实现上述最小字段、来源分支、菜单及独立控件，现有冻结请求不补字段。修改模块关闭说明包括盘点。
+- [x] 写真实页面E2E及完整HTTP fixture：复用transfer fixture认证结构和本地harness，不测试mock自身。覆盖完整状态链(含显式0/差异原因)、取消、25行详情分页与完整编辑、只读/manage/approve/denied、配置失败/非法/关闭、unknown/非法成功/429原body字节和key重放、刷新/员工切换隔离、版本冲突手动再确认、SNAPSHOT_CONFLICT取消重盘、COST_BASIS_REQUIRED不给输入价格、迟到列表响应、来源跳转。平台独立开关与回执重试在既有supplier-rollout suite增加用例。
+- [x] 首先 `bun run typecheck`；然后 `bunx playwright test --config playwright.warehouse-stocktakes.config.ts` (桌面+375px)、`bunx playwright test --config playwright.supplier-rollout.config.ts` 和调拨回归。预期全部通过。检查截图和页面宽度、对话框可达性；`bun run build` →成功。保存证据并提交 `feat: 接通盘点灰度开关与来源导航`，按SPEC→质量两轮审核。
+
+Task 2完成：5da8d98a，独立SPEC→质量通过，无待修问题。74 tests/405 assertions；盘点38、平台22、调拨32项桌面/375px E2E通过，Admin typecheck/file-size/build退出0。主代理另行fresh复跑typecheck及盘点38项，通过并检查截图；HTTP fixture不等同DEV真实验收。
 
 ## Task 3: DEV apply、固定候选发布与晴天验收
 
