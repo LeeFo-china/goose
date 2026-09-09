@@ -43,6 +43,7 @@ class WarehouseStocktakesController extends TenantBaseController {
   @Post('/warehouse-stocktakes/:id/cancel') async cancel(request: FastifyRequest) { return this.runCommand(request, 'cancel'); }
   private async runCommand(request: FastifyRequest, command: WarehouseStocktakeCommand) {
     const auth = await this.getRequiredTenantContext(request);
+    this.parse(WarehouseStocktakeSettingsQuerySchema, request.query);
     const key = requireSupplierIdempotencyKey(request);
     const { id } = this.parse(WarehouseStocktakeParamSchema, request.params);
     const schema = command === 'save_draft' ? WarehouseStocktakeDraftSchema

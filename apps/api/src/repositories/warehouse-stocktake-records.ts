@@ -28,7 +28,9 @@ export const WarehouseStocktakeSummarySchema = WarehouseStocktakeOrderBaseSchema
   warehouse_name: z.string(), item_count: z.number().int().min(0).max(100),
   counted_count: z.number().int().min(0).max(100), difference_count: z.number().int().min(0).max(100),
   gain_amount: summaryAmount.nullable(), loss_amount: summaryAmount.nullable(),
-}).refine(auditTimestampsMatchStatus);
+}).refine(auditTimestampsMatchStatus).refine((summary) => summary.status === 'completed'
+  ? summary.gain_amount !== null && summary.loss_amount !== null
+  : summary.gain_amount === null && summary.loss_amount === null);
 export const WarehouseStocktakeItemSchema = z.object({
   id: uuid, tenant_id: uuid, stocktake_order_id: uuid, warehouse_id: uuid,
   line_no: z.number().int().min(1).max(100), supplier_sku_id: uuid,
