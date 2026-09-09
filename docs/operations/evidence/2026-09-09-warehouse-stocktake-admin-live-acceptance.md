@@ -28,6 +28,12 @@ SQL只在本机schema-only基线527条后的采购领域、随机无网络Postgr
 
 Chrome恢复后可列出原验收标签页，但页面读取再次超时；尚未提交任何盘点业务操作，发布后需重新确认真实交互连接。
 
+## 开发发布编排静态预检
+
+`bun test scripts/release-orchestration-contract.test.ts --test-name-pattern 'development migration transaction orchestration|development orchestrator'`：17 pass、265 assertions，其他138项按范围未执行。另从本仓库`migrate-dev-database.yml`提取真实`scan_top_level_transaction_controls`与`emit_explicit_transaction_migration`函数，对四份待执行盘点SQL逐一离线渲染：退出0，模拟history语句仅出现一次且紧邻最终COMMIT之前。只执行本地Bash/awk解析，不连接数据库或执行渲染SQL。
+
+GitHub只读检查时无本批进行中的发布任务；远端main43cb38bf、feature4f54d15f与D1固定候选710b3322未变化。计划沿用开发专用plan/apply工作流及`release-dev.yml`的`service=api,admin`，迁移对齐门禁后先API再Admin，另建不可移动候选分支。
+
 ## 待完成门禁
 
 Task 2平台开关/来源/菜单实施与独立审核、盘点浏览器回归/构建、晴天限定权限迁移验证、固定DEV plan/apply、完整migration list对齐、API/Admin开发发布及Chrome盘盈/盘亏业务恢复验收尚待完成。D2.2手工调整不在本批。
