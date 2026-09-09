@@ -14,7 +14,7 @@
 
 文件：新 CLI migration `warehouse_stocktake_read_models`；新增 `scripts/fixtures/warehouse-stage-b/stocktake-reads.sql`、`stocktake-read-performance.sql`。参考 `20260908185501_warehouse_transfer_atomic_commands.sql` 中4个读取函数及 transfer-read-performance.sql。不编辑其他生产文件。
 
-- [ ] 写 stocktake-reads fixture，先检测缺失 RPC：
+- [x] 写 stocktake-reads fixture，先检测缺失 RPC：
 
 ```sql
 DO $$ BEGIN
@@ -24,9 +24,9 @@ DO $$ BEGIN
 END $$;
 ```
 
-- [ ] API `bun run typecheck` 后，运行 runner（material-workflow.sql、transfer-workflow.sql、stocktake-workflow.sql、stocktake-reads.sql）；确认预期缺失函数失败。
-- [ ] `supabase migration new warehouse_stocktake_read_models`，用 apply_patch 实现4读取函数。签名统一 actor 参数：get settings(tenant,user,employee)，get order(tenant,order,user,employee)，list orders(tenant,user,employee,warehouse default null,status text default null,keyword text default null,page int default1,page_size int default20)，items(tenant,order,user,employee,page default1,page_size default20)。权限调用 `__gooes_stocktake_assert_actor`，settings先选实际有权项。RPC revoke PUBLIC/anon/authenticated/service_role 后只 grant service_role。不得放宽 helper ACL。
-- [ ] 列表页查询核心契约：
+- [x] API `bun run typecheck` 后，运行 runner（material-workflow.sql、transfer-workflow.sql、stocktake-workflow.sql、stocktake-reads.sql）；确认预期缺失函数失败。
+- [x] `supabase migration new warehouse_stocktake_read_models`，用 apply_patch 实现4读取函数。签名统一 actor 参数：get settings(tenant,user,employee)，get order(tenant,order,user,employee)，list orders(tenant,user,employee,warehouse default null,status text default null,keyword text default null,page int default1,page_size int default20)，items(tenant,order,user,employee,page default1,page_size default20)。权限调用 `__gooes_stocktake_assert_actor`，settings先选实际有权项。RPC revoke PUBLIC/anon/authenticated/service_role 后只 grant service_role。不得放宽 helper ACL。
+- [x] 列表页查询核心契约：
 
 ```sql
 WITH page AS MATERIALIZED (
@@ -54,9 +54,9 @@ FROM page p JOIN public.warehouses w ON w.id=p.warehouse_id AND w.tenant_id=p.te
 LEFT JOIN totals t ON t.stocktake_order_id=p.id;
 ```
 
-- [ ] 详情同 Summary；items 所有7个 numeric 字段（book_quantity/book_value/book_unit_cost/counted_quantity/difference_quantity/unit_cost/amount）显式 `::text`，其余 to_jsonb 行和 sku_name/sku_code，NULL 不转零。
-- [ ] 扩展 fixture：ACL、假身份、deny、跨租户 notfound、关闭后历史、页边界、筛选/总数/空页、NULL和正负小数、完成gain/loss0与非零。performance插入回滚10,000单据/20,000明细，提取实际 RPC SQL EXPLAIN，20单页<=40明细行访问，测试无筛选/warehouse/warehouse+status及缓存计划；必要时函数force_custom_plan或索引新 migration。
-- [ ] 同命令重新运行绿灯，记录 RED/GREEN 和 EXPLAIN；自检提交 `feat: add bounded warehouse stocktake read models`。
+- [x] 详情同 Summary；items 所有7个 numeric 字段（book_quantity/book_value/book_unit_cost/counted_quantity/difference_quantity/unit_cost/amount）显式 `::text`，其余 to_jsonb 行和 sku_name/sku_code，NULL 不转零。
+- [x] 扩展 fixture：ACL、假身份、deny、跨租户 notfound、关闭后历史、页边界、筛选/总数/空页、NULL和正负小数、完成gain/loss0与非零。performance插入回滚10,000单据/20,000明细，提取实际 RPC SQL EXPLAIN，20单页<=40明细行访问，测试无筛选/warehouse/warehouse+status及缓存计划；必要时函数force_custom_plan或索引新 migration。
+- [x] 同命令重新运行绿灯，记录 RED/GREEN 和 EXPLAIN；自检提交 `feat: add bounded warehouse stocktake read models`。
 
 ## Task 2: Domain 与 HTTP 接入
 
