@@ -47,6 +47,8 @@ Task 1完成：ab0de645 + a285dc1，SPEC/质量通过，37 tests/229 assertions�
 **Create:** `apps/admin/e2e/warehouse-stocktakes-workflow.spec.ts`、`warehouse-stocktakes-mock-backend.mjs`、`warehouse-stocktakes-mock-fixture.mjs`、`apps/admin/playwright.warehouse-stocktakes.config.ts`。
 **Modify:** `apps/admin/e2e/supplier-rollout-{workflow.spec.ts,mock-backend.mjs,mock-fixture.mjs}`。
 
+实施时确认的测试职责拆分：新增`warehouse-stocktakes-recovery.spec.ts`承载恢复/会话隔离，`warehouse-stocktakes-helpers.ts`承载共用页面操作；主workflow保留正常流程，config显式匹配两份spec。避免单文件超过既有预算，不增加功能或通用测试引擎。
+
 - [ ] 对库存两个adjustment方向写渲染RED：断言 `href="/warehouse-stocktakes?order_id=…"` 与“盘点单”；无采购/项目权限仍可链接，null来源不出现采购undefined。菜单和入口只用stock.view。
 - [ ] 平台规则/请求RED：module=true且其他子开关false可开盘点；盘点true不能关模块；查看员工开关disabled；已知true在其他设置请求中保留；旧响应缺失且无意图省略新字段；明确false发送false；冻结body不变。
 
