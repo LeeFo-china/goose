@@ -63,8 +63,8 @@ ON CONFLICT (role_id, permission_id) DO NOTHING;
 
 文件：`scripts/fixtures/warehouse-stage-b/transfer-cross-command-concurrency.sql`；若准备代码过长，拆出 `transfer-cross-command-before.sql`，通过 runner 原有 fixture 参数顺序传入，不修改 runner 或旧 fixture。
 
-- [ ] 先验证既有 `material-workflow → transfer-contract → transfer-workflow → transfer-concurrency` 基线，读取 `receipt-accounting.sql` 的真实采购生成及收货命令；只调用已存在、已检查的真实 SQL API。
-- [ ] 新增四组独立连接持锁调度：退料先／调拨先、采购收货先／调拨先。准备完成后连接 A 执行业务命令持有未提交事务，连接 B 异步执行另一命令，必须观察 `pg_stat_activity.wait_event_type='Lock'` 后才提交 A；有超时与连接清理，不用串行命令或固定 sleep 冒充并发。
-- [ ] 退料通过真实领料完成再建立草稿；收货通过真实采购生成、确认履约再调用 `create_supplier_purchase_order_receipt`。两种调拨都通过真实保存／提交／完成命令。不得禁用触发器、修改 RLS 或伪造已完成业务状态来通过测试。
-- [ ] 每轮断言两命令预期结果、单据／版本／回执与流水条数、调拨成对数量价值净0、余额与全部流水重算一致、每个来源唯一。合法退料对应的成本冲回、收货对应的应付必须单独精确归因；调拨不得产生项目成本／应付／付款／现金事实。不声称采购收货后总库存与测试前相同。
-- [ ] 在一次性无网络容器运行上述新 fixture；必须含负控制证明无真实锁等待会失败，且每组都输出可核验 evidence。独立 SPEC 后 quality 审查、主代理复跑并记录，不以合成测试替代真实 UI 验收。
+- [x] 先验证既有 `material-workflow → transfer-contract → transfer-workflow → transfer-concurrency` 基线，读取 `receipt-accounting.sql` 的真实采购生成及收货命令；只调用已存在、已检查的真实 SQL API。
+- [x] 新增四组独立连接持锁调度：退料先／调拨先、采购收货先／调拨先。准备完成后连接 A 执行业务命令持有未提交事务，连接 B 异步执行另一命令，必须观察 `pg_stat_activity.wait_event_type='Lock'` 后才提交 A；有超时与连接清理，不用串行命令或固定 sleep 冒充并发。
+- [x] 退料通过真实领料完成再建立草稿；收货通过真实采购生成、确认履约再调用 `create_supplier_purchase_order_receipt`。两种调拨都通过真实保存／提交／完成命令。不得禁用触发器、修改 RLS 或伪造已完成业务状态来通过测试。
+- [x] 每轮断言两命令预期结果、单据／版本／回执与流水条数、调拨成对数量价值净0、余额与全部流水重算一致、每个来源唯一。合法退料对应的成本冲回、收货对应的应付必须单独精确归因；调拨不得产生项目成本／应付／付款／现金事实。不声称采购收货后总库存与测试前相同。
+- [x] 在一次性无网络容器运行上述新 fixture；必须含负控制证明无真实锁等待会失败，且每组都输出可核验 evidence。独立 SPEC 后 quality 审查、主代理复跑并记录，不以合成测试替代真实 UI 验收。
