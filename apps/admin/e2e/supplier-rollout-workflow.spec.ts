@@ -20,6 +20,7 @@ type MutationJournalEntry = {
   idempotencyKey: string | null;
   payload: Record<string, unknown>;
   responseStatus: number;
+  rawBody: string;
 };
 
 type MockState = {
@@ -34,6 +35,7 @@ type MockState = {
     warehouse_procurement_enabled: boolean;
     warehouse_materials_enabled: boolean;
     warehouse_transfers_enabled: boolean;
+    warehouse_stocktakes_enabled: boolean;
   };
   mutations: MutationJournalEntry[];
   settingsReadCount: number;
@@ -85,6 +87,50 @@ test.describe("租户供应商灰度确定性交互", () => {
   test.beforeEach(async ({ page, request }) => {
     await resetMock(request);
     await loginAsPlatformAdmin(page);
+  });
+
+  test('盘点独立启停、原字节重试和父模块保护', async ({ page, request }, info) => {
+    await request.post(`${mockBackendBaseUrl}/__test/reset`, { data: { level: 1, version: 1 } });
+    await page.goto('/e2e-harness/supplier-rollout?level=1');
+    const control = page.getByRole('switch', { name: '仓库盘点', exact: true });
+    await expect(control).toBeEnabled();
+    await request.post(`${mockBackendBaseUrl}/__test/failure-next`, { data: { status: 503, commit: true } });
+    await control.click(); await expect(page.getByText('操作结果尚未确认', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: '重试本次操作', exact: true }).click();
+    await expect(control).toBeChecked(); await expectVersion(request, 2);
+    const state = await readState(request);
+    expect(state.settings).toMatchObject({ warehouse_stocktakes_enabled: true, warehouse_transfers_enabled: false, warehouse_materials_enabled: false, warehouse_procurement_enabled: false });
+    expect(state.mutations).toHaveLength(2);
+    expect(typeof state.mutations[0].rawBody).toBe('string');
+    expect(state.mutations[1].rawBody).toBe(state.mutations[0].rawBody);
+    expect(state.mutations[1].idempotencyKey).toBe(state.mutations[0].idempotencyKey);
+    await expect(page.getByRole('button', { name: '停用供应商模块', exact: true })).toBeDisabled();
+    await page.mouse.move(0, 0);
+    await expect(page.locator('[data-sonner-toast]')).toHaveCount(0, { timeout: 10_000 });
+    await control.scrollIntoViewIfNeeded(); await page.screenshot({ path: info.outputPath('stocktakes-independent.png'), fullPage: true });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await control.click(); await expect(control).not.toBeChecked(); await expectVersion(request, 3);
+    await expect(page.getByRole('button', { name: '停用供应商模块', exact: true })).toBeEnabled();
+    expect((await readState(request)).mutations[2].payload.warehouse_stocktakes_enabled).toBe(false);
+  });
+
+  test('旧响应省略盘点字段，刷新新配置后原冻结body仍不补字段', async ({ page, request }) => {
+    await request.post(`${mockBackendBaseUrl}/__test/reset`, { data: { level: 1, version: 1, stocktakes: true } });
+    // Existing SSR harness intentionally represents a legacy response without this field.
+    await page.goto('/e2e-harness/supplier-rollout?level=1');
+    await request.post(`${mockBackendBaseUrl}/__test/failure-next`, { data: { status: 503, commit: true } });
+    await page.getByRole('switch', { name: '所有权读取', exact: true }).click();
+    await expect(page.getByText('操作结果尚未确认', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: '重新加载', exact: true }).click();
+    await expect(page.getByRole('switch', { name: '仓库盘点', exact: true })).toBeChecked();
+    await page.getByRole('button', { name: '重试本次操作', exact: true }).click();
+    await expect(page.getByText('操作结果尚未确认', { exact: true })).toHaveCount(0);
+    await expect(page.getByRole('switch', { name: '仓库盘点', exact: true })).toBeEnabled();
+    const state = await readState(request); expect(state.mutations).toHaveLength(2);
+    expect(Object.hasOwn(state.mutations[0].payload, 'warehouse_stocktakes_enabled')).toBe(false);
+    expect(state.mutations[1].rawBody).toBe(state.mutations[0].rawBody);
+    expect(state.mutations[1].idempotencyKey).toBe(state.mutations[0].idempotencyKey);
+    expect(state.settings.warehouse_stocktakes_enabled).toBe(true);
   });
 
   test("调拨开关独立、冻结重试且关闭模块前必须关闭", async ({ page, request }, testInfo) => {
@@ -356,6 +402,8 @@ test.describe("租户供应商灰度确定性交互", () => {
     const controls = switches(page);
     await expect(page.getByRole("switch", { name: "仓库领退料", exact: true })).toBeVisible();
     await expect(page.getByRole("switch", { name: "仓库领退料", exact: true })).toBeDisabled();
+    await expect(page.getByRole("switch", { name: "仓库盘点", exact: true })).toBeVisible();
+    await expect(page.getByRole("switch", { name: "仓库盘点", exact: true })).toBeDisabled();
     for (const name of rolloutNames) {
       await expect(controls[name]).toBeVisible();
       await expect(controls[name]).toBeChecked();

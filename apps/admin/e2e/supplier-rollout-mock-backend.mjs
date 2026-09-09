@@ -70,13 +70,15 @@ function isCompletePayload(payload) {
 }
 
 async function patchSettings(request, response, url) {
-  const payload = JSON.parse(await readBody(request) || "{}");
+  const rawBody = await readBody(request);
+  const payload = JSON.parse(rawBody || "{}");
   const key = idempotencyKey(request);
   const mutation = {
     method: request.method,
     path: url.pathname,
     idempotencyKey: key,
     payload: structuredClone(payload),
+    rawBody,
     responseStatus: null,
   };
   mutations.push(mutation);
@@ -143,6 +145,12 @@ async function patchSettings(request, response, url) {
   const targetLevel = rolloutLevel(payload);
   const effectiveMaterials = payload.warehouse_materials_enabled ?? settings.warehouse_materials_enabled;
   const effectiveTransfers = payload.warehouse_transfers_enabled ?? settings.warehouse_transfers_enabled;
+  const effectiveStocktakes = payload.warehouse_stocktakes_enabled ?? settings.warehouse_stocktakes_enabled;
+  if (effectiveStocktakes && !payload.module_enabled) {
+    mutation.responseStatus = 409;
+    sendJson(response, 409, { success: false, code: "SUPPLIER_ROLLOUT_ORDER_INVALID", message: "仓库盘点需要供应商模块" });
+    return;
+  }
   if (effectiveTransfers && !payload.module_enabled) {
     mutation.responseStatus = 409;
     sendJson(response, 409, { success: false, code: "SUPPLIER_ROLLOUT_ORDER_INVALID", message: "仓库调拨需要供应商模块" });
@@ -188,6 +196,7 @@ async function patchSettings(request, response, url) {
     warehouse_procurement_enabled: payload.warehouse_procurement_enabled,
     warehouse_materials_enabled: effectiveMaterials,
     warehouse_transfers_enabled: effectiveTransfers,
+    warehouse_stocktakes_enabled: effectiveStocktakes,
     enabled_by_employee_id: payload.module_enabled
       ? settings.enabled_by_employee_id ?? mockSupplierRolloutSession.employee.id
       : null,
@@ -223,6 +232,7 @@ const server = createServer(async (request, response) => {
   if (request.method === "POST" && url.pathname === "/__test/reset") {
     const payload = JSON.parse(await readBody(request) || "{}");
     settings = createSupplierRolloutSettings(payload.level ?? 0, payload.version ?? 0);
+    if (payload.stocktakes === true) settings.warehouse_stocktakes_enabled = true;
     mutations = [];
     conflictNext = false;
     delayNextMs = 0;

@@ -21,6 +21,15 @@ test('transfer history navigation requires only stock view', () => {
   expect(denied).not.toContain('href="/warehouse-transfers"');
 });
 
+test('stocktake history navigation requires only stock view', () => {
+  expect(tenantNavGroups.find((group) => group.label === '采购供应')?.items.find((item) => item.href === '/warehouse-stocktakes'))
+    .toMatchObject({ label: '仓库盘点', permission: 'inventory.stock.view' });
+  const markup = renderToStaticMarkup(<InventoryWorkspace canView canViewWarehouses={false} canViewPurchaseOrders={false} canViewMaterials={false} />);
+  expect(markup).toContain('href="/warehouse-stocktakes"');
+  const denied = renderToStaticMarkup(<InventoryWorkspace canView={false} canViewWarehouses={false} canViewPurchaseOrders={false} />);
+  expect(denied).not.toContain('href="/warehouse-stocktakes"');
+});
+
 test('no stock permission renders a denied state rather than inventory controls', () => {
   const markup = renderToStaticMarkup(
     <InventoryWorkspace

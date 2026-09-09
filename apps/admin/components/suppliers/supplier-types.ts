@@ -31,6 +31,7 @@ export type TenantSupplierSettings = {
   warehouse_procurement_enabled?: boolean;
   warehouse_materials_enabled?: boolean;
   warehouse_transfers_enabled?: boolean;
+  warehouse_stocktakes_enabled?: boolean;
   enabled_by_employee_id: string | null;
   enabled_at: string | null;
   version: number;

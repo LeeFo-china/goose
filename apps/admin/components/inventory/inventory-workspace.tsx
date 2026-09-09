@@ -126,6 +126,9 @@ export function InventoryWorkspace({
         </TabsList>
         <div className="flex flex-wrap gap-2">
           <Button asChild size="sm" variant="outline">
+            <Link href="/warehouse-stocktakes">仓库盘点</Link>
+          </Button>
+          <Button asChild size="sm" variant="outline">
             <Link href="/warehouse-transfers">仓库调拨</Link>
           </Button>
           {canViewMaterials && <>
