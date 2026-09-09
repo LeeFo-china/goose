@@ -194,6 +194,11 @@ try {
   console.log(`PASS restored schema-only baseline ${baseline} (${versions.size} migrations)`);
   const fixtures = process.argv.slice(2).filter((arg) => !["--generate-material-types", "--material-api-smoke"].includes(arg));
   for (const name of pending) {
+    if (name === "20260909064815_warehouse_stocktake_atomic_commands.sql" &&
+      fixtures.includes("scripts/fixtures/warehouse-stage-b/stocktake-rollout.sql")) {
+      sql(readFileSync("scripts/fixtures/warehouse-stage-b/stocktake-rollout-before.sql", "utf8"));
+      console.log("PASS genuine pre-stocktake-column typed/JSON receipts saved before stocktake core migration");
+    }
     if (name === "20260909045512_grant_qingtian_warehouse_transfer_permissions.sql" &&
       fixtures.includes("scripts/fixtures/warehouse-stage-b/transfer-tenant-grant.sql")) {
       const migration = readFileSync(`${migrationDirectory}/${name}`, "utf8");

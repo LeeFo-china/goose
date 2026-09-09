@@ -77,6 +77,7 @@ type SettingsRequest = {
   warehouse_procurement_enabled?: boolean;
   warehouse_materials_enabled?: boolean;
   warehouse_transfers_enabled?: boolean;
+  warehouse_stocktakes_enabled?: boolean;
   expected_version: number; reason?: string; idempotencyKey: string;
 };
 export class PlatformSuppliersService {
@@ -319,7 +320,8 @@ export class PlatformSuppliersService {
       const target = { ...input,
         warehouse_procurement_enabled: input.warehouse_procurement_enabled ?? current?.warehouse_procurement_enabled ?? false,
         warehouse_materials_enabled: input.warehouse_materials_enabled ?? current?.warehouse_materials_enabled ?? false,
-        warehouse_transfers_enabled: input.warehouse_transfers_enabled ?? current?.warehouse_transfers_enabled ?? false };
+        warehouse_transfers_enabled: input.warehouse_transfers_enabled ?? current?.warehouse_transfers_enabled ?? false,
+        warehouse_stocktakes_enabled: input.warehouse_stocktakes_enabled ?? current?.warehouse_stocktakes_enabled ?? false };
       assertSupplierRolloutDependencies(target);
       assertSupplierRolloutTransition(current ?? {
         module_enabled: false,
@@ -349,6 +351,9 @@ export class PlatformSuppliersService {
         }),
         ...(input.warehouse_transfers_enabled === undefined ? {} : {
           warehouse_transfers_enabled: input.warehouse_transfers_enabled,
+        }),
+        ...(input.warehouse_stocktakes_enabled === undefined ? {} : {
+          warehouse_stocktakes_enabled: input.warehouse_stocktakes_enabled,
         }),
         expected_version: input.expected_version, actor_user_id: actor.authUserId,
         actor_employee_id: actor.employeeId,

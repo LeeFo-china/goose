@@ -34,6 +34,7 @@ export const SETTINGS_SELECT = [
   "purchase_batch_workflow_enabled", "warehouse_procurement_enabled",
   "warehouse_materials_enabled",
   "warehouse_transfers_enabled",
+  "warehouse_stocktakes_enabled",
   "enabled_by_employee_id", "enabled_at", "version", "created_at", "updated_at",
 ].join(",");
 export const CONTRACT_SELECT = [
@@ -177,6 +178,7 @@ export const SettingsSchema = z.object({
   warehouse_procurement_enabled: z.boolean().default(false),
   warehouse_materials_enabled: z.boolean().default(false),
   warehouse_transfers_enabled: z.boolean().optional(),
+  warehouse_stocktakes_enabled: z.boolean().optional(),
   enabled_by_employee_id: z.uuid().nullable(),
   enabled_at: nullableText,
   version: z.number().int().positive(),

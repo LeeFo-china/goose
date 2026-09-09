@@ -59,6 +59,9 @@ const InventoryTransactionRecordSchema = z.object({
     transfer_order_no: z.string().min(1),
     source_warehouse_id: uuid,
     destination_warehouse_id: uuid,
+  }).strict(), z.object({
+    stocktake_order_id: uuid,
+    stocktake_order_no: z.string().min(1),
   }).strict()]).nullable().default(null),
   project_id: uuid.nullable(),
   cost_category_id: uuid.nullable(),
@@ -69,9 +72,17 @@ const InventoryTransactionRecordSchema = z.object({
 }).strict().refine((row) => {
   const isTransfer = row.transaction_type === "transfer_out" || row.transaction_type === "transfer_in";
   const hasTransferSource = row.source_type === "warehouse_transfer_out_item" || row.source_type === "warehouse_transfer_in_item";
+  const isStocktake = row.transaction_type === "adjustment_in" || row.transaction_type === "adjustment_out";
+  const hasStocktakeSource = row.source_type === "warehouse_stocktake_item";
   if (isTransfer !== hasTransferSource) return false;
   if (isTransfer && row.source_type !== `warehouse_${row.transaction_type}_item`) return false;
-  return row.source_document === null || isTransfer === ("transfer_order_id" in row.source_document);
+  if (hasStocktakeSource && !isStocktake) return false;
+  if (row.source_document === null) return true;
+  const documentIsTransfer = "transfer_order_id" in row.source_document;
+  const documentIsStocktake = "stocktake_order_id" in row.source_document;
+  if (documentIsStocktake) return hasStocktakeSource && isStocktake;
+  if (hasStocktakeSource) return false;
+  return isTransfer === documentIsTransfer;
 }, { message: "调拨流水类型与来源单据不一致", path: ["source_document"] });
 
 const InventoryBalancePageSchema = z.object({

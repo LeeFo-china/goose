@@ -26,17 +26,30 @@ const setting = {
 };
 
 describe("PlatformSuppliersRepository settings command", () => {
-  test("transfer column expansion accepts only the known boolean and keeps legacy rows valid", async () => {
+  test("warehouse column expansion accepts only known booleans and keeps legacy rows valid", async () => {
     const { SettingsSchema: platformSchema } = await import("./platform-supplier-records");
     const { SettingsSchema: tenantSchema } = await import("./tenant-suppliers-mappers");
     for (const schema of [platformSchema, tenantSchema]) {
       expect(schema.safeParse(setting).success).toBe(true);
       for (const enabled of [false, true]) {
         expect(schema.safeParse({ ...setting, warehouse_transfers_enabled: enabled }).success).toBe(true);
+        expect(schema.safeParse({ ...setting, warehouse_stocktakes_enabled: enabled }).success).toBe(true);
       }
       expect(schema.safeParse({ ...setting, warehouse_transfers_enabled: "false" }).success).toBe(false);
+      expect(schema.safeParse({ ...setting, warehouse_stocktakes_enabled: "false" }).success).toBe(false);
       expect(schema.safeParse({ ...setting, unrelated_flag: false }).success).toBe(false);
     }
+  });
+
+  test("stocktake explicit flag uses JSON while omission preserves typed arguments", async () => {
+    const { supplierSettingsCommandArgs } = await import('./platform-supplier-settings-command');
+    const base = { ...setting, expected_version: 2, actor_employee_id: ACTOR_EMPLOYEE_ID,
+      actor_user_id: ACTOR_USER_ID, idempotency_key: 'stocktake-command' };
+    expect(supplierSettingsCommandArgs({ ...base, warehouse_stocktakes_enabled: true })).toMatchObject({
+      p_request: expect.objectContaining({ warehouse_stocktakes_enabled: true }),
+    });
+    expect(supplierSettingsCommandArgs(base)).toHaveProperty('p_tenant_id', TENANT_ID);
+    expect(supplierSettingsCommandArgs(base)).not.toHaveProperty('p_request');
   });
 
   test("rollout RPC expanded current and historical snapshots parse after transfer migration", async () => {
@@ -109,6 +122,7 @@ describe("PlatformSuppliersRepository settings command", () => {
       "purchase_batch_workflow_enabled",
       "warehouse_procurement_enabled",
       "warehouse_transfers_enabled",
+      "warehouse_stocktakes_enabled",
     ]) {
       expect(selectedColumns).toContain(flag);
     }
