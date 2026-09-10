@@ -1,0 +1,559 @@
+{
+  "forward_draft": {
+    "settings": {
+      "version": 19,
+      "module_enabled": true,
+      "warehouse_transfers_enabled": true
+    },
+    "checked_at": "2026-09-09T05:29:06.212596+00:00",
+    "sku_totals": {
+      "value": 88,
+      "quantity": 1
+    },
+    "orders_total": 1,
+    "invalid_pairs": 0,
+    "orders_sample": [
+      {
+        "id": "dfeda48f-050f-42d6-aba1-a56b953cd0c7",
+        "reason": "DEV 调拨验收 20260909：测试库存正向调拨，无真实物流",
+        "status": "draft",
+        "version": 1,
+        "order_no": "WT-0000000001",
+        "completed_at": null,
+        "source_warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+        "created_by_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826",
+        "destination_warehouse_id": "7b5af333-fcdf-4f92-9ac2-1ccbc77bedce"
+      }
+    ],
+    "commands_total": 1,
+    "warehouses_total": 2,
+    "warehouses_sample": [
+      {
+        "id": "7b5af333-fcdf-4f92-9ac2-1ccbc77bedce",
+        "name": "DEV 调拨验收分仓 20260909",
+        "status": "active",
+        "is_default": false
+      },
+      {
+        "id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+        "name": "公司仓库",
+        "status": "active",
+        "is_default": true
+      }
+    ],
+    "sku_balances_sample": [
+      {
+        "warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+        "inventory_value": 88,
+        "quantity_on_hand": 1,
+        "average_unit_cost": 88
+      }
+    ],
+    "unknown_source_types": 0,
+    "test_sku_transfer_facts": 0,
+    "test_sku_transfer_pairs": 0
+  },
+  "forward_submitted": {
+    "settings": {
+      "version": 19,
+      "module_enabled": true,
+      "warehouse_transfers_enabled": true
+    },
+    "checked_at": "2026-09-09T05:31:20.938108+00:00",
+    "sku_totals": {
+      "value": 88,
+      "quantity": 1
+    },
+    "orders_total": 1,
+    "invalid_pairs": 0,
+    "orders_sample": [
+      {
+        "id": "dfeda48f-050f-42d6-aba1-a56b953cd0c7",
+        "reason": "DEV 调拨验收 20260909：测试库存正向调拨，无真实物流",
+        "status": "submitted",
+        "version": 2,
+        "order_no": "WT-0000000001",
+        "completed_at": null,
+        "source_warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+        "created_by_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826",
+        "destination_warehouse_id": "7b5af333-fcdf-4f92-9ac2-1ccbc77bedce"
+      }
+    ],
+    "commands_total": 2,
+    "warehouses_total": 2,
+    "warehouses_sample": [
+      {
+        "id": "7b5af333-fcdf-4f92-9ac2-1ccbc77bedce",
+        "name": "DEV 调拨验收分仓 20260909",
+        "status": "active",
+        "is_default": false
+      },
+      {
+        "id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+        "name": "公司仓库",
+        "status": "active",
+        "is_default": true
+      }
+    ],
+    "sku_balances_sample": [
+      {
+        "warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+        "inventory_value": 88,
+        "quantity_on_hand": 1,
+        "average_unit_cost": 88
+      }
+    ],
+    "unknown_source_types": 0,
+    "test_sku_transfer_facts": 0,
+    "test_sku_transfer_pairs": 0
+  },
+  "forward_completed": {
+    "settings": {
+      "version": 19,
+      "module_enabled": true,
+      "warehouse_transfers_enabled": true
+    },
+    "checked_at": "2026-09-09T05:33:31.596993+00:00",
+    "sku_totals": {
+      "value": 88,
+      "quantity": 1
+    },
+    "orders_total": 1,
+    "invalid_pairs": 0,
+    "orders_sample": [
+      {
+        "id": "dfeda48f-050f-42d6-aba1-a56b953cd0c7",
+        "reason": "DEV 调拨验收 20260909：测试库存正向调拨，无真实物流",
+        "status": "completed",
+        "version": 3,
+        "order_no": "WT-0000000001",
+        "completed_at": "2026-09-09T05:33:14.509108+00:00",
+        "source_warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+        "created_by_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826",
+        "destination_warehouse_id": "7b5af333-fcdf-4f92-9ac2-1ccbc77bedce"
+      }
+    ],
+    "commands_total": 3,
+    "warehouses_total": 2,
+    "warehouses_sample": [
+      {
+        "id": "7b5af333-fcdf-4f92-9ac2-1ccbc77bedce",
+        "name": "DEV 调拨验收分仓 20260909",
+        "status": "active",
+        "is_default": false
+      },
+      {
+        "id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+        "name": "公司仓库",
+        "status": "active",
+        "is_default": true
+      }
+    ],
+    "sku_balances_sample": [
+      {
+        "warehouse_id": "7b5af333-fcdf-4f92-9ac2-1ccbc77bedce",
+        "inventory_value": 88,
+        "quantity_on_hand": 1,
+        "average_unit_cost": 88
+      },
+      {
+        "warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+        "inventory_value": 0,
+        "quantity_on_hand": 0,
+        "average_unit_cost": 0
+      }
+    ],
+    "unknown_source_types": 0,
+    "test_sku_transfer_facts": 2,
+    "test_sku_transfer_pairs": 1
+  },
+  "reverse_draft": {
+    "settings": {
+      "version": 19,
+      "module_enabled": true,
+      "warehouse_transfers_enabled": true
+    },
+    "checked_at": "2026-09-09T05:39:50.500768+00:00",
+    "sku_totals": {
+      "value": 88,
+      "quantity": 1
+    },
+    "orders_total": 2,
+    "invalid_pairs": 0,
+    "orders_sample": [
+      {
+        "id": "58dea46e-5fb0-4658-97fb-87162250b65b",
+        "reason": "DEV 调拨验收 20260909：反向调回测试库存，关联 WT-0000000001，无真实物流",
+        "status": "draft",
+        "version": 1,
+        "order_no": "WT-0000000002",
+        "completed_at": null,
+        "source_warehouse_id": "7b5af333-fcdf-4f92-9ac2-1ccbc77bedce",
+        "created_by_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826",
+        "destination_warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90"
+      },
+      {
+        "id": "dfeda48f-050f-42d6-aba1-a56b953cd0c7",
+        "reason": "DEV 调拨验收 20260909：测试库存正向调拨，无真实物流",
+        "status": "completed",
+        "version": 3,
+        "order_no": "WT-0000000001",
+        "completed_at": "2026-09-09T05:33:14.509108+00:00",
+        "source_warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+        "created_by_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826",
+        "destination_warehouse_id": "7b5af333-fcdf-4f92-9ac2-1ccbc77bedce"
+      }
+    ],
+    "commands_total": 4,
+    "warehouses_total": 2,
+    "warehouses_sample": [
+      {
+        "id": "7b5af333-fcdf-4f92-9ac2-1ccbc77bedce",
+        "name": "DEV 调拨验收分仓 20260909",
+        "status": "active",
+        "is_default": false
+      },
+      {
+        "id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+        "name": "公司仓库",
+        "status": "active",
+        "is_default": true
+      }
+    ],
+    "sku_balances_sample": [
+      {
+        "warehouse_id": "7b5af333-fcdf-4f92-9ac2-1ccbc77bedce",
+        "inventory_value": 88,
+        "quantity_on_hand": 1,
+        "average_unit_cost": 88
+      },
+      {
+        "warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+        "inventory_value": 0,
+        "quantity_on_hand": 0,
+        "average_unit_cost": 0
+      }
+    ],
+    "unknown_source_types": 0,
+    "test_sku_transfer_facts": 2,
+    "test_sku_transfer_pairs": 1
+  },
+  "reverse_submitted": {
+    "settings": {
+      "version": 19,
+      "module_enabled": true,
+      "warehouse_transfers_enabled": true
+    },
+    "checked_at": "2026-09-09T05:41:41.332224+00:00",
+    "sku_totals": {
+      "value": 88,
+      "quantity": 1
+    },
+    "orders_total": 2,
+    "invalid_pairs": 0,
+    "orders_sample": [
+      {
+        "id": "58dea46e-5fb0-4658-97fb-87162250b65b",
+        "reason": "DEV 调拨验收 20260909：反向调回测试库存，关联 WT-0000000001，无真实物流",
+        "status": "submitted",
+        "version": 2,
+        "order_no": "WT-0000000002",
+        "completed_at": null,
+        "source_warehouse_id": "7b5af333-fcdf-4f92-9ac2-1ccbc77bedce",
+        "created_by_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826",
+        "destination_warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90"
+      },
+      {
+        "id": "dfeda48f-050f-42d6-aba1-a56b953cd0c7",
+        "reason": "DEV 调拨验收 20260909：测试库存正向调拨，无真实物流",
+        "status": "completed",
+        "version": 3,
+        "order_no": "WT-0000000001",
+        "completed_at": "2026-09-09T05:33:14.509108+00:00",
+        "source_warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+        "created_by_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826",
+        "destination_warehouse_id": "7b5af333-fcdf-4f92-9ac2-1ccbc77bedce"
+      }
+    ],
+    "commands_total": 5,
+    "warehouses_total": 2,
+    "warehouses_sample": [
+      {
+        "id": "7b5af333-fcdf-4f92-9ac2-1ccbc77bedce",
+        "name": "DEV 调拨验收分仓 20260909",
+        "status": "active",
+        "is_default": false
+      },
+      {
+        "id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+        "name": "公司仓库",
+        "status": "active",
+        "is_default": true
+      }
+    ],
+    "sku_balances_sample": [
+      {
+        "warehouse_id": "7b5af333-fcdf-4f92-9ac2-1ccbc77bedce",
+        "inventory_value": 88,
+        "quantity_on_hand": 1,
+        "average_unit_cost": 88
+      },
+      {
+        "warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+        "inventory_value": 0,
+        "quantity_on_hand": 0,
+        "average_unit_cost": 0
+      }
+    ],
+    "unknown_source_types": 0,
+    "test_sku_transfer_facts": 2,
+    "test_sku_transfer_pairs": 1
+  },
+  "reverse_completed": {
+    "settings": {
+      "version": 19,
+      "module_enabled": true,
+      "warehouse_transfers_enabled": true
+    },
+    "checked_at": "2026-09-09T05:43:27.810001+00:00",
+    "sku_totals": {
+      "value": 88,
+      "quantity": 1
+    },
+    "orders_total": 2,
+    "invalid_pairs": 0,
+    "orders_sample": [
+      {
+        "id": "58dea46e-5fb0-4658-97fb-87162250b65b",
+        "reason": "DEV 调拨验收 20260909：反向调回测试库存，关联 WT-0000000001，无真实物流",
+        "status": "completed",
+        "version": 3,
+        "order_no": "WT-0000000002",
+        "completed_at": "2026-09-09T05:42:52.206644+00:00",
+        "source_warehouse_id": "7b5af333-fcdf-4f92-9ac2-1ccbc77bedce",
+        "created_by_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826",
+        "destination_warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90"
+      },
+      {
+        "id": "dfeda48f-050f-42d6-aba1-a56b953cd0c7",
+        "reason": "DEV 调拨验收 20260909：测试库存正向调拨，无真实物流",
+        "status": "completed",
+        "version": 3,
+        "order_no": "WT-0000000001",
+        "completed_at": "2026-09-09T05:33:14.509108+00:00",
+        "source_warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+        "created_by_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826",
+        "destination_warehouse_id": "7b5af333-fcdf-4f92-9ac2-1ccbc77bedce"
+      }
+    ],
+    "commands_total": 6,
+    "warehouses_total": 2,
+    "warehouses_sample": [
+      {
+        "id": "7b5af333-fcdf-4f92-9ac2-1ccbc77bedce",
+        "name": "DEV 调拨验收分仓 20260909",
+        "status": "active",
+        "is_default": false
+      },
+      {
+        "id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+        "name": "公司仓库",
+        "status": "active",
+        "is_default": true
+      }
+    ],
+    "sku_balances_sample": [
+      {
+        "warehouse_id": "7b5af333-fcdf-4f92-9ac2-1ccbc77bedce",
+        "inventory_value": 0,
+        "quantity_on_hand": 0,
+        "average_unit_cost": 0
+      },
+      {
+        "warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+        "inventory_value": 88,
+        "quantity_on_hand": 1,
+        "average_unit_cost": 88
+      }
+    ],
+    "unknown_source_types": 0,
+    "test_sku_transfer_facts": 4,
+    "test_sku_transfer_pairs": 2
+  },
+  "closed_stock": {
+    "settings": {
+      "version": 20,
+      "module_enabled": true,
+      "warehouse_transfers_enabled": false
+    },
+    "checked_at": "2026-09-09T05:51:15.311939+00:00",
+    "sku_totals": {
+      "value": 88,
+      "quantity": 1
+    },
+    "orders_total": 2,
+    "invalid_pairs": 0,
+    "orders_sample": [
+      {
+        "id": "58dea46e-5fb0-4658-97fb-87162250b65b",
+        "reason": "DEV 调拨验收 20260909：反向调回测试库存，关联 WT-0000000001，无真实物流",
+        "status": "completed",
+        "version": 3,
+        "order_no": "WT-0000000002",
+        "completed_at": "2026-09-09T05:42:52.206644+00:00",
+        "source_warehouse_id": "7b5af333-fcdf-4f92-9ac2-1ccbc77bedce",
+        "created_by_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826",
+        "destination_warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90"
+      },
+      {
+        "id": "dfeda48f-050f-42d6-aba1-a56b953cd0c7",
+        "reason": "DEV 调拨验收 20260909：测试库存正向调拨，无真实物流",
+        "status": "completed",
+        "version": 3,
+        "order_no": "WT-0000000001",
+        "completed_at": "2026-09-09T05:33:14.509108+00:00",
+        "source_warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+        "created_by_employee_id": "d8ecc522-e6a1-49d6-b7b7-aaa0f3084826",
+        "destination_warehouse_id": "7b5af333-fcdf-4f92-9ac2-1ccbc77bedce"
+      }
+    ],
+    "commands_total": 6,
+    "warehouses_total": 2,
+    "warehouses_sample": [
+      {
+        "id": "7b5af333-fcdf-4f92-9ac2-1ccbc77bedce",
+        "name": "DEV 调拨验收分仓 20260909",
+        "status": "active",
+        "is_default": false
+      },
+      {
+        "id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+        "name": "公司仓库",
+        "status": "active",
+        "is_default": true
+      }
+    ],
+    "sku_balances_sample": [
+      {
+        "warehouse_id": "7b5af333-fcdf-4f92-9ac2-1ccbc77bedce",
+        "inventory_value": 0,
+        "quantity_on_hand": 0,
+        "average_unit_cost": 0
+      },
+      {
+        "warehouse_id": "99565a46-0275-4cb5-bc2a-0e31abda7e90",
+        "inventory_value": 88,
+        "quantity_on_hand": 1,
+        "average_unit_cost": 88
+      }
+    ],
+    "unknown_source_types": 0,
+    "test_sku_transfer_facts": 4,
+    "test_sku_transfer_pairs": 2
+  },
+  "closed_business": {
+    "checked_at": "2026-09-09T05:51:15.660997+00:00",
+    "lock_waiters": 0,
+    "source_types": [
+      "supplier_purchase_receipt_item",
+      "warehouse_issue_item",
+      "warehouse_return_item",
+      "warehouse_transfer_in_item",
+      "warehouse_transfer_out_item"
+    ],
+    "history_count": 605,
+    "business_facts": {
+      "warehouses": {
+        "md5": "d979170cf33645f04454166a37058569",
+        "count": 2
+      },
+      "supplier_payments": {
+        "md5": "d41d8cd98f00b204e9800998ecf8427e",
+        "count": 0
+      },
+      "inventory_balances": {
+        "md5": "2fb393692237fcec441b0231f4fd9d94",
+        "count": 2
+      },
+      "project_cost_events": {
+        "md5": "de288f3c65d5e387a4750387b7780ca4",
+        "count": 7
+      },
+      "finance_ledger_entries": {
+        "md5": "87db489033a31eec29a0cb9627bee1f2",
+        "count": 21
+      },
+      "inventory_transactions": {
+        "md5": "ca7425a8a1f71da8d4eabf93eef04e97",
+        "count": 8
+      },
+      "warehouse_issue_orders": {
+        "md5": "b248de47e88c0c9f711d40268777eeee",
+        "count": 1
+      },
+      "supplier_payable_events": {
+        "md5": "a555c42133bf7a7975f3285f3a245b07",
+        "count": 5
+      },
+      "warehouse_return_orders": {
+        "md5": "f0dc564fbf021f6eec440e7ea87446a0",
+        "count": 2
+      },
+      "tenant_supplier_settings": {
+        "md5": "e14d5350bf874bf349b8f8c9a6890ec4",
+        "count": 1
+      }
+    },
+    "history_latest": "20260909045512",
+    "transfer_objects": [
+      "warehouse_transfer_command_events",
+      "warehouse_transfer_order_items",
+      "warehouse_transfer_orders"
+    ],
+    "long_transactions": 0,
+    "transfer_permissions": 2,
+    "transfer_role_grants": 2,
+    "invalid_existing_sources": 4,
+    "transfer_employee_grants": 0
+  },
+  "closed_roles": {
+    "target": {
+      "id": "e72850fe-dbba-427f-9109-f1779080a239",
+      "code": "system_admin",
+      "status": "active",
+      "tenant_id": "3eebca47-961f-4899-b976-a3d3208d326b",
+      "tenant_name": "固始晴天装饰工程有限公司",
+      "tenant_status": "active"
+    },
+    "checked_at": "2026-09-09T05:51:15.654016+00:00",
+    "employee_roles": {
+      "md5": "0b49e0a6393c9d2f228426aa27a16496",
+      "count": 34
+    },
+    "manage_allowed": true,
+    "approve_allowed": true,
+    "employee_overrides": {
+      "md5": "36b70b31a34f9434892036d5935b884f",
+      "count": 6
+    },
+    "target_role_grants": [
+      {
+        "code": "inventory.transfer.approve",
+        "role_id": "e72850fe-dbba-427f-9109-f1779080a239",
+        "access_scope": "all",
+        "permission_id": "32c9cffb-1539-4fb7-8fd6-38d40cb7d5ce"
+      },
+      {
+        "code": "inventory.transfer.manage",
+        "role_id": "e72850fe-dbba-427f-9109-f1779080a239",
+        "access_scope": "all",
+        "permission_id": "dd361097-fff6-4b21-a2bf-068f2e45cae6"
+      }
+    ],
+    "permission_helper_md5": "13517c88abd2190103aae0dc76517e0c",
+    "other_role_permissions": {
+      "md5": "97039e57a93b1bf8e27ea3ea4fe230d0",
+      "count": 1593
+    }
+  }
+}

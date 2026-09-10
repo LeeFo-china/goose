@@ -1,0 +1,71 @@
+PASS restored schema-only baseline 20260828160000 (527 migrations)
+PASS isolated migration 20260829130000_clarify_supplier_product_active_sku_requirement.sql
+PASS isolated migration 20260829150000_add_supplier_product_sku_counts.sql
+PASS isolated migration 20260829153000_harden_supplier_product_sku_count_batch_limit.sql
+PASS isolated migration 20260829160000_system_manage_supplier_sku_codes.sql
+PASS isolated migration 20260829170000_prepare_supplier_purchase_batch_project_option_filters.sql
+PASS isolated migration 20260830110500_add_supplier_purchase_batch_workflow_foundation.sql
+PASS isolated migration 20260830111000_extend_supplier_workflow_rollout_command.sql
+PASS isolated migration 20260830112000_seed_supplier_purchase_batch_workflow.sql
+PASS isolated migration 20260830113000_create_supplier_purchase_batch_workflow_submit.sql
+PASS isolated migration 20260830113500_list_supplier_purchase_batch_workflow_projection.sql
+PASS isolated migration 20260830113600_list_accessible_supplier_purchase_batch_workflow_tasks.sql
+PASS isolated migration 20260830113700_fix_supplier_purchase_batch_workflow_task_pagination.sql
+PASS isolated migration 20260830113800_fix_supplier_purchase_batch_budget_preflight.sql
+PASS isolated migration 20260830114000_create_supplier_purchase_batch_workflow_review.sql
+PASS isolated migration 20260830115000_create_supplier_purchase_batch_workflow_withdraw.sql
+PASS isolated migration 20260901130000_create_supplier_purchasable_sku_command.sql
+PASS isolated migration 20260902100000_supplier_catalog_cost_category_rules.sql
+PASS isolated migration 20260902110000_guard_supplier_purchasable_sku_noop_period_overlap.sql
+PASS isolated migration 20260902180000_supplier_purchase_auto_cost_category.sql
+PASS isolated migration 20260902202000_repair_supplier_purchase_batch_workflow_snapshot.sql
+PASS isolated migration 20260902203000_repair_supplier_purchase_batch_workflow_assignee_scope.sql
+PASS isolated migration 20260904150000_create_supplier_purchase_order_share_links.sql
+PASS isolated migration 20260904161000_list_supplier_purchase_orders_fulfillment_status.sql
+PASS isolated migration 20260904193000_add_supplier_purchase_personnel_snapshots.sql
+PASS isolated migration 20260905130000_align_supplier_purchase_order_awaiting_receipt.sql
+PASS isolated migration 20260905200000_harden_supplier_purchase_batch_budget_snapshot.sql
+PASS isolated migration 20260905210000_create_warehouse_foundation.sql
+PASS isolated migration 20260905211000_add_procurement_destinations.sql
+PASS isolated migration 20260906100000_fix_supplier_purchase_order_cancel_timestamp.sql
+PASS isolated migration 20260906110000_create_inventory_ledger_stage_b.sql
+PASS isolated migration 20260907052559_enable_warehouse_purchase_batch_drafts.sql
+PASS isolated migration 20260907053628_list_warehouse_purchase_orders.sql
+PASS isolated migration 20260907055503_enable_warehouse_purchase_batch_accounting_commands.sql
+PASS isolated migration 20260907062812_enable_warehouse_purchase_workflow.sql
+PASS isolated migration 20260907065551_harden_warehouse_receipt_posting.sql
+PASS isolated migration 20260907070346_enable_warehouse_supplier_payment_reads.sql
+PASS isolated migration 20260907071752_enable_warehouse_supplier_payment_commands.sql
+PASS isolated migration 20260907073222_add_inventory_source_document_reads.sql
+PASS isolated migration 20260907092110_optimize_inventory_transaction_read_paging.sql
+PASS isolated migration 20260907095435_stabilize_inventory_transaction_query_plans.sql
+PASS isolated migration 20260907102914_fix_supplier_sku_exact_catalog_resolution.sql
+PASS isolated migration 20260908010000_extend_warehouse_procurement_rollout_command.sql
+PASS isolated migration 20260908015230_create_warehouse_project_material_commands.sql
+PASS isolated migration 20260908015649_warehouse_net_project_costs.sql
+PASS isolated migration 20260908020216_warehouse_material_rollout_command.sql
+PASS isolated migration 20260908023924_read_warehouse_material_settings.sql
+PASS isolated migration 20260908062915_repair_reviewed_orphan_warehouses.sql
+PASS isolated migration 20260908110000_resolve_supplier_purchase_batch_category_options.sql
+PASS isolated migration 20260908185501_warehouse_transfer_atomic_commands.sql
+PASS isolated migration 20260908235654_warehouse_transfer_rollout_command.sql
+PASS isolated migration 20260908235954_warehouse_transfer_inventory_sources.sql
+PASS isolated migration 20260909045512_grant_qingtian_warehouse_transfer_permissions.sql
+EVIDENCE material workflow: final depletion 0.02; returns 0.01/0.00/0.01; injected cost failure rolled back all facts; immutable command replay retained
+PASS scripts/fixtures/warehouse-stage-b/material-workflow.sql
+EVIDENCE transfer contract: forced RLS, owner-only helpers, service-only RPCs, no role grants, default-disabled flag
+PASS scripts/fixtures/warehouse-stage-b/transfer-contract.sql
+EVIDENCE transfer workflow: empty target, 0.01/0.01 tail, destination average 26.25, multi-SKU 26.27, failure rollback, exact replay, paged string reads, no financial writes
+PASS scripts/fixtures/warehouse-stage-b/transfer-workflow.sql
+EVIDENCE transfer concurrency: 5 independent connection races observed Lock waits; oversubscription single winner; bidirectional no deadlock; same-key exact replay; transfer/material compete in both directions; restored 0.3 / 0.02
+PASS scripts/fixtures/warehouse-stage-b/transfer-concurrency.sql
+PASS scripts/fixtures/warehouse-stage-b/transfer-cross-command-before.sql
+EVIDENCE cross-command negative control: A committed early; exact P9002 CROSS_COMMAND_EXPECTED_LOCK_WAIT; B rolled back; both connections closed; real reverse restored stock
+EVIDENCE cross-command timeout: observed B Lock before actual 500ms statement_timeout; original 57014 preserved; both connections closed; A and B business writes rolled back within 8s
+EVIDENCE cross-command return-first: {"a_pid": 521, "b_pid": 522, "wait_event": "transactionid", "blocking_pids": [521], "wait_event_type": "Lock"}; {"other": "completed", "transfer": "completed"}; versions/unique receipts/3 inventory facts/transfer pair net 0/full ledger/replay/financial attribution verified
+EVIDENCE cross-command transfer-before-return: {"a_pid": 523, "b_pid": 524, "wait_event": "transactionid", "blocking_pids": [523], "wait_event_type": "Lock"}; {"other": "completed", "transfer": "completed"}; versions/unique receipts/3 inventory facts/transfer pair net 0/full ledger/replay/financial attribution verified
+EVIDENCE cross-command receipt-first: {"a_pid": 525, "b_pid": 526, "wait_event": "transactionid", "blocking_pids": [525], "wait_event_type": "Lock"}; {"other": "receipt_created", "transfer": "completed"}; versions/unique receipts/3 inventory facts/transfer pair net 0/full ledger/replay/financial attribution verified
+EVIDENCE cross-command transfer-before-receipt: {"a_pid": 527, "b_pid": 528, "wait_event": "transactionid", "blocking_pids": [527], "wait_event_type": "Lock"}; {"other": "receipt_created", "transfer": "completed"}; versions/unique receipts/3 inventory facts/transfer pair net 0/full ledger/replay/financial attribution verified
+EVIDENCE cross-command final: 4 real Lock waits; source stock 0.9 / 0.06 includes 2 actual receipts; net project cost 0; 2 legitimate payables total 0.04; connections closed
+PASS scripts/fixtures/warehouse-stage-b/transfer-cross-command-concurrency.sql
+Procurement-domain isolated verification passed; NOT full migration history/data, real-environment or end-to-end login acceptance.

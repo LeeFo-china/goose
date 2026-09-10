@@ -12,6 +12,15 @@ test('inventory menu belongs to procurement and requires stock view', () => {
   ).toMatchObject({ label: '仓库库存', permission: 'inventory.stock.view' });
 });
 
+test('transfer history navigation requires only stock view', () => {
+  expect(tenantNavGroups.find((group) => group.label === '采购供应')?.items.find((item) => item.href === '/warehouse-transfers'))
+    .toMatchObject({ label: '仓库调拨', permission: 'inventory.stock.view' });
+  const markup = renderToStaticMarkup(<InventoryWorkspace canView canViewWarehouses={false} canViewPurchaseOrders={false} canViewMaterials={false} />);
+  expect(markup).toContain('href="/warehouse-transfers"');
+  const denied = renderToStaticMarkup(<InventoryWorkspace canView={false} canViewWarehouses={false} canViewPurchaseOrders={false} />);
+  expect(denied).not.toContain('href="/warehouse-transfers"');
+});
+
 test('no stock permission renders a denied state rather than inventory controls', () => {
   const markup = renderToStaticMarkup(
     <InventoryWorkspace
