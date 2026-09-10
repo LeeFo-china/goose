@@ -30,7 +30,7 @@ export interface FrozenInventoryCommandOptions {
 
 export function useFrozenInventoryCommand(
   scope: string,
-  onResolved: (id: string) => void,
+  onResolved: (id: string, outcome: 'success' | 'conflict') => void,
   options: FrozenInventoryCommandOptions,
 ) {
   const storageKey = options.storageKey?.(scope) ?? `${ADMIN_SESSION_STORAGE_PREFIX}${scope}:${options.storageSuffix}`;
@@ -118,7 +118,7 @@ export function useFrozenInventoryCommand(
       if (cleared === 'cleared' && isOwnerCurrent()) {
         setPending(null);
         setMessage('操作已成功，已重新读取最新单据。');
-        onResolved(command.orderId);
+        onResolved(command.orderId, 'success');
       }
     } catch (error: unknown) {
       if (!options.retain(error, wasUncertain)) {
@@ -131,7 +131,7 @@ export function useFrozenInventoryCommand(
         if (cleared === 'cleared' && isOwnerCurrent()) {
           setPending(null);
           if (error && typeof error === 'object' && 'status' in error && error.status === 409)
-            onResolved(command.orderId);
+            onResolved(command.orderId, 'conflict');
           setMessage(options.error(error));
         }
         return;

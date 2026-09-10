@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { loadCompleteStocktakeItems, readStocktake, type StocktakePage } from './stocktake-api';
 import type { StocktakeDraftSeed } from './stocktake-draft';
+import type { StocktakeCountsEdit } from './stocktake-editor-storage';
 import {
   StocktakeItemTable,
   StocktakeLoading,
@@ -29,7 +30,7 @@ import {
   type StocktakeAccess,
   type StocktakeAction,
 } from './stocktake-rules';
-export type StocktakeCountsSeed = { order: WarehouseStocktakeOrderSummary; items: WarehouseStocktakeItem[] };
+export type StocktakeCountsSeed = { order: WarehouseStocktakeOrderSummary; items: WarehouseStocktakeItem[]; recovery?: StocktakeCountsEdit };
 const LABELS: Record<StocktakeAction, string> = {
   'save-draft': '编辑草稿',
   start: '开始盘点',

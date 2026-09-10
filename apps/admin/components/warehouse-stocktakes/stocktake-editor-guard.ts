@@ -43,7 +43,7 @@ export function installStocktakeLeaveGuard({
     document.removeEventListener('click', click, true);
   };
 }
-export function useStocktakeEditorGuard(dirty: boolean, onClose: () => void) {
+export function useStocktakeEditorGuard(dirty: boolean, onClose: () => void, onDiscard?: () => boolean) {
   const [discard, setDiscard] = useState(false);
   const destination = useRef<(() => void) | null>(null);
   const stopGuard = useRef<(() => void) | null>(null);
@@ -73,6 +73,7 @@ export function useStocktakeEditorGuard(dirty: boolean, onClose: () => void) {
     setDiscard(true);
   };
   const discardChanges = () => {
+    if (onDiscard && !onDiscard()) return;
     const leave = destination.current;
     destination.current = null;
     stopGuard.current?.();

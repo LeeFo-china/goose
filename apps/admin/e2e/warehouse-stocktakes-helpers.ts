@@ -14,7 +14,7 @@ export async function writes(page: Page): Promise<Write[]> {
 export async function scenario(page: Page, value: string) { await page.request.post(`${backend}/__test/scenario`, { data: { scenario: value } }); }
 export async function draft(page: Page, count = 1) {
   await page.getByRole('button', { name: '新建盘点', exact: true }).click();
-  await page.getByLabel('盘点仓库', { exact: true }).click();
+  await page.getByRole('region', { name: '盘点草稿' }).getByLabel('盘点仓库', { exact: true }).click();
   await page.getByRole('option', { name: '仓库01', exact: true }).click();
   await page.getByLabel('盘点原因', { exact: true }).fill('浏览器测试盘点');
   for (let index = 1; index <= count; index++) {

@@ -1,6 +1,31 @@
 import { expect, test } from '@playwright/test';
 import { action, backend, count, detail, draft, open, quantity, reason, save, saveCounts, scenario, writes } from './warehouse-stocktakes-helpers';
 
+test('详情往返保留关键词仓库状态和页码，取消后重读当前页', async ({ page }) => {
+  await open(page);
+  const list = page.getByRole('region', { name: '盘点单列表' });
+  await list.getByLabel('搜索单号 / 原因').fill('PD');
+  await list.getByLabel('搜索单号 / 原因').press('Enter');
+  await list.getByLabel('状态', { exact: true }).click();
+  await page.getByRole('option', { name: '草稿', exact: true }).click();
+  await list.getByLabel('盘点仓库', { exact: true }).click();
+  await page.getByRole('option', { name: '仓库01', exact: true }).click();
+  const pager = page.getByRole('navigation', { name: '盘点单分页' });
+  await pager.getByRole('button', { name: '下一页', exact: true }).click();
+  await page.getByRole('button', { name: '查看 PD0023', exact: true }).click();
+  await page.getByRole('button', { name: '返回列表', exact: true }).click();
+  await expect(pager).toContainText('第 2 / 2 页');
+  await expect(list.getByLabel('搜索单号 / 原因')).toHaveValue('PD');
+  await expect(list.getByLabel('状态', { exact: true })).toContainText('草稿');
+  await expect(list.getByLabel('盘点仓库', { exact: true })).toContainText('仓库01');
+  await page.getByRole('button', { name: '查看 PD0023', exact: true }).click();
+  await action(page, '取消盘点'); await expect(detail(page)).toContainText('已取消');
+  await page.getByRole('button', { name: '返回列表', exact: true }).click();
+  await expect(pager).toContainText('共 22 条');
+  await expect(pager).toContainText('第 2 / 2 页');
+  await expect(page.getByRole('button', { name: '查看 PD0023', exact: true })).toHaveCount(0);
+});
+
 test('全流程精确盘盈盘亏，空白不是零，不发客户端成本，来源可追溯', async ({ page }, info) => {
   await open(page); await draft(page, 2);
   await page.screenshot({ path: info.outputPath('stocktake-draft.png'), fullPage: true });
@@ -54,7 +79,7 @@ test('25行明细分页和完整编辑，分次录入首尾行保留，取消只
   await expect(table.getByRole('row')).toHaveCount(6);
   await page.getByRole('button', { name: '编辑草稿' }).click();
   await expect(page.getByRole('button', { name: /^移除 / })).toHaveCount(25);
-  await expect(page.getByLabel('盘点仓库', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: '盘点草稿' }).getByLabel('盘点仓库', { exact: true })).toHaveCount(0);
   await save(page); await expect(detail(page)).toContainText('版本 2');
   expect((await writes(page))[0].body.items).toHaveLength(25);
   await action(page, '开始盘点'); await count(page);
