@@ -54,6 +54,17 @@ const nullableConfidence = z.preprocess((value) => {
   return value;
 }, z.coerce.number("地址置信度必须是数字").min(0).max(1).nullable().optional());
 
+const optionalNullableDateTime = (message: string) => z.preprocess((value) => {
+  if (value === undefined || value === "") return undefined;
+  if (value === null) return null;
+  if (typeof value !== "string") return value;
+
+  const normalized = value.trim();
+  if (!normalized) return undefined;
+  const timestamp = Date.parse(normalized);
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : value;
+}, z.iso.datetime(message).nullable().optional());
+
 const TenantAddressMetadataSchema = {
   address_title: nullableText(120, "地址标题不能超过 120 个字符"),
   address_poi_id: nullableText(120, "POI ID 不能超过 120 个字符"),
@@ -65,7 +76,7 @@ const TenantAddressMetadataSchema = {
   address_longitude: nullableCoordinate(-180, 180, "地址经度必须在 -180 到 180 之间"),
   address_source: PlatformTenantAddressSourceSchema.nullable().optional(),
   address_confidence: nullableConfidence,
-  address_confirmed_at: z.iso.datetime("地址确认时间格式不正确").optional().nullable(),
+  address_confirmed_at: optionalNullableDateTime("地址确认时间格式不正确"),
 };
 
 export const PlatformTenantListQuerySchema = PaginationQuerySchema.extend({
@@ -96,6 +107,12 @@ export const UpdatePlatformTenantSchema = z.object({
   ...TenantAddressMetadataSchema,
   contact_name: optionalText(80, "联系人不能超过 80 个字符"),
   contact_phone: optionalText(30, "联系电话不能超过 30 个字符"),
+}).transform((value) => {
+  const normalized = { ...value };
+  if (normalized.address_confirmed_at === undefined) {
+    delete normalized.address_confirmed_at;
+  }
+  return normalized;
 }).refine((value) => Object.keys(value).length > 0, {
   message: "至少需要提交一个更新字段",
 });

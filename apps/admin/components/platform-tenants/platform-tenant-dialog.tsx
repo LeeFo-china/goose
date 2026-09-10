@@ -50,12 +50,15 @@ function optionalNumber(formData: FormData, key: string) {
   return Number.isFinite(numericValue) ? numericValue : undefined;
 }
 
-function optionalNullableDate(formData: FormData, key: string) {
+function optionalNullableIsoDate(formData: FormData, key: string) {
   const value = String(formData.get(key) || "").trim();
-  return value || null;
+  if (!value) return null;
+
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : undefined;
 }
 
-function buildAddressPayload(formData: FormData) {
+export function buildAddressPayload(formData: FormData) {
   const address = optionalString(formData, "address");
   const source = optionalString(formData, "address_source");
   if (!address) {
@@ -104,7 +107,7 @@ function buildAddressPayload(formData: FormData) {
     address_longitude: optionalNumber(formData, "address_longitude"),
     address_source: source,
     address_confidence: optionalNumber(formData, "address_confidence"),
-    address_confirmed_at: source === "manual" ? null : optionalNullableDate(formData, "address_confirmed_at"),
+    address_confirmed_at: source === "manual" ? null : optionalNullableIsoDate(formData, "address_confirmed_at"),
   };
 }
 
