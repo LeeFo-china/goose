@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { WarehouseStocktakeSettings } from '@gooes/domain';
 
 import { StatusAlert } from '@/components/admin/status-alert';
@@ -15,6 +15,9 @@ import { StocktakeCounts } from './stocktake-counts';
 import { StocktakeDetail, type StocktakeCountsSeed } from './stocktake-detail';
 import { StocktakeDraft, type StocktakeDraftSeed } from './stocktake-draft';
 import { StocktakeList } from './stocktake-list';
+import { recoverStocktakeEditor } from './stocktake-editor-recovery';
+import { useStocktakeEditorRecovery } from './use-stocktake-editor-recovery';
+import { StocktakeDiscardDialog } from './stocktake-parts';
 import { stocktakeAccess, stocktakeError, stocktakeFeatureEnabled, type StocktakeAccess } from './stocktake-rules';
 
 export function StocktakeWorkspace({
@@ -41,6 +44,7 @@ export function StocktakeWorkspace({
       key={`${scope}:${initialOrderId ?? ''}`}
       access={access}
       scope={scope}
+      tenantId={session.tenantId}
       initialOrderId={initialOrderId}
     />
   );
@@ -49,10 +53,12 @@ export function StocktakeWorkspace({
 function StocktakeWorkspaceSession({
   access,
   scope,
+  tenantId,
   initialOrderId,
 }: {
   access: StocktakeAccess;
   scope: string;
+  tenantId: string | null;
   initialOrderId?: string;
 }) {
   const [selected, setSelected] = useState(initialOrderId ?? '');
@@ -62,7 +68,14 @@ function StocktakeWorkspaceSession({
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [settingsError, setSettingsError] = useState('');
   const [settingsRetry, setSettingsRetry] = useState(0);
-  const command = useStocktakeCommand(scope, (id) => {
+  const editor = useStocktakeEditorRecovery(scope);
+  const [restoreBusy, setRestoreBusy] = useState(false);
+  const [restoreError, setRestoreError] = useState('');
+  const [discardRecovery, setDiscardRecovery] = useState(false);
+  const restoreController = useRef<AbortController | null>(null);
+  useEffect(() => () => restoreController.current?.abort(), []);
+  const command = useStocktakeCommand(scope, (id, outcome) => {
+    if (outcome === 'success' && editor.record?.orderId === id) editor.clear();
     setDraft(null);
     setCounts(null);
     setSelected(id);
@@ -84,10 +97,28 @@ function StocktakeWorkspaceSession({
       });
     return () => controller.abort();
   }, [settingsRetry]);
-  const blocked = enabled !== true || !command.ready || command.busy || Boolean(command.pending);
+  const blocked = enabled !== true || !command.ready || command.busy || Boolean(command.pending) || !editor.ready || restoreBusy;
+  const awaitingRecovery = Boolean(editor.record) && !draft && !counts;
+  async function restoreEditor() {
+    if (blocked || !access.canManage || !editor.record || restoreController.current) return;
+    const controller = new AbortController();
+    restoreController.current = controller;
+    setRestoreBusy(true); setRestoreError('');
+    try {
+      const result = await recoverStocktakeEditor(editor.record, tenantId, controller.signal);
+      if (controller.signal.aborted) return;
+      if (result.error) setRestoreError(result.error);
+      else if (result.draft) setDraft(result.draft);
+      else if (result.counts) setCounts(result.counts);
+    } catch (caught) {
+      if (!controller.signal.aborted) setRestoreError(stocktakeError(caught));
+    } finally {
+      if (!controller.signal.aborted) { setRestoreBusy(false); restoreController.current = null; }
+    }
+  }
   const execute = (path: string, body: object, id: string) => {
     const permitted = path.endsWith('/complete') ? access.canApprove : access.canManage;
-    if (!blocked && permitted) void command.execute(path, body, id);
+    if (!blocked && !awaitingRecovery && permitted) void command.execute(path, body, id);
   };
   return (
     <div className="flex min-w-0 flex-col gap-4 pb-6">
@@ -100,8 +131,9 @@ function StocktakeWorkspaceSession({
           {access.canManage && (
             <Button
               size="sm"
-              disabled={blocked || Boolean(draft) || Boolean(counts)}
+              disabled={blocked || awaitingRecovery || Boolean(draft) || Boolean(counts)}
               onClick={() => {
+                if (blocked || awaitingRecovery || draft || counts) return;
                 setSelected('');
                 setDraft({ id: crypto.randomUUID(), items: [] });
               }}
@@ -145,11 +177,24 @@ function StocktakeWorkspaceSession({
           </Button>
         </StatusAlert>
       )}
+      {(editor.error || restoreError) && <StatusAlert>{editor.error || restoreError}</StatusAlert>}
+      {(awaitingRecovery || !editor.ready && editor.error) && (
+        <div className="flex gap-2">
+          <Button variant="outline" disabled={blocked || !access.canManage || !editor.record} onClick={() => void restoreEditor()}>恢复未保存编辑</Button>
+          <Button variant="outline" disabled={command.busy || Boolean(command.pending) || restoreBusy} onClick={() => setDiscardRecovery(true)}>放弃恢复</Button>
+        </div>
+      )}
+      <StocktakeDiscardDialog open={discardRecovery} onOpenChange={setDiscardRecovery} onDiscard={() => {
+        if (editor.clear()) { setDiscardRecovery(false); setRestoreError(''); }
+      }} />
       {counts ? (
         <StocktakeCounts
           key={counts.order.id}
           order={counts.order}
           items={counts.items}
+          recovery={counts.recovery}
+          onEdit={editor.write}
+          onDiscard={editor.clear}
           disabled={blocked || !access.canManage}
           onSave={execute}
           onClose={() => setCounts(null)}
@@ -158,6 +203,8 @@ function StocktakeWorkspaceSession({
         <StocktakeDraft
           key={draft.id}
           seed={draft}
+          onEdit={editor.write}
+          onDiscard={editor.clear}
           access={access}
           disabled={blocked}
           onSave={execute}
@@ -175,15 +222,16 @@ function StocktakeWorkspaceSession({
             id={selected}
             revision={revision}
             access={access}
-            disabled={blocked}
+            disabled={blocked || awaitingRecovery}
             onDraft={setDraft}
             onCounts={setCounts}
             onCommand={execute}
           />
         </>
-      ) : (
-        <StocktakeList access={access} revision={revision} onOpen={setSelected} />
-      )}
+      ) : null}
+      <div hidden={Boolean(draft || counts || selected)}>
+        <StocktakeList access={access} revision={revision} onOpen={setSelected} active={!draft && !counts && !selected} />
+      </div>
       <Separator />
       <p className="text-xs text-muted-foreground">
         开始盘点冻结账面快照；完成盘点按实盘差异调整仓库库存，不生成项目成本、供应商应付或付款记录。

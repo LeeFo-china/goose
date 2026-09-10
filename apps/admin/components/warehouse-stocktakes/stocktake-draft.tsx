@@ -12,10 +12,12 @@ import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
 import { loadStocktakeStock } from './stocktake-api';
 import { stocktakeDraftSchema, type StocktakeAccess } from './stocktake-rules';
 import { StocktakeDiscardDialog } from './stocktake-parts';
+import type { StocktakeDraftEdit } from './stocktake-editor-storage';
 export interface StocktakeDraftSeed {
   id: string;
   order?: WarehouseStocktakeOrderSummary;
   items: WarehouseStocktakeItem[];
+  recovery?: StocktakeDraftEdit;
 }
 export function StocktakeDraft({
   seed,
@@ -23,24 +25,34 @@ export function StocktakeDraft({
   disabled,
   onSave,
   onClose,
+  onEdit,
+  onDiscard,
 }: {
   seed: StocktakeDraftSeed;
   access: StocktakeAccess;
   disabled: boolean;
   onSave: (path: string, body: object, id: string) => void;
   onClose: () => void;
+  onEdit?: (edit: StocktakeDraftEdit) => boolean;
+  onDiscard?: () => boolean;
 }) {
   const [warehouse, setWarehouse] = useState(
-    seed.order ? { id: seed.order.warehouse_id, name: seed.order.warehouse_name } : null,
+    seed.recovery ? seed.recovery.warehouse : seed.order ? { id: seed.order.warehouse_id, name: seed.order.warehouse_name } : null,
   );
-  const [reason, setReason] = useState(seed.order?.reason ?? '');
+  const [reason, setReason] = useState(seed.recovery?.reason ?? seed.order?.reason ?? '');
   const [lines, setLines] = useState(
-    seed.items.map((item) => ({ id: item.supplier_sku_id, name: item.sku_name + ' · ' + item.sku_code })),
+    seed.recovery?.lines ?? seed.items.map((item) => ({ id: item.supplier_sku_id, name: item.sku_name + ' · ' + item.sku_code })),
   );
-  const [dirty, setDirty] = useState(false);
-  const { discard, setDiscard, close, discardChanges } = useStocktakeEditorGuard(dirty, onClose);
+  const [dirty, setDirty] = useState(Boolean(seed.recovery));
+  const { discard, setDiscard, close, discardChanges } = useStocktakeEditorGuard(dirty, onClose, onDiscard);
   const [error, setError] = useState('');
   const locked = disabled || !access.canManage;
+  function update(change: Partial<Pick<StocktakeDraftEdit, 'warehouse' | 'reason' | 'lines'>>) {
+    if (locked) return;
+    const next: StocktakeDraftEdit = { kind: 'draft', orderId: seed.id, version: seed.order?.version ?? 0, warehouse, reason, lines, ...change };
+    if (onEdit && !onEdit(next)) return;
+    setWarehouse(next.warehouse); setReason(next.reason); setLines(next.lines); setDirty(true);
+  }
   const stockLoader = useMemo(
     () => (page: number, keyword: string, signal?: AbortSignal) =>
       loadStocktakeStock(warehouse?.id ?? '', page, keyword, signal),
@@ -82,9 +94,7 @@ export function StocktakeDraft({
             load={warehouseLoader}
             disabled={locked}
             onChange={(value) => {
-              if (value.id.toLowerCase() !== warehouse?.id.toLowerCase()) setLines([]);
-              setWarehouse(value);
-              setDirty(true);
+              update({ warehouse: { id: value.id, name: value.name }, lines: value.id.toLowerCase() !== warehouse?.id.toLowerCase() ? [] : lines });
             }}
           />
         ) : (
@@ -99,8 +109,7 @@ export function StocktakeDraft({
             disabled={locked}
             aria-invalid={Boolean(error)}
             onChange={(event) => {
-              setReason(event.target.value);
-              setDirty(true);
+              update({ reason: event.target.value });
             }}
           />
         </Field>
@@ -117,8 +126,7 @@ export function StocktakeDraft({
                 setError('盘点 SKU 不能重复');
                 return;
               }
-              setLines((current) => [...current, value]);
-              setDirty(true);
+              update({ lines: [...lines, { id: value.id, name: value.name }] });
               setError('');
             }}
           />
@@ -141,8 +149,7 @@ export function StocktakeDraft({
                 disabled={locked}
                 aria-label={'移除 ' + line.name}
                 onClick={() => {
-                  setLines((current) => current.filter((item) => item.id !== line.id));
-                  setDirty(true);
+                  update({ lines: lines.filter((item) => item.id !== line.id) });
                 }}
               >
                 移除

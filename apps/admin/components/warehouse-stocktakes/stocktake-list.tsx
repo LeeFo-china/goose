@@ -26,10 +26,12 @@ export function StocktakeList({
   access,
   revision,
   onOpen,
+  active = true,
 }: {
   access: StocktakeAccess;
   revision: number;
   onOpen: (id: string) => void;
+  active?: boolean;
 }) {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -48,6 +50,7 @@ export function StocktakeList({
     warehouseId: warehouse?.id,
   });
   useEffect(() => {
+    if (!active) return;
     const controller = new AbortController();
     setResult(null);
     setError('');
@@ -64,7 +67,7 @@ export function StocktakeList({
         if (!controller.signal.aborted) setError(stocktakeError(caught));
       });
     return () => controller.abort();
-  }, [path, revision, retry, page]);
+  }, [path, revision, retry, page, active]);
   return (
     <section className="flex min-w-0 flex-col gap-3" aria-label="盘点单列表">
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">

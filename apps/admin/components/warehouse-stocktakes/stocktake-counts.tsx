@@ -14,6 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { formatInventoryDecimal } from '@/components/inventory/inventory-rules';
 import { stocktakeCountsSchema, stocktakeDifference } from './stocktake-rules';
 import { StocktakeDiscardDialog, stocktakeMoney } from './stocktake-parts';
+import type { StocktakeCountsEdit } from './stocktake-editor-storage';
 interface CountLine {
   item: WarehouseStocktakeItem;
   counted: string;
@@ -47,25 +48,35 @@ export function StocktakeCounts({
   disabled,
   onSave,
   onClose,
+  recovery,
+  onEdit,
+  onDiscard,
 }: {
   order: WarehouseStocktakeOrderSummary;
   items: WarehouseStocktakeItem[];
   disabled: boolean;
   onSave: (path: string, body: object, id: string) => void;
   onClose: () => void;
+  recovery?: StocktakeCountsEdit;
+  onEdit?: (edit: StocktakeCountsEdit) => boolean;
+  onDiscard?: () => boolean;
 }) {
   const [lines, setLines] = useState<CountLine[]>(
     items.map((item) => ({
       item,
-      counted: item.counted_quantity ?? '',
-      reason: item.difference_reason ?? '',
+      counted: recovery?.lines.find((line) => line.skuId.toLowerCase() === item.supplier_sku_id.toLowerCase())?.counted ?? item.counted_quantity ?? '',
+      reason: recovery?.lines.find((line) => line.skuId.toLowerCase() === item.supplier_sku_id.toLowerCase())?.reason ?? item.difference_reason ?? '',
     })),
   );
-  const [dirty, setDirty] = useState(false);
-  const { discard, setDiscard, close, discardChanges } = useStocktakeEditorGuard(dirty, onClose);
+  const [dirty, setDirty] = useState(Boolean(recovery));
+  const { discard, setDiscard, close, discardChanges } = useStocktakeEditorGuard(dirty, onClose, onDiscard);
   const [error, setError] = useState('');
   function update(id: string, change: Partial<Pick<CountLine, 'counted' | 'reason'>>) {
-    setLines((current) => current.map((line) => (line.item.id === id ? { ...line, ...change } : line)));
+    if (disabled) return;
+    const next = lines.map((line) => (line.item.id === id ? { ...line, ...change } : line));
+    if (onEdit && !onEdit({ kind: 'counts', orderId: order.id, version: order.version,
+      lines: next.map((line) => ({ skuId: line.item.supplier_sku_id, counted: line.counted, reason: line.reason })) })) return;
+    setLines(next);
     setDirty(true);
   }
   function save() {
