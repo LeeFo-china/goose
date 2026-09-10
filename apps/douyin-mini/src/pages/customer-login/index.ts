@@ -15,5 +15,4 @@ Page(createCustomerLoginPageDefinition({
   verifyDouyinCustomerSms,
   selectDouyinCustomerIdentity,
   navigateToPage,
-  showToast: (options) => { void tt.showToast(options); },
 }));

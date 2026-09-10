@@ -1,23 +1,122 @@
 <view class="page-content customer-login-page">
-  <view class="ui-page-title">我的项目</view>
-  <view class="ui-page-description">使用装修公司预留手机号登录后查看项目进度。</view>
-
-  <button class="primary-action ui-pressable" open-type="getPhoneNumber" bindgetphonenumber="onDouyinPhone">抖音手机号一键登录</button>
-
-  <view class="sms-panel ui-card">
-    <input class="ui-control input" type="number" maxlength="11" value="{{phone}}" placeholder="填写手机号" bindinput="onPhoneInput" />
-    <view class="sms-row">
-      <input class="ui-control code-input" type="number" maxlength="6" value="{{code}}" placeholder="验证码" bindinput="onCodeInput" />
-      <button class="secondary-action ui-pressable" bindtap="onSendCode">获取验证码</button>
+  <view class="welcome" style="background-color: {{primaryColor}}; color: {{primaryTextColor}}">
+    <view class="brand-row">
+      <view class="brand-mark">
+        <image tt:if="{{logoUrl && !logoFailed}}" class="brand-logo" src="{{logoUrl}}" mode="aspectFill" binderror="onLogoError" />
+        <text tt:else class="brand-fallback" style="color: {{primaryColor}}">家</text>
+      </view>
+      <view class="brand-name">{{brandName}}</view>
     </view>
-    <button class="primary-action ui-pressable" loading="{{status === 'verifying'}}" bindtap="onVerifySms">登录</button>
+    <view class="welcome-title">查看我家的装修进度</view>
+    <view class="welcome-description">登录后查看项目进度、施工日志和现场照片</view>
   </view>
 
-  <view tt:if="{{status === 'selecting'}}" class="candidate-list">
-    <view class="ui-section-title">选择客户身份</view>
-    <button tt:for="{{candidates}}" tt:key="candidate_id" class="candidate-item ui-pressable" data-id="{{item.candidate_id}}" bindtap="onSelectCandidate">
-      <view class="candidate-title">{{item.title}}</view>
-      <view class="candidate-subtitle">{{item.subtitle}}</view>
+  <view tt:if="{{status === 'selecting' || status === 'choosing'}}" class="candidate-section">
+    <view class="section-kicker">已找到多个客户身份</view>
+    <view class="section-title">选择装修公司</view>
+    <view class="section-description">请选择本次要查看的项目所属公司</view>
+    <view tt:if="{{loginError}}" class="inline-error" role="alert">{{loginError}}</view>
+    <button
+      tt:for="{{candidates}}"
+      tt:key="candidate_id"
+      class="candidate-item ui-pressable"
+      hover-class="ui-pressable--pressed"
+      disabled="{{status === 'choosing'}}"
+      loading="{{status === 'choosing' && choosingCandidateId === item.candidate_id}}"
+      data-id="{{item.candidate_id}}"
+      bindtap="onSelectCandidate"
+    >
+      <view class="candidate-copy">
+        <view class="candidate-title">{{item.title}}</view>
+        <view class="candidate-subtitle">{{item.subtitle}}</view>
+      </view>
+      <view class="candidate-arrow" aria-hidden="true">›</view>
     </button>
   </view>
+
+  <view tt:else class="login-section">
+    <button
+      class="primary-action ui-pressable"
+      hover-class="ui-pressable--pressed"
+      style="background-color: {{primaryColor}}; color: {{primaryTextColor}}"
+      open-type="getPhoneNumber"
+      disabled="{{status !== 'idle'}}"
+      loading="{{status === 'authorizing'}}"
+      bindgetphonenumber="onDouyinPhone"
+    >{{status === 'authorizing' ? '正在登录' : '使用抖音手机号登录'}}</button>
+
+    <view tt:if="{{loginError && !smsExpanded}}" class="inline-error" role="alert">{{loginError}}</view>
+
+    <view class="method-divider">
+      <view class="divider-line"></view>
+      <view class="divider-label">其他登录方式</view>
+      <view class="divider-line"></view>
+    </view>
+
+    <button
+      class="sms-toggle ui-pressable"
+      hover-class="ui-pressable--pressed"
+      disabled="{{status !== 'idle'}}"
+      bindtap="onToggleSms"
+    >
+      <text>使用短信验证码登录</text>
+      <text class="toggle-symbol" aria-hidden="true">{{smsExpanded ? '−' : '+'}}</text>
+    </button>
+
+    <view tt:if="{{smsExpanded}}" class="sms-form">
+      <view class="field-group">
+        <view class="field-label">手机号</view>
+        <input
+          class="field-input ui-control {{phoneError ? 'ui-control--error' : ''}}"
+          aria-label="手机号"
+          type="number"
+          maxlength="11"
+          value="{{phone}}"
+          placeholder="请输入装修公司预留手机号"
+          disabled="{{status !== 'idle'}}"
+          bindinput="onPhoneInput"
+        />
+        <view tt:if="{{phoneError}}" class="field-error" role="alert">{{phoneError}}</view>
+      </view>
+
+      <view class="field-group">
+        <view class="field-label">验证码</view>
+        <view class="sms-row">
+          <input
+            class="field-input code-input ui-control {{codeError ? 'ui-control--error' : ''}}"
+            aria-label="验证码"
+            type="number"
+            maxlength="6"
+            value="{{code}}"
+            placeholder="请输入验证码"
+            disabled="{{status !== 'idle'}}"
+            bindinput="onCodeInput"
+          />
+          <button
+            class="sms-send ui-pressable"
+            hover-class="ui-pressable--pressed"
+            style="{{phoneReady && status === 'idle' && smsCooldown === 0 ? 'border-color: ' + primaryColor + '; color: ' + primaryColor : ''}}"
+            disabled="{{!phoneReady || status !== 'idle' || smsCooldown > 0}}"
+            loading="{{status === 'sending'}}"
+            bindtap="onSendCode"
+          >{{smsCooldown > 0 ? smsCooldown + '秒后重发' : (status === 'sending' ? '发送中' : '获取验证码')}}</button>
+        </view>
+        <view tt:if="{{codeError}}" class="field-error" role="alert">{{codeError}}</view>
+      </view>
+
+      <view tt:if="{{formNotice}}" class="form-notice">{{formNotice}}</view>
+      <view tt:if="{{loginError}}" class="inline-error" role="alert">{{loginError}}</view>
+
+      <button
+        class="verify-action ui-pressable"
+        hover-class="ui-pressable--pressed"
+        style="background-color: {{primaryColor}}; color: {{primaryTextColor}}"
+        disabled="{{status !== 'idle'}}"
+        loading="{{status === 'verifying'}}"
+        bindtap="onVerifySms"
+      >{{status === 'verifying' ? '正在验证' : '验证并登录'}}</button>
+    </view>
+  </view>
+
+  <view class="privacy-note">手机号仅用于核验您与装修项目的客户关系</view>
 </view>
