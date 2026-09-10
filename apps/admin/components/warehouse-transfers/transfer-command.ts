@@ -2,15 +2,15 @@
 
 import { useEffect, useRef, useState } from 'react';
 
-import { ADMIN_SESSION_STORAGE_PREFIX } from '@/components/layout/admin-session-scope';
 import { beginFrozenCommand, getBrowserFrozenCommandStorage } from '@/components/supplier-purchase-orders/purchase-order-fulfillment-ui-state';
 
 import { sendTransfer } from './transfer-api';
-import { clearStoredTransferCommand, createTransferCommandLifecycle, matchStoredTransferCommand, parseStoredTransferCommand, type TransferCommand } from './transfer-command-state';
+import { clearStoredTransferCommand, createTransferCommandLifecycle, matchStoredTransferCommand, type TransferCommand } from './transfer-command-state';
+import { restoreTransferCommand, transferRecoveryStorageKey } from './transfer-command-storage';
 import { retainTransferCommand, transferError } from './transfer-rules';
 
 export function useTransferCommand(scope: string, onResolved: (id: string) => void) {
-  const storageKey = `${ADMIN_SESSION_STORAGE_PREFIX}${scope}:warehouse-transfer-command`;
+  const storageKey = transferRecoveryStorageKey(scope);
   const [pending, setPending] = useState<TransferCommand | null>(null);
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -20,23 +20,18 @@ export function useTransferCommand(scope: string, onResolved: (id: string) => vo
   const inFlight = useRef(false);
   useEffect(() => {
     owner.current = lifecycle.current.activate();
+    setReady(false); setPending(null); setBusy(false); setMessage(''); inFlight.current = false;
     const storage = getBrowserFrozenCommandStorage();
-    try {
-      const raw = storage?.getItem(storageKey);
-      if (raw) {
-        const restored = parseStoredTransferCommand(raw);
-        if (!restored) { setMessage('待确认请求记录无效，请联系管理员核实后处理'); return; }
-        else setPending(restored);
-      }
-      setReady(true);
-    } catch { setMessage('无法读取待确认请求记录，请核实最近一次操作'); }
+    const restored = restoreTransferCommand(storage, scope);
+    setPending(restored.pending); setReady(restored.ready); setMessage(restored.message);
     return () => { lifecycle.current.deactivate(); };
-  }, [storageKey]);
+  }, [scope]);
 
   async function execute(path?: string, payload?: object, orderId?: string) {
     if (!ready || inFlight.current) return;
     const executionOwner = owner.current;
     const isOwnerCurrent = () => lifecycle.current.isCurrent(executionOwner);
+    if (!isOwnerCurrent()) return;
     const wasUncertain = Boolean(pending);
     let command = pending;
     if (!command) {
@@ -46,9 +41,13 @@ export function useTransferCommand(scope: string, onResolved: (id: string) => vo
     }
     const storage = getBrowserFrozenCommandStorage();
     try {
-      if (!storage) { setMessage('无法保存会话请求记录，暂不能执行操作'); return; }
+      if (!storage) { setReady(false); setMessage('无法保存会话请求记录，暂不能执行操作'); return; }
+      const existing = storage.getItem(storageKey);
+      if ((pending && matchStoredTransferCommand(storage, storageKey, command) !== 'current') || (!pending && existing !== null)) {
+        setReady(false); setMessage('待确认请求记录已变化，请刷新核实'); return;
+      }
       storage.setItem(storageKey, JSON.stringify(command));
-    } catch { setMessage('无法保存会话请求记录，暂不能执行操作'); return; }
+    } catch { setReady(false); setMessage('无法保存会话请求记录，暂不能执行操作'); return; }
     setPending(command); inFlight.current = true; setBusy(true); setMessage('');
     try {
       await sendTransfer(command.path, command.body, command.key);
@@ -79,7 +78,7 @@ export function useTransferCommand(scope: string, onResolved: (id: string) => vo
       const match = matchStoredTransferCommand(storage, storageKey, command);
       if (isOwnerCurrent() && match === 'current') setMessage(transferError(error));
       if (isOwnerCurrent() && match === 'error') setMessage('无法读取待确认请求记录，请刷新并核实最近一次操作');
-    } finally { inFlight.current = false; if (isOwnerCurrent()) setBusy(false); }
+    } finally { if (isOwnerCurrent()) { inFlight.current = false; setBusy(false); } }
   }
   return { pending, ready, busy, message, execute };
 }

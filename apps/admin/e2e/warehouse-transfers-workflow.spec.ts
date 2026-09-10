@@ -28,6 +28,91 @@ async function action(page: Page, name: string) {
   await page.getByRole('button', { name, exact: true }).click();
   await page.getByRole('button', { name: '确认执行', exact: true }).click();
 }
+test('恢复回归：新建和已保存草稿编辑中禁止重复新建', async ({ page }) => {
+  await open(page); await draft(page);
+  await expect(page.getByRole('button', { name: '新建调拨', exact: true })).toBeDisabled();
+  await expect(page.getByLabel('调拨原因', { exact: true })).toHaveValue('浏览器测试调拨');
+  await expect(page.locator('input[id^="transfer-quantity-"]')).toHaveValue('2.0001');
+  await save(page);
+  await expect(page.getByRole('heading', { name: 'DBNEW', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '编辑草稿', exact: true }).click();
+  await expect(page.getByRole('button', { name: '新建调拨', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: '关闭编辑', exact: true }).click();
+  await expect(page.getByRole('button', { name: '新建调拨', exact: true })).toBeEnabled();
+  expect(await writes(page)).toHaveLength(1);
+});
+
+test('恢复回归：详情返回保留搜索双仓状态和页码，命令后重新读取', async ({ page }) => {
+  await open(page);
+  await page.getByLabel('搜索单号 / 原因').fill('DB');
+  await page.getByLabel('搜索单号 / 原因').press('Enter');
+  await page.getByLabel('状态', { exact: true }).click();
+  await page.getByRole('option', { name: '草稿', exact: true }).click();
+  await selectWarehouse(page, '调出仓库', '仓库01');
+  await selectWarehouse(page, '调入仓库', '仓库02');
+  const pager = page.getByRole('navigation', { name: '调拨单分页' });
+  await pager.getByRole('button', { name: '下一页', exact: true }).click();
+  await page.getByRole('button', { name: '查看 DB0022', exact: true }).click();
+  await page.getByRole('button', { name: '返回列表', exact: true }).click();
+  await expect(pager).toContainText('第 2 / 2 页');
+  await expect(page.getByLabel('搜索单号 / 原因')).toHaveValue('DB');
+  await expect(page.getByLabel('状态', { exact: true })).toContainText('草稿');
+  await expect(page.getByLabel('调出仓库', { exact: true })).toContainText('仓库01');
+  await expect(page.getByLabel('调入仓库', { exact: true })).toContainText('仓库02');
+  await page.getByRole('button', { name: '查看 DB0022', exact: true }).click();
+  await action(page, '取消调拨');
+  await expect(page.getByRole('region', { name: '调拨单详情' })).toContainText('已取消');
+  await page.getByRole('button', { name: '返回列表', exact: true }).click();
+  await expect(pager).toContainText('共 23 条');
+  await expect(pager).toContainText('第 2 / 2 页');
+  await expect(page.getByRole('button', { name: '查看 DB0022', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: '清除筛选', exact: true }).click();
+  await expect(pager).toContainText('第 1 / 2 页');
+});
+
+for (const legacy of [false, true]) {
+  test(`恢复回归：${legacy ? '旧前缀离开调拨后' : '新请求'}实际退出再登录可原样重试`, async ({ page }) => {
+    await open(page, 'unknown'); await draft(page);
+    const firstRequest = page.waitForRequest(request => request.method() === 'POST' && request.url().endsWith('/save-draft'));
+    await save(page);
+    const first = await firstRequest;
+    await expect(page.getByRole('button', { name: '重试原请求' })).toBeEnabled();
+    if (legacy) {
+      await page.locator('main').getByRole('link', { name: '仓库库存', exact: true }).click();
+      await expect(page).toHaveURL(/\/inventory$/);
+      expect(await page.evaluate(() => {
+        const key = Object.keys(sessionStorage).find(value => value.endsWith(':warehouse-transfer-command'));
+        if (!key) return false;
+        const oldKey = key.replace('gooes:warehouse-transfer-recovery:', 'gooes:admin-session:');
+        const raw = sessionStorage.getItem(key)!;
+        sessionStorage.removeItem(key); sessionStorage.setItem(oldKey, raw);
+        return true;
+      })).toBe(true);
+    }
+    await page.getByRole('button', { name: '退出登录', exact: true }).click();
+    await expect(page).toHaveURL(/\/login$/);
+    await page.request.post('/api/auth/login', { data: { phone: 'other' } });
+    await page.goto('/warehouse-transfers');
+    await expect(page.getByText('当前为只读权限；', { exact: false })).toBeVisible();
+    await expect(page.getByRole('button', { name: '重试原请求' })).toHaveCount(0);
+    await page.getByRole('button', { name: '退出登录', exact: true }).click();
+    await expect(page).toHaveURL(/\/login$/);
+    await page.request.post('/api/auth/login', { data: { phone: 'all' } });
+    await page.request.post(`${backend}/__test/scenario`, { data: { scenario: 'off' } });
+    await page.goto('/warehouse-transfers');
+    await expect(page.getByRole('button', { name: '重试原请求' })).toBeEnabled();
+    const replayRequest = page.waitForRequest(request => request.method() === 'POST' && request.url().endsWith('/save-draft'));
+    await page.getByRole('button', { name: '重试原请求' }).click();
+    const replay = await replayRequest;
+    expect(replay.url()).toBe(first.url());
+    expect(replay.postData()).toBe(first.postData());
+    expect(replay.headers()['idempotency-key']).toBe(first.headers()['idempotency-key']);
+    await expect(page.getByRole('heading', { name: 'DBNEW', exact: true })).toBeVisible();
+    expect(await writes(page)).toHaveLength(2);
+    expect(await page.evaluate(() => Object.keys(sessionStorage).filter(key => key.endsWith(':warehouse-transfer-command')))).toEqual([]);
+  });
+}
+
 test('新建到完成保持精确数量与请求字段，终态只读且来源可追溯', async ({ page }, info) => {
   await open(page); await draft(page);
   await page.screenshot({ path: info.outputPath('transfer-draft.png'), fullPage: true });

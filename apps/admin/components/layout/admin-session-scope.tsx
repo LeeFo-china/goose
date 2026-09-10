@@ -71,7 +71,11 @@ export function clearAdminSessionScopedStorage(
     const keys: string[] = [];
     for (let index = 0; index < storage.length; index += 1) {
       const key = storage.key(index);
-      if (key?.startsWith(ADMIN_SESSION_STORAGE_PREFIX)) keys.push(key);
+      if (key?.startsWith(ADMIN_SESSION_STORAGE_PREFIX)) {
+        // Old transfer commands migrate when their owning identity next opens the workspace.
+        if (key.endsWith(":warehouse-transfer-command")) continue;
+        keys.push(key);
+      }
     }
     for (const key of keys) storage.removeItem(key);
   } catch {
