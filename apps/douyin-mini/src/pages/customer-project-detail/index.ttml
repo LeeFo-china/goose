@@ -12,7 +12,7 @@
       <view class="log-meta">{{item.stage_label || '施工'}} · {{item.node_name || ''}}</view>
       <view class="log-content">{{item.content || '施工进度已更新'}}</view>
       <view tt:if="{{item.images.length}}" class="log-images">
-        <image tt:for="{{item.images}}" tt:key="*this" class="log-image" src="{{item}}" mode="aspectFill" />
+        <image-gallery items="{{item.images}}" variant="compact" />
       </view>
       <view class="log-footer">{{item.employee_name || '项目成员'}} · {{item.created_at}}</view>
     </view>

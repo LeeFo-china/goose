@@ -4,6 +4,7 @@
   "usingComponents": {
     "empty-state": "/components/empty-state/index",
     "error-state": "/components/error-state/index",
+    "image-gallery": "/components/image-gallery/index",
     "page-skeleton": "/components/page-skeleton/index",
     "pagination-loader": "/components/pagination-loader/index"
   }

@@ -24,6 +24,17 @@ test("customer project detail loads project and all construction logs", async ()
   expect(fetchLogs).toHaveBeenCalledWith({}, PROJECT_ID, { page: 1, pageSize: 10 });
 });
 
+test("customer project detail renders construction log images with the preview gallery", async () => {
+  const [template, config] = await Promise.all([
+    Bun.file(`${__dirname}/index.ttml`).text(),
+    Bun.file(`${__dirname}/index.json`).text(),
+  ]);
+
+  expect(template).toContain('<image-gallery items="{{item.images}}" variant="compact" />');
+  expect(template).not.toContain('<image tt:for="{{item.images}}"');
+  expect(config).toContain('"image-gallery": "/components/image-gallery/index"');
+});
+
 function attachSetData<T extends { data: Record<string, unknown> }>(definition: T) {
   return Object.assign(definition, {
     setData(patch: Record<string, unknown>) {
