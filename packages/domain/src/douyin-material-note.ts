@@ -89,8 +89,8 @@ export const DouyinMaterialNotePublicAssetSchema = z.strictObject({
   fileId: IdSchema,
   src: z.url({ protocol: /^https$/ }).max(2_048),
   alt: NonEmptyShortTextSchema,
-  width: z.number().int().positive().max(16_384),
-  height: z.number().int().positive().max(16_384),
+  width: z.number().int().positive().max(16_384).nullable(),
+  height: z.number().int().positive().max(16_384).nullable(),
 });
 
 export const DouyinMaterialNotePublicImageBlockSchema = z.strictObject({

@@ -522,6 +522,19 @@ describe('Douyin material note domain contracts', () => {
         },
       }],
     }).success).toBe(false);
+
+    const imageWithoutRecordedDimensions = {
+      ...publicImageBlock,
+      asset: {
+        ...publicImageBlock.asset,
+        width: null,
+        height: null,
+      },
+    };
+    expect(DouyinMaterialNoteOwnedDetailSchema.parse({
+      ...ownedDetail,
+      content_blocks: [imageWithoutRecordedDimensions],
+    }).content_blocks).toEqual([imageWithoutRecordedDimensions]);
   });
 
   test('defines aggregate-only tenant summary, detail and version DTOs', () => {

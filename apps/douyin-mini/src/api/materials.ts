@@ -438,12 +438,17 @@ function parseImageAsset(value: unknown): DouyinMaterialNoteImageAsset | null {
     ? value.src.trim()
     : null;
   const alt = boundedText(value.alt, 1, 300);
-  if (!fileId || !src || !alt
-    || !isIntegerInRange(value.width, 1, 16_384)
-    || !isIntegerInRange(value.height, 1, 16_384)) {
+  const width = parseNullableImageDimension(value.width);
+  const height = parseNullableImageDimension(value.height);
+  if (!fileId || !src || !alt || width === undefined || height === undefined) {
     return null;
   }
-  return { fileId, src, alt, width: value.width, height: value.height };
+  return { fileId, src, alt, width, height };
+}
+
+function parseNullableImageDimension(value: unknown): number | null | undefined {
+  if (value === null) return null;
+  return isIntegerInRange(value, 1, 16_384) ? value as number : undefined;
 }
 
 function validateId(id: string): string {

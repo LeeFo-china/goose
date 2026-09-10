@@ -360,6 +360,34 @@ describe("Douyin material API client", () => {
     }
   });
 
+  test("accepts claimed images whose optional dimensions were not recorded", async () => {
+    const imageWithoutRecordedDimensions = {
+      ...publicImageBlock,
+      asset: {
+        ...publicImageBlock.asset,
+        width: null,
+        height: null,
+      },
+    };
+    const response = {
+      claim_id: CLAIM_ID,
+      already_claimed: true,
+      claimed_at: CLAIMED_AT,
+      material: {
+        ...claimedMaterial,
+        content_blocks: [imageWithoutRecordedDimensions],
+      },
+    };
+
+    await expect(claimMaterial(clientWith(() => response), NOTE_ID)).resolves.toEqual(response);
+    await expect(fetchOwnedMaterialDetail(clientWith(() => ({
+      ...ownedSummary,
+      content_blocks: [imageWithoutRecordedDimensions],
+    })), CLAIM_ID)).resolves.toMatchObject({
+      content_blocks: [imageWithoutRecordedDimensions],
+    });
+  });
+
   test("counts normalized content with portable UTF-8 semantics at 512 KiB", async () => {
     for (const token of ["A", "é", "中", "😀"]) {
       const accepted = maximumUtf8Blocks(token);

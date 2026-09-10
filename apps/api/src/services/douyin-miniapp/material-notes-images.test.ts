@@ -199,6 +199,42 @@ describe('DouyinMiniappMaterialNotesService image blocks', () => {
     });
   });
 
+  test('keeps otherwise valid historical images in claim and owned detail responses', async () => {
+    const context = harness({
+      assets: [{ ...imageAsset, width: null, height: null }],
+    });
+
+    await expect(context.service.claim(undefined, NOTE_ID)).resolves.toMatchObject({
+      material: {
+        content_blocks: [{ type: 'paragraph' }, {
+          type: 'image',
+          asset: {
+            fileId: IMAGE_FILE_ID,
+            width: null,
+            height: null,
+          },
+        }, {
+          type: 'image',
+          asset: {
+            fileId: IMAGE_FILE_ID,
+            width: null,
+            height: null,
+          },
+        }],
+      },
+    });
+    await expect(context.service.getOwnedDetail(undefined, CLAIM_ID)).resolves.toMatchObject({
+      content_blocks: [{ type: 'paragraph' }, {
+        type: 'image',
+        asset: {
+          fileId: IMAGE_FILE_ID,
+          width: null,
+          height: null,
+        },
+      }],
+    });
+  });
+
   test('rejects unusable image assets before exposing a body', async () => {
     const context = harness({ assets: [{ ...imageAsset, mime_type: 'application/pdf' }] });
     await expect(context.service.claim(undefined, NOTE_ID))

@@ -159,8 +159,8 @@ export type DouyinMaterialNoteBlock =
       fileId: string;
       src: string;
       alt: string;
-      width: number;
-      height: number;
+      width: number | null;
+      height: number | null;
     };
     caption?: string;
   };
