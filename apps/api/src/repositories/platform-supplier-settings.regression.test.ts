@@ -26,17 +26,45 @@ const setting = {
 };
 
 describe("PlatformSuppliersRepository settings command", () => {
-  test("transfer column expansion accepts only the known boolean and keeps legacy rows valid", async () => {
+  test("warehouse column expansion accepts only known booleans and keeps legacy rows valid", async () => {
     const { SettingsSchema: platformSchema } = await import("./platform-supplier-records");
     const { SettingsSchema: tenantSchema } = await import("./tenant-suppliers-mappers");
     for (const schema of [platformSchema, tenantSchema]) {
-      expect(schema.safeParse(setting).success).toBe(true);
+      const legacy = schema.parse(setting);
+      expect(legacy).toEqual({ ...setting, warehouse_materials_enabled: false });
+      expect(legacy).not.toHaveProperty('warehouse_stocktakes_enabled');
       for (const enabled of [false, true]) {
         expect(schema.safeParse({ ...setting, warehouse_transfers_enabled: enabled }).success).toBe(true);
+        expect(schema.safeParse({ ...setting, warehouse_stocktakes_enabled: enabled }).success).toBe(true);
       }
       expect(schema.safeParse({ ...setting, warehouse_transfers_enabled: "false" }).success).toBe(false);
+      expect(schema.safeParse({ ...setting, warehouse_stocktakes_enabled: "false" }).success).toBe(false);
       expect(schema.safeParse({ ...setting, unrelated_flag: false }).success).toBe(false);
     }
+  });
+
+  test("stocktake explicit flag uses JSON while omission preserves typed arguments", async () => {
+    const { supplierSettingsCommandArgs } = await import('./platform-supplier-settings-command');
+    const base = { tenant_id: TENANT_ID, module_enabled: false, require_active_contract_for_new_order: false,
+      ownership_reads_enabled: false, private_supplier_writes_enabled: false, private_catalog_writes_enabled: false,
+      procurement_snapshot_v1_enabled: false, purchase_batch_workflow_enabled: false, expected_version: 2,
+      actor_employee_id: ACTOR_EMPLOYEE_ID, actor_user_id: ACTOR_USER_ID, idempotency_key: 'stocktake-command' };
+    for (const warehouse_stocktakes_enabled of [false, true]) {
+      expect(supplierSettingsCommandArgs({ ...base, warehouse_stocktakes_enabled })).toEqual({
+        p_request: { tenant_id: TENANT_ID, module_enabled: false, require_active_contract_for_new_order: false,
+          ownership_reads_enabled: false, private_supplier_writes_enabled: false, private_catalog_writes_enabled: false,
+          procurement_snapshot_v1_enabled: false, purchase_batch_workflow_enabled: false, expected_version: 2,
+          actor_employee_id: ACTOR_EMPLOYEE_ID, warehouse_stocktakes_enabled, reason: null },
+        p_actor_user_id: ACTOR_USER_ID, p_idempotency_key: 'stocktake-command',
+      });
+    }
+    expect(supplierSettingsCommandArgs(base)).toEqual({
+      p_tenant_id: TENANT_ID, p_module_enabled: false, p_require_active_contract_for_new_order: false,
+      p_ownership_reads_enabled: false, p_private_supplier_writes_enabled: false,
+      p_private_catalog_writes_enabled: false, p_procurement_snapshot_v1_enabled: false,
+      p_purchase_batch_workflow_enabled: false, p_expected_version: 2, p_actor_user_id: ACTOR_USER_ID,
+      p_actor_employee_id: ACTOR_EMPLOYEE_ID, p_idempotency_key: 'stocktake-command', p_reason: null,
+    });
   });
 
   test("rollout RPC expanded current and historical snapshots parse after transfer migration", async () => {
@@ -109,6 +137,7 @@ describe("PlatformSuppliersRepository settings command", () => {
       "purchase_batch_workflow_enabled",
       "warehouse_procurement_enabled",
       "warehouse_transfers_enabled",
+      "warehouse_stocktakes_enabled",
     ]) {
       expect(selectedColumns).toContain(flag);
     }

@@ -219,6 +219,8 @@ export const PERMISSION_CODE_VALUES = [
   'inventory.issue.approve',
   'inventory.transfer.manage',
   'inventory.transfer.approve',
+  'inventory.stocktake.manage',
+  'inventory.stocktake.approve',
   'project_referral.read',
   'project_referral.manage',
   'marketing_page.read',
@@ -1070,6 +1072,18 @@ export const PermissionCodeConfig: Record<
     label: '确认仓库调拨',
     module: 'inventory',
     resource: 'transfer',
+    action: 'approve',
+  },
+  'inventory.stocktake.manage': {
+    label: '管理仓库盘点',
+    module: 'inventory',
+    resource: 'stocktake',
+    action: 'manage',
+  },
+  'inventory.stocktake.approve': {
+    label: '确认仓库盘点',
+    module: 'inventory',
+    resource: 'stocktake',
     action: 'approve',
   },
   'project_referral.read': {

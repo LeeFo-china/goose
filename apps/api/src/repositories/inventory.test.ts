@@ -24,12 +24,58 @@ const TRANSFER_SOURCE_DOCUMENT = {
   transfer_order_id: '90000000-0000-4000-8000-000000000001', transfer_order_no: 'WT-001',
   source_warehouse_id: WAREHOUSE_ID, destination_warehouse_id: '20000000-0000-4000-8000-000000000002',
 };
+const STOCKTAKE_SOURCE_DOCUMENT = {
+  stocktake_order_id: '91000000-0000-4000-8000-000000000001', stocktake_order_no: 'ST-001',
+};
 
 process.env.SUPABASE_URL ??= 'http://127.0.0.1:54321';
 process.env.SUPABASE_PUBLISH ??= 'test-publish-key';
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= 'test-service-role-key';
 
 describe('InventoryRepository', () => {
+  test.each(['adjustment_in', 'adjustment_out'] as const)('preserves complete stocktake %s source', async (transaction_type) => {
+    const { InventoryRepository } = await import('./inventory');
+    const repository = new InventoryRepository({ rpc: async () => ({ data: { items: [{ ...TRANSACTION,
+      transaction_type, source_type: 'warehouse_stocktake_item', source_document: STOCKTAKE_SOURCE_DOCUMENT }],
+      total: 1, page: 1, page_size: 20 }, error: null }) });
+    expect((await repository.listTransactions({ tenant_id: TENANT_ID, page: 1, pageSize: 20 })).list[0]?.source_document)
+      .toEqual(STOCKTAKE_SOURCE_DOCUMENT);
+  });
+
+  test('rejects malformed, mixed and wrong-type stocktake sources', async () => {
+    const { InventoryRepository } = await import('./inventory');
+    const cases = [
+      ['adjustment_in', 'warehouse_stocktake_item', { stocktake_order_id: STOCKTAKE_SOURCE_DOCUMENT.stocktake_order_id }],
+      ['adjustment_out', 'warehouse_stocktake_item', { ...STOCKTAKE_SOURCE_DOCUMENT, stocktake_order_no: '' }],
+      ['adjustment_in', 'warehouse_stocktake_item', { ...STOCKTAKE_SOURCE_DOCUMENT, ...SOURCE_DOCUMENT }],
+      ['purchase_receipt', 'warehouse_stocktake_item', STOCKTAKE_SOURCE_DOCUMENT],
+      ['adjustment_in', 'legacy_adjustment', STOCKTAKE_SOURCE_DOCUMENT],
+    ] as const;
+    for (const [transaction_type, source_type, source_document] of cases) {
+      const repository = new InventoryRepository({ rpc: async () => ({ data: { items: [{ ...TRANSACTION,
+        transaction_type, source_type, source_document }], total: 1, page: 1, page_size: 20 }, error: null }) });
+      await expect(repository.listTransactions({ tenant_id: TENANT_ID, page: 1, pageSize: 20 })).rejects.toBeInstanceOf(AppError);
+    }
+    const wrongType = new InventoryRepository({ rpc: async () => ({ data: { items: [{ ...TRANSACTION,
+      transaction_type: 'purchase_receipt', source_type: 'warehouse_stocktake_item',
+      source_document: STOCKTAKE_SOURCE_DOCUMENT }], total: 1, page: 1, page_size: 20 }, error: null }) });
+    await expect(wrongType.listTransactions({ tenant_id: TENANT_ID, page: 1, pageSize: 20 })).rejects.toMatchObject({
+      code: 'DB_ERROR',
+      details: expect.arrayContaining([expect.objectContaining({ message: '库存流水类型与来源单据不一致' })]),
+    });
+  });
+
+  test('allows unresolved matching stocktake and legacy adjustment sources', async () => {
+    const { InventoryRepository } = await import('./inventory');
+    for (const [transaction_type, source_type] of [
+      ['adjustment_in', 'warehouse_stocktake_item'], ['adjustment_out', 'warehouse_stocktake_item'],
+      ['adjustment_in', 'legacy_adjustment'], ['adjustment_out', 'legacy_adjustment'],
+    ] as const) {
+      const repository = new InventoryRepository({ rpc: async () => ({ data: { items: [{ ...TRANSACTION,
+        transaction_type, source_type, source_document: null }], total: 1, page: 1, page_size: 20 }, error: null }) });
+      expect((await repository.listTransactions({ tenant_id: TENANT_ID, page: 1, pageSize: 20 })).list[0]?.source_document).toBeNull();
+    }
+  });
   test.each(['transfer_out', 'transfer_in'] as const)('preserves complete %s source with one paginated RPC', async (transactionType) => {
     const { InventoryRepository } = await import('./inventory');
     const calls: Record<string, unknown>[] = [];

@@ -152,6 +152,7 @@ export const SettingsSchema = z.object({
   warehouse_procurement_enabled: z.boolean().default(false),
   warehouse_materials_enabled: z.boolean().default(false),
   warehouse_transfers_enabled: z.boolean().optional(),
+  warehouse_stocktakes_enabled: z.boolean().optional(),
   enabled_by_employee_id: z.uuid().nullable(),
   enabled_at: nullableString,
   ...auditFields,

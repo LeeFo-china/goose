@@ -6,6 +6,8 @@
 
 **范围：** Gooes API、Admin、Domain、Supabase migration 和对接文档；不改动 Orange 仓库
 
+**实施进度（2026-09-09）：** 项目领料/退料已通过[阶段C开发验收](../../operations/evidence/2026-09-09-warehouse-stage-c-dev-acceptance.md)，调拨已通过[晴天真实租户验收](../../operations/evidence/2026-09-09-warehouse-transfer-granted-live-acceptance.md)。盘点API/Admin、DEV apply/发布和晴天Chrome真实盘盈/反向盘亏验收已完成，公司仓恢复1箱/88元，开关恢复关闭，财务及非目标权限摘要不变；见[盘点最新记录](../../operations/evidence/2026-09-09-warehouse-stocktake-admin-live-acceptance.md)。手工调整D2.2未开始，阶段D整体尚未完成。下文保留原首期设计范围，不将领域预留值视为已开放功能，DEV验收不等同生产开放。
+
 ## 1. 背景
 
 现有供应商采购链路以项目直采为唯一业务范围。采购批次、采购申请、采购单、

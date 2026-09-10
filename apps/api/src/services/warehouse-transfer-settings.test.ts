@@ -17,6 +17,7 @@ test('transfers are independent of procurement and material flags but depend on 
   expect(effectiveSupplierRolloutSettings({ ...enabled, module_enabled: false })).toHaveProperty('warehouse_transfers_enabled', false);
   expect(settingsState({ ...enabled, version: 1 })).toHaveProperty('warehouse_transfers_enabled', true);
   expect(SETTINGS_SELECT.split(',')).toContain('warehouse_transfers_enabled');
+  expect(SETTINGS_SELECT.split(',')).toContain('warehouse_stocktakes_enabled');
 });
 
 test('settings input accepts only an optional boolean transfer flag', () => {
@@ -25,6 +26,11 @@ test('settings input accepts only an optional boolean transfer flag', () => {
   for (const value of ['true', null, 1]) expect(PlatformTenantSupplierSettingsCommandSchema.safeParse({ ...body, warehouse_transfers_enabled: value }).success).toBe(false);
   const { warehouse_transfers_enabled: omitted, ...legacy } = body;
   expect(PlatformTenantSupplierSettingsCommandSchema.parse(legacy)).not.toHaveProperty('warehouse_transfers_enabled');
+  expect(PlatformTenantSupplierSettingsCommandSchema.safeParse({ ...body, warehouse_stocktakes_enabled: true }).success).toBe(true);
+  expect(PlatformTenantSupplierSettingsCommandSchema.safeParse({ ...body, warehouse_stocktakes_enabled: false }).success).toBe(true);
+  for (const value of [null, 'true', 1]) {
+    expect(PlatformTenantSupplierSettingsCommandSchema.safeParse({ ...body, warehouse_stocktakes_enabled: value }).success).toBe(false);
+  }
 });
 
 test('explicit false and true use existing JSON overload; omission retains historical typed fingerprint', () => {

@@ -1,0 +1,98 @@
+# Warehouse Stocktake Backend Integration Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** 接通盘点有界读取、六命令 API、流水来源和平台开关配置，不开启真实租户。
+
+**Architecture:** 复用调拨 controller/service/repository 和 owner-only SQL helper；各变更独立 migration，不改已提交命令 migration。金额在 SQL numeric 计算、HTTP text 传输。历史读和回执不受关闭开关影响。
+
+**Tech Stack:** Bun、TypeScript、Fastify decorators、Zod 4.4.2、Supabase PostgreSQL17。
+
+规格：`../specs/2026-09-09-warehouse-stocktake-integration-design.md`。已有隔离工作树 `warehouse-project-material-stage-c`，基线 620f53a8；所有步骤仅在此工作树。RAG502，依据已验收 D1 实现。每项提交后独立 SPEC → quality 审查；先静态再耗时验证。用户已统一授权常规确认，按推荐子代理执行，无须再询问流程选择。
+
+## Task 1: SQL 有界读取
+
+文件：新 CLI migration `warehouse_stocktake_read_models`；新增 `scripts/fixtures/warehouse-stage-b/stocktake-reads.sql`、`stocktake-read-performance.sql`。参考 `20260908185501_warehouse_transfer_atomic_commands.sql` 中4个读取函数及 transfer-read-performance.sql。不编辑其他生产文件。
+
+- [x] 写 stocktake-reads fixture，先检测缺失 RPC：
+
+```sql
+DO $$ BEGIN
+ IF to_regprocedure('public.get_warehouse_stocktake_settings(uuid,uuid,uuid)') IS NULL THEN
+   RAISE EXCEPTION 'Stocktake settings RPC is required';
+ END IF;
+END $$;
+```
+
+- [x] API `bun run typecheck` 后，运行 runner（material-workflow.sql、transfer-workflow.sql、stocktake-workflow.sql、stocktake-reads.sql）；确认预期缺失函数失败。
+- [x] `supabase migration new warehouse_stocktake_read_models`，用 apply_patch 实现4读取函数。签名统一 actor 参数：get settings(tenant,user,employee)，get order(tenant,order,user,employee)，list orders(tenant,user,employee,warehouse default null,status text default null,keyword text default null,page int default1,page_size int default20)，items(tenant,order,user,employee,page default1,page_size default20)。权限调用 `__gooes_stocktake_assert_actor`，settings先选实际有权项。RPC revoke PUBLIC/anon/authenticated/service_role 后只 grant service_role。不得放宽 helper ACL。
+- [x] 列表页查询核心契约：
+
+```sql
+WITH page AS MATERIALIZED (
+ SELECT o.* FROM public.warehouse_stocktake_orders o
+ WHERE o.tenant_id=p_tenant_id
+   AND (p_warehouse_id IS NULL OR o.warehouse_id=p_warehouse_id)
+   AND (p_status IS NULL OR o.status=p_status)
+   AND (p_keyword IS NULL OR strpos(lower(o.order_no),lower(p_keyword))>0 OR strpos(lower(o.reason),lower(p_keyword))>0)
+ ORDER BY o.created_at DESC,o.id DESC LIMIT p_page_size OFFSET (p_page::bigint-1)*p_page_size
+), totals AS (
+ SELECT i.stocktake_order_id,count(*) item_count,count(i.counted_quantity) counted_count,
+   count(*) FILTER (WHERE i.difference_quantity<>0) difference_count,
+   coalesce(sum(i.amount) FILTER (WHERE i.difference_quantity>0),0)::numeric(20,2)::text gain_amount,
+   coalesce(sum(i.amount) FILTER (WHERE i.difference_quantity<0),0)::numeric(20,2)::text loss_amount
+ FROM page p JOIN public.warehouse_stocktake_order_items i ON i.stocktake_order_id=p.id
+ GROUP BY i.stocktake_order_id
+)
+SELECT coalesce(jsonb_agg(to_jsonb(p)||jsonb_build_object(
+ 'warehouse_name',w.name,'item_count',coalesce(t.item_count,0),'counted_count',coalesce(t.counted_count,0),
+ 'difference_count',coalesce(t.difference_count,0),
+ 'gain_amount',CASE WHEN p.status='completed' THEN coalesce(t.gain_amount,'0.00') END,
+ 'loss_amount',CASE WHEN p.status='completed' THEN coalesce(t.loss_amount,'0.00') END)
+ ORDER BY p.created_at DESC,p.id DESC),'[]'::jsonb) INTO v_items
+FROM page p JOIN public.warehouses w ON w.id=p.warehouse_id AND w.tenant_id=p.tenant_id
+LEFT JOIN totals t ON t.stocktake_order_id=p.id;
+```
+
+- [x] 详情同 Summary；items 所有7个 numeric 字段（book_quantity/book_value/book_unit_cost/counted_quantity/difference_quantity/unit_cost/amount）显式 `::text`，其余 to_jsonb 行和 sku_name/sku_code，NULL 不转零。
+- [x] 扩展 fixture：ACL、假身份、deny、跨租户 notfound、关闭后历史、页边界、筛选/总数/空页、NULL和正负小数、完成gain/loss0与非零。performance插入回滚10,000单据/20,000明细，提取实际 RPC SQL EXPLAIN，20单页<=40明细行访问，测试无筛选/warehouse/warehouse+status及缓存计划；必要时函数force_custom_plan或索引新 migration。
+- [x] 同命令重新运行绿灯，记录 RED/GREEN 和 EXPLAIN；自检提交 `feat: add bounded warehouse stocktake read models`。
+
+## Task 2: Domain 与 HTTP 接入
+
+文件：修改 `packages/domain/src/warehouse-stocktake.ts` 及测试；新增 `apps/api/src/repositories/warehouse-stocktake-records.ts`、`warehouse-stocktakes.ts` 和测试，`services/warehouse-stocktake-errors.ts`、`warehouse-stocktakes.ts` 和测试，`controllers/warehouse-stocktakes/index.ts`、`controllers/warehouse-stocktake-routes.test.ts`；修改 `routes/index.ts`、`services/tenant-service-capability-map.ts` 及相应断言；fixture DTO 可集中 `apps/api/src/test-fixtures/warehouse-stocktakes.ts`（参照真实 transfer fixture 位置再落位，不新增测试框架）。不修改已有请求契约。
+
+- [x] Domain/strict parser/route registry 断言已交付；实施顺序并非所有验收先RED，具体差异见证据 Task 2，不将下列原计划示例视作全部实际执行记录：
+
+```ts
+test('registers all stocktake endpoints', async () => {
+  const exists = await Bun.file('src/controllers/warehouse-stocktakes/index.ts').exists();
+  expect(exists).toBe(true);
+});
+```
+
+- [x] HTTP最终使用真实 Fastify inject 覆盖全部端点；审查发现的POST query缺口有独立RED/GREEN（最初完整HTTP覆盖为实现后补充，未执行此处原计划的文件存在性RED）。
+- [x] Domain增加 WarehouseStocktakeOrder（表字段）、WarehouseStocktakeOrderSummary（上述count与gain/loss）、WarehouseStocktakeItem（表字段含 nullable string decimals、SKU名称代码）、WarehouseStocktakeSettings、WarehouseStocktakeCommandResult；命令result仅status和原始Order，不错要求Summary字段。
+- [x] records严格 schema，非负 decimal `/^(?:0|[1-9]\d{0,13})(?:\.\d{1,4})?$/`；signed差异加可选负号；金额16整2小数，汇总18整2小数；所有字段严格 nullable 符合真实SQL。parseRPC errors包装 Errors.dbError；repository每方法一次RPC，默认分页及最大100由 PaginationQuerySchema 验证。
+- [x] service注入 Pick 仓储5方法；requireScope要求tenant/employee/user及权限；settings任一三权限；6命令按command选已有 Draft/Counts/Command schema，提取expected_version，不预读。错误表覆盖 SQL现有全部 WAREHOUSE_STOCKTAKE_* 错误（rg实际文本），未知保持原始包装。
+- [x] controller4GET6POST；路径 record-counts映射record_counts；getRequiredTenantContext、requireSupplierIdempotencyKey、Errors.fromZod、ResponseHandler.success；总路由与 capability registry 注册 singleton，不暴露 PATCH/DELETE。
+- [x] 测试 strict response数字/精度/null、分页映射、每方法1RPC、所有命令payload/actor/key、无项目权限依赖、SQLdeny即使system_admin派生权限、稳定错误；Fastify inject验证真实controllers六POST四GET、未知字段/页界/头校验、命令回执重放路径无mutable preread。system_admin 边界单列 `apps/api/src/services/authorization/system-admin-warehouse-stocktake-permissions.test.ts`，最终命令一并运行；各测试须可独立运行，不依赖其他文件先初始化测试环境。
+- [x] root `bun test packages/domain/src/warehouse-stocktake.test.ts`、`bun run --cwd packages/domain build`；apps/api `bun test src/schema/warehouse-stocktakes.test.ts src/repositories/warehouse-stocktakes.test.ts src/services/warehouse-stocktakes.test.ts src/controllers/warehouse-stocktake-routes.test.ts`、`bun run typecheck`。修复后提交 `feat: expose warehouse stocktake APIs`。
+
+## Task 3: 库存来源与平台开关
+
+文件：`apps/api/src/repositories/inventory.ts`及test；新 CLI migration `warehouse_stocktake_inventory_sources`、`warehouse_stocktake_rollout_command`；fixtures `stocktake-inventory-sources.sql`、`stocktake-rollout-before.sql`、`stocktake-rollout.sql`；runner添加精确 prefixture hook。修改API `schema/platform-suppliers.ts`、`services/supplier-rollout-settings.ts`、`services/platform-suppliers.ts`、`services/platform-supplier-service-utils.ts` 的真实audit状态投影、`repositories/platform-supplier-settings-command.ts`、`platform-supplier-records.ts`、`platform-suppliers.ts`及第二处真实settingsselect；对应regression tests。无Admin改动。
+
+- [x] 盘点来源/有效开关先有目标Bun预期RED；其余兼容、显式JSON/原typed、省略/旧回执及完整SQL验收在实现复核时补入，顺序差异详见证据，不宣称全部先RED。最终全部要求通过SPEC与quality。
+- [x] source_document增加strict `{stocktake_order_id:uuid,stocktake_order_no:string}`；stocktake source只允许adjustment_in/out，非stocktake source不接受stocktake document，null只允许匹配类型。SQL参考D1唯一anchor替换，页后JOIN完成order+item+同tenant/warehouse/SKU+正确difference方向，保留ACL/config。
+- [x] rollout测试先用历史typed/JSON命令产生真实receipt并存payload/receipt；runner在 `20260909064815_warehouse_stocktake_atomic_commands.sql` 前执行before fixture（早于新增盘点列，旧回执中该字段确实缺失），只在参数包含post fixture时触发。前置夹具断言列和回执字段均不存在；后置夹具验证扩列和core扩展后的旧回放。新SQL patch已有私有core的7个唯一片段：变量、白名单、boolean flags、行锁后省略值/依赖、insert列、insert值、update。不可改变旧fingerprint或wrapper签名。
+- [x] TS新字段可选boolean；effective=module_enabled && field===true；current merge保留省略；command JSON分支条件加 `input.warehouse_stocktakes_enabled !== undefined`；旧typedbranch不动，旧response parser用 optional不default以保持receipt。
+- [x] 平台新命令audit的settingsState before/after包括盘点状态，重放仍跳过audit。该既有helper在父级全路径核查中补入范围，不改变旧SQL回执内容。
+- [x] SQL验证版本/冲突/开关/依赖/错误类型/字段省略/真实旧回放及来源跨租户/关闭历史/页后有界；静态绿灯后运行 runner包括新fixtures与C/D1回归。
+- [x] API typecheck、Domain build；自检并提交 `feat: integrate stocktake sources and rollout settings`。
+
+## Final verification and handoff
+
+- [x] 父代理刷新 Domain build/API typecheck/本批所有 Bun tests、SQL fixtures；结果记录到 `docs/operations/evidence/2026-09-09-warehouse-stocktake-integration.md`，说明SQLASCII/schema-only边界及没有DEV/UI验收。
+- [x] 独立最终质量审查，核对安全/精度/历史读/幂等/性能和所有规格项；修复后复审。
+- [x] 更新总体D2设计进度，git diff --check，代码 e3766666 已push当前开发分支；证据随最终文档提交归档。交付前最后再次验证 clean HEAD=origin及固定release仍710b332282b2f10b2f561b20db197e5f39a8a6eb；不创建PR/merge/apply/真实授权。

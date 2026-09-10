@@ -53,6 +53,7 @@ export type InventoryTransaction = InventoryRow & {
         source_warehouse_id: string;
         destination_warehouse_id: string;
       }
+    | { stocktake_order_id: string; stocktake_order_no: string }
     | null;
 };
 

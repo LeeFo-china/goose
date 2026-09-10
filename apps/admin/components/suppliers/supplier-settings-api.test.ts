@@ -5,6 +5,29 @@ import type { TenantSupplierSettings } from "./supplier-types";
 const originalFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = originalFetch; });
 
+test("stocktake merge preserves known booleans but omits unknown legacy field", async () => {
+  const current: TenantSupplierSettings = {
+    tenant_id: "test", module_enabled: true, require_active_contract_for_new_order: false,
+    ownership_reads_enabled: false, private_supplier_writes_enabled: false,
+    private_catalog_writes_enabled: false, procurement_snapshot_v1_enabled: false,
+    purchase_batch_workflow_enabled: false, version: 1, enabled_at: null,
+    enabled_by_employee_id: null, created_at: "", updated_at: "",
+  };
+  const build = (intent: settingsApi.PlatformModuleIntent, value = current) =>
+    settingsApi.createPlatformSupplierSettingsRequest({ tenantId: "test", current: value, intent, idempotencyKey: "stocktake-key" });
+  for (const value of [true, false]) {
+    expect(JSON.parse(build({ moduleEnabled: true, warehouseStocktakesEnabled: value }).body).warehouse_stocktakes_enabled).toBe(value);
+    expect(JSON.parse(build({ moduleEnabled: true, ownershipReadsEnabled: true }, { ...current, warehouse_stocktakes_enabled: value }).body).warehouse_stocktakes_enabled).toBe(value);
+  }
+  const legacy = build({ moduleEnabled: true });
+  expect(Object.hasOwn(JSON.parse(legacy.body), 'warehouse_stocktakes_enabled')).toBe(false);
+  let actual: RequestInit | undefined;
+  globalThis.fetch = (async (_url, init) => { actual = init; return Response.json({ success: true, data: current }); }) as typeof fetch;
+  await settingsApi.updatePlatformTenantSupplierModule(legacy);
+  expect(actual?.body).toBe(legacy.body);
+  expect(actual?.headers).toMatchObject({ 'Idempotency-Key': 'stocktake-key' });
+});
+
 test("transfer flag merges independently and old frozen bodies remain byte-identical", async () => {
   const current: TenantSupplierSettings = {
     tenant_id: "test", module_enabled: true, require_active_contract_for_new_order: false,

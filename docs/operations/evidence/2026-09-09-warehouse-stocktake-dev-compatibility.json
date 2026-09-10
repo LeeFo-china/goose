@@ -1,0 +1,90 @@
+{
+  "readonly": "on",
+  "checked_at": "2026-09-09T10:22:54.001681+00:00",
+  "lock_waiters": 0,
+  "business_facts": {
+    "warehouses": {
+      "md5": "d979170cf33645f04454166a37058569",
+      "count": 2
+    },
+    "supplier_payments": {
+      "md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "count": 0
+    },
+    "project_cost_events": {
+      "md5": "de288f3c65d5e387a4750387b7780ca4",
+      "count": 7
+    },
+    "finance_ledger_entries": {
+      "md5": "b7d575ad20aadbb73e3d1a234b284054",
+      "count": 20
+    },
+    "warehouse_issue_orders": {
+      "md5": "b248de47e88c0c9f711d40268777eeee",
+      "count": 1
+    },
+    "supplier_command_events": {
+      "md5": "600d3d180b3a074beaab40dbfbacf564",
+      "count": 129
+    },
+    "supplier_payable_events": {
+      "md5": "a555c42133bf7a7975f3285f3a245b07",
+      "count": 5
+    },
+    "warehouse_return_orders": {
+      "md5": "f0dc564fbf021f6eec440e7ea87446a0",
+      "count": 2
+    },
+    "warehouse_transfer_orders": {
+      "md5": "0103527a9ba9dc1ce4663a24447c2822",
+      "count": 2
+    }
+  },
+  "employee_roles": {
+    "md5": "0b49e0a6393c9d2f228426aa27a16496",
+    "count": 34
+  },
+  "long_transactions": 0,
+  "stocktake_objects": 0,
+  "employee_overrides": {
+    "md5": "36b70b31a34f9434892036d5935b884f",
+    "count": 6
+  },
+  "rollout_anchor_counts": [
+    {
+      "count": 1,
+      "anchor": 1
+    },
+    {
+      "count": 1,
+      "anchor": 2
+    },
+    {
+      "count": 1,
+      "anchor": 3
+    },
+    {
+      "count": 1,
+      "anchor": 4
+    },
+    {
+      "count": 1,
+      "anchor": 5
+    },
+    {
+      "count": 1,
+      "anchor": 6
+    },
+    {
+      "count": 1,
+      "anchor": 7
+    }
+  ],
+  "stocktake_permissions": 0,
+  "inventory_anchor_count": 1,
+  "other_role_permissions": {
+    "md5": "76164303e3ac2d8e3b20dcb70ca82a78",
+    "count": 1595
+  },
+  "inventory_materialized_page": true
+}

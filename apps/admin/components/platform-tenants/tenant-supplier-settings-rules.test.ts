@@ -17,6 +17,13 @@ const settings = {
 };
 
 describe("tenant supplier settings UI rollout rules", () => {
+  test("stocktake is independent and prevents parent disable", () => {
+    const stocktakes = { ...settings, warehouse_stocktakes_enabled: true };
+    expect(hasEnabledSupplierRolloutFlags(stocktakes)).toBe(true);
+    expect(canToggleSupplierRolloutFlag(settings, "warehouse_stocktakes_enabled")).toBe(true);
+    expect(canToggleSupplierRolloutFlag({ ...stocktakes, module_enabled: false }, "warehouse_stocktakes_enabled")).toBe(false);
+    expect(canToggleSupplierRolloutFlag(stocktakes, "warehouse_transfers_enabled")).toBe(true);
+  });
   test("transfers is independent of procurement and materials but blocks module disable", () => {
     const transfers = { ...settings, warehouse_transfers_enabled: true };
     expect(hasEnabledSupplierRolloutFlags(transfers)).toBe(true);
