@@ -337,6 +337,7 @@ describe("Douyin material API client", () => {
     expect(calls).toEqual([{
       path: `/douyin-mini/material-notes/${NOTE_ID}/claim`,
       method: "POST",
+      data: {},
       token: "test-token",
     }]);
 
@@ -469,9 +470,15 @@ describe("Douyin material API client", () => {
       {
         path: `/douyin-mini/my-material-notes/${CLAIM_ID}/remove`,
         method: "POST",
+        data: {},
         token: "test-token",
       },
-      { path: "/douyin-mini/my-material-notes/clear", method: "POST", token: "test-token" },
+      {
+        path: "/douyin-mini/my-material-notes/clear",
+        method: "POST",
+        data: {},
+        token: "test-token",
+      },
     ]);
     await expect(removeOwnedMaterial(clientWith(() => ({ removed: false })), CLAIM_ID))
       .rejects.toMatchObject({ code: "INVALID_API_RESPONSE" });

@@ -83,6 +83,7 @@ export async function claimMaterial(
   const value = await client.request<unknown>({
     path: `/douyin-mini/material-notes/${encodeURIComponent(normalizedId)}/claim`,
     method: "POST",
+    data: {},
   });
   const result = parseClaimResponse(value);
   if (!result || result.material.id !== normalizedId) throw invalidResponse();
@@ -125,6 +126,7 @@ export async function removeOwnedMaterial(
   const value = await client.request<unknown>({
     path: `/douyin-mini/my-material-notes/${encodeURIComponent(normalizedId)}/remove`,
     method: "POST",
+    data: {},
   });
   if (!isStrictRecord(value, ["removed"]) || value.removed !== true) throw invalidResponse();
   return { removed: true };
@@ -136,6 +138,7 @@ export async function clearOwnedMaterials(
   const value = await client.request<unknown>({
     path: "/douyin-mini/my-material-notes/clear",
     method: "POST",
+    data: {},
   });
   if (!isStrictRecord(value, ["removed_count"])
     || !isIntegerInRange(value.removed_count, 0, Number.MAX_SAFE_INTEGER)) {
