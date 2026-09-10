@@ -2,6 +2,8 @@
 .home-block { margin-top: 28rpx; }
 .home-hero { margin-top: 24rpx; }
 .home-section { margin-top: 56rpx; }
+.customer-entry { margin-top: 24rpx; }
+.customer-entry-action { width: 100%; min-height: 88rpx; margin: 0; border: 1rpx solid; border-radius: 16rpx; background: #fff; font-size: 28rpx; font-weight: 650; line-height: 88rpx; }
 .qa-card { padding: 32rpx; }
 .qa-eyebrow { color: #706c67; font-size: 23rpx; font-weight: 650; }
 .qa-title { margin-top: 10rpx; color: #191817; font-size: 34rpx; font-weight: 700; line-height: 1.35; }

@@ -53,13 +53,52 @@ test("home caps the module at four and ignores its old response after hide-show"
   expect(page.setData).toHaveBeenCalledTimes(writes);
 });
 
-function makePage(fetchMaterials: ReturnType<typeof mock>) {
+test("home opens customer projects when customer session is authenticated", async () => {
+  const navigated: string[] = [];
+  const page = makePage(mock(async () => response([])), {
+    isCustomerAuthenticated: true,
+    navigateToPage: async (path: string) => { navigated.push(path); },
+  });
+
+  (page as { onMyProjects(): void }).onMyProjects();
+  await flush();
+
+  expect(navigated).toEqual(["pages/customer-projects/index"]);
+});
+
+test("home opens customer login before customer session is authenticated", async () => {
+  const navigated: string[] = [];
+  const page = makePage(mock(async () => response([])), {
+    isCustomerAuthenticated: false,
+    navigateToPage: async (path: string) => { navigated.push(path); },
+  });
+
+  (page as { onMyProjects(): void }).onMyProjects();
+  await flush();
+
+  expect(navigated).toEqual(["pages/customer-login/index"]);
+});
+
+function makePage(
+  fetchMaterials: ReturnType<typeof mock>,
+  options: {
+    isCustomerAuthenticated?: boolean;
+    navigateToPage?: (path: string) => Promise<void>;
+  } = {},
+) {
   const definition = createHomePageDefinition({
-    getApp: () => ({ api: {}, startup: Promise.resolve(bootstrap()), recordAnalytics: () => undefined }),
+    getApp: () => ({
+      api: {},
+      customerSession: {
+        isAuthenticated: () => options.isCustomerAuthenticated ?? false,
+      },
+      startup: Promise.resolve(bootstrap()),
+      recordAnalytics: () => undefined,
+    }),
     fetchMaterials,
     navigateToEntityDetail: async () => undefined,
     navigateToMaterialDetail: async () => undefined,
-    navigateToPage: async () => undefined,
+    navigateToPage: options.navigateToPage ?? (async () => undefined),
     switchToTab: async () => undefined,
     showToast: () => undefined,
   } as never);

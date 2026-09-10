@@ -14,6 +14,9 @@ const PAGE_PATHS = new Set([
   "pages/materials/index",
   "pages/material-detail/index",
   "pages/my-materials/index",
+  "pages/customer-login/index",
+  "pages/customer-projects/index",
+  "pages/customer-project-detail/index",
 ]);
 const TAB_PATHS = {
   home: "pages/home/index",
@@ -50,6 +53,11 @@ export function buildOwnedMaterialDetailRoute(claimId: string): string {
   return `${buildPageRoute("pages/material-detail/index")}?claimId=${encodeURIComponent(normalized)}`;
 }
 
+export function buildCustomerProjectDetailRoute(projectId: string): string {
+  const normalized = normalizeUuid(projectId);
+  return `${buildPageRoute("pages/customer-project-detail/index")}?id=${encodeURIComponent(normalized)}`;
+}
+
 export function navigateToPage(path: string): Promise<void> {
   return navigate("navigateTo", buildPageRoute(path));
 }
@@ -68,6 +76,10 @@ export function navigateToMaterialDetail(id: string): Promise<void> {
 
 export function navigateToOwnedMaterialDetail(claimId: string): Promise<void> {
   return navigate("navigateTo", buildOwnedMaterialDetailRoute(claimId));
+}
+
+export function navigateToCustomerProjectDetail(projectId: string): Promise<void> {
+  return navigate("navigateTo", buildCustomerProjectDetailRoute(projectId));
 }
 
 export function navigateToServiceUnavailable(code: ServiceUnavailableCode): Promise<void> {

@@ -5,6 +5,9 @@
   <view class="home-block home-hero">
     <hero-banner title="{{bannerTitle}}" subtitle="{{bannerSubtitle}}" image-url="{{bannerImageUrl}}" action-label="开始预算初算" primary-color="{{primaryColor}}" bindaction="onBudget" />
   </view>
+  <view class="home-section customer-entry">
+    <button class="customer-entry-action ui-pressable" hover-class="ui-pressable--pressed" style="border-color: {{primaryColor}}; color: {{primaryColor}}" bindtap="onMyProjects">我的项目</button>
+  </view>
   <view tt:if="{{metrics.length}}" class="home-block"><trust-metrics items="{{metrics}}" /></view>
 
   <view class="home-section qa-card ui-card">
