@@ -28,6 +28,47 @@ async function action(page: Page, name: string) {
   await page.getByRole('button', { name, exact: true }).click();
   await page.getByRole('button', { name: '确认执行', exact: true }).click();
 }
+test('保存草稿409保留输入并锁旧版本，明确放弃后才重载新版本', async ({ page }, info) => {
+  await open(page, 'conflict');
+  await page.getByRole('button', { name: '查看 DB0002' }).click();
+  await page.getByRole('button', { name: '编辑草稿' }).click();
+  await page.getByLabel('调拨原因', { exact: true }).fill('冲突前未保存原因');
+  const quantities = page.locator('input[id^="transfer-quantity-"]');
+  const originalQuantity = await quantities.first().inputValue();
+  expect(originalQuantity).not.toBe('3.0002');
+  await quantities.first().fill('3.0002');
+  await save(page);
+  const editor = page.getByRole('region', { name: '调拨草稿' });
+  await expect(page.getByRole('alert').filter({ hasText: '版本已变化，请重新确认' })).toBeVisible();
+  await expect(editor).toBeVisible();
+  await expect(page.getByLabel('调拨原因', { exact: true })).toHaveValue('冲突前未保存原因');
+  await expect(quantities).toHaveCount(25);
+  await expect(quantities.first()).toHaveValue('3.0002');
+  await expect(page.getByRole('button', { name: '保存草稿', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '重试原请求' })).toHaveCount(0);
+  expect(await writes(page)).toHaveLength(1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: info.outputPath('transfer-draft-conflict.png'), fullPage: true });
+  await page.getByRole('button', { name: '放弃修改并重载', exact: true }).click();
+  await expect(page.getByRole('alertdialog')).toHaveAccessibleName('放弃本次修改并重新读取？');
+  await page.screenshot({ path: info.outputPath('transfer-draft-conflict-confirm.png'), fullPage: true });
+  await page.getByRole('button', { name: '保留输入', exact: true }).click();
+  await expect(page.getByLabel('调拨原因', { exact: true })).toHaveValue('冲突前未保存原因');
+  await page.getByRole('button', { name: '放弃修改并重载', exact: true }).click();
+  await page.getByRole('button', { name: '确认放弃并重载', exact: true }).click();
+  await expect(page.getByRole('region', { name: '调拨单详情' })).toContainText('版本 2');
+  await page.getByRole('button', { name: '编辑草稿' }).click();
+  await expect(page.getByLabel('调拨原因', { exact: true })).not.toHaveValue('冲突前未保存原因');
+  await expect(quantities.first()).toHaveValue(originalQuantity);
+  await page.getByLabel('调拨原因', { exact: true }).fill('核对新版本后保存');
+  await save(page);
+  await expect(page.getByRole('region', { name: '调拨单详情' })).toContainText('版本 3');
+  await expect(editor).toHaveCount(0);
+  const requests = await writes(page);
+  expect(requests).toHaveLength(2);
+  expect(requests.map(request => request.body.expected_version)).toEqual([1, 2]);
+  expect(requests[1].key).not.toBe(requests[0].key);
+});
 test('恢复回归：新建和已保存草稿编辑中禁止重复新建', async ({ page }) => {
   await open(page); await draft(page);
   await expect(page.getByRole('button', { name: '新建调拨', exact: true })).toBeDisabled();

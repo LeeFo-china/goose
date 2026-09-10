@@ -9,7 +9,7 @@ import { clearStoredTransferCommand, createTransferCommandLifecycle, matchStored
 import { restoreTransferCommand, transferRecoveryStorageKey } from './transfer-command-storage';
 import { retainTransferCommand, transferError } from './transfer-rules';
 
-export function useTransferCommand(scope: string, onResolved: (id: string) => void) {
+export function useTransferCommand(scope: string, onResolved: (id: string, outcome: 'success' | 'conflict') => void) {
   const storageKey = transferRecoveryStorageKey(scope);
   const [pending, setPending] = useState<TransferCommand | null>(null);
   const [ready, setReady] = useState(false);
@@ -58,7 +58,7 @@ export function useTransferCommand(scope: string, onResolved: (id: string) => vo
         return;
       }
       if (cleared === 'cleared' && isOwnerCurrent()) {
-        setPending(null); setMessage('操作已成功，已重新读取最新单据。'); onResolved(command.orderId);
+        setPending(null); setMessage('操作已成功，已重新读取最新单据。'); onResolved(command.orderId, 'success');
       }
     } catch (error: unknown) {
       if (!retainTransferCommand(error, wasUncertain)) {
@@ -70,7 +70,7 @@ export function useTransferCommand(scope: string, onResolved: (id: string) => vo
         }
         if (cleared === 'cleared' && isOwnerCurrent()) {
           setPending(null);
-          if (error && typeof error === 'object' && 'status' in error && error.status === 409) onResolved(command.orderId);
+          if (error && typeof error === 'object' && 'status' in error && error.status === 409) onResolved(command.orderId, 'conflict');
           setMessage(transferError(error));
         }
         return;
