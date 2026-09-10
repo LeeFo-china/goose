@@ -150,4 +150,23 @@ describe("PhoneIdentityCandidateRepository", () => {
     expect(query.range).toHaveBeenCalledWith(0, 1);
     expect(ids).toEqual(new Set(["user-1", "user-2"]));
   });
+
+  test("returns active OAuth user IDs for an explicit platform", async () => {
+    const { PhoneIdentityCandidateRepository } = await repositoryModule;
+    const query = createQuery([{ user_id: "user-1" }]);
+    const client = createClient(query);
+    const repository = new PhoneIdentityCandidateRepository(client);
+
+    const ids = await repository.listActiveOauthUserIds(
+      ["user-1", "user-1"],
+      "douyin_mini",
+    );
+
+    expect(client.from).toHaveBeenCalledWith("user_oauth_identities");
+    expect(query.in).toHaveBeenCalledWith("user_id", ["user-1"]);
+    expect(query.eq).toHaveBeenCalledWith("platform", "douyin_mini");
+    expect(query.eq).toHaveBeenCalledWith("status", "active");
+    expect(query.range).toHaveBeenCalledWith(0, 0);
+    expect(ids).toEqual(new Set(["user-1"]));
+  });
 });

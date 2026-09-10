@@ -12,7 +12,7 @@ export type PhoneIdentityCandidate = {
   candidateId: string;
   targetMode: PhoneIdentityTargetMode;
   bindingState: PhoneIdentityBindingState;
-  rebindKind?: "tenant_wechat" | "platform_partner";
+  rebindKind?: "tenant_wechat" | "platform_partner" | "douyin_mini";
   tenantId: string | null;
   customerId: string | null;
   employeeId: string | null;

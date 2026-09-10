@@ -124,6 +124,32 @@ describe("buildPhoneIdentityCandidates", () => {
     ]);
   });
 
+  test("marks records bound to active Douyin users with Douyin rebind kind", () => {
+    const result = buildPhoneIdentityCandidates(baseInput({
+      customers: [customer({ user_id: "other-user" })],
+      activeWechatOauthUserIds: new Set<string>(),
+      activeOauthUserIds: new Set(["other-user"]),
+      rebindKind: "douyin_mini",
+    }));
+
+    expect(result.candidates[0]?.bindingState).toBe("rebind_required");
+    expect(result.candidates[0]?.rebindKind).toBe("douyin_mini");
+  });
+
+  test("can build customer-only candidate lists for Douyin login", () => {
+    const result = buildPhoneIdentityCandidates(baseInput({
+      customers: [customer()],
+      employees: [employee()],
+      partnerMembers: [partnerMember()],
+      includeTargetModes: new Set(["customer"]),
+    }));
+
+    expect(result.rawMatchCount).toBe(3);
+    expect(result.candidates.map((item) => item.targetMode)).toEqual([
+      "customer",
+    ]);
+  });
+
   test("sorts share tenant customer first", () => {
     const result = buildPhoneIdentityCandidates(baseInput({
       shareTenantId: "tenant-2",

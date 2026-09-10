@@ -1,5 +1,6 @@
 import { Errors } from "@/errors/error-factory";
 import { MEMBER_SELECT, type PlatformPartnerMemberRecord } from "@/repositories/platform-partner-portal-types";
+import type { OAuthPlatform } from "@/repositories/user-identities";
 import { SupabaseDB } from "@/utils/supabase";
 
 export type RelationOne<T> = T | T[] | null;
@@ -155,7 +156,10 @@ export class PhoneIdentityCandidateRepository {
     );
   }
 
-  async listActiveWechatOauthUserIds(userIds: string[]): Promise<Set<string>> {
+  async listActiveOauthUserIds(
+    userIds: string[],
+    platform: OAuthPlatform,
+  ): Promise<Set<string>> {
     const uniqueUserIds = Array.from(new Set(userIds.filter((id) => id)));
     if (uniqueUserIds.length === 0) return new Set();
 
@@ -163,16 +167,20 @@ export class PhoneIdentityCandidateRepository {
       .from("user_oauth_identities")
       .select("user_id")
       .in("user_id", uniqueUserIds)
-      .eq("platform", "wechat_mini")
+      .eq("platform", platform)
       .eq("status", "active")
       .range(0, uniqueUserIds.length - 1);
 
-    if (error) throw Errors.dbError("查询微信登录凭证失败", error);
+    if (error) throw Errors.dbError("查询登录凭证失败", error);
     return new Set(
       ((data ?? []) as OAuthUserRecord[])
         .map((item) => item.user_id)
         .filter((id): id is string => typeof id === "string" && id.length > 0),
     );
+  }
+
+  async listActiveWechatOauthUserIds(userIds: string[]): Promise<Set<string>> {
+    return this.listActiveOauthUserIds(userIds, "wechat_mini");
   }
 }
 
