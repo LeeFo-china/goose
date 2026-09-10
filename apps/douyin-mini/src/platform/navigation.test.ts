@@ -11,6 +11,7 @@ import {
   buildOwnedMaterialDetailRoute,
   buildPageRoute,
   buildTabRoute,
+  buildCustomerProjectDetailRoute,
   navigateToMaterialDetail,
   navigateToOwnedMaterialDetail,
   navigateToPage,
@@ -36,6 +37,10 @@ describe("Douyin native navigation and visual view models", () => {
     expect(buildTabRoute("budget")).toBe("/pages/budget/index");
     expect(buildPageRoute("pages/company/index")).toBe("/pages/company/index");
     expect(buildPageRoute("pages/sites/index")).toBe("/pages/sites/index");
+    expect(buildPageRoute("pages/customer-login/index"))
+      .toBe("/pages/customer-login/index");
+    expect(buildPageRoute("pages/customer-projects/index"))
+      .toBe("/pages/customer-projects/index");
     expect(() => buildPageRoute("pages/home/index"))
       .toThrow("INVALID_NAVIGATION_TARGET");
     expect(() => navigateToPage("pages/cases/index"))
@@ -43,6 +48,14 @@ describe("Douyin native navigation and visual view models", () => {
     expect(() => buildPageRoute("pages/admin/index"))
       .toThrow("INVALID_NAVIGATION_TARGET");
     expect(() => buildTabRoute("admin" as never))
+      .toThrow("INVALID_NAVIGATION_TARGET");
+  });
+
+  test("builds customer project detail routes with one validated id", () => {
+    expect(buildCustomerProjectDetailRoute(ENTITY_ID)).toBe(
+      `/pages/customer-project-detail/index?id=${ENTITY_ID}`,
+    );
+    expect(() => buildCustomerProjectDetailRoute(`${ENTITY_ID}&tenant_id=forged`))
       .toThrow("INVALID_NAVIGATION_TARGET");
   });
 
@@ -135,6 +148,9 @@ describe("Douyin native navigation and visual view models", () => {
       "pages/materials/index",
       "pages/material-detail/index",
       "pages/my-materials/index",
+      "pages/customer-login/index",
+      "pages/customer-projects/index",
+      "pages/customer-project-detail/index",
     ]));
     expect(appConfig.tabBar.list).toEqual([
       { pagePath: "pages/home/index", text: "首页", iconPath: "assets/tabbar/home.png", selectedIconPath: "assets/tabbar/home-active.png" },

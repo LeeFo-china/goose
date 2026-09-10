@@ -1,0 +1,6 @@
+.customer-projects-page { padding-bottom: 64rpx; }
+.project-list { display: flex; flex-direction: column; gap: 20rpx; margin-top: 28rpx; }
+.project-item { width: 100%; margin: 0; padding: 28rpx; border-radius: 16rpx; background: #fff; text-align: left; line-height: 1.5; }
+.project-title { color: #191817; font-size: 30rpx; font-weight: 700; }
+.project-meta { margin-top: 10rpx; color: #625f5b; font-size: 24rpx; }
+.project-node { display: inline-flex; margin-top: 18rpx; padding: 8rpx 14rpx; border-radius: 999rpx; background: #eceae6; color: #191817; font-size: 22rpx; }

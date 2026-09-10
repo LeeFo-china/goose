@@ -5,7 +5,7 @@ import type {
 } from "@/schema/user-auth-events";
 import { SupabaseDB } from "@/utils/supabase";
 
-export type OAuthPlatform = "wechat_mini" | "wechat_web" | "ios" | "android" | "web" | "apple";
+export type OAuthPlatform = "wechat_mini" | "wechat_web" | "ios" | "android" | "web" | "apple" | "douyin_mini";
 export type BusinessIdentityType = "customer" | "employee" | "platform_admin";
 export type IdentityStatus = "active" | "disabled" | "unbound";
 

@@ -1,0 +1,22 @@
+<page-skeleton tt:if="{{firstLoading}}" />
+<error-state tt:elif="{{firstError}}" title="项目详情加载失败" description="请检查网络后重试。" bindretry="onRetry" />
+<view tt:else class="page-content customer-project-detail-page">
+  <view tt:if="{{project}}" class="project-header">
+    <view class="ui-page-title">{{project.name}}</view>
+    <view class="ui-page-description">{{project.status_label || '项目'}} · {{project.property.community || project.address || ''}}</view>
+    <view tt:if="{{project.workflow_state.current_node_title}}" class="current-node">{{project.workflow_state.current_node_title}}</view>
+  </view>
+  <view class="ui-section-title logs-title">施工日志</view>
+  <view tt:if="{{logs.length}}" class="log-list">
+    <view tt:for="{{logs}}" tt:key="id" class="log-item ui-card">
+      <view class="log-meta">{{item.stage_label || '施工'}} · {{item.node_name || ''}}</view>
+      <view class="log-content">{{item.content || '施工进度已更新'}}</view>
+      <view tt:if="{{item.images.length}}" class="log-images">
+        <image tt:for="{{item.images}}" tt:key="*this" class="log-image" src="{{item}}" mode="aspectFill" />
+      </view>
+      <view class="log-footer">{{item.employee_name || '项目成员'}} · {{item.created_at}}</view>
+    </view>
+  </view>
+  <empty-state tt:elif="{{emptyLogs}}" title="暂无施工日志" description="该项目还没有施工日志。" />
+  <pagination-loader tt:if="{{logs.length}}" status="{{paginationStatus}}" bindloadmore="onLoadMore" bindretry="onRetry" />
+</view>

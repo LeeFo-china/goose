@@ -15,10 +15,14 @@ import { loginOnce } from "./platform/login";
 import { navigateToServiceUnavailable } from "./platform/navigation";
 import {
   clearStoredSession,
+  clearStoredCustomerSession,
   readStoredSession,
+  readStoredCustomerSession,
   writeStoredSession,
+  writeStoredCustomerSession,
 } from "./platform/storage";
 import { BootstrapStore, toServiceUnavailableCode } from "./state/bootstrap";
+import { CustomerSessionManager } from "./state/customer-session";
 import { SessionManager } from "./state/session";
 import { createUuidV4IdempotencyKey } from "./utils/idempotency";
 
@@ -39,6 +43,13 @@ const session = new SessionManager({
   clearStoredSession,
 });
 const api = new ApiClient(transport, session);
+const customerSession = new CustomerSessionManager({
+  now: () => Date.now(),
+  readStoredCustomerSession,
+  writeStoredCustomerSession,
+  clearStoredCustomerSession,
+});
+const customerApi = new ApiClient(transport, customerSession);
 const analytics = new AnalyticsQueue(api);
 const bootstrap = new BootstrapStore(
   () => fetchBootstrap(api),
@@ -47,6 +58,8 @@ const bootstrap = new BootstrapStore(
 
 export type DouyinAppContext = {
   api: ApiClient;
+  customerApi: ApiClient;
+  customerSession: CustomerSessionManager;
   analytics: AnalyticsQueue;
   bootstrap: BootstrapStore;
   launchContext: LaunchContext;
@@ -62,6 +75,8 @@ const DEFAULT_LAUNCH_CONTEXT: LaunchContext = {
 
 App({
   api,
+  customerApi,
+  customerSession,
   analytics,
   bootstrap,
   launchContext: DEFAULT_LAUNCH_CONTEXT,

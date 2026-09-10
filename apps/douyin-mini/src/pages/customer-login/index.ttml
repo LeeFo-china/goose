@@ -1,0 +1,23 @@
+<view class="page-content customer-login-page">
+  <view class="ui-page-title">我的项目</view>
+  <view class="ui-page-description">使用装修公司预留手机号登录后查看项目进度。</view>
+
+  <button class="primary-action ui-pressable" open-type="getPhoneNumber" bindgetphonenumber="onDouyinPhone">抖音手机号一键登录</button>
+
+  <view class="sms-panel ui-card">
+    <input class="ui-control input" type="number" maxlength="11" value="{{phone}}" placeholder="填写手机号" bindinput="onPhoneInput" />
+    <view class="sms-row">
+      <input class="ui-control code-input" type="number" maxlength="6" value="{{code}}" placeholder="验证码" bindinput="onCodeInput" />
+      <button class="secondary-action ui-pressable" bindtap="onSendCode">获取验证码</button>
+    </view>
+    <button class="primary-action ui-pressable" loading="{{status === 'verifying'}}" bindtap="onVerifySms">登录</button>
+  </view>
+
+  <view tt:if="{{status === 'selecting'}}" class="candidate-list">
+    <view class="ui-section-title">选择客户身份</view>
+    <button tt:for="{{candidates}}" tt:key="candidate_id" class="candidate-item ui-pressable" data-id="{{item.candidate_id}}" bindtap="onSelectCandidate">
+      <view class="candidate-title">{{item.title}}</view>
+      <view class="candidate-subtitle">{{item.subtitle}}</view>
+    </button>
+  </view>
+</view>

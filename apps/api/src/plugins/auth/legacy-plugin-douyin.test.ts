@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from "bun:test";
+import { beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { createHmac } from "node:crypto";
 import Fastify from "fastify";
 import errorHandler from "@/plugins/error-handler";
@@ -13,10 +13,12 @@ process.env.JWT_SECRET = JWT_SECRET;
 let authPlugin: typeof import("./legacy-plugin").default;
 let signDouyinMiniappToken: typeof import("@/utils/jwt").signDouyinMiniappToken;
 let signToken: typeof import("@/utils/jwt").signToken;
+let userIdentityService: typeof import("@/services/user-identities").userIdentityService;
 
 beforeAll(async () => {
   ({ default: authPlugin } = await import("./legacy-plugin"));
   ({ signDouyinMiniappToken, signToken } = await import("@/utils/jwt"));
+  ({ userIdentityService } = await import("@/services/user-identities"));
 });
 
 async function createApp() {
@@ -34,6 +36,7 @@ async function createApp() {
     ({ user: request.user }));
   app.post("/douyin-mini/my-material-notes/clear", async (request) => ({ user: request.user }));
   app.get("/ordinary", async () => ({ ordinary: true }));
+  app.get("/customer/projects", async (request) => ({ user: request.user }));
   await app.ready();
   return app;
 }
@@ -194,5 +197,72 @@ describe("auth plugin Douyin miniapp isolation", () => {
     } finally {
       await app.close();
     }
+  });
+
+  test("accepts Douyin customer auth tokens only on customer routes with active bindings", async () => {
+    const app = await createApp();
+    const token = signToken({
+      sub: "auth-user-1",
+      token_type: "auth",
+      login_channel: "douyin",
+      roles: ["customer"],
+      tenant_id: douyinPayload.tenant_id,
+      customer_id: "11111111-1111-4111-8111-111111111111",
+      subject_hash: douyinPayload.subject_hash,
+      douyin_installation_id: douyinPayload.douyin_installation_id,
+      douyin_app_id: douyinPayload.douyin_app_id,
+    });
+    const oauth = spyOn(userIdentityService, "findActiveOauthIdentity")
+      .mockResolvedValue({ user_id: "auth-user-1" } as never);
+    const membership = spyOn(userIdentityService, "hasActiveBusinessMembership")
+      .mockResolvedValue(true);
+
+    const accepted = await app.inject({
+      method: "GET",
+      url: "/customer/projects",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(accepted.statusCode).toBe(200);
+    expect(accepted.json().user).toMatchObject({
+      login_channel: "douyin",
+      customer_id: "11111111-1111-4111-8111-111111111111",
+    });
+    expect((await app.inject({
+      method: "GET",
+      url: "/ordinary",
+      headers: { authorization: `Bearer ${token}` },
+    })).statusCode).toBe(401);
+
+    oauth.mockRestore();
+    membership.mockRestore();
+    await app.close();
+  });
+
+  test("rejects Douyin customer auth tokens when OAuth binding is inactive", async () => {
+    const app = await createApp();
+    const token = signToken({
+      sub: "auth-user-1",
+      token_type: "auth",
+      login_channel: "douyin",
+      roles: ["customer"],
+      tenant_id: douyinPayload.tenant_id,
+      customer_id: "11111111-1111-4111-8111-111111111111",
+      subject_hash: douyinPayload.subject_hash,
+    });
+    const oauth = spyOn(userIdentityService, "findActiveOauthIdentity")
+      .mockResolvedValue(null);
+    const membership = spyOn(userIdentityService, "hasActiveBusinessMembership")
+      .mockResolvedValue(true);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/customer/projects",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(response.statusCode).toBe(401);
+
+    oauth.mockRestore();
+    membership.mockRestore();
+    await app.close();
   });
 });

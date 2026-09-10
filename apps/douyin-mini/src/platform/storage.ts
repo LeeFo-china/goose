@@ -1,6 +1,7 @@
 import type { StoredSession } from "../models";
 
 const SESSION_STORAGE_KEY = "gooes_douyin_session_v1";
+const CUSTOMER_SESSION_STORAGE_KEY = "gooes_douyin_customer_session_v1";
 
 export function readStoredSession(): StoredSession | null {
   const value: unknown = tt.getStorageSync(SESSION_STORAGE_KEY);
@@ -28,6 +29,21 @@ export function writeStoredSession(session: StoredSession): void {
 
 export function clearStoredSession(): void {
   tt.removeStorageSync(SESSION_STORAGE_KEY);
+}
+
+export function readStoredCustomerSession(): StoredSession | null {
+  return parseStoredSession(tt.getStorageSync(CUSTOMER_SESSION_STORAGE_KEY));
+}
+
+export function writeStoredCustomerSession(session: StoredSession): void {
+  tt.setStorageSync(CUSTOMER_SESSION_STORAGE_KEY, {
+    accessToken: session.accessToken,
+    expiresAt: session.expiresAt,
+  });
+}
+
+export function clearStoredCustomerSession(): void {
+  tt.removeStorageSync(CUSTOMER_SESSION_STORAGE_KEY);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

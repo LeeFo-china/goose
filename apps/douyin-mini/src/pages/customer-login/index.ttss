@@ -1,0 +1,11 @@
+.customer-login-page { padding-bottom: 64rpx; }
+.primary-action { width: 100%; min-height: 88rpx; margin-top: 28rpx; border-radius: 16rpx; background: #191817; color: #fff; font-size: 28rpx; line-height: 88rpx; }
+.secondary-action { min-width: 190rpx; min-height: 88rpx; margin: 0; border-radius: 16rpx; background: #eceae6; color: #191817; font-size: 26rpx; line-height: 88rpx; }
+.sms-panel { margin-top: 32rpx; padding: 28rpx; }
+.input { margin-bottom: 18rpx; }
+.sms-row { display: flex; align-items: center; gap: 16rpx; }
+.code-input { flex: 1; }
+.candidate-list { margin-top: 40rpx; }
+.candidate-item { width: 100%; margin: 18rpx 0 0; padding: 24rpx; border-radius: 16rpx; background: #fff; text-align: left; line-height: 1.5; }
+.candidate-title { color: #191817; font-size: 28rpx; font-weight: 650; }
+.candidate-subtitle { margin-top: 8rpx; color: #625f5b; font-size: 24rpx; }

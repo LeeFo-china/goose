@@ -6,6 +6,21 @@ import type { Inserts, Tables, Updates } from "./db";
 type DouyinFunctions = Database["public"]["Functions"];
 
 describe("douyin miniapp database types", () => {
+  test("migration allows douyin_mini user OAuth platform", async () => {
+    const migration = await Bun.file(
+      new URL(
+        "../../../../supabase/migrations/20260910120000_allow_douyin_mini_oauth_identity.sql",
+        import.meta.url,
+      ),
+    ).text();
+
+    expect(migration).toContain("user_oauth_identities_platform_check");
+    expect(migration).toContain("'douyin_mini'");
+    expect(migration).toContain(
+      "wechat_mini/wechat_web/ios/android/web/apple/douyin_mini",
+    );
+  });
+
   test("exposes atomic marketing tables and RPC contracts", () => {
     const lead = {} as Tables<"marketing_leads">;
     const event = {} as Tables<"marketing_events">;

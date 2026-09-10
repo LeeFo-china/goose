@@ -109,6 +109,12 @@ export function createHomePageDefinition(dependencies: HomePageDependencies) {
     onViewPrivacy() { this.navigateWithFeedback(dependencies.navigateToPage("pages/privacy/index")); },
     onViewMaterials() { this.navigateWithFeedback(dependencies.navigateToPage("pages/materials/index")); },
     onViewMyMaterials() { this.navigateWithFeedback(dependencies.navigateToPage("pages/my-materials/index")); },
+    onMyProjects() {
+      const path = dependencies.getApp().customerSession.isAuthenticated()
+        ? "pages/customer-projects/index"
+        : "pages/customer-login/index";
+      this.navigateWithFeedback(dependencies.navigateToPage(path));
+    },
     onRetryMaterials() { void this.loadMaterials(); },
     onMaterialSelect(event: { detail: { id?: string } }) {
       if (event.detail.id) this.navigateWithFeedback(dependencies.navigateToMaterialDetail(event.detail.id));

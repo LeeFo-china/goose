@@ -1,0 +1,15 @@
+<page-skeleton tt:if="{{firstLoading}}" />
+<error-state tt:elif="{{firstError}}" title="我的项目加载失败" description="请重新登录或稍后重试。" action-label="重新登录" bindaction="onLogin" bindretry="onRetry" />
+<view tt:else class="page-content customer-projects-page">
+  <view class="ui-page-title">我的项目</view>
+  <view class="ui-page-description">查看你家项目的施工进度和日志记录。</view>
+  <view tt:if="{{items.length}}" class="project-list">
+    <button tt:for="{{items}}" tt:key="id" class="project-item ui-pressable" data-id="{{item.id}}" bindtap="onProjectSelect">
+      <view class="project-title">{{item.name}}</view>
+      <view class="project-meta">{{item.status_label || '项目'}} · {{item.property.community || item.address || ''}}</view>
+      <view tt:if="{{item.workflow_state.current_node_title}}" class="project-node">{{item.workflow_state.current_node_title}}</view>
+    </button>
+  </view>
+  <empty-state tt:elif="{{empty}}" title="暂无项目" description="该手机号暂未匹配到项目，请联系装修公司确认预留手机号。" />
+  <pagination-loader tt:if="{{items.length}}" status="{{paginationStatus}}" bindloadmore="onLoadMore" bindretry="onRetry" />
+</view>

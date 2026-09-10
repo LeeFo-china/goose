@@ -13,6 +13,9 @@ export const DOUYIN_ENTRY_PATH_VALUES = [
   "pages/materials/index",
   "pages/material-detail/index",
   "pages/my-materials/index",
+  "pages/customer-login/index",
+  "pages/customer-projects/index",
+  "pages/customer-project-detail/index",
 ] as const;
 
 export const DOUYIN_SOURCE_TYPES = [
@@ -227,6 +230,80 @@ export type PublicSiteLog = {
 };
 
 export type PublicSiteLogPage = { items: PublicSiteLog[]; pagination: PaginationMeta };
+
+export type CustomerAuthResult = {
+  token: string;
+  user_id: string;
+  mode: "customer";
+  authMode?: "customer";
+  roles: string[];
+  verified_phone: string;
+  has_customer_profile: true;
+  tenant: { id: string; name: string | null; slug: string | null };
+  customer: { id: string; name: string | null; phone: string | null };
+};
+
+export type CustomerIdentityCandidate = {
+  candidate_id: string;
+  target_mode: "customer";
+  role_label: string;
+  title: string;
+  subtitle: string;
+  binding_state: "current" | "bindable" | "rebind_required";
+  rebind_kind?: "douyin_mini" | "tenant_wechat" | "platform_partner";
+};
+
+export type CustomerIdentitySelectionResult =
+  | { status: "authenticated"; auth: CustomerAuthResult }
+  | {
+    status: "selection_required";
+    selection_token: string;
+    expires_in: number;
+    phone_masked: string;
+    candidates: CustomerIdentityCandidate[];
+  };
+
+export type CustomerSmsSendResult = {
+  success: true;
+  cooldown_seconds: number;
+};
+
+export type CustomerProject = {
+  id: string;
+  name: string;
+  status: string | null;
+  status_label: string | null;
+  budget: number | null;
+  address: string | null;
+  start_date: string | null;
+  style_tags: string[];
+  workflow_state?: { current_node_title?: string | null } | null;
+  property?: {
+    community?: string | null;
+    layout?: string | null;
+    area?: number | null;
+  } | null;
+  recent_logs?: CustomerProjectLog[];
+};
+
+export type CustomerProjectLog = {
+  id: string;
+  project_id: string;
+  employee_name: string | null;
+  stage_label: string | null;
+  node_name: string | null;
+  content: string | null;
+  images: string[];
+  image_count: number;
+  created_at: string;
+  comment_count?: number;
+  rating_count?: number;
+  average_rating?: number | null;
+  my_rating?: number | null;
+};
+
+export type CustomerProjectPage = { list: CustomerProject[]; pagination: PaginationMeta };
+export type CustomerProjectLogPage = { list: CustomerProjectLog[]; pagination: PaginationMeta };
 
 export type DouyinPropertyCondition = "rough" | "old_house";
 export type DouyinDecorationTier = "economy" | "comfortable" | "quality";

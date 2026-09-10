@@ -21,6 +21,9 @@ export type BuildPhoneIdentityCandidatesInput = {
   partnerMembers: PlatformPartnerMemberRecord[];
   activeMembershipKeys: Set<string>;
   activeWechatOauthUserIds: Set<string>;
+  activeOauthUserIds?: Set<string>;
+  includeTargetModes?: Set<PhoneIdentityTargetMode>;
+  rebindKind?: PhoneIdentityCandidate["rebindKind"];
   shareTenantId?: string | null;
   createCandidateId?: () => string;
 };
@@ -53,9 +56,15 @@ export function buildPhoneIdentityCandidates(
     input.employees.length +
     input.partnerMembers.length;
   const candidates = [
-    ...buildCustomerCandidates(input, createCandidateId),
-    ...buildEmployeeCandidates(input, createCandidateId),
-    ...buildPartnerCandidates(input, createCandidateId),
+    ...withTargetMode(input, "customer", () =>
+      buildCustomerCandidates(input, createCandidateId)
+    ),
+    ...withTargetMode(input, "tenant_employee", () =>
+      buildEmployeeCandidates(input, createCandidateId)
+    ),
+    ...withTargetMode(input, "platform_partner", () =>
+      buildPartnerCandidates(input, createCandidateId)
+    ),
   ];
   const deduplicated = deduplicateCandidates(candidates);
 
@@ -78,11 +87,16 @@ export function resolveBindingState(input: {
   recordUserId: string | null;
   membershipCurrent: boolean;
   recordUserHasActiveWechat: boolean;
+  activeOauthUserIds?: Set<string>;
 }): PhoneIdentityBindingState {
   if (input.recordUserId === input.currentAuthUserId || input.membershipCurrent) {
     return "current";
   }
-  if (!input.recordUserId || !input.recordUserHasActiveWechat) {
+  const activeOauthUserIds = input.activeOauthUserIds;
+  const hasActiveOauth = activeOauthUserIds
+    ? input.recordUserId ? activeOauthUserIds.has(input.recordUserId) : false
+    : input.recordUserHasActiveWechat;
+  if (!input.recordUserId || !hasActiveOauth) {
     return "bindable";
   }
   return "rebind_required";
@@ -107,6 +121,7 @@ function buildCustomerCandidates(
       recordUserHasActiveWechat: Boolean(
         record.user_id && input.activeWechatOauthUserIds.has(record.user_id),
       ),
+      activeOauthUserIds: input.activeOauthUserIds,
     });
 
     return [{
@@ -114,7 +129,7 @@ function buildCustomerCandidates(
       targetMode: "customer",
       bindingState,
       rebindKind: bindingState === "rebind_required"
-        ? "tenant_wechat"
+        ? input.rebindKind ?? "tenant_wechat"
         : undefined,
       tenantId: record.tenant_id,
       customerId: record.id,
@@ -153,6 +168,7 @@ function buildEmployeeCandidates(
       recordUserHasActiveWechat: Boolean(
         record.user_id && input.activeWechatOauthUserIds.has(record.user_id),
       ),
+      activeOauthUserIds: input.activeOauthUserIds,
     });
     const department = relationOne(record.tenant_department);
     const post = relationOne(record.post);
@@ -162,7 +178,7 @@ function buildEmployeeCandidates(
       targetMode: "tenant_employee",
       bindingState,
       rebindKind: bindingState === "rebind_required"
-        ? "tenant_wechat"
+        ? input.rebindKind ?? "tenant_wechat"
         : undefined,
       tenantId: record.tenant_id,
       customerId: null,
@@ -201,6 +217,7 @@ function buildPartnerCandidates(
         record.auth_user_id &&
           input.activeWechatOauthUserIds.has(record.auth_user_id),
       ),
+      activeOauthUserIds: input.activeOauthUserIds,
     });
 
     return [{
@@ -221,6 +238,17 @@ function buildPartnerCandidates(
       sharePreferred: false,
     }];
   });
+}
+
+function withTargetMode(
+  input: BuildPhoneIdentityCandidatesInput,
+  targetMode: PhoneIdentityTargetMode,
+  build: () => PhoneIdentityCandidate[],
+) {
+  if (input.includeTargetModes && !input.includeTargetModes.has(targetMode)) {
+    return [];
+  }
+  return build();
 }
 
 function relationOne<T>(value: RelationOne<T>): T | null {
