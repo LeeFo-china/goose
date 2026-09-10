@@ -13,6 +13,6 @@ const options = {
   retain: retainTransferCommand,
   error: transferError,
 };
-export function useTransferCommand(scope: string, onResolved: (id: string) => void) {
+export function useTransferCommand(scope: string, onResolved: (id: string, outcome: 'success' | 'conflict') => void) {
   return useFrozenInventoryCommand(scope, onResolved, options);
 }
