@@ -218,9 +218,9 @@ function parsePagination(value: unknown, itemCount: number): PaginationMeta | nu
 }
 
 function parsePreview(value: unknown): DouyinMaterialNotePreview | null {
-  if (!isStrictRecord(value, [
+  if (!isStrictRecordWithOptionalKeys(value, [
     "id", "title", "summary", "category", "applicable_to", "published_at", "claimed",
-  ])) return null;
+  ], ["category_id"])) return null;
   const common = parseCommon(value);
   const publishedAt = parseDateTime(value.published_at);
   if (!common || !publishedAt || typeof value.claimed !== "boolean") return null;
@@ -246,9 +246,9 @@ function parseClaimResponse(value: unknown): DouyinMaterialNoteClaimResponse | n
 }
 
 function parseClaimedMaterial(value: unknown): DouyinMaterialNoteClaimedMaterial | null {
-  if (!isStrictRecord(value, [
+  if (!isStrictRecordWithOptionalKeys(value, [
     "id", "version", "title", "summary", "category", "applicable_to", "content_blocks",
-  ])) return null;
+  ], ["category_id"])) return null;
   const common = parseCommon(value);
   const blocks = parseBlocks(value.content_blocks);
   return common && isIntegerInRange(value.version, 1, Number.MAX_SAFE_INTEGER) && blocks
@@ -257,9 +257,9 @@ function parseClaimedMaterial(value: unknown): DouyinMaterialNoteClaimedMaterial
 }
 
 function parseOwnedSummary(value: unknown): DouyinMaterialNoteOwnedSummary | null {
-  if (!isStrictRecord(value, [
+  if (!isStrictRecordWithOptionalKeys(value, [
     "claim_id", "id", "version", "title", "summary", "category", "applicable_to", "claimed_at",
-  ])) return null;
+  ], ["category_id"])) return null;
   const common = parseCommon(value);
   const claimedAt = parseDateTime(value.claimed_at);
   const claimId = parseUuid(value.claim_id);
@@ -276,10 +276,10 @@ function parseOwnedSummary(value: unknown): DouyinMaterialNoteOwnedSummary | nul
 }
 
 function parseOwnedDetail(value: unknown): DouyinMaterialNoteOwnedDetail | null {
-  if (!isStrictRecord(value, [
+  if (!isStrictRecordWithOptionalKeys(value, [
     "claim_id", "id", "version", "title", "summary", "category", "applicable_to",
     "claimed_at", "content_blocks",
-  ])) return null;
+  ], ["category_id"])) return null;
   const summary = parseOwnedSummary({
     claim_id: value.claim_id,
     id: value.id,
@@ -287,6 +287,7 @@ function parseOwnedDetail(value: unknown): DouyinMaterialNoteOwnedDetail | null 
     title: value.title,
     summary: value.summary,
     category: value.category,
+    ...(value.category_id !== undefined ? { category_id: value.category_id } : {}),
     applicable_to: value.applicable_to,
     claimed_at: value.claimed_at,
   });
@@ -296,12 +297,22 @@ function parseOwnedDetail(value: unknown): DouyinMaterialNoteOwnedDetail | null 
 
 function parseCommon(value: Record<string, unknown>): {
   id: string;
-  content: Pick<DouyinMaterialNotePreview, "title" | "summary" | "category" | "applicable_to">;
+  content: Pick<
+    DouyinMaterialNotePreview,
+    "title" | "summary" | "category" | "category_id" | "applicable_to"
+  >;
 } | null {
   const title = boundedText(value.title, 1, 300);
   const summary = boundedText(value.summary, 1, 1_000);
   const category = boundedText(value.category, 1, 100);
   const id = parseUuid(value.id);
+  let categoryId: string | null | undefined;
+  if (value.category_id === null) {
+    categoryId = null;
+  } else if (value.category_id !== undefined) {
+    categoryId = parseUuid(value.category_id) ?? undefined;
+    if (!categoryId) return null;
+  }
   let applicableTo: string | null = null;
   if (value.applicable_to !== null) {
     applicableTo = boundedText(value.applicable_to, 1, 300);
@@ -310,7 +321,13 @@ function parseCommon(value: Record<string, unknown>): {
   if (!id || !title || !summary || !category) return null;
   return {
     id,
-    content: { title, summary, category, applicable_to: applicableTo },
+    content: {
+      title,
+      summary,
+      category,
+      ...(categoryId !== undefined ? { category_id: categoryId } : {}),
+      applicable_to: applicableTo,
+    },
   };
 }
 
@@ -453,6 +470,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function isStrictRecord(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
   return isRecord(value) && Object.keys(value).length === keys.length
     && Object.keys(value).every((key) => keys.includes(key));
+}
+
+function isStrictRecordWithOptionalKeys(
+  value: unknown,
+  requiredKeys: readonly string[],
+  optionalKeys: readonly string[],
+): value is Record<string, unknown> {
+  if (!isRecord(value)) return false;
+  const keys = Object.keys(value);
+  return requiredKeys.every((key) => Object.prototype.hasOwnProperty.call(value, key))
+    && keys.every((key) => requiredKeys.includes(key) || optionalKeys.includes(key));
 }
 
 function isIntegerInRange(value: unknown, minimum: number, maximum: number): value is number {

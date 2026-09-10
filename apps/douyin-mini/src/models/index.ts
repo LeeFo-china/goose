@@ -170,6 +170,7 @@ export type DouyinMaterialNotePreview = {
   title: string;
   summary: string;
   category: string;
+  category_id?: string | null;
   applicable_to: string | null;
   published_at: string;
   claimed: boolean;
@@ -181,6 +182,7 @@ export type DouyinMaterialNoteClaimedMaterial = {
   title: string;
   summary: string;
   category: string;
+  category_id?: string | null;
   applicable_to: string | null;
   content_blocks: DouyinMaterialNoteBlock[];
 };
@@ -199,6 +201,7 @@ export type DouyinMaterialNoteOwnedSummary = {
   title: string;
   summary: string;
   category: string;
+  category_id?: string | null;
   applicable_to: string | null;
   claimed_at: string;
 };

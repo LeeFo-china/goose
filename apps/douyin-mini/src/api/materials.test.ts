@@ -28,6 +28,7 @@ void (null as unknown as PaginationHasNoKeyword);
 
 const NOTE_ID = "11111111-1111-4111-8111-111111111111";
 const CLAIM_ID = "22222222-2222-4222-8222-222222222222";
+const CATEGORY_ID = "33333333-3333-4333-8333-333333333333";
 const UPPER_NOTE_ID = "A1111111-B111-4111-8111-11111111111A";
 const UPPER_CLAIM_ID = "B2222222-C222-4222-8222-22222222222B";
 const ZOD_UUID_POSITIVE_CASES = [
@@ -164,6 +165,48 @@ describe("Douyin material API client", () => {
     expect(keywordCalls[0]?.path).toBe(
       "/douyin-mini/material-notes?page=2&pageSize=100&keyword=%E5%BC%80%E5%B7%A5%20%E6%B8%85%E5%8D%95",
     );
+  });
+
+  test("accepts the optional category identity across current and legacy material responses", async () => {
+    const categorizedPreview = { ...preview, category_id: CATEGORY_ID };
+    await expect(fetchMaterials(clientWith(() => ({
+      list: [categorizedPreview],
+      pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+    })))).resolves.toEqual({
+      list: [categorizedPreview],
+      pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+    });
+    await expect(fetchMaterialPreview(clientWith(() => ({
+      ...preview,
+      category_id: null,
+    })), NOTE_ID)).resolves.toMatchObject({ category_id: null });
+
+    await expect(claimMaterial(clientWith(() => ({
+      claim_id: CLAIM_ID,
+      already_claimed: false,
+      claimed_at: CLAIMED_AT,
+      material: { ...claimedMaterial, category_id: CATEGORY_ID },
+    })), NOTE_ID)).resolves.toMatchObject({
+      material: { category_id: CATEGORY_ID },
+    });
+
+    const categorizedOwned = { ...ownedSummary, category_id: CATEGORY_ID };
+    await expect(fetchOwnedMaterials(clientWith(() => ({
+      list: [categorizedOwned],
+      pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+    })))).resolves.toMatchObject({ list: [categorizedOwned] });
+    await expect(fetchOwnedMaterialDetail(clientWith(() => ({
+      ...ownedSummary,
+      category_id: null,
+      content_blocks: contentBlocks,
+    })), CLAIM_ID)).resolves.toMatchObject({ category_id: null });
+
+    for (const invalidCategoryId of ["invalid", 1, "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF"]) {
+      await expect(fetchMaterialPreview(clientWith(() => ({
+        ...preview,
+        category_id: invalidCategoryId,
+      })), NOTE_ID)).rejects.toMatchObject({ code: "INVALID_API_RESPONSE" });
+    }
   });
 
   test("rejects invalid list queries before transport and mismatched pagination echoes", async () => {
