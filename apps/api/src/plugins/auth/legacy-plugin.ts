@@ -27,6 +27,9 @@ import { logAuthStage } from "./legacy/timing";
 import {
   assertWechatIdentityBinding,
 } from "./legacy/wechat-assertions";
+import {
+  assertDouyinCustomerIdentityBinding,
+} from "./legacy/douyin-customer-assertions";
 
 export { primeWechatIdentityCheckCacheFromToken } from "./legacy/wechat-cache";
 
@@ -157,6 +160,26 @@ async function authenticateRequest(
     return false;
   }
 
+  if (payload.login_channel === "douyin") {
+    if (!isCustomerSelfServiceRoute(url)) {
+      const error = Errors.unauthorized(
+        "抖音客户令牌不支持该操作",
+        ErrorCodes.TOKEN_INVALID,
+      );
+      logAuthReject(request, "unsupported_token_type", {
+        tokenType: payload.token_type,
+      });
+      reply.status(error.statusCode).send(sendUnauthorized(error, request.id));
+      return false;
+    }
+
+    await logAuthStage(request, "assert_douyin_customer_binding", () =>
+      assertDouyinCustomerIdentityBinding(payload)
+    );
+    request.user = payload;
+    return true;
+  }
+
   if (payload.openid && isPureVisitorPayload(payload) && isVisitorSessionRoute(method, url)) {
     request.log.info(
       { requestId: request.id, path: url },
@@ -204,3 +227,7 @@ async function authenticateRequest(
 }
 
 export default authPlugin;
+
+function isCustomerSelfServiceRoute(url: string) {
+  return url === "/customer" || url.startsWith("/customer/");
+}

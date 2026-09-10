@@ -28,16 +28,21 @@ function createDefaultPhoneDependencies() {
   };
 }
 
-const phoneDependencies = createDefaultPhoneDependencies();
+let defaultService: DouyinCustomerAuthService | undefined;
 
-export const douyinCustomerAuthService = new DouyinCustomerAuthService({
-  smsService: smsVerificationCodeService,
-  sessionRepository: phoneIdentityLoginRepository,
-  candidateRepository: phoneIdentityCandidateRepository,
-  authUsers: authUsersService,
-  userIdentities: userIdentityService,
-  customerIdentity: wechatCustomerIdentityService,
-  contextRepository: douyinMiniappContentRepository,
-  accessTokens: phoneDependencies.accessTokens,
-  phoneGateway: phoneDependencies.phoneGateway,
-});
+export function getDouyinCustomerAuthService() {
+  if (defaultService) return defaultService;
+  const phoneDependencies = createDefaultPhoneDependencies();
+  defaultService = new DouyinCustomerAuthService({
+    smsService: smsVerificationCodeService,
+    sessionRepository: phoneIdentityLoginRepository,
+    candidateRepository: phoneIdentityCandidateRepository,
+    authUsers: authUsersService,
+    userIdentities: userIdentityService,
+    customerIdentity: wechatCustomerIdentityService,
+    contextRepository: douyinMiniappContentRepository,
+    accessTokens: phoneDependencies.accessTokens,
+    phoneGateway: phoneDependencies.phoneGateway,
+  });
+  return defaultService;
+}

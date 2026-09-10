@@ -75,6 +75,10 @@ describe("DouyinMiniappController", () => {
 
     expect(routes.map(({ method, path }) => `${method} ${path}`)).toEqual([
       "POST /douyin-mini/auth/session",
+      "POST /douyin-mini/customer-auth/authorize-phone",
+      "POST /douyin-mini/customer-auth/sms/send-code",
+      "POST /douyin-mini/customer-auth/sms/verify",
+      "POST /douyin-mini/customer-auth/select",
       "GET /douyin-mini/bootstrap",
       "GET /douyin-mini/company",
       "GET /douyin-mini/cases",
