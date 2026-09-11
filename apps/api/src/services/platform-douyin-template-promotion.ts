@@ -47,7 +47,11 @@ export type PlatformDouyinTemplatePromotionDependencies = {
   readonly gateway: DouyinTemplateManagementGateway;
   readonly templates: TemplateRepositoryPort;
   readonly templateAppId: string;
+  readonly wait?: (delayMs: number) => Promise<void>;
 };
+
+// Douyin may acknowledge add_tpl before get_tpl_list reflects the new template.
+const TEMPLATE_VISIBILITY_RETRY_DELAYS_MS = [500, 1_000, 1_500] as const;
 
 export class PlatformDouyinTemplatePromotionService {
   constructor(
@@ -216,36 +220,67 @@ export class PlatformDouyinTemplatePromotionService {
       addError = error;
     }
 
-    let after;
+    let template;
     try {
-      after = await this.dependencies.gateway.listTemplates(request);
+      template = await this.waitForAddedTemplate(
+        request,
+        templateIdsBefore,
+        {
+          draftId,
+          version,
+          description,
+          createdAt: draftCreatedAt,
+        },
+      );
     } catch (error: unknown) {
       if (addError !== undefined) throw addError;
       throw error;
     }
-    const recovered = this.findTemplateByDraftIdentity(
-      after.items,
-      draftId,
-      version,
-      description,
-      draftCreatedAt,
-    );
-    if (recovered) return recovered;
-    const promoted = this.requireUniqueExactTemplate(
-      after.items.filter(
-        (template) => !templateIdsBefore.has(template.templateId),
-      ),
-      version,
-      description,
-      draftCreatedAt,
-    );
-    if (promoted) return promoted;
+    if (template) return template;
     if (addError !== undefined) throw addError;
     throw Errors.business(
       502,
       "抖音模板已添加但暂未出现在模板库",
       "DOUYIN_TEMPLATE_PROMOTION_NOT_VISIBLE",
     );
+  }
+
+  private async waitForAddedTemplate(
+    request: { componentAccessToken: string },
+    templateIdsBefore: ReadonlySet<string>,
+    draft: ReadyDraft,
+  ): Promise<DouyinCodeTemplate | undefined> {
+    for (
+      let attempt = 0;
+      attempt <= TEMPLATE_VISIBILITY_RETRY_DELAYS_MS.length;
+      attempt += 1
+    ) {
+      if (attempt > 0) {
+        await (this.dependencies.wait ?? sleep)(
+          TEMPLATE_VISIBILITY_RETRY_DELAYS_MS[attempt - 1] ?? 0,
+        );
+      }
+      const result = await this.dependencies.gateway.listTemplates(request);
+      const recovered = this.findTemplateByDraftIdentity(
+        result.items,
+        draft.draftId,
+        draft.version,
+        draft.description,
+        draft.createdAt,
+      );
+      if (recovered) return recovered;
+
+      const promoted = this.requireUniqueExactTemplate(
+        result.items.filter(
+          (template) => !templateIdsBefore.has(template.templateId),
+        ),
+        draft.version,
+        draft.description,
+        draft.createdAt,
+      );
+      if (promoted) return promoted;
+    }
+    return undefined;
   }
 
   private findTemplateByDraftIdentity(
@@ -312,6 +347,10 @@ export class PlatformDouyinTemplatePromotionService {
     }
     return authContext.employeeId;
   }
+}
+
+function sleep(delayMs: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, delayMs));
 }
 
 let defaultServicePromise: Promise<PlatformDouyinTemplatePromotionService> | undefined;

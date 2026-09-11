@@ -67,14 +67,16 @@ function createHarness() {
     findCurrent: mock(async () => null as typeof currentTemplate | null),
     confirm: mock(async (_input: unknown) => currentTemplate),
   };
+  const wait = mock(async (_delayMs: number) => {});
   const service = new PlatformDouyinTemplatePromotionService({
     accessPolicy,
     accessTokens,
     gateway,
     templates,
     templateAppId: TEMPLATE_APP_ID,
+    wait,
   } as never);
-  return { service, accessPolicy, accessTokens, gateway, templates };
+  return { service, accessPolicy, accessTokens, gateway, templates, wait };
 }
 
 describe("PlatformDouyinTemplatePromotionService", () => {
@@ -246,6 +248,40 @@ describe("PlatformDouyinTemplatePromotionService", () => {
     await expect(harness.service.confirmLatest(authContext as never, {
       channel: "default",
     })).resolves.toEqual(currentTemplate);
+  });
+
+  test("waits for a newly added template to become visible before reporting failure", async () => {
+    const harness = createHarness();
+    harness.gateway.listTemplates
+      .mockResolvedValueOnce({ items: [], logId: "before-log" })
+      .mockResolvedValueOnce({ items: [], logId: "not-visible-yet" })
+      .mockResolvedValueOnce({ items: [providerTemplate], logId: "visible-log" });
+
+    await expect(harness.service.confirmLatest(authContext as never, {
+      channel: "default",
+    })).resolves.toEqual(currentTemplate);
+
+    expect(harness.gateway.addTemplate).toHaveBeenCalledTimes(1);
+    expect(harness.gateway.listTemplates).toHaveBeenCalledTimes(3);
+    expect(harness.wait).toHaveBeenCalledTimes(1);
+  });
+
+  test("bounds provider visibility checks when the new template stays unavailable", async () => {
+    const harness = createHarness();
+
+    await expect(harness.service.confirmLatest(authContext as never, {
+      channel: "default",
+    })).rejects.toMatchObject({
+      code: "DOUYIN_TEMPLATE_PROMOTION_NOT_VISIBLE",
+    });
+
+    expect(harness.gateway.addTemplate).toHaveBeenCalledTimes(1);
+    expect(harness.gateway.listTemplates).toHaveBeenCalledTimes(5);
+    expect(harness.wait.mock.calls.map(([delayMs]) => delayMs)).toEqual([
+      500,
+      1_000,
+      1_500,
+    ]);
   });
 
   test("does not confirm a preexisting exact template after provider failure", async () => {
