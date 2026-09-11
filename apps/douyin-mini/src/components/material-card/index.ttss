@@ -7,6 +7,18 @@
   text-align: left;
 }
 
+.material-card__content { min-width: 0; flex: 1; }
+
+.material-card--flat {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  padding: 24rpx 4rpx;
+  border-bottom: 1rpx solid #dddad5;
+  border-radius: 0;
+  background: transparent;
+}
+
 .material-card__header {
   display: flex;
   align-items: center;
@@ -54,3 +66,14 @@
   font-size: 22rpx;
   line-height: 1.5;
 }
+
+.material-card--flat .material-card__category,
+.material-card--flat .material-card__claimed {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.material-card--flat .material-card__title { margin-top: 10rpx; font-size: 28rpx; }
+.material-card--flat .material-card__summary { max-height: 36rpx; margin-top: 8rpx; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.material-card__arrow { width: 36rpx; flex: none; color: #85817c; font-size: 36rpx; line-height: 1; text-align: right; }

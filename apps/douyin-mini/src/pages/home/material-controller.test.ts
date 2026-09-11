@@ -9,9 +9,9 @@ const note = (index: number): DouyinMaterialNotePreview => ({
   published_at: "2026-09-01T08:00:00.000Z", claimed: false,
 });
 
-test("home requests four materials and keeps material failure local", async () => {
+test("home requests three materials and keeps material failure local", async () => {
   const fetchMaterials = mock(async (_api, query) => {
-    expect(query).toEqual({ page: 1, pageSize: 4 });
+    expect(query).toEqual({ page: 1, pageSize: 3 });
     throw new Error("local failure");
   });
   const page = makePage(fetchMaterials);
@@ -32,7 +32,7 @@ test("home keeps its global state healthy when no public materials are available
   expect(page.data.materialItems).toEqual([]);
 });
 
-test("home caps the module at four and ignores its old response after hide-show", async () => {
+test("home caps the module at three and ignores its old response after hide-show", async () => {
   const staleFlight = deferred<ReturnType<typeof response>>();
   const currentFlight = deferred<ReturnType<typeof response>>();
   const flights = [staleFlight, currentFlight];
@@ -117,7 +117,7 @@ function bootstrap() {
 }
 
 function response(list: DouyinMaterialNotePreview[] = []) {
-  return { list, pagination: { page: 1, pageSize: 4, total: list.length, totalPages: list.length ? 1 : 0 } };
+  return { list, pagination: { page: 1, pageSize: 3, total: list.length, totalPages: list.length ? 1 : 0 } };
 }
 
 function deferred<T>() {

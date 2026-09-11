@@ -42,8 +42,9 @@ test("site cards keep a compact 240rpx square media layout", async () => {
 });
 
 test("home keeps one lead intent and uses direct Chinese section headings", async () => {
-  const [template, config] = await Promise.all([
+  const [template, style, config] = await Promise.all([
     readSource("pages/home/index.ttml"),
+    readSource("pages/home/index.ttss"),
     readSource("pages/home/index.json"),
   ]);
   expect(template).not.toContain("section-kicker");
@@ -54,6 +55,24 @@ test("home keeps one lead intent and uses direct Chinese section headings", asyn
   expect(template.match(/开始预算初算/g)).toHaveLength(1);
   expect(template).not.toContain("先算预算，再规划装修");
   expect(template).toContain('tt:if="{{metrics.length}}"');
+  expect(template).toContain("AI 装修问题助手");
+  expect(template).not.toContain("qa-card ui-card");
+  expect(template).not.toContain("customer-entry-action");
+  expect(style).not.toContain(".qa-card");
+  expect(style).not.toContain(".customer-entry-action");
+  expect(template.match(/class="material-loading-row"/g)).toHaveLength(3);
+  expect(style).not.toMatch(/\.material-module-loading\s*\{[^}]*border-radius/);
+
+  const projectsTool = template.indexOf("我的项目");
+  const aiTool = template.indexOf("AI 装修问题助手");
+  const materials = template.indexOf("装修资料");
+  const projects = template.indexOf("项目实景");
+  const metrics = template.indexOf("<trust-metrics");
+  expect(projectsTool).toBeGreaterThan(-1);
+  expect(aiTool).toBeGreaterThan(projectsTool);
+  expect(materials).toBeGreaterThan(aiTool);
+  expect(projects).toBeGreaterThan(materials);
+  expect(metrics).toBeGreaterThan(projects);
 });
 
 test("trust metrics hides empty public data instead of showing placeholder copy", async () => {
@@ -71,7 +90,24 @@ test("hero collapses the reserved media column when no image is visible", async 
     "{{imageUrl && !imageFailed ? 'hero--with-image' : 'hero--without-image'}}",
   );
   expect(style).toMatch(/\.hero--without-image \.hero-content\s*\{[^}]*max-width:\s*none/);
-  expect(style).toMatch(/\.hero--without-image \.hero-action\s*\{[^}]*width:\s*100%/);
+  expect(style).not.toMatch(/\.hero--without-image \.hero-action\s*\{[^}]*width:\s*100%/);
+});
+
+test("home uses flat content variants without changing list-page cards", async () => {
+  const [home, materials, projects, materialCard, caseCard] = await Promise.all([
+    readSource("pages/home/index.ttml"),
+    readSource("pages/materials/index.ttml"),
+    readSource("pages/cases/index.ttml"),
+    readSource("components/material-card/index.ttml"),
+    readSource("components/case-card/index.ttml"),
+  ]);
+  expect(home).toContain('<material-card tt:for="{{materialItems}}" tt:key="id" variant="flat"');
+  expect(home).toContain('variant="flat" phase-label="{{item.phaseLabel}}"');
+  expect(home).not.toContain('class="project-phase"');
+  expect(materialCard).toContain("variant === 'flat'");
+  expect(caseCard).toContain("variant === 'flat'");
+  expect(materials).not.toContain('variant="flat"');
+  expect(projects).not.toContain('variant="flat"');
 });
 
 test("unified projects bind authoritative phase and paginated detail actions", async () => {

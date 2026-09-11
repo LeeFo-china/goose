@@ -2,6 +2,8 @@ Component({
   data: { imageFailed: false },
   properties: {
     item: { type: Object, value: {} },
+    variant: { type: String, value: "card" },
+    phaseLabel: { type: String, value: "" },
     fallbackImageUrl: { type: String, value: "" },
     loading: { type: Boolean, value: false },
     error: { type: Boolean, value: false },

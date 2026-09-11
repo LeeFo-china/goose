@@ -5,16 +5,15 @@
   <view class="home-block home-hero">
     <hero-banner title="{{bannerTitle}}" subtitle="{{bannerSubtitle}}" image-url="{{bannerImageUrl}}" action-label="开始预算初算" primary-color="{{primaryColor}}" bindaction="onBudget" />
   </view>
-  <view class="home-section customer-entry">
-    <button class="customer-entry-action ui-pressable" hover-class="ui-pressable--pressed" style="border-color: {{primaryColor}}; color: {{primaryColor}}" bindtap="onMyProjects">我的项目</button>
-  </view>
-  <view tt:if="{{metrics.length}}" class="home-block"><trust-metrics items="{{metrics}}" /></view>
-
-  <view class="home-section qa-card ui-card">
-    <view class="qa-eyebrow">装修问题助手</view>
-    <view class="qa-title">不确定先问什么，可以从常见装修问题开始</view>
-    <view class="qa-copy">围绕预算准备、旧房翻新、局部装修和量房准备，给出简短参考建议。</view>
-    <button class="qa-action ui-pressable" hover-class="ui-pressable--pressed" style="background: {{primaryColor}}; color: {{primaryTextColor}}" bindtap="onAskQuestion">去提问</button>
+  <view class="home-tools" aria-label="常用工具">
+    <button class="home-tool-link ui-pressable" hover-class="ui-pressable--pressed" bindtap="onMyProjects">
+      <view class="home-tool-copy"><view class="home-tool-title">我的项目</view><view class="home-tool-description">查看施工进度与施工日志</view></view>
+      <view class="home-tool-arrow" style="color: {{primaryColor}}" aria-hidden="true">›</view>
+    </button>
+    <button class="home-tool-link ui-pressable" hover-class="ui-pressable--pressed" bindtap="onAskQuestion">
+      <view class="home-tool-copy"><view class="home-tool-title">AI 装修问题助手</view><view class="home-tool-description">咨询预算、翻新、量房和施工问题</view></view>
+      <view class="home-tool-arrow" style="color: {{primaryColor}}" aria-hidden="true">›</view>
+    </button>
   </view>
 
   <view class="home-section">
@@ -25,9 +24,13 @@
         <button class="section-link ui-pressable" hover-class="ui-pressable--pressed" style="color: {{primaryColor}}" bindtap="onViewMyMaterials">我的资料</button>
       </view>
     </view>
-    <view tt:if="{{materialStatus === 'loading'}}" class="material-module-loading" aria-label="装修资料加载中"><view class="material-loading-bar"></view><view class="material-loading-bar material-loading-bar--short"></view></view>
-    <view tt:elif="{{materialStatus === 'ready'}}" class="card-list">
-      <material-card tt:for="{{materialItems}}" tt:key="id" item="{{item}}" bindselect="onMaterialSelect" />
+    <view tt:if="{{materialStatus === 'loading'}}" class="material-module-loading" aria-label="装修资料加载中">
+      <view class="material-loading-row"><view class="material-loading-bar"></view><view class="material-loading-bar material-loading-bar--short"></view></view>
+      <view class="material-loading-row"><view class="material-loading-bar"></view><view class="material-loading-bar material-loading-bar--short"></view></view>
+      <view class="material-loading-row"><view class="material-loading-bar"></view><view class="material-loading-bar material-loading-bar--short"></view></view>
+    </view>
+    <view tt:elif="{{materialStatus === 'ready'}}" class="material-list">
+      <material-card tt:for="{{materialItems}}" tt:key="id" variant="flat" item="{{item}}" bindselect="onMaterialSelect" />
     </view>
     <view tt:elif="{{materialStatus === 'empty'}}" class="material-module-empty ui-hint-surface">暂无新资料，可在“我的资料”继续查看已领取内容。</view>
     <view tt:else class="material-module-error ui-hint-surface" role="alert"><view>装修资料暂时加载失败，不影响其他功能。</view><button class="material-retry ui-pressable" hover-class="ui-pressable--pressed" bindtap="onRetryMaterials">重试</button></view>
@@ -35,11 +38,13 @@
 
   <view class="home-section">
     <view class="section-heading"><view class="ui-section-title">项目实景</view><button class="section-link ui-pressable" hover-class="ui-pressable--pressed" style="color: {{primaryColor}}" bindtap="onViewProjects">查看全部项目</button></view>
-    <view tt:if="{{featuredProjects.length}}" class="card-list">
-      <view tt:for="{{featuredProjects}}" tt:key="id" class="project-card"><view class="project-phase" style="border-color: {{primaryColor}}">{{item.phaseLabel}}</view><case-card item="{{item}}" primary-color="{{primaryColor}}" primary-text-color="{{primaryTextColor}}" bindselect="onProjectSelect" /></view>
+    <view tt:if="{{featuredProjects.length}}" class="project-list">
+      <case-card tt:for="{{featuredProjects}}" tt:key="id" variant="flat" phase-label="{{item.phaseLabel}}" item="{{item}}" primary-color="{{primaryColor}}" primary-text-color="{{primaryTextColor}}" bindselect="onProjectSelect" />
     </view>
     <empty-state tt:else title="项目实景正在整理" description="装修公司尚未发布可公开的项目内容。" />
   </view>
+
+  <view tt:if="{{metrics.length}}" class="home-section metrics-section"><trust-metrics items="{{metrics}}" /></view>
 
   <view class="home-section">
     <view class="ui-section-title">装修服务流程</view>
@@ -52,7 +57,7 @@
     <view class="process-note">具体服务内容、价格与工期以你和装修公司最终确认的信息为准。</view>
   </view>
 
-  <view class="home-section trust-panel ui-card">
+  <view class="home-section company-section">
     <view class="ui-section-title">本地服务与公司介绍</view>
     <view tt:if="{{serviceRegions.length}}" class="region-list"><view tt:for="{{serviceRegions}}" tt:key="*this" class="region-tag">{{item}}</view></view>
     <view tt:else class="section-empty">服务区域正在完善，可提交需求后进一步确认。</view>

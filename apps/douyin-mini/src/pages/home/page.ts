@@ -90,11 +90,11 @@ export function createHomePageDefinition(dependencies: HomePageDependencies) {
       this.setData({ materialStatus: "loading" });
       try {
         const result = await dependencies.fetchMaterials(dependencies.getApp().api, {
-          page: 1, pageSize: 4,
+          page: 1, pageSize: 3,
         });
         if (sequence !== this.materialRequestSequence || !this.lifecycle.isCurrent(authority)) return;
         this.setData({
-          materialItems: result.list.slice(0, 4),
+          materialItems: result.list.slice(0, 3),
           materialStatus: result.list.length > 0 ? "ready" : "empty",
         });
       } catch {
