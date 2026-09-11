@@ -28,6 +28,26 @@ async function action(page: Page, name: string) {
   await page.getByRole('button', { name, exact: true }).click();
   await page.getByRole('button', { name: '确认执行', exact: true }).click();
 }
+
+test('列表使用唯一表格滚动容器，窄屏工作区允许触摸滚动', async ({ page }) => {
+  await open(page);
+  const workspace = page.locator('[data-slot="warehouse-transfer-workspace"]');
+  const table = page.getByRole('table', { name: '调拨单列表' });
+  const tableWrapper = table.locator('..');
+  const tableScroller = tableWrapper.locator('..');
+
+  await expect(table).toBeVisible();
+  expect(await tableWrapper.evaluate((element) => getComputedStyle(element).overflowY)).toBe(
+    'visible',
+  );
+  expect(await tableScroller.evaluate((element) => getComputedStyle(element).overflowY)).toBe(
+    'auto',
+  );
+  expect(await workspace.evaluate((element) => getComputedStyle(element).overflowY)).toBe(
+    (page.viewportSize()?.width ?? 1280) < 1024 ? 'auto' : 'hidden',
+  );
+});
+
 test('保存草稿409保留输入并锁旧版本，明确放弃后才重载新版本', async ({ page }, info) => {
   await open(page, 'conflict');
   await page.getByRole('button', { name: '查看 DB0002' }).click();
@@ -332,12 +352,22 @@ test('慢列表响应不能覆盖更新后的搜索结果', async ({ page }) => 
 
 test('历史筛选包含停用仓库，新建不提供停用仓库', async ({ page }) => {
   await open(page);
-  await page.getByLabel('搜索调出仓库', { exact: true }).fill('仓库25');
-  await page.getByLabel('搜索调出仓库', { exact: true }).press('Enter');
-  await selectWarehouse(page, '调出仓库', '仓库25（已停用）');
-  await expect(page.getByText('暂无符合条件的调拨单', { exact: true })).toBeVisible();
+  await page.getByLabel('调出仓库', { exact: true }).click();
+  const sourceSearch = page.getByLabel('搜索调出仓库', { exact: true });
+  await sourceSearch.fill('仓库25');
+  await sourceSearch.press('Enter');
+  await expect(sourceSearch).toBeVisible();
+  await expect(page.getByRole('option', { name: '仓库25（已停用）', exact: true })).toBeVisible();
+  await sourceSearch.press('End');
+  await sourceSearch.press('Enter');
+  await expect(page.getByLabel('调出仓库', { exact: true })).toContainText('仓库25');
+  await expect(page.getByText('没有匹配的调拨单', { exact: true })).toBeVisible();
   const requests: { path: string }[] = await (await page.request.get(`${backend}/__test/requests`)).json();
   expect(requests.some(row => row.path.includes('sourceWarehouseId=77000000-0000-4000-8000-000000000124'))).toBe(true);
+  await page.getByRole('button', { name: '清除筛选', exact: true }).click();
+  await page.getByLabel('调出仓库', { exact: true }).click();
+  await expect(sourceSearch).toHaveValue('');
+  await page.keyboard.press('Escape');
   await page.getByRole('button', { name: '新建调拨', exact: true }).click();
   await page.getByLabel('搜索调出仓库', { exact: true }).fill('仓库25');
   await page.getByLabel('搜索调出仓库', { exact: true }).press('Enter');

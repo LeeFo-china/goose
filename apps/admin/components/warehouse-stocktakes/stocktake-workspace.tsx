@@ -2,12 +2,14 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
+import { ClipboardPlus, Warehouse } from 'lucide-react';
 import type { WarehouseStocktakeSettings } from '@gooes/domain';
 
 import { StatusAlert } from '@/components/admin/status-alert';
 import { useAdminSessionScope } from '@/components/layout/admin-session-scope';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { cn } from '@/lib/utils';
 
 import { readStocktake } from './stocktake-api';
 import { useStocktakeCommand } from './stocktake-command';
@@ -120,17 +122,33 @@ function StocktakeWorkspaceSession({
     const permitted = path.endsWith('/complete') ? access.canApprove : access.canManage;
     if (!blocked && !awaitingRecovery && permitted) void command.execute(path, body, id);
   };
+  const showingList = !draft && !counts && !selected;
   return (
-    <div className="flex min-w-0 flex-col gap-4 pb-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-lg font-semibold">仓库盘点</h1>
+    <div
+      data-slot="warehouse-stocktake-workspace"
+      className={cn(
+        'flex min-w-0 flex-col gap-4',
+        showingList
+          ? 'h-full min-h-0 overflow-auto pb-6 lg:h-[calc(100vh-6.5625rem)] lg:overflow-hidden lg:pb-0'
+          : 'pb-6',
+      )}
+    >
+      <div className="flex shrink-0 flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold tracking-normal">仓库盘点</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            查看盘点单、实盘进度与库存差异。
+          </p>
+        </div>
         <div className="flex gap-2">
-          <Button asChild size="sm" variant="outline">
-            <Link href="/inventory">仓库库存</Link>
+          <Button asChild variant="outline">
+            <Link href="/inventory">
+              <Warehouse data-icon="inline-start" />
+              仓库库存
+            </Link>
           </Button>
           {access.canManage && (
             <Button
-              size="sm"
               disabled={blocked || awaitingRecovery || Boolean(draft) || Boolean(counts)}
               onClick={() => {
                 if (blocked || awaitingRecovery || draft || counts) return;
@@ -138,6 +156,7 @@ function StocktakeWorkspaceSession({
                 setDraft({ id: crypto.randomUUID(), items: [] });
               }}
             >
+              <ClipboardPlus data-icon="inline-start" />
               新建盘点
             </Button>
           )}
@@ -229,11 +248,14 @@ function StocktakeWorkspaceSession({
           />
         </>
       ) : null}
-      <div hidden={Boolean(draft || counts || selected)}>
+      <div
+        hidden={!showingList}
+        className="min-h-0 flex-1"
+      >
         <StocktakeList access={access} revision={revision} onOpen={setSelected} active={!draft && !counts && !selected} />
       </div>
-      <Separator />
-      <p className="text-xs text-muted-foreground">
+      <Separator className="shrink-0" />
+      <p className="shrink-0 text-xs text-muted-foreground">
         开始盘点冻结账面快照；完成盘点按实盘差异调整仓库库存，不生成项目成本、供应商应付或付款记录。
       </p>
     </div>

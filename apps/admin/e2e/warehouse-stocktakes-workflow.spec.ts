@@ -1,6 +1,25 @@
 import { expect, test } from '@playwright/test';
 import { action, backend, count, detail, draft, open, quantity, reason, save, saveCounts, scenario, writes } from './warehouse-stocktakes-helpers';
 
+test('列表使用唯一表格滚动容器，窄屏工作区允许触摸滚动', async ({ page }) => {
+  await open(page);
+  const workspace = page.locator('[data-slot="warehouse-stocktake-workspace"]');
+  const table = page.getByRole('table', { name: '盘点单列表' });
+  const tableWrapper = table.locator('..');
+  const tableScroller = tableWrapper.locator('..');
+
+  await expect(table).toBeVisible();
+  expect(await tableWrapper.evaluate((element) => getComputedStyle(element).overflowY)).toBe(
+    'visible',
+  );
+  expect(await tableScroller.evaluate((element) => getComputedStyle(element).overflowY)).toBe(
+    'auto',
+  );
+  expect(await workspace.evaluate((element) => getComputedStyle(element).overflowY)).toBe(
+    (page.viewportSize()?.width ?? 1280) < 1024 ? 'auto' : 'hidden',
+  );
+});
+
 test('详情往返保留关键词仓库状态和页码，取消后重读当前页', async ({ page }) => {
   await open(page);
   const list = page.getByRole('region', { name: '盘点单列表' });
