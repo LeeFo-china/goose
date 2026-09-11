@@ -225,6 +225,8 @@ export const tenantNavGroups: AdminMenuGroup[] = [
         permission: "employee.permission_manage",
       },
       { href: "/marketing", label: "营销活动", icon: Megaphone },
+      { href: "/rendering-library", label: "装修效果库", icon: Images,
+        requiredPermissions: [{ code: "rendering_library.read", scope: "all" }], allowPlatformAdminPermissionBypass: false },
       {
         href: "/social-video",
         label: "自媒体脚本",

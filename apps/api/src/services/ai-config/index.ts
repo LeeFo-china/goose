@@ -28,6 +28,8 @@ import type {
 import { openRouterModelSyncService } from "@/services/ai-config/openrouter-model-sync";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import { isAiSecretSettingKey } from "@/schema/ai-secret-settings";
+import { aiSecretSettingsService } from "@/services/ai-config/secret-settings";
 
 const READ_PERMISSION = "platform.ai_config.read";
 const MANAGE_PERMISSION = "platform.ai_config.manage";
@@ -74,6 +76,7 @@ type AiConfigServiceDependencies = {
   catalogRepository?: Partial<CatalogRepositoryPort>;
   openRouterSyncService?: OpenRouterSyncServicePort;
   auditRepository?: AuditRepositoryPort;
+  secretSettingsService?: Pick<typeof aiSecretSettingsService, "assertReference">;
 };
 
 export class AiConfigService {
@@ -81,12 +84,14 @@ export class AiConfigService {
   private readonly catalogRepository: Partial<CatalogRepositoryPort>;
   private readonly openRouterSyncService: OpenRouterSyncServicePort;
   private readonly auditRepository: AuditRepositoryPort;
+  private readonly secretSettingsService: Pick<typeof aiSecretSettingsService, "assertReference">;
 
   constructor(dependencies: AiConfigServiceDependencies = {}) {
     this.configRepository = dependencies.configRepository ?? aiConfigRepository;
     this.catalogRepository = dependencies.catalogRepository ?? aiModelCatalogRepository;
     this.openRouterSyncService = dependencies.openRouterSyncService ?? openRouterModelSyncService;
     this.auditRepository = dependencies.auditRepository ?? platformAuditLogRepository;
+    this.secretSettingsService = dependencies.secretSettingsService ?? aiSecretSettingsService;
   }
 
   async getConfig(authContext: AuthContext) {
@@ -153,6 +158,7 @@ export class AiConfigService {
 
   async createProvider(authContext: AuthContext, input: AiProviderPayload) {
     this.assertPlatformPermission(authContext, MANAGE_PERMISSION);
+    await this.assertProviderReference(input.provider_type, input.api_key_setting_key);
     const record = await this.requireConfigRepository("createProvider").call(this.configRepository, input);
     await this.audit(authContext, "ai_provider", record.id, record.name, "创建 AI 供应商");
     return record;
@@ -160,6 +166,17 @@ export class AiConfigService {
 
   async updateProvider(authContext: AuthContext, id: string, input: UpdateAiProviderPayload) {
     this.assertPlatformPermission(authContext, MANAGE_PERMISSION);
+    if (Object.hasOwn(input, "api_key_setting_key") && !isAiSecretSettingKey(input.api_key_setting_key)) {
+      throw Errors.badRequest("请选择已登记的 AI 密钥配置");
+    }
+    if (Object.hasOwn(input, "api_key_setting_key") || Object.hasOwn(input, "provider_type")) {
+      const current = await this.requireConfigRepository("getProviderById").call(this.configRepository, id);
+      if (!current) throw Errors.notFound("AI 供应商不存在");
+      const changesType = input.provider_type !== undefined && input.provider_type !== current.provider_type;
+      if (Object.hasOwn(input, "api_key_setting_key") || changesType) {
+        await this.assertProviderReference(input.provider_type ?? current.provider_type, input.api_key_setting_key ?? current.api_key_setting_key);
+      }
+    }
     const record = await this.requireConfigRepository("updateProvider").call(this.configRepository, id, input);
     await this.audit(authContext, "ai_provider", record.id, record.name, "更新 AI 供应商");
     return record;
@@ -299,6 +316,14 @@ export class AiConfigService {
       resourceLabel,
       summary,
     }).catch(() => null);
+  }
+
+  private async assertProviderReference(providerType: string, key: unknown): Promise<void> {
+    if (!isAiSecretSettingKey(key)) throw Errors.badRequest("请选择已登记的 AI 密钥配置");
+    if (providerType === "openrouter" && key !== "OPENROUTER_API_KEY") {
+      throw Errors.badRequest("OpenRouter 必须使用已登记的 OpenRouter 密钥配置");
+    }
+    await this.secretSettingsService.assertReference(key);
   }
 
   private async requireActiveProvider(providerId: string): Promise<AiProviderRecord> {

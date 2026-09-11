@@ -36,6 +36,15 @@ export const DEFINITIONS_AI_SOCIAL: SettingDefinition[] = [  {
     isSecret: true,
   },
   {
+    key: "ARK_API_KEY",
+    groupCode: "ai",
+    name: "火山方舟接口密钥",
+    description: "火山方舟图片生成和视觉理解接口密钥，加密存储。供应商密钥配置引用 ARK_API_KEY。",
+    valueType: "string",
+    envNames: ["ARK_API_KEY"],
+    isSecret: true,
+  },
+  {
     key: "AI_MODEL",
     groupCode: "ai",
     name: "AI 模型名称",

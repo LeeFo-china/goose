@@ -11,6 +11,9 @@ type RouteContext = {
 };
 
 const RETRYABLE_METHODS = new Set(["GET", "HEAD"]);
+function isAiSecretPath(path: string) {
+  return /^\/platform\/ai-config\/secret-settings(?:[/?]|$)/.test(path);
+}
 const REDIRECT_RESPONSE_HEADERS = [
   "location",
   "cache-control",
@@ -65,12 +68,13 @@ async function fetchBackendWithRetry(input: {
       });
     } catch (error) {
       lastError = error;
+      const isSecret = isAiSecretPath(input.path);
       console.error("[admin-backend-proxy] backend fetch failed", {
-        path: input.path,
+        path: isSecret ? "/platform/ai-config/secret-settings/:key" : input.path,
         method: input.method,
         attempt,
         maxAttempts,
-        error: error instanceof Error ? error.message : String(error),
+        error: isSecret ? "密钥配置后端连接失败" : error instanceof Error ? error.message : String(error),
       });
 
       if (attempt < maxAttempts) {
@@ -82,7 +86,7 @@ async function fetchBackendWithRetry(input: {
   throw lastError;
 }
 
-async function proxyBackend(request: Request, context: RouteContext) {
+async function fetchProxiedBackend(request: Request, context: RouteContext) {
   const token = await getAdminToken();
   if (!token) {
     return clearAdminTokenCookie(NextResponse.json(
@@ -146,6 +150,19 @@ async function proxyBackend(request: Request, context: RouteContext) {
     status: response.status,
     headers: responseHeaders,
   }));
+}
+
+async function proxyBackend(request: Request, context: RouteContext) {
+  const response = await fetchProxiedBackend(request, context);
+  const { path } = await context.params;
+  // Private images and secret configuration must remain non-cacheable, including
+  // early errors, without changing unrelated proxy routes.
+  if (path[0] === "tenant" && path[1] === "rendering-library"
+    || path[0] === "platform" && path[1] === "ai-config" && path[2] === "secret-settings") {
+    response.headers.set("Cache-Control", "private, no-store");
+    response.headers.set("Referrer-Policy", "no-referrer");
+  }
+  return response;
 }
 
 export async function GET(request: Request, context: RouteContext) {

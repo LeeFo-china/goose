@@ -43,7 +43,7 @@ describe("AI model routing page layout", () => {
     expect(sections).toContain("pending ? (");
     expect(routeTab).toContain("isRouteLoading ? (");
     expect(panel).not.toContain('className="m-0 min-h-0 flex-1 overflow-auto pr-1"');
-    expect(panel.match(/className="grid h-full min-h-0 gap-4 overflow-auto xl:grid-cols-\[360px_minmax\(0,1fr\)\] xl:overflow-hidden"/g)?.length ?? 0).toBe(1);
+    expect(panel).toContain('className="grid h-full min-h-0 auto-rows-max gap-4 overflow-auto xl:auto-rows-fr xl:grid-cols-[360px_minmax(0,1fr)] xl:overflow-hidden"');
 
     expect(table).toContain("containerClassName");
     expect(routeTab).toContain('className="grid h-full min-h-0 gap-4 overflow-auto xl:grid-cols-[360px_minmax(0,1fr)] xl:overflow-hidden"');

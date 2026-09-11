@@ -5,6 +5,7 @@ import { Edit3, Plus, RotateCcw, Save } from "lucide-react";
 import { toast } from "sonner";
 import type { AiModelRecord, AiProviderRecord, PageData } from "@/components/platform-ai/ai-config-types";
 import { statusLabel } from "@/components/platform-ai/ai-config-types";
+import { AiProviderSecretEditor } from "./ai-provider-secret-editor";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,7 +16,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import type { ModelFormState, ProviderFormState } from "@/components/platform-ai/ai-model-routing-shared";
 import {
   normalizeProviderFormForType,
-  OPENROUTER_API_KEY_SETTING_KEY,
   providerKeyDisplay,
 } from "@/components/platform-ai/ai-model-routing-shared";
 
@@ -188,23 +188,10 @@ export function ProviderFormCard({
             <FieldLabel htmlFor="ai-provider-endpoint">Endpoint</FieldLabel>
             <Input id="ai-provider-endpoint" value={form.endpoint_url} onChange={(event) => onChange({ ...form, endpoint_url: event.target.value })} />
           </Field>
-          <Field>
-            <FieldLabel htmlFor="ai-provider-key">密钥配置 Key</FieldLabel>
-            <Input
-              id="ai-provider-key"
-              value={form.provider_type === "openrouter" && !form.api_key_setting_key
-                ? OPENROUTER_API_KEY_SETTING_KEY
-                : form.api_key_setting_key}
-              readOnly={form.provider_type === "openrouter"}
-              aria-readonly={form.provider_type === "openrouter" ? "true" : undefined}
-              onChange={(event) => onChange({ ...form, api_key_setting_key: event.target.value })}
-            />
-            <FieldDescription>
-              {form.provider_type === "openrouter"
-                ? "真实密钥请在系统配置中维护，这里固定引用 OPENROUTER_API_KEY。"
-                : "例如 AI_API_KEY、DEEPSEEK_API_KEY。不要填写真实密钥。"}
-            </FieldDescription>
-          </Field>
+          <AiProviderSecretEditor
+            key={`${form.id || "new"}:${form.provider_type}:${form.api_key_setting_key}:${form.initial_api_key_setting_key || ""}`}
+            form={form} onChange={onChange}
+          />
           <RouteStatusSelect value={form.status} onChange={(status) => onChange({ ...form, status })} />
           <Field>
             <FieldLabel htmlFor="ai-provider-sort">排序</FieldLabel>
@@ -400,7 +387,7 @@ export function ProviderTable({
                   <div className="text-xs text-muted-foreground">{item.code}</div>
                 </TableCell>
                 <TableCell className="max-w-[280px] truncate">{item.endpoint_url || "-"}</TableCell>
-                <TableCell>{providerKeyDisplay(item.api_key_setting_key)}</TableCell>
+                <TableCell>{item.api_key_setting_invalid ? "配置引用异常" : providerKeyDisplay(item.api_key_setting_key)}</TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
                     <StatusBadge status={item.status} />

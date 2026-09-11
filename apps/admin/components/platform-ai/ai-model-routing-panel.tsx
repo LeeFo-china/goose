@@ -17,6 +17,7 @@ import {
   emptyRouteForm,
   NONE_VALUE,
   providerFormFromRecord,
+  providerReferencePatch,
   requestBackend,
   routeModelOptionFromModel,
   type ProviderFormState,
@@ -131,14 +132,13 @@ export function AiModelRoutingPanel({
   async function submitProvider() {
     const payload = {
       name: providerForm.name,
-      provider_type: providerForm.provider_type,
       endpoint_url: providerForm.endpoint_url || null,
-      api_key_setting_key: providerForm.api_key_setting_key || null,
+      ...providerReferencePatch(providerForm),
       status: providerForm.status,
       sort_order: Number(providerForm.sort_order || 0),
       ...(providerForm.id ? { expected_version: providerForm.version ?? 1 } : {}),
     };
-    await requestBackend(
+    const savedProvider = await requestBackend<AiProviderRecord>(
       providerForm.id
         ? `/platform/ai-config/providers/${providerForm.id}`
         : "/platform/ai-config/providers",
@@ -148,7 +148,7 @@ export function AiModelRoutingPanel({
       },
     );
     toast.success(providerForm.id ? "供应商已更新" : "供应商已创建");
-    setProviderForm(emptyProviderForm());
+    setProviderForm(providerFormFromRecord(savedProvider));
     await reloadProviderState();
     refresh();
   }
@@ -273,7 +273,7 @@ export function AiModelRoutingPanel({
       </TabsContent>
 
       <TabsContent value="providers" className="m-0 min-h-0 flex-1 overflow-hidden">
-        <div className="grid h-full min-h-0 gap-4 overflow-auto xl:grid-cols-[360px_minmax(0,1fr)] xl:overflow-hidden">
+        <div className="grid h-full min-h-0 auto-rows-max gap-4 overflow-auto xl:auto-rows-fr xl:grid-cols-[360px_minmax(0,1fr)] xl:overflow-hidden">
           <ProviderFormCard
             form={providerForm}
             isPending={isPending}

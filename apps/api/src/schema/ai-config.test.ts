@@ -10,6 +10,17 @@ import {
 } from "./ai-config";
 
 describe("AI config schemas", () => {
+  test("limits provider references to registered AI secret keys", () => {
+    for (const key of ["AI_API_KEY", "DEEPSEEK_API_KEY", "OPENROUTER_API_KEY", "ARK_API_KEY"]) {
+      expect(AiProviderPayloadSchema.safeParse({name: "供应商", api_key_setting_key: key}).success).toBe(true);
+    }
+    for (const key of ["UNKNOWN_KEY", "AI_MODEL", "", null]) {
+      expect(AiProviderPayloadSchema.safeParse({name: "供应商", api_key_setting_key: key}).success).toBe(false);
+      expect(UpdateAiProviderPayloadSchema.safeParse({expected_version: 1, api_key_setting_key: key}).success).toBe(false);
+    }
+    expect(AiProviderPayloadSchema.safeParse({name: "供应商"}).success).toBe(false);
+    expect(UpdateAiProviderPayloadSchema.safeParse({expected_version: 1, name: "供应商"}).success).toBe(true);
+  });
   test("keeps ordinary model CRUD separate from capability override RPC", () => {
     expect(AiModelPayloadSchema.safeParse({
       provider_id: "11111111-1111-4111-8111-111111111111",
@@ -72,6 +83,19 @@ describe("AI config schemas", () => {
       expected_version: 1,
       api_key_setting_key: "Bearer secret-token",
     }).success).toBe(false);
+  });
+
+  test("rejects Ark credentials as setting references on create and update", () => {
+    const credential = ["ark", "11111111", "2222", "4333", "8444", "555555555555", "synthetic"].join("-");
+    expect(AiProviderPayloadSchema.safeParse({
+      name: "火山方舟", api_key_setting_key: credential,
+    }).success).toBe(false);
+    expect(UpdateAiProviderPayloadSchema.safeParse({
+      expected_version: 1, api_key_setting_key: credential,
+    }).success).toBe(false);
+    expect(AiProviderPayloadSchema.safeParse({
+      name: "火山方舟", api_key_setting_key: "ARK_API_KEY",
+    }).success).toBe(true);
   });
 
   test("accepts catalog entry search filters and rejects unknown modalities", () => {

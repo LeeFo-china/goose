@@ -52,3 +52,5 @@ export * from './workflow';
 export * from './wechat-pay-applyment-readiness';
 export * from './wechat-pay-settlement-rule';
 export * from './warehouse-adjustment';
+export * from './customer-rendering';
+export * from './rendering-library';

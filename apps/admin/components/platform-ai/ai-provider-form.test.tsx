@@ -8,6 +8,8 @@ import {
   normalizeProviderFormForType,
   OPENROUTER_API_KEY_SETTING_KEY,
   providerFormFromRecord,
+  providerKeyDisplay,
+  providerReferencePatch,
 } from "./ai-model-routing-shared";
 import type { AiProviderRecord, PageData } from "./ai-config-types";
 
@@ -69,7 +71,7 @@ describe("ProviderFormCard", () => {
     expect(normalized.provider_type).toBe("openrouter");
     expect(normalized.api_key_setting_key).toBe(OPENROUTER_API_KEY_SETTING_KEY);
     expect(html).toContain(OPENROUTER_API_KEY_SETTING_KEY);
-    expect(html).toContain("真实密钥请在系统配置中维护");
+    expect(html).toContain("保存供应商后可配置真实密钥");
     expect(html).not.toContain("sk-or-v1-secret");
   });
 
@@ -86,8 +88,32 @@ describe("ProviderFormCard", () => {
       onPageChange: () => undefined,
     }));
 
-    expect(form.api_key_setting_key).toBe(OPENROUTER_API_KEY_SETTING_KEY);
+    expect(form.api_key_setting_key).toBe("");
+    expect(providerReferencePatch(form)).toEqual({});
     expect(html).toContain("已隐藏真实密钥");
     expect(html).not.toContain("sk-or-v1-secret");
+  });
+
+  test("unknown legacy references never render and unchanged reference is omitted", () => {
+    const form = providerFormFromRecord({ ...rawOpenRouterProvider, provider_type: "openai_compatible", api_key_setting_key: "unregistered-sensitive-value" });
+    expect(form.api_key_setting_key).toBe("");
+    expect(providerKeyDisplay("unregistered-sensitive-value")).not.toContain("unregistered-sensitive-value");
+    expect(providerReferencePatch(form)).toEqual({});
+    expect(providerReferencePatch({ ...form, api_key_setting_key: "ARK_API_KEY" })).toEqual({ api_key_setting_key: "ARK_API_KEY" });
+  });
+
+  test("historical OpenRouter cannot edit another providers shared key without repair", () => {
+    const form = providerFormFromRecord({ ...rawOpenRouterProvider, api_key_setting_key: "ARK_API_KEY" });
+    expect(form.api_key_setting_key).toBe("");
+    expect(form.api_key_setting_invalid).toBe(true);
+    expect(providerReferencePatch(form)).toEqual({});
+  });
+
+  test("unchanged type is omitted so unrelated legacy edits do not trigger reference validation", () => {
+    const form = providerFormFromRecord(rawOpenRouterProvider);
+    expect(providerReferencePatch(form)).toEqual({});
+    expect(providerReferencePatch({ ...form, provider_type: "openai_compatible", api_key_setting_key: "ARK_API_KEY" })).toEqual({
+      provider_type: "openai_compatible", api_key_setting_key: "ARK_API_KEY",
+    });
   });
 });

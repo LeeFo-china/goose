@@ -4,6 +4,7 @@ import type {
   AiRouteModelOptionRecord,
 } from "@/components/platform-ai/ai-config-types";
 import { requestBackendJson } from "@/lib/backend-client";
+import { isAiSecretSettingKey } from "@/components/settings/ai-secret-input";
 
 export type ProviderFormState = {
   id?: string;
@@ -11,8 +12,11 @@ export type ProviderFormState = {
   code: string;
   name: string;
   provider_type: "openai_compatible" | "openrouter";
+  initial_provider_type?: "openai_compatible" | "openrouter";
   endpoint_url: string;
   api_key_setting_key: string;
+  initial_api_key_setting_key?: string;
+  api_key_setting_invalid?: boolean;
   status: "active" | "inactive";
   sort_order: string;
 };
@@ -77,37 +81,49 @@ export function normalizeProviderFormForType(
     return { ...form, provider_type: "openai_compatible" };
   }
 
-  const currentKey = form.api_key_setting_key.trim();
   return {
     ...form,
     provider_type: "openrouter",
-    api_key_setting_key: currentKey && !isDirectSecretLikeSettingKey(currentKey)
-      ? currentKey
-      : OPENROUTER_API_KEY_SETTING_KEY,
+    api_key_setting_key: OPENROUTER_API_KEY_SETTING_KEY,
   };
 }
 
 export function providerFormFromRecord(item: AiProviderRecord): ProviderFormState {
   const providerType = item.provider_type === "openrouter" ? "openrouter" : "openai_compatible";
   const apiKeySettingKey = item.api_key_setting_key || "";
-  const normalizedKey = isDirectSecretLikeSettingKey(apiKeySettingKey) ? "" : apiKeySettingKey;
+  const normalizedKey = isAiSecretSettingKey(apiKeySettingKey)
+    && (providerType !== "openrouter" || apiKeySettingKey === OPENROUTER_API_KEY_SETTING_KEY)
+    ? apiKeySettingKey : "";
 
-  return normalizeProviderFormForType({
+  return {
     id: item.id,
     version: item.version ?? 1,
     code: item.code,
     name: item.name,
     provider_type: providerType,
+    initial_provider_type: providerType,
     endpoint_url: item.endpoint_url || "",
     api_key_setting_key: normalizedKey,
+    initial_api_key_setting_key: normalizedKey,
+    api_key_setting_invalid: item.api_key_setting_invalid || Boolean(apiKeySettingKey && !normalizedKey),
     status: item.status,
     sort_order: String(item.sort_order ?? 0),
-  }, providerType);
+  };
+}
+
+export function providerReferencePatch(form: ProviderFormState): {
+  provider_type?: ProviderFormState["provider_type"]; api_key_setting_key?: string | null;
+} {
+  return {
+    ...(!form.id || form.provider_type !== form.initial_provider_type ? { provider_type: form.provider_type } : {}),
+    ...(!form.id || form.api_key_setting_key !== form.initial_api_key_setting_key
+      ? { api_key_setting_key: form.api_key_setting_key || null } : {}),
+  };
 }
 
 export function providerKeyDisplay(value: string | null | undefined): string {
   if (!value) return "-";
-  return isDirectSecretLikeSettingKey(value) ? "已隐藏真实密钥" : value;
+  return isAiSecretSettingKey(value) ? value : "配置引用异常（已隐藏真实密钥或未知值）";
 }
 
 export function emptyModelForm(providerId = ""): ModelFormState {

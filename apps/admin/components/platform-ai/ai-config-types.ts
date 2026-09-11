@@ -5,6 +5,7 @@ export type AiProviderRecord = {
   provider_type: "openai_compatible" | "openrouter" | string;
   endpoint_url: string | null;
   api_key_setting_key: string | null;
+  api_key_setting_invalid?: boolean;
   status: "active" | "inactive";
   sort_order: number;
   version?: number | null;
