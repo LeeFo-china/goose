@@ -216,7 +216,10 @@ describe("lead form model", () => {
     expect(template).toContain('mode="date"');
     expect(template).toContain('conversion-target="{{douyinClueEnabled ? 1 : 0}}"');
     expect(template).toContain('clue-component-id="{{douyinClueComponentId}}"');
-    expect(template).toContain('tt:if="{{!douyinClueEnabled}}" class="field-group"');
+    expect(template).toContain("改用短信验证码");
+    expect(template).toContain("使用抖音手机号快捷提交");
+    expect(template).toContain('bindtap="onTogglePhoneCapture"');
+    expect(template).toContain("!douyinClueEnabled || smsFallbackExpanded");
     expect(template).toContain('open-type="getPhoneNumber"');
     expect(template).toContain('bindgetphonenumber="onDouyinPhoneNumber"');
     expect(template).toContain("授权手机号并提交");

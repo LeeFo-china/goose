@@ -161,7 +161,31 @@ describe("lead page definition", () => {
     expect(payload).not.toHaveProperty("sms_code");
   });
 
-  test("asks for phone authorization when Douyin does not return a phone code", async () => {
+  test("falls back to SMS when Douyin does not return a phone code", async () => {
+    const harness = createHarness({
+      ...BOOTSTRAP,
+      features: {
+        ...BOOTSTRAP.features,
+        douyin_phone: true,
+        phone_capture_mode: "douyin_phone",
+        clue_component_id: "clue_1234567890",
+      },
+    });
+    harness.page.onLoad();
+    await flushPromises();
+
+    await harness.page.onSubmit({ detail: { douyin_phone_code: "" } });
+
+    expect(harness.submitLead).not.toHaveBeenCalled();
+    expect(harness.page.data).toMatchObject({
+      submitting: false,
+      smsFallbackExpanded: true,
+      focusedField: "phone",
+      formError: "未获得抖音手机号授权，请改用短信验证码提交",
+    });
+  });
+
+  test("allows an official-phone lead to switch to SMS submission", async () => {
     const harness = createHarness({
       ...BOOTSTRAP,
       features: {
@@ -174,15 +198,23 @@ describe("lead page definition", () => {
     harness.page.onLoad();
     await flushPromises();
     setValidForm(harness.page);
-    harness.page.data.form = { ...harness.page.data.form, phone: "", sms_code: "" };
 
-    await harness.page.onSubmit({ detail: { douyin_phone_code: "" } });
-
-    expect(harness.submitLead).not.toHaveBeenCalled();
+    harness.page.onTogglePhoneCapture();
     expect(harness.page.data).toMatchObject({
-      submitting: false,
-      formError: "请授权手机号后提交量房申请",
+      smsFallbackExpanded: true,
+      focusedField: "phone",
     });
+
+    const submit = harness.deferredSubmit();
+    const operation = harness.page.onSubmit();
+    submit.resolve(publicAppointment());
+    await operation;
+
+    expect(harness.submitLead).toHaveBeenCalledWith({}, expect.objectContaining({
+      verification_method: "sms",
+      phone: "13800138000",
+      sms_code: "123456",
+    }));
   });
 
   test("a stale policy rejection cannot write or unlock current page navigation", async () => {

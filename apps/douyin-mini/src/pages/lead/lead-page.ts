@@ -90,6 +90,7 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
     optionalDetailsExpanded: false,
     douyinClueEnabled: false,
     douyinClueComponentId: "",
+    smsFallbackExpanded: false,
   },
   onLoad() {
     this.lifecycle.onLoad();
@@ -160,6 +161,7 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
       douyinClueComponentId: bootstrap.features.douyin_phone
         ? bootstrap.features.clue_component_id
         : "",
+      smsFallbackExpanded: false,
     });
     dependencies.getApp().recordAnalytics("page_view");
   },
@@ -273,10 +275,32 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
       optionalDetailsExpanded: toggleOptionalDetails(this.data.optionalDetailsExpanded),
     });
   },
+  onTogglePhoneCapture() {
+    if (!this.data.douyinClueEnabled || this.data.submitting || this.data.smsSending) return;
+    const smsFallbackExpanded = !this.data.smsFallbackExpanded;
+    const withoutPhoneError = clearLeadFieldError(this.data.fieldErrors, "phone");
+    this.setData({
+      smsFallbackExpanded,
+      fieldErrors: clearLeadFieldError(withoutPhoneError, "sms_code"),
+      focusedField: smsFallbackExpanded ? "phone" : "",
+      formError: "",
+    });
+  },
   async onSubmit(event?: { detail?: { douyin_phone_code?: string } }) {
+    const phoneCaptureMode = this.data.douyinClueEnabled
+        && !this.data.smsFallbackExpanded
+      ? "douyin_phone"
+      : "sms";
+    if (phoneCaptureMode === "douyin_phone" && !event?.detail?.douyin_phone_code) {
+      this.setData({
+        smsFallbackExpanded: true,
+        focusedField: "phone",
+        formError: "未获得抖音手机号授权，请改用短信验证码提交",
+      });
+      return;
+    }
     const linkedBudget = this.syncBudgetContext();
     const minimumVisitDate = getShanghaiNaturalDate();
-    const phoneCaptureMode = this.data.douyinClueEnabled ? "douyin_phone" : "sms";
     this.setData({ minVisitDate: minimumVisitDate });
     const validation = validateLeadForm(
       this.data.form,
@@ -323,15 +347,6 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
     try {
       const app = dependencies.getApp();
       const form = this.data.form;
-      if (phoneCaptureMode === "douyin_phone" && !event?.detail?.douyin_phone_code) {
-        if (!this.lifecycle.finishSubmit(authority)) return;
-        this.idempotency = failIdempotentSubmission(this.idempotency);
-        this.setData({
-          submitting: false,
-          formError: "请授权手机号后提交量房申请",
-        });
-        return;
-      }
       const verification = phoneCaptureMode === "douyin_phone"
         ? {
           verification_method: "douyin_phone" as const,
