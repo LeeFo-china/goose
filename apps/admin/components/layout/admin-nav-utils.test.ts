@@ -51,49 +51,25 @@ describe("admin nav active matching", () => {
     const douyinItems = tenantNavGroups.find(
       (group) => group.label === "抖音小程序",
     )?.items ?? [];
+    const expectedHrefs = [
+      "/douyin-miniapp/workspace",
+      "/douyin-miniapp/leads",
+      "/douyin-miniapp/materials",
+      "/douyin-miniapp/projects",
+      "/douyin-miniapp/budget",
+    ];
 
-    expect(douyinItems).toHaveLength(4);
-    expect(
-      isActivePath(
-        "/douyin-miniapp/workspace",
-        douyinItems[0]?.href ?? "",
-      ),
-    ).toBe(true);
-    expect(
-      isActivePath(
-        "/douyin-miniapp/leads",
-        douyinItems[1]?.href ?? "",
-      ),
-    ).toBe(true);
-    expect(
-      isActivePath(
-        "/douyin-miniapp/leads",
-        douyinItems[0]?.href ?? "",
-      ),
-    ).toBe(false);
-    expect(
-      isActivePath(
-        "/douyin-miniapp/projects",
-        douyinItems[2]?.href ?? "",
-      ),
-    ).toBe(true);
-    expect(
-      isActivePath(
-        "/douyin-miniapp/projects",
-        douyinItems[1]?.href ?? "",
-      ),
-    ).toBe(false);
-    expect(
-      isActivePath(
-        "/douyin-miniapp/budget",
-        douyinItems[3]?.href ?? "",
-      ),
-    ).toBe(true);
-    expect(
-      isActivePath(
-        "/douyin-miniapp/budget",
-        douyinItems[2]?.href ?? "",
-      ),
-    ).toBe(false);
+    expect(douyinItems.map((item) => item.href)).toEqual(expectedHrefs);
+    for (const pathname of expectedHrefs) {
+      const activeHrefs = douyinItems
+        .filter((item) =>
+          isActivePath(pathname, item.href, {
+            exact: item.activeMatch === "exact",
+          }),
+        )
+        .map((item) => item.href);
+
+      expect(activeHrefs).toEqual([pathname]);
+    }
   });
 });
