@@ -151,6 +151,7 @@ export default async function PlatformAiModelsPage() {
 
       {hasPlatformAccess ? (
         <AiModelRoutingPanel
+          canManageProviders={session.tenant === null && session.permissions.some((item) => item.code === "platform.ai_config.manage")}
           providerPage={result.providerPage}
           routePage={result.routePage}
           providerOptions={result.providerOptions}

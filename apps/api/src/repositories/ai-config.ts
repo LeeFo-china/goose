@@ -4,6 +4,7 @@ import type {
   AiRouteModelOptionListQuery,
   AiProviderPayload,
   AiSceneRoutePayload,
+  DeleteAiProviderPayload,
   UpdateAiModelPayload,
   UpdateAiProviderPayload,
   UpdateAiSceneRoutePayload,
@@ -359,6 +360,26 @@ export class AiConfigRepository {
     }
 
     return data as AiProviderRecord;
+  }
+
+  async deleteProvider(id: string, input: DeleteAiProviderPayload): Promise<Pick<AiProviderRecord, "id" | "name">> {
+    // Deploy the RESTRICT FK migration first; FK enforcement also covers concurrent model inserts.
+    const { data, error } = await this.from("ai_providers")
+      .delete()
+      .eq("id", id)
+      .eq("version", input.expected_version)
+      .select("id,name")
+      .maybeSingle();
+
+    if (error) {
+      if (error.code === "23503") {
+        throw Errors.business(409, "供应商仍有关联模型或目录记录，请改用停用", "AI_PROVIDER_IN_USE");
+      }
+      if (isNoRowsError(error)) throw staleVersionError();
+      throw Errors.dbError("删除 AI 供应商失败");
+    }
+    if (!data) throw staleVersionError();
+    return { id: data.id, name: data.name };
   }
 
   async createModel(input: AiModelPayload) {

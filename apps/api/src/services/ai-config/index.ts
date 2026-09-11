@@ -18,6 +18,7 @@ import type {
   AiRouteModelOptionResolvePayload,
   AiSceneRouteListQuery,
   AiSceneRoutePayload,
+  DeleteAiProviderPayload,
   OpenRouterCatalogApplyPayload,
   OpenRouterCatalogPreviewPayload,
   OpenRouterProviderQuery,
@@ -39,6 +40,7 @@ type ConfigRepositoryPort = Pick<typeof aiConfigRepository,
   | "createModel"
   | "createProvider"
   | "createSceneRoute"
+  | "deleteProvider"
   | "findModelByProviderAndCallName"
   | "getModelById"
   | "getProviderById"
@@ -180,6 +182,13 @@ export class AiConfigService {
     const record = await this.requireConfigRepository("updateProvider").call(this.configRepository, id, input);
     await this.audit(authContext, "ai_provider", record.id, record.name, "更新 AI 供应商");
     return record;
+  }
+
+  async deleteProvider(authContext: AuthContext, id: string, input: DeleteAiProviderPayload): Promise<{ id: string; deleted: true }> {
+    this.assertPlatformPermission(authContext, MANAGE_PERMISSION);
+    const record = await this.requireConfigRepository("deleteProvider").call(this.configRepository, id, input);
+    await this.audit(authContext, "ai_provider", record.id, record.name, "删除 AI 供应商");
+    return { id: record.id, deleted: true };
   }
 
   async createModel(authContext: AuthContext, input: AiModelPayload) {

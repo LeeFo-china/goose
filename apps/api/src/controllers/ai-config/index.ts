@@ -13,6 +13,8 @@ import {
   AiRouteModelOptionResolvePayloadSchema,
   AiSceneRouteListQuerySchema,
   AiSceneRoutePayloadSchema,
+  DeleteAiProviderPayloadSchema,
+  DeleteAiProviderQuerySchema,
   OpenRouterCatalogApplyPayloadSchema,
   OpenRouterCatalogPreviewPayloadSchema,
   OpenRouterProviderQuerySchema,
@@ -24,7 +26,7 @@ import { aiConfigService } from "@/services/ai-config";
 import { aiSecretSettingsService } from "@/services/ai-config/secret-settings";
 import { redactAiProviderReferences } from "@/services/ai-config/provider-reference";
 import { AiSecretSettingParamsSchema, ReplaceAiSecretSettingSchema } from "@/schema/ai-secret-settings";
-import { Get, Patch, Post } from "@/utils/decorators/route";
+import { Delete, Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
@@ -164,6 +166,19 @@ class AiConfigController extends PlatformBaseController {
       bodyResult.data,
     );
     return ResponseHandler.success(redactAiProviderReferences(data));
+  }
+
+  @Delete("/platform/ai-config/providers/:id")
+  async deleteProvider(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getAiConfigManageContext(request);
+    const paramsResult = AiConfigIdParamsSchema.safeParse(request.params);
+    const queryResult = DeleteAiProviderQuerySchema.safeParse(request.query ?? {});
+    const bodyResult = DeleteAiProviderPayloadSchema.safeParse(request.body);
+    if (!paramsResult.success || !queryResult.success || !bodyResult.success) {
+      throw Errors.badRequest("删除 AI 供应商参数无效");
+    }
+    const data = await aiConfigService.deleteProvider(authContext, paramsResult.data.id, bodyResult.data);
+    return ResponseHandler.success(data);
   }
 
   @Post("/platform/ai-config/models")

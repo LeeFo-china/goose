@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import type { AiModelRecord, AiProviderRecord, PageData } from "@/components/platform-ai/ai-config-types";
 import { statusLabel } from "@/components/platform-ai/ai-config-types";
 import { AiProviderSecretEditor } from "./ai-provider-secret-editor";
+import { AiProviderDelete } from "./ai-provider-delete";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -343,11 +344,15 @@ export function ProviderTable({
   page,
   pending,
   onEdit,
+  onDelete,
+  deleteDisabled = false,
   onPageChange,
 }: {
   page: PageData<AiProviderRecord>;
   pending: boolean;
   onEdit: (item: AiProviderRecord) => void;
+  onDelete?: (item: AiProviderRecord) => Promise<void> | void;
+  deleteDisabled?: boolean;
   onPageChange: (page: number) => void;
 }) {
   return (
@@ -394,10 +399,13 @@ export function ProviderTable({
                   </div>
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button variant="outline" size="sm" onClick={() => onEdit(item)}>
-                    <Edit3 data-icon="inline-start" />
-                    编辑
-                  </Button>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" size="sm" onClick={() => onEdit(item)}>
+                      <Edit3 data-icon="inline-start" />
+                      编辑
+                    </Button>
+                    {onDelete ? <AiProviderDelete provider={item} onDeleted={onDelete} disabled={deleteDisabled} /> : null}
+                  </div>
                 </TableCell>
               </TableRow>
             ))}

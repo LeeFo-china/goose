@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 if (process.env.FORCE_COLOR && process.env.NO_COLOR) delete process.env.NO_COLOR;
 export default defineConfig({
-  testDir: './e2e', testMatch: 'ai-provider-secrets.spec.ts', workers: 1, retries: 0,
+  testDir: './e2e', testMatch: ['ai-provider-secrets.spec.ts', 'ai-provider-delete.spec.ts'], workers: 1, retries: 0,
   timeout: 45000, reporter: [['list']], outputDir: 'test-results/ai-provider-secrets',
   use: { baseURL: 'http://127.0.0.1:3039', screenshot: 'only-on-failure' },
   webServer: [

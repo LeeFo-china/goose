@@ -62,6 +62,12 @@ export const UpdateAiProviderPayloadSchema = AiProviderPayloadSchema.partial().e
   expected_version: ExpectedVersionSchema,
 });
 
+export const DeleteAiProviderPayloadSchema = z.strictObject({
+  expected_version: z.number().int().min(1, "配置版本无效"),
+});
+
+export const DeleteAiProviderQuerySchema = z.strictObject({});
+
 export const AiModelPayloadSchema = z.strictObject({
   provider_id: z.uuid("无效的供应商 ID"),
   code: z.string().trim().min(1, "模型编码不能为空").max(120, "模型编码过长"),
@@ -152,6 +158,7 @@ export const OpenRouterProviderQuerySchema = z.strictObject({
 
 export type AiProviderPayload = z.infer<typeof AiProviderPayloadSchema>;
 export type UpdateAiProviderPayload = z.infer<typeof UpdateAiProviderPayloadSchema>;
+export type DeleteAiProviderPayload = z.infer<typeof DeleteAiProviderPayloadSchema>;
 export type AiModelPayload = z.infer<typeof AiModelPayloadSchema>;
 export type UpdateAiModelPayload = z.infer<typeof UpdateAiModelPayloadSchema>;
 export type AiSceneRoutePayload = z.infer<typeof AiSceneRoutePayloadSchema>;

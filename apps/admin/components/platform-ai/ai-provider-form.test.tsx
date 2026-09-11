@@ -28,6 +28,15 @@ const rawOpenRouterProvider: AiProviderRecord = {
 };
 
 describe("ProviderFormCard", () => {
+  test("provider table exposes deletion only when a manage callback is available", () => {
+    const props = {
+      page: { list: [rawOpenRouterProvider], pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 } },
+      pending: false, onEdit: () => undefined, onPageChange: () => undefined,
+    };
+    expect(renderToStaticMarkup(createElement(ProviderTable, { ...props, onDelete: () => undefined }))).toContain("删除");
+    expect(renderToStaticMarkup(createElement(ProviderTable, props))).not.toContain("删除");
+  });
+
   test("does not ask operators to type a provider code when creating a provider", () => {
     const html = renderToStaticMarkup(createElement(ProviderFormCard, {
       form: emptyProviderForm(),

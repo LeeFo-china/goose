@@ -74,6 +74,6 @@ Files: `apps/admin/components/settings/settings-actions.tsx`、新增邻近纯�
 - [x] Task 2 Admin 引用选择、密钥弹窗、状态和失败路径完成。
 - [x] Task 3 AI 空白防护与非 AI 兼容回归完成。
 - [x] Task 4 本地规格／质量复审、类型检查、API 构建、相关测试及浏览器 mock 验证完成；源码夹具已清理。
-- [ ] 后续运维：保留原功能分支，准备干净发布历史并重新核对开发 migration、备份及固定发布版本；尚未 push 或部署。
+- [x] 后续运维：保留原功能分支，使用同树独立发布历史推送固定版本；开发备份、精确两条 migration、614 条 CLI 对齐及 API/Admin 部署完成，未填写真实密钥或调用模型。见 `docs/operations/evidence/2026-09-11-rendering-library-ai-secrets-dev-release.md`。
 
 实际文件及验证命令／结果见 `docs/superpowers/specs/2026-09-11-ai-provider-secret-management-progress.md`。任务分解中的源文件名允许按职责使用实际命名 `schema/ai-secret-settings.ts` 和 `services/ai-config/secret-settings.ts`，未改变合同或范围。

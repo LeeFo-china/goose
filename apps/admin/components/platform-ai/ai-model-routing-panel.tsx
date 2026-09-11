@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type {
@@ -12,6 +12,7 @@ import type {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AiModelRouteTab } from "@/components/platform-ai/ai-model-route-tab";
 import { ProviderFormCard, ProviderTable } from "@/components/platform-ai/ai-model-routing-sections";
+import { providerPageAfterDelete } from "./ai-provider-delete-state";
 import {
   emptyProviderForm,
   emptyRouteForm,
@@ -33,10 +34,12 @@ export function AiModelRoutingPanel({
   providerPage: initialProviderPage,
   routePage: initialRoutePage,
   providerOptions: initialProviderOptions,
+  canManageProviders = false,
 }: {
   providerPage: PageData<AiProviderRecord>;
   routePage: PageData<AiSceneRouteRecord>;
   providerOptions: AiProviderRecord[];
+  canManageProviders?: boolean;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -46,36 +49,45 @@ export function AiModelRoutingPanel({
   const [primaryOptions, setPrimaryOptions] = useState<PageData<AiRouteModelOptionRecord>>(emptyRouteOptionPage());
   const [fallbackOptions, setFallbackOptions] = useState<PageData<AiRouteModelOptionRecord>>(emptyRouteOptionPage());
   const [providerLoading, setProviderLoading] = useState(false);
+  const [providerSaving, setProviderSaving] = useState(false);
   const [routeLoading, setRouteLoading] = useState(false);
   const [providerForm, setProviderForm] = useState<ProviderFormState>(emptyProviderForm());
   const initialProviderId = initialProviderOptions[0]?.id || initialProviderPage.list[0]?.id || "";
   const [routeForm, setRouteForm] = useState<RouteFormState>(emptyRouteForm(initialProviderId));
+  const providerPageRequest = useRef(0);
+  const providerOptionsRequest = useRef(0);
+  const deletedProviderIds = useRef(new Set<string>());
 
   function refresh() {
     startTransition(() => router.refresh());
   }
 
-  async function loadProviderPage(page: number) {
+  async function loadProviderPage(page: number, propagateFailure = false) {
+    const requestId = ++providerPageRequest.current;
     setProviderLoading(true);
     try {
-      setProviderPage(await requestBackend<PageData<AiProviderRecord>>(
+      const response = await requestBackend<PageData<AiProviderRecord>>(
         `/platform/ai-config/providers?page=${page}&pageSize=20`,
-      ));
+      );
+      if (requestId === providerPageRequest.current) setProviderPage(response);
     } catch (error) {
+      if (propagateFailure) throw error;
       toast.error(error instanceof Error ? error.message : "供应商列表加载失败");
     } finally {
-      setProviderLoading(false);
+      if (requestId === providerPageRequest.current) setProviderLoading(false);
     }
   }
 
-  async function loadProviderOptions() {
+  async function loadProviderOptions(propagateFailure = false) {
+    const requestId = ++providerOptionsRequest.current;
     try {
       const response = await requestBackend<PageData<AiProviderRecord>>(
         "/platform/ai-config/providers?page=1&pageSize=100",
       );
-      setProviderOptions(response.list);
+      if (requestId === providerOptionsRequest.current) setProviderOptions(response.list);
       return response.list;
     } catch (error) {
+      if (propagateFailure) throw error;
       toast.error(error instanceof Error ? error.message : "供应商选项加载失败");
       return providerOptions;
     }
@@ -105,6 +117,35 @@ export function AiModelRoutingPanel({
     await loadRoutePage(routePage.pagination.page);
   }
 
+  async function providerDeleted(provider: AiProviderRecord) {
+    deletedProviderIds.current.add(provider.id);
+    ++providerPageRequest.current;
+    ++providerOptionsRequest.current;
+    const nextPage = providerPageAfterDelete(providerPage.pagination.page, providerPage.list.length);
+    setProviderPage((current) => {
+      const total = Math.max(0, current.pagination.total - 1);
+      return {
+        list: current.list.filter((item) => item.id !== provider.id),
+        pagination: { ...current.pagination, page: nextPage, total, totalPages: Math.ceil(total / current.pagination.pageSize) },
+      };
+    });
+    setProviderOptions((current) => current.filter((item) => item.id !== provider.id));
+    setProviderForm((current) => current.id === provider.id ? emptyProviderForm() : current);
+    setRouteForm((current) => ({
+      ...current,
+      ...(current.primary_provider_id === provider.id ? {
+        primary_provider_id: "", primary_model_id: "", primary_keyword: "", primary_option_value: "",
+      } : {}),
+      ...(current.fallback_provider_id === provider.id ? {
+        fallback_provider_id: "", fallback_model_id: NONE_VALUE, fallback_keyword: "", fallback_option_value: NONE_VALUE,
+      } : {}),
+    }));
+    setPrimaryOptions((current) => ({ ...current, list: current.list.filter((item) => item.provider_id !== provider.id) }));
+    setFallbackOptions((current) => ({ ...current, list: current.list.filter((item) => item.provider_id !== provider.id) }));
+    try { await Promise.all([loadProviderPage(nextPage, true), loadProviderOptions(true)]); }
+    finally { refresh(); }
+  }
+
   async function loadRouteModelOptions(target: "primary" | "fallback", providerId: string, keyword: string) {
     if (!providerId) {
       if (target === "primary") setPrimaryOptions(emptyRouteOptionPage());
@@ -122,6 +163,7 @@ export function AiModelRoutingPanel({
       const response = await requestBackend<PageData<AiRouteModelOptionRecord>>(
         `/platform/ai-config/providers/${providerId}/route-model-options?${params.toString()}`,
       );
+      if (deletedProviderIds.current.has(providerId)) return;
       if (target === "primary") setPrimaryOptions(response);
       else setFallbackOptions(response);
     } catch (error) {
@@ -130,6 +172,12 @@ export function AiModelRoutingPanel({
   }
 
   async function submitProvider() {
+    setProviderSaving(true);
+    try { await persistProvider(); }
+    finally { setProviderSaving(false); }
+  }
+
+  async function persistProvider() {
     const payload = {
       name: providerForm.name,
       endpoint_url: providerForm.endpoint_url || null,
@@ -285,6 +333,8 @@ export function AiModelRoutingPanel({
             page={providerPage}
             pending={providerLoading}
             onEdit={editProvider}
+            onDelete={canManageProviders ? providerDeleted : undefined}
+            deleteDisabled={providerSaving}
             onPageChange={(page) => void loadProviderPage(page)}
           />
         </div>
