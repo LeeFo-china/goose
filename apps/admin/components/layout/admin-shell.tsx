@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { type AdminSession } from "@/lib/backend";
 import { LogoutButton } from "@/components/layout/logout-button";
-import { AdminNav } from "@/components/layout/admin-nav";
+import { AdminSidebarScrollArea } from "@/components/layout/admin-sidebar-scroll-area";
 import { AdminSessionGuard } from "@/components/layout/admin-session-guard";
 import { AdminSessionScopeProvider } from "@/components/layout/admin-session-scope";
 import {
@@ -116,9 +116,10 @@ export function AdminShell({
           </div>
         </div>
         <Separator />
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          <AdminNav session={session} collapsed={preferences.sidebarCollapsed} />
-        </div>
+        <AdminSidebarScrollArea
+          session={session}
+          collapsed={preferences.sidebarCollapsed}
+        />
         <div className={cn("border-t border-black/10 px-5 py-3", preferences.sidebarCollapsed && "px-2 text-center")}>
           <div className="truncate text-xs font-semibold text-[var(--goose-ink)]">
             {preferences.sidebarCollapsed ? session.employee.name?.slice(0, 1) || "员" : sidebarIdentityTitle}

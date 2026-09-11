@@ -48,6 +48,37 @@ test('列表使用唯一表格滚动容器，窄屏工作区允许触摸滚动',
   );
 });
 
+test('刷新后保留侧边栏滚动位置并让活动菜单保持可见', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'chromium', '桌面侧边栏仅在大屏视口显示');
+  await open(page);
+  const scrollArea = page.locator('aside').getByRole('navigation').locator('..');
+  const activeLink = scrollArea.getByRole('link', { name: '仓库调拨', exact: true });
+
+  const beforeReload = await scrollArea.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+    element.dispatchEvent(new Event('scroll'));
+    return {
+      maxScroll: element.scrollHeight - element.clientHeight,
+      scrollTop: element.scrollTop,
+    };
+  });
+  expect(beforeReload.maxScroll).toBeGreaterThan(100);
+  await page.waitForTimeout(50);
+
+  await page.reload({ waitUntil: 'load' });
+  await expect(activeLink).toHaveAttribute('aria-current', 'page');
+  await expect.poll(() => scrollArea.evaluate((element) => element.scrollTop)).toBeGreaterThan(
+    beforeReload.scrollTop - 2,
+  );
+  expect(
+    await activeLink.evaluate((link) => {
+      const item = link.getBoundingClientRect();
+      const container = link.closest('nav')?.parentElement?.getBoundingClientRect();
+      return Boolean(container && item.top >= container.top && item.bottom <= container.bottom);
+    }),
+  ).toBe(true);
+});
+
 test('保存草稿409保留输入并锁旧版本，明确放弃后才重载新版本', async ({ page }, info) => {
   await open(page, 'conflict');
   await page.getByRole('button', { name: '查看 DB0002' }).click();
