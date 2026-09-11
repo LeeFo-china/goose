@@ -71,16 +71,20 @@ export function TablePageFooter({
 
 export function RouteStatusSelect({
   value,
+  id,
+  disabled = false,
   onChange,
 }: {
   value: "active" | "inactive";
+  id?: string;
+  disabled?: boolean;
   onChange: (value: "active" | "inactive") => void;
 }) {
   return (
     <Field>
-      <FieldLabel>状态</FieldLabel>
-      <Select value={value} onValueChange={(next) => onChange(next as "active" | "inactive")}>
-        <SelectTrigger>
+      <FieldLabel htmlFor={id}>状态</FieldLabel>
+      <Select value={value} disabled={disabled} onValueChange={(next) => onChange(next as "active" | "inactive")}>
+        <SelectTrigger id={id}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

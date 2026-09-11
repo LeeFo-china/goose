@@ -85,11 +85,11 @@ export const UpdateAiModelPayloadSchema = AiModelPayloadSchema.partial().extend(
 
 export const AiSceneRoutePayloadSchema = z.object({
   scene_code: z.string().trim().min(1, "场景编码不能为空").max(120, "场景编码过长"),
-  name: z.string().trim().min(1, "场景名称不能为空").max(120, "场景名称过长"),
+  name: z.string().trim().min(1, "场景名称不能为空").max(120, "场景名称过长").optional(),
   primary_model_id: z.uuid("无效的主模型 ID").nullable().optional(),
   fallback_model_id: z.uuid("无效的备用模型 ID").nullable().optional(),
   quality_tier: QualityTierSchema.default("balanced"),
-  modality: ModalitySchema.default("text"),
+  modality: ModalitySchema.optional(),
   temperature: z.coerce.number().min(0).max(2).nullable().optional(),
   response_format: z.enum(["json_object", "text"], {
     message: "响应格式无效",
@@ -99,6 +99,8 @@ export const AiSceneRoutePayloadSchema = z.object({
 });
 
 export const UpdateAiSceneRoutePayloadSchema = AiSceneRoutePayloadSchema.partial().extend({
+  quality_tier: QualityTierSchema.optional(),
+  status: StatusSchema.optional(),
   expected_version: ExpectedVersionSchema,
 });
 
@@ -129,6 +131,7 @@ export const AiSceneRouteListQuerySchema = PaginationQuerySchema.extend({
   sceneCode: optionalText(120),
   qualityTier: QualityTierSchema.optional(),
 });
+export const SystemAiSceneListQuerySchema = PaginationQuerySchema;
 export const AiCatalogRunListQuerySchema = PaginationQuerySchema.extend({
   provider_id: z.uuid("无效的供应商 ID").optional(),
 });
@@ -168,6 +171,7 @@ export type AiModelListQuery = z.infer<typeof AiModelListQuerySchema>;
 export type AiRouteModelOptionListQuery = z.infer<typeof AiRouteModelOptionListQuerySchema>;
 export type AiRouteModelOptionResolvePayload = z.infer<typeof AiRouteModelOptionResolvePayloadSchema>;
 export type AiSceneRouteListQuery = z.infer<typeof AiSceneRouteListQuerySchema>;
+export type SystemAiSceneListQuery = z.infer<typeof SystemAiSceneListQuerySchema>;
 export type AiCatalogRunListQuery = z.infer<typeof AiCatalogRunListQuerySchema>;
 export type AiCatalogEntryListQuery = z.infer<typeof AiCatalogEntryListQuerySchema>;
 export type OpenRouterCatalogPreviewPayload = z.infer<typeof OpenRouterCatalogPreviewPayloadSchema>;

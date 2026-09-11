@@ -23,20 +23,32 @@ describe("AiModelRouteTab simplified route form", () => {
     const html = renderToStaticMarkup(createElement(AiModelRouteTab, {
       routePage: { list: [], pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 } },
       providers: [provider],
-      primaryOptions: { list: [], pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 } },
-      fallbackOptions: { list: [], pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 } },
+      scenes: { list: [], pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 } },
+      sceneLoadError: null,
+      sceneLoading: false,
+      primaryOptions: { data: { list: [], pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 } }, loading: false, error: null, selected: null },
+      fallbackOptions: { data: { list: [], pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 } }, loading: false, error: null, selected: null },
       routeForm: emptyRouteForm(provider.id),
+      selectedScene: null,
       isPending: false,
       isRouteLoading: false,
+      isRouteSaving: false,
+      canManageRoutes: true,
       onRouteFormChange: () => undefined,
+      onSceneChange: () => undefined,
+      onSceneRetry: () => undefined,
       onRouteSubmit: async () => undefined,
+      onRouteReset: () => undefined,
       onRouteEdit: () => undefined,
       onRoutePageChange: () => undefined,
-      onModelSearch: async () => undefined,
+      onProviderChange: () => undefined,
+      onKeywordChange: () => undefined,
+      onModelSearch: () => undefined,
+      onModelSelect: () => undefined,
     }));
 
-    expect(html).toContain("选择供应商");
-    expect(html).toContain("搜索模型");
+    expect(html).toContain("主模型供应商");
+    expect(html).toContain("搜索主模型");
     expect(html).not.toContain("OpenRouter 目录");
     expect(html).not.toContain("模型编码");
   });

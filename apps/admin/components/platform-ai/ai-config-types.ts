@@ -43,13 +43,26 @@ export type AiRouteModelOptionRecord = {
   apply_status?: string | null;
 };
 
+export type AiSystemSceneRecord = {
+  code: string;
+  name: string;
+  modality: "text" | "image" | "video" | "speech";
+  required_input_modalities: Array<"text" | "image" | "video" | "speech">;
+  runtime_status: "connected" | "not_connected";
+  requirements_source: "runtime" | "planned_adapter";
+  requires_streaming: boolean;
+  min_reference_images: number;
+  source: "system" | "legacy";
+  allow_new_configuration: boolean;
+};
+
 export type AiSceneRouteRecord = {
   id: string;
   scene_code: string;
   name: string;
   primary_model_id: string | null;
   fallback_model_id: string | null;
-  quality_tier?: "fast" | "balanced" | "quality";
+  quality_tier?: "fast" | "balanced" | "quality" | null;
   modality?: "text" | "image" | "video" | "speech";
   temperature: number | null;
   response_format: "json_object" | "text" | null;

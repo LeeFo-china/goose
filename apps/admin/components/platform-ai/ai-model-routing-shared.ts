@@ -45,10 +45,10 @@ export type RouteFormState = {
   fallback_provider_id: string;
   fallback_keyword: string;
   fallback_option_value: string;
-  quality_tier: "fast" | "balanced" | "quality";
+  quality_tier: "fast" | "balanced" | "quality" | "";
   modality: "text" | "image" | "video" | "speech";
   temperature: string;
-  response_format: "json_object" | "text";
+  response_format: "json_object" | "text" | "";
   timeout_ms: string;
   status: "active" | "inactive";
 };

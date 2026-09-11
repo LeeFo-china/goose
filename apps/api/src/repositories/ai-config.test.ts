@@ -70,6 +70,33 @@ function listBuilder(rows: unknown[], count = rows.length) {
 }
 
 describe("AiConfigRepository optimistic version errors", () => {
+  test("lists system scenes with exact bounded pagination and public fields only", async () => {
+    const { AiSystemSceneRepository } = await import("./ai-system-scenes");
+    const builder = listBuilder([{
+      code: "decoration_qa",
+      name: "装修问答",
+      modality: "text",
+      required_input_modalities: ["text"],
+      runtime_status: "connected",
+      requirements_source: "runtime",
+      requires_streaming: true,
+      min_reference_images: 0,
+      source: "system",
+      allow_new_configuration: true,
+    }], 11);
+    const repository = new AiSystemSceneRepository({ from: () => builder } as never);
+
+    const result = await repository.list({ page: 2, pageSize: 10 });
+
+    expect(result.pagination).toEqual({ page: 2, pageSize: 10, total: 11, totalPages: 2 });
+    expect(result.list[0]).toMatchObject({ code: "decoration_qa", source: "system" });
+    expect(builder.calls.find((call) => call.method === "select")?.args).toEqual([
+      "code,name,modality,required_input_modalities,runtime_status,requirements_source,requires_streaming,min_reference_images,source,allow_new_configuration",
+      { count: "exact" },
+    ]);
+    expect(builder.calls).toContainEqual({ method: "range", args: [10, 19] });
+  });
+
   test("maps stale version updates to stable 409 without raw database details", async () => {
     const { AiConfigRepository } = await import("./ai-config");
     const builder = updateBuilder({
@@ -156,5 +183,34 @@ describe("AiConfigRepository optimistic version errors", () => {
     expect(builder.calls).toContainEqual({ method: "eq", args: ["status", "active"] });
     expect(builder.calls.some((call) => call.method === "or" && String(call.args[0]).includes("gpt"))).toBe(true);
     expect(builder.calls).toContainEqual({ method: "range", args: [20, 39] });
+  });
+
+  test("maps only scene and quality duplicate writes to a stable conflict", async () => {
+    const { AiConfigRepository } = await import("./ai-config");
+    const builder = {
+      insert: () => builder,
+      select: () => builder,
+      single: async () => ({
+        data: null,
+        error: {
+          code: "23505",
+          constraint: "uniq_ai_scene_routes_scene_quality",
+          message: "private database detail",
+        },
+      }),
+    };
+    const repository = new AiConfigRepository({ from: () => builder } as never);
+
+    await expect(repository.createSceneRoute({
+      scene_code: "decoration_qa",
+      name: "装修问答",
+      modality: "text",
+      quality_tier: "balanced",
+      status: "active",
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: "AI_SCENE_ROUTE_TIER_CONFLICT",
+      details: undefined,
+    });
   });
 });

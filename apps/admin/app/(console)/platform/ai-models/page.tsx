@@ -5,6 +5,7 @@ import type {
   AiConfigData,
   AiProviderRecord,
   AiSceneRouteRecord,
+  AiSystemSceneRecord,
   PageData,
 } from "@/components/platform-ai/ai-config-types";
 import { StatusAlert } from "@/components/admin/status-alert";
@@ -43,16 +44,26 @@ async function getAiConfig() {
       providerPage: emptyPage<AiProviderRecord>(),
       routePage: emptyPage<AiSceneRouteRecord>(),
       providerOptions: [],
+      systemScenePage: emptyPage<AiSystemSceneRecord>(),
+      systemSceneError: "缺少登录凭证",
       error: "缺少登录凭证",
     };
   }
 
   try {
-    const [summary, providers, routes, providerOptions] = await Promise.all([
+    const scenesPromise = fetchBackendData<PageData<AiSystemSceneRecord>>(
+      token,
+      "/platform/ai-config/system-scenes?page=1&pageSize=20",
+    ).then((page) => ({ page, error: null })).catch((error) => ({
+      page: emptyPage<AiSystemSceneRecord>(),
+      error: error instanceof Error ? error.message : "业务场景注册表加载失败",
+    }));
+    const [summary, providers, routes, providerOptions, scenes] = await Promise.all([
       fetchBackendData<AiConfigData>(token, "/platform/ai-config"),
       fetchBackendData<PageData<AiProviderRecord>>(token, "/platform/ai-config/providers?page=1&pageSize=20"),
       fetchBackendData<PageData<AiSceneRouteRecord>>(token, "/platform/ai-config/routes?page=1&pageSize=20"),
       fetchBackendData<PageData<AiProviderRecord>>(token, "/platform/ai-config/providers?page=1&pageSize=100"),
+      scenesPromise,
     ]);
     return {
       data: {
@@ -64,6 +75,8 @@ async function getAiConfig() {
       providerPage: providers || emptyPage<AiProviderRecord>(),
       routePage: routes || emptyPage<AiSceneRouteRecord>(),
       providerOptions: providerOptions?.list || providers?.list || [],
+      systemScenePage: scenes.page || emptyPage<AiSystemSceneRecord>(),
+      systemSceneError: scenes.error,
       error: null,
     };
   } catch (error) {
@@ -72,6 +85,8 @@ async function getAiConfig() {
       providerPage: emptyPage<AiProviderRecord>(),
       routePage: emptyPage<AiSceneRouteRecord>(),
       providerOptions: [],
+      systemScenePage: emptyPage<AiSystemSceneRecord>(),
+      systemSceneError: error instanceof Error ? error.message : "业务场景注册表加载失败",
       error: error instanceof Error ? error.message : "AI 模型路由配置加载失败",
     };
   }
@@ -91,6 +106,8 @@ export default async function PlatformAiModelsPage() {
       providerPage: emptyPage<AiProviderRecord>(),
       routePage: emptyPage<AiSceneRouteRecord>(),
       providerOptions: [],
+      systemScenePage: emptyPage<AiSystemSceneRecord>(),
+      systemSceneError: "当前账号不是平台超管，无法维护 AI 模型路由",
       error: "当前账号不是平台超管，无法维护 AI 模型路由",
     };
 
@@ -103,7 +120,7 @@ export default async function PlatformAiModelsPage() {
       <div className="shrink-0">
         <h1 className="text-2xl font-semibold tracking-normal">AI 模型路由</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          统一维护平台 AI 供应商、模型和业务场景路由。场景配置生效后，后端按主模型调用，失败时可切换备用模型。
+          统一维护平台 AI 供应商、模型和业务场景路由。已接通的场景按主模型调用，失败时可切换备用模型；保存配置不代表运行时已接通。
         </p>
       </div>
 
@@ -152,9 +169,12 @@ export default async function PlatformAiModelsPage() {
       {hasPlatformAccess ? (
         <AiModelRoutingPanel
           canManageProviders={session.tenant === null && session.permissions.some((item) => item.code === "platform.ai_config.manage")}
+          canManageRoutes={session.tenant === null && session.permissions.some((item) => item.code === "platform.ai_config.manage")}
           providerPage={result.providerPage}
           routePage={result.routePage}
           providerOptions={result.providerOptions}
+          systemScenePage={result.systemScenePage}
+          systemSceneError={result.systemSceneError}
         />
       ) : null}
     </div>

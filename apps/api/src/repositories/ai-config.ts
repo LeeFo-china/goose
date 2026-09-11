@@ -47,10 +47,13 @@ export type AiSceneRouteRecord = {
   name: string;
   primary_model_id: string | null;
   fallback_model_id: string | null;
+  quality_tier: "fast" | "balanced" | "quality";
+  modality: "text" | "image" | "video" | "speech";
   temperature: number | null;
   response_format: "json_object" | "text" | null;
   timeout_ms: number | null;
   status: "active" | "inactive";
+  version: number;
   created_at: string;
   updated_at: string;
   primary_model?: AiModelRecord | null;
@@ -81,6 +84,19 @@ function isNoRowsError(error: unknown): boolean {
 
 function staleVersionError() {
   return Errors.business(409, "配置版本已变化，请重新加载后再保存", "AI_CONFIG_VERSION_STALE");
+}
+
+function sceneTierConflictError() {
+  return Errors.business(409, "该场景与质量档位已存在", "AI_SCENE_ROUTE_TIER_CONFLICT");
+}
+
+function isSceneTierConflict(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const record = error as { code?: unknown; constraint?: unknown; message?: unknown };
+  if (record.code !== "23505") return false;
+  return record.constraint === "uniq_ai_scene_routes_scene_quality"
+    || (typeof record.message === "string"
+      && record.message.includes("uniq_ai_scene_routes_scene_quality"));
 }
 
 function normalizeProviderCodeSeed(value: string): string {
@@ -137,6 +153,23 @@ const MODEL_SELECT = [
   "created_at",
   "updated_at",
   "provider:ai_providers!ai_models_provider_id_fkey(id,code,name,provider_type,status)",
+].join(",");
+
+const SCENE_ROUTE_SELECT = [
+  "id",
+  "scene_code",
+  "name",
+  "primary_model_id",
+  "fallback_model_id",
+  "quality_tier",
+  "modality",
+  "temperature",
+  "response_format",
+  "timeout_ms",
+  "status",
+  "version",
+  "created_at",
+  "updated_at",
 ].join(",");
 
 function routeModelOptionFromRecord(item: AiModelRecord): AiRouteModelOptionRecord {
@@ -419,6 +452,7 @@ export class AiConfigRepository {
       .single();
 
     if (error) {
+      if (isSceneTierConflict(error)) throw sceneTierConflictError();
       throw Errors.dbError("创建 AI 场景路由失败", error);
     }
 
@@ -435,11 +469,21 @@ export class AiConfigRepository {
       .single();
 
     if (error) {
+      if (isSceneTierConflict(error)) throw sceneTierConflictError();
       if (isNoRowsError(error)) throw staleVersionError();
       throw Errors.dbError("更新 AI 场景路由失败", error);
     }
 
     return data as AiSceneRouteRecord;
+  }
+
+  async getSceneRouteById(id: string): Promise<AiSceneRouteRecord | null> {
+    const { data, error } = await this.from("ai_scene_routes")
+      .select(SCENE_ROUTE_SELECT)
+      .eq("id", id)
+      .maybeSingle();
+    if (error) throw Errors.dbError("查询 AI 场景路由失败", error);
+    return data as AiSceneRouteRecord | null;
   }
 }
 

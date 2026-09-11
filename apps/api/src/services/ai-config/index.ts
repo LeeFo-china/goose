@@ -1,7 +1,6 @@
 import { Errors } from "@/errors/error-factory";
 import {
   aiConfigRepository,
-  type AiModelRecord,
   type AiProviderRecord,
 } from "@/repositories/ai-config";
 import { aiModelCatalogRepository } from "@/repositories/ai-model-catalog";
@@ -22,6 +21,7 @@ import type {
   OpenRouterCatalogApplyPayload,
   OpenRouterCatalogPreviewPayload,
   OpenRouterProviderQuery,
+  SystemAiSceneListQuery,
   UpdateAiModelPayload,
   UpdateAiProviderPayload,
   UpdateAiSceneRoutePayload,
@@ -31,6 +31,8 @@ import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { isAiSecretSettingKey } from "@/schema/ai-secret-settings";
 import { aiSecretSettingsService } from "@/services/ai-config/secret-settings";
+import { AiSceneRoutePolicy } from "@/services/ai-config/scene-route-policy";
+import { aiSystemSceneRepository } from "@/repositories/ai-system-scenes";
 
 const READ_PERMISSION = "platform.ai_config.read";
 const MANAGE_PERMISSION = "platform.ai_config.manage";
@@ -43,11 +45,17 @@ type ConfigRepositoryPort = Pick<typeof aiConfigRepository,
   | "deleteProvider"
   | "findModelByProviderAndCallName"
   | "getModelById"
+  | "getSceneRouteById"
   | "getProviderById"
   | "listRouteModels"
   | "updateModel"
   | "updateProvider"
   | "updateSceneRoute"
+>;
+
+type SystemSceneRepositoryPort = Pick<typeof aiSystemSceneRepository,
+  | "getByCode"
+  | "list"
 >;
 
 type CatalogRepositoryPort = Pick<typeof aiModelCatalogRepository,
@@ -79,6 +87,7 @@ type AiConfigServiceDependencies = {
   openRouterSyncService?: OpenRouterSyncServicePort;
   auditRepository?: AuditRepositoryPort;
   secretSettingsService?: Pick<typeof aiSecretSettingsService, "assertReference">;
+  systemSceneRepository?: Partial<SystemSceneRepositoryPort>;
 };
 
 export class AiConfigService {
@@ -87,6 +96,8 @@ export class AiConfigService {
   private readonly openRouterSyncService: OpenRouterSyncServicePort;
   private readonly auditRepository: AuditRepositoryPort;
   private readonly secretSettingsService: Pick<typeof aiSecretSettingsService, "assertReference">;
+  private readonly systemSceneRepository: Partial<SystemSceneRepositoryPort>;
+  private readonly sceneRoutePolicy: AiSceneRoutePolicy;
 
   constructor(dependencies: AiConfigServiceDependencies = {}) {
     this.configRepository = dependencies.configRepository ?? aiConfigRepository;
@@ -94,6 +105,8 @@ export class AiConfigService {
     this.openRouterSyncService = dependencies.openRouterSyncService ?? openRouterModelSyncService;
     this.auditRepository = dependencies.auditRepository ?? platformAuditLogRepository;
     this.secretSettingsService = dependencies.secretSettingsService ?? aiSecretSettingsService;
+    this.systemSceneRepository = dependencies.systemSceneRepository ?? aiSystemSceneRepository;
+    this.sceneRoutePolicy = new AiSceneRoutePolicy(this.configRepository, this.systemSceneRepository);
   }
 
   async getConfig(authContext: AuthContext) {
@@ -124,6 +137,11 @@ export class AiConfigService {
   async listSceneRoutes(authContext: AuthContext, query: AiSceneRouteListQuery) {
     this.assertPlatformPermission(authContext, READ_PERMISSION);
     return this.requireCatalogRepository("listSceneRoutes").call(this.catalogRepository, query);
+  }
+
+  async listSystemScenes(authContext: AuthContext, query: SystemAiSceneListQuery) {
+    this.assertPlatformPermission(authContext, READ_PERMISSION);
+    return this.requireSystemSceneRepository("list").call(this.systemSceneRepository, query);
   }
 
   async listCatalogRuns(authContext: AuthContext, query: AiCatalogRunListQuery) {
@@ -228,9 +246,15 @@ export class AiConfigService {
           status: "active",
         }]
         : [];
+      // The synthetic candidate occupies one position after all persisted results,
+      // not one extra position on every page. Keep the repository query bounded.
+      const offset = (query.page - 1) * query.pageSize;
+      const internalTotal = internalOptions.pagination.total;
+      const total = internalTotal + manualOption.length;
+      const includesManual = offset <= internalTotal && internalTotal < offset + query.pageSize;
       return {
-        ...internalOptions,
-        list: [...internalOptions.list, ...manualOption],
+        list: [...internalOptions.list, ...(includesManual ? manualOption : [])],
+        pagination: { ...internalOptions.pagination, total, totalPages: Math.ceil(total / query.pageSize) },
       };
     }
 
@@ -295,16 +319,16 @@ export class AiConfigService {
 
   async createSceneRoute(authContext: AuthContext, input: AiSceneRoutePayload) {
     this.assertPlatformPermission(authContext, MANAGE_PERMISSION);
-    await this.assertRouteModels(input);
-    const record = await this.requireConfigRepository("createSceneRoute").call(this.configRepository, input);
+    const prepared = await this.sceneRoutePolicy.prepareCreate(input);
+    const record = await this.requireConfigRepository("createSceneRoute").call(this.configRepository, prepared);
     await this.audit(authContext, "ai_scene_route", record.id, record.name, "创建 AI 场景路由");
     return record;
   }
 
   async updateSceneRoute(authContext: AuthContext, id: string, input: UpdateAiSceneRoutePayload) {
     this.assertPlatformPermission(authContext, MANAGE_PERMISSION);
-    await this.assertRouteModels(input);
-    const record = await this.requireConfigRepository("updateSceneRoute").call(this.configRepository, id, input);
+    const prepared = await this.sceneRoutePolicy.prepareUpdate(id, input);
+    const record = await this.requireConfigRepository("updateSceneRoute").call(this.configRepository, id, prepared);
     await this.audit(authContext, "ai_scene_route", record.id, record.name, "更新 AI 场景路由");
     return record;
   }
@@ -347,47 +371,6 @@ export class AiConfigService {
     return provider;
   }
 
-  private async assertRouteModels(input: {
-    primary_model_id?: string | null;
-    fallback_model_id?: string | null;
-    modality?: AiSceneRoutePayload["modality"];
-  }) {
-    if (!input.primary_model_id && !input.fallback_model_id) return;
-    if (
-      input.primary_model_id
-      && input.fallback_model_id
-      && input.primary_model_id === input.fallback_model_id
-    ) {
-      throw Errors.business(409, "主模型和备用模型不能相同", "AI_ROUTE_MODEL_DUPLICATED");
-    }
-
-    await Promise.all([
-      input.primary_model_id ? this.assertRouteModel(input.primary_model_id, input.modality) : null,
-      input.fallback_model_id ? this.assertRouteModel(input.fallback_model_id, input.modality) : null,
-    ]);
-  }
-
-  private async assertRouteModel(
-    modelId: string,
-    modality?: AiSceneRoutePayload["modality"],
-  ): Promise<AiModelRecord> {
-    const modelRecord = await this.requireConfigRepository("getModelById")
-      .call(this.configRepository, modelId);
-    if (!modelRecord) {
-      throw Errors.business(404, "AI 模型不存在", "AI_MODEL_NOT_FOUND");
-    }
-    if (modelRecord.status !== "active") {
-      throw Errors.business(409, "AI 模型已停用", "AI_MODEL_INACTIVE");
-    }
-    if (modality && modelRecord.modality && modelRecord.modality !== modality) {
-      throw Errors.business(409, "AI 模型模态与场景路由不匹配", "AI_ROUTE_MODEL_MODALITY_MISMATCH");
-    }
-    if (modelRecord.provider?.status && modelRecord.provider.status !== "active") {
-      throw Errors.business(409, "AI 供应商已停用", "AI_PROVIDER_INACTIVE");
-    }
-    return modelRecord;
-  }
-
   private requireConfigRepository<K extends keyof ConfigRepositoryPort>(
     method: K,
   ): ConfigRepositoryPort[K] {
@@ -406,6 +389,16 @@ export class AiConfigService {
       throw Errors.business(500, "AI 目录仓储未配置", "AI_CATALOG_REPOSITORY_METHOD_MISSING");
     }
     return target as CatalogRepositoryPort[K];
+  }
+
+  private requireSystemSceneRepository<K extends keyof SystemSceneRepositoryPort>(
+    method: K,
+  ): SystemSceneRepositoryPort[K] {
+    const target = this.systemSceneRepository[method];
+    if (!target) {
+      throw Errors.business(500, "AI 场景仓储未配置", "AI_SCENE_REPOSITORY_METHOD_MISSING");
+    }
+    return target as SystemSceneRepositoryPort[K];
   }
 
   private assertPlatformPermission(authContext: AuthContext, permission: string) {

@@ -28,6 +28,7 @@ export type {
   AiQualityTier,
   AiScope,
 } from './ai-generation';
+export * from './ai-scenes';
 
 export {
   AUTH_TARGET_ROLE_VALUES,

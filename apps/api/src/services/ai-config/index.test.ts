@@ -95,6 +95,7 @@ function model(input: Partial<{
   };
 }
 
+
 describe("AiConfigService restricted provider delete", () => {
   test("returns minimal deletion result and audits only provider identity after deletion", async () => {
     const { AiConfigService } = await import("./index");
@@ -145,6 +146,40 @@ describe("AiConfigService restricted provider delete", () => {
 });
 
 describe("AiConfigService route model options", () => {
+  test("counts the manual candidate once and keeps every page within its requested size", async () => {
+    const { AiConfigService } = await import("./index");
+    for (const [total, pageSize] of [[0, 20], [19, 20], [20, 20], [21, 20], [100, 100]] as const) {
+      const calls: unknown[] = [];
+      const internal = Array.from({ length: total }, (_, index) => ({
+        ...model({ id: `model-${index}` }),
+        source: "internal" as const, value: `model-${index}`, model_id: `model-${index}`,
+        provider_id: PROVIDER_ID, label: `Model ${index}`, description: null,
+        modality: "text" as const, status: "active" as const,
+      }));
+      const service = new AiConfigService({ configRepository: {
+        getProviderById: async () => provider(),
+        listRouteModels: async (_id, query) => {
+          calls.push(query);
+          const offset = (query.page - 1) * query.pageSize;
+          return { list: internal.slice(offset, offset + query.pageSize),
+            pagination: { page: query.page, pageSize: query.pageSize, total, totalPages: Math.ceil(total / query.pageSize) } };
+        },
+      } });
+      const totalPages = Math.ceil((total + 1) / pageSize);
+      const values: string[] = [];
+      for (let page = 1; page <= totalPages + 1; page += 1) {
+        const result = await service.listRouteModelOptions(authContext(), PROVIDER_ID, {
+          page, pageSize, keyword: "custom", modality: "text",
+        });
+        expect(result.list.length).toBeLessThanOrEqual(pageSize);
+        expect(result.pagination).toEqual({ page, pageSize, total: total + 1, totalPages });
+        values.push(...result.list.map((item) => item.value));
+      }
+      expect(values).toEqual([...internal.map((item) => item.value), "manual:custom"]);
+      expect(calls).toHaveLength(totalPages + 1);
+    }
+  });
+
   test("requires an active provider before listing route model options", async () => {
     const { AiConfigService } = await import("./index");
     let catalogCalled = false;
@@ -240,28 +275,4 @@ describe("AiConfigService route model options", () => {
     });
   });
 
-  test("rejects route save when primary and fallback are the same model", async () => {
-    const { AiConfigService } = await import("./index");
-    const service = new AiConfigService({
-      configRepository: {
-        getModelById: async () => model(),
-        createSceneRoute: async () => {
-          throw new Error("createSceneRoute should not be called");
-        },
-      },
-    });
-
-    await expect(service.createSceneRoute(authContext(), {
-      scene_code: "decoration_qa",
-      name: "装修问答",
-      primary_model_id: MODEL_ID,
-      fallback_model_id: MODEL_ID,
-      quality_tier: "balanced",
-      modality: "text",
-      status: "active",
-    })).rejects.toMatchObject({
-      statusCode: 409,
-      code: "AI_ROUTE_MODEL_DUPLICATED",
-    });
-  });
 });

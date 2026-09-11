@@ -37,3 +37,7 @@
 开发发布前应补齐隔离 PostgreSQL 执行与并发检查，核对唯一待应用 migration、备份、应用 migration，再执行 `supabase migration list` 确认 Local/Remote 对齐，最后发布固定版本 API/Admin。旧 CASCADE 约束存在时不能上线新 DELETE 接口。
 
 回退应用或关闭 DELETE 入口时保留 RESTRICT；不重新开启级联删除、不手动修库或修改迁移历史。共用的 ARK_API_KEY 等配置与此前开发发布分支保持不变。
+
+## 后续开发发布结果
+
+用户随后授权“先 migration，在开发发布”。隔离 PostgreSQL fixture 与两种双会话并发检查已补齐并通过；唯一新 migration 经开发工作流成功应用，615 条 Local/Remote 完全对齐。API/Admin 已发布固定 SHA `372c980b5d44f3d48d53ac1173f2e2213ad832bf`，工作流及独立健康、revision/digest、未认证 DELETE 检查通过，未删除真实供应商。完整备份、迁移、验证和发布证据见 [开发发布记录](../../operations/evidence/2026-09-11-ai-provider-delete-dev-release.md)。上文“未发布/未执行 PG”保留为本地实施阶段的历史状态。

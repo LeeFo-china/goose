@@ -18,6 +18,7 @@ import {
   OpenRouterCatalogApplyPayloadSchema,
   OpenRouterCatalogPreviewPayloadSchema,
   OpenRouterProviderQuerySchema,
+  SystemAiSceneListQuerySchema,
   UpdateAiModelPayloadSchema,
   UpdateAiProviderPayloadSchema,
   UpdateAiSceneRoutePayloadSchema,
@@ -86,6 +87,15 @@ class AiConfigController extends PlatformBaseController {
     const authContext = await this.getAiConfigReadContext(request);
     const data = await aiConfigService.listSceneRoutes(authContext, queryResult.data);
     return ResponseHandler.success(redactAiProviderReferences(data));
+  }
+
+  @Get("/platform/ai-config/system-scenes")
+  async listSystemScenes(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getAiConfigReadContext(request);
+    const queryResult = SystemAiSceneListQuerySchema.safeParse(request.query || {});
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+    const data = await aiConfigService.listSystemScenes(authContext, queryResult.data);
+    return ResponseHandler.success(data);
   }
 
   @Get("/platform/ai-config/providers/:id/route-model-options")
