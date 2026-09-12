@@ -1,8 +1,8 @@
-# 客户装修生图额度本地验收证据
+# 客户装修生图额度本地与开发环境验收证据
 
 日期：2026-09-12
 分支：`feat/customer-rendering-quota`
-结论：代码、合同、构建及独立数据库行为通过；开发库只读 history 已确认仅待本次 migration，必须继续使用仓库专用 workflow plan/apply，禁止直接 `db push`。
+结论：代码、合同、构建及独立数据库行为通过；唯一待执行 migration 已由仓库专用 workflow 应用到开发库，API 已发布到开发环境并完成后验检查。
 
 ## 已验证范围
 
@@ -115,10 +115,9 @@ history。直接 `db reset` / `db push` 本来就不是这组 migration 的支�
 
 仓库 migration runner 合同以 `bun test --timeout 20000` 完整复验：155 项通过、
 0 项失败、5045 次断言，包含非事务 migration 的事务外执行、失败不登记 history
-及索引后验校验。发布仍需先运行 `migrate-dev-database.yml` 的 `plan`，确认其输出
-仍只有上述一个版本，再运行同一 workflow 的 `apply`。禁止修改既有并发索引
-migration、使用 `migration repair`、手工写 history 或手工远端 DDL/DML 来掩盖
-CLI 限制。
+及索引后验校验。随后已按该路径完成 `plan` 和 `apply`，详见下方开发发布证据。
+禁止修改既有并发索引 migration、使用 `migration repair`、手工写 history 或
+手工远端 DDL/DML 来掩盖 CLI 限制。
 
 ## 配置与边界
 
@@ -134,12 +133,26 @@ CUSTOMER_RENDERING_IDENTITY_HMAC_KEY_VERSION 正整数，默认 1
 开发服务器 `/opt/gooes-dev/docker/.env.dev.api` 已在服务器本机生成并原子写入
 64 位十六进制 HMAC 值及版本 `1`，文件权限保持 `0600`；可恢复备份为
 `/opt/gooes-dev/docker/.env.dev.api.bak.customer-rendering-20260912T152825Z`。
-更新后尚未重启或部署 API，密钥值没有离开服务器或进入日志/证据。
+密钥值没有离开服务器或进入日志/证据；API 发布后容器内只核对到配置存在、长度
+为 64 且版本为 `1`。
+
+## 开发 migration 与 API 发布
+
+- Migration plan：[run 34702449470](https://github.com/LeeFo-china/goose/actions/runs/34702449470)，绑定提交 `ab42e7b0654de32deff389a974d3d79fb2763c10`；`before_count=617`、`before_latest=20260912100000`、`pending_count=1`、`pending_versions=20260912150000`、`applied_count=0`。
+- Migration apply：[run 34702485912](https://github.com/LeeFo-china/goose/actions/runs/34702485912)，绑定相同提交；`after_count=618`、`after_latest=20260912150000`、`applied_count=1`、`applied_versions=20260912150000`。
+- 只读数据库后验：history 为 `618 / 20260912150000`；5 张账本表存在且 5 张均启用 RLS；4 个公开 RPC 存在，4 个均有预期 service-role EXECUTE 权限。
+- API 发布：[run 34702570347](https://github.com/LeeFo-china/goose/actions/runs/34702570347)，migration history gate、不可变镜像证据、部署和服务健康检查均通过；运行容器 revision 为完整提交 `ab42e7b0654de32deff389a974d3d79fb2763c10`。
+- 公网 smoke：根路径返回 200；微信和抖音 quota 路径在无 token 时均返回 401 / `TOKEN_MISSING`；使用服务器内生成的短期虚构 subject 抖音 token 调用 quota 返回 200 / `message=success` / `remaining=1` / `phone_verified=false`。
+
+开发库当时没有未过期的微信 visitor 选租上下文，因此没有伪造或写入 fixture 来
+强行完成微信 200 smoke；微信合法会话路径已由本地 Fastify inject 和 service 测试
+覆盖。未认证公网检查证明新路径已进入统一鉴权，剩余风险是等待小程序真实微信
+会话联调。
 
 本次没有：
 
-- 应用远端 migration；
-- 发布 API 或触发真实火山方舟生图费用；
+- 触碰生产 migration 或生产发布；
+- 触发真实火山方舟生图费用；
 - 修改 `orange`；
 - 新增无分页列表；
 - 让 controller 直连 Supabase；
