@@ -3,6 +3,12 @@ import { Errors } from "@/errors/error-factory";
 
 export type ArkGatewayOutcome = "invalid_configuration" | "invalid_input" | "rejected" | "submission_unknown" | "result_unavailable";
 
+export interface ArkUpstreamDiagnostics {
+  upstreamCode?: string;
+  upstreamParam?: string;
+  upstreamReason?: string;
+}
+
 const ERROR_DEFINITIONS = {
   invalid_configuration: [500, "效果图服务配置无效", "ARK_INVALID_CONFIGURATION"],
   invalid_input: [400, "效果图服务请求参数无效", "ARK_INVALID_INPUT"],
@@ -11,11 +17,16 @@ const ERROR_DEFINITIONS = {
   result_unavailable: [502, "效果图结果下载失败", "ARK_RESULT_DOWNLOAD_FAILED"],
 } as const;
 
-export function arkGatewayError(outcome: ArkGatewayOutcome, upstreamStatus?: number): AppError {
+export function arkGatewayError(
+  outcome: ArkGatewayOutcome,
+  upstreamStatus?: number,
+  diagnostics: ArkUpstreamDiagnostics = {},
+): AppError {
   const [status, message, code] = ERROR_DEFINITIONS[outcome];
   return Errors.business(status, message, code, {
     outcome,
     ...(upstreamStatus === undefined ? {} : { upstreamStatus }),
+    ...diagnostics,
   });
 }
 

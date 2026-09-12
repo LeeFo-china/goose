@@ -3,6 +3,7 @@ import { Errors } from "@/errors/error-factory";
 import {
   parseCustomerRenderingArkSmokeArgs,
   runCustomerRenderingArkSmoke,
+  safeCustomerRenderingArkSmokeError,
   type CustomerRenderingArkSmokeDependencies,
 } from "./customer-rendering-ark-smoke";
 
@@ -71,6 +72,31 @@ function fixture() {
 }
 
 describe("customer rendering Ark smoke", () => {
+  test("reports only safe upstream diagnostics", () => {
+    expect(safeCustomerRenderingArkSmokeError({
+      code: "ARK_UPSTREAM_REJECTED",
+      message: "效果图服务拒绝了请求",
+      details: {
+        outcome: "rejected",
+        upstreamStatus: 400,
+        upstreamCode: "InvalidParameter.ImageURL",
+        upstreamParam: "image",
+        upstreamReason: "image_input_unavailable",
+        apiKey: "ark-sensitive-key",
+        signedUrl: "https://example.test/result?X-Tos-Signature=private",
+      },
+    })).toEqual({
+      ok: false,
+      code: "ARK_UPSTREAM_REJECTED",
+      message: "效果图服务拒绝了请求",
+      outcome: "rejected",
+      upstreamStatus: 400,
+      upstreamCode: "InvalidParameter.ImageURL",
+      upstreamParam: "image",
+      upstreamReason: "image_input_unavailable",
+    });
+  });
+
   test("defaults to a read-only readiness check", async () => {
     const { dependencies, calls } = fixture();
     const result = await runCustomerRenderingArkSmoke({ execute: false }, dependencies);
@@ -96,6 +122,16 @@ describe("customer rendering Ark smoke", () => {
       .toThrow("真实验证必须指定绝对 WebP 输出路径");
     expect(parseCustomerRenderingArkSmokeArgs(["--execute", "--output=/tmp/result.webp"]))
       .toEqual({ execute: true, outputPath: "/tmp/result.webp" });
+    expect(parseCustomerRenderingArkSmokeArgs([
+      "--execute",
+      "--output=/tmp/result.webp",
+      "--timeout-ms=300000",
+    ])).toEqual({ execute: true, outputPath: "/tmp/result.webp", timeoutMs: 300000 });
+    expect(() => parseCustomerRenderingArkSmokeArgs([
+      "--execute",
+      "--output=/tmp/result.webp",
+      "--timeout-ms=300001",
+    ])).toThrow("装修生图验证超时时间无效");
   });
 
   test("runs dual-image generation, verifies private storage and cleans all temporary objects", async () => {
@@ -104,6 +140,7 @@ describe("customer rendering Ark smoke", () => {
     const result = await runCustomerRenderingArkSmoke({
       execute: true,
       outputPath: "/tmp/customer-rendering-smoke.webp",
+      timeoutMs: 300000,
     }, dependencies);
 
     expect(calls.map(([name, detail]) => detail === undefined ? name : [name, detail])).toEqual([
@@ -133,6 +170,9 @@ describe("customer rendering Ark smoke", () => {
       outputPath: "/tmp/customer-rendering-smoke.webp",
       cleanupCount: 3,
       usage: { generated_images: 1, output_tokens: 1200, total_tokens: 1200 },
+    });
+    expect(calls.find(([name]) => name === "generate")?.[1]).toMatchObject({
+      config: { timeoutMs: 300000 },
     });
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain(imageConfig.apiKey);

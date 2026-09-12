@@ -18,6 +18,7 @@ const PROMPT = [
 export interface CustomerRenderingArkSmokeOptions {
   execute: boolean;
   outputPath?: string;
+  timeoutMs?: number;
 }
 
 interface NormalizedSmokeImage {
@@ -105,22 +106,34 @@ function invalidOutputPath(): never {
   throw Errors.badRequest("真实验证必须指定绝对 WebP 输出路径");
 }
 
+function invalidTimeout(): never {
+  throw Errors.badRequest("装修生图验证超时时间无效");
+}
+
 export function parseCustomerRenderingArkSmokeArgs(
   args: string[],
 ): CustomerRenderingArkSmokeOptions {
   const execute = args.includes("--execute");
   const outputArg = args.find((arg) => arg.startsWith("--output="));
-  const unknown = args.find((arg) => arg !== "--execute" && !arg.startsWith("--output="));
+  const timeoutArg = args.find((arg) => arg.startsWith("--timeout-ms="));
+  const unknown = args.find((arg) => arg !== "--execute"
+    && !arg.startsWith("--output=") && !arg.startsWith("--timeout-ms="));
   if (unknown) throw Errors.badRequest("装修生图验证参数无效");
   if (!execute) {
-    if (outputArg) throw Errors.badRequest("预检模式不能指定输出文件");
+    if (outputArg || timeoutArg) throw Errors.badRequest("预检模式不能指定执行参数");
     return { execute: false };
   }
   const outputPath = outputArg?.slice("--output=".length);
   if (!outputPath || !isAbsolute(outputPath) || extname(outputPath).toLowerCase() !== ".webp") {
     return invalidOutputPath();
   }
-  return { execute: true, outputPath };
+  const timeoutText = timeoutArg?.slice("--timeout-ms=".length);
+  const timeoutMs = timeoutText === undefined ? undefined : Number(timeoutText);
+  if (timeoutMs !== undefined
+    && (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 300000)) {
+    return invalidTimeout();
+  }
+  return { execute: true, outputPath, ...(timeoutMs === undefined ? {} : { timeoutMs }) };
 }
 
 export async function runCustomerRenderingArkSmoke(
@@ -164,7 +177,7 @@ export async function runCustomerRenderingArkSmoke(
       baseUrl: config.baseUrl,
       apiKey: config.apiKey,
       model: config.modelName,
-      timeoutMs: config.timeoutMs,
+      timeoutMs: options.timeoutMs ?? config.timeoutMs,
     }, {
       roomImageUrl,
       referenceImageUrl,
@@ -271,20 +284,62 @@ async function runtimeDependencies(): Promise<CustomerRenderingArkSmokeDependenc
   };
 }
 
+export function safeCustomerRenderingArkSmokeError(error: unknown): {
+  ok: false;
+  code: string;
+  message: string;
+  outcome?: string;
+  upstreamStatus?: number;
+  upstreamCode?: string;
+  upstreamParam?: string;
+  upstreamReason?: string;
+} {
+  const envelope = error && typeof error === "object"
+    ? error as { code?: unknown; message?: unknown; details?: unknown }
+    : {};
+  const details = envelope.details && typeof envelope.details === "object"
+    ? envelope.details as {
+      outcome?: unknown;
+      upstreamStatus?: unknown;
+      upstreamCode?: unknown;
+      upstreamParam?: unknown;
+      upstreamReason?: unknown;
+    }
+    : {};
+  const result: ReturnType<typeof safeCustomerRenderingArkSmokeError> = {
+    ok: false,
+    code: typeof envelope.code === "string" ? envelope.code : "RENDERING_SMOKE_FAILED",
+    message: typeof envelope.message === "string" ? envelope.message : "装修生图验证失败",
+  };
+  if (typeof details.outcome === "string" && /^[a-z_]{1,32}$/.test(details.outcome)) {
+    result.outcome = details.outcome;
+  }
+  if (Number.isSafeInteger(details.upstreamStatus)
+    && Number(details.upstreamStatus) >= 100 && Number(details.upstreamStatus) <= 599) {
+    result.upstreamStatus = Number(details.upstreamStatus);
+  }
+  if (typeof details.upstreamCode === "string"
+    && /^[A-Za-z0-9_.:-]{1,128}$/.test(details.upstreamCode)) {
+    result.upstreamCode = details.upstreamCode;
+  }
+  if (typeof details.upstreamParam === "string"
+    && /^[A-Za-z0-9_.\[\]-]{1,128}$/.test(details.upstreamParam)) {
+    result.upstreamParam = details.upstreamParam;
+  }
+  if (typeof details.upstreamReason === "string"
+    && /^[a-z_]{1,64}$/.test(details.upstreamReason)) {
+    result.upstreamReason = details.upstreamReason;
+  }
+  return result;
+}
+
 async function main(): Promise<void> {
   try {
     const options = parseCustomerRenderingArkSmokeArgs(process.argv.slice(2));
     const result = await runCustomerRenderingArkSmoke(options, await runtimeDependencies());
     process.stdout.write(`${JSON.stringify({ ok: true, ...result })}\n`);
   } catch (error) {
-    const envelope = error && typeof error === "object"
-      ? error as { code?: unknown; message?: unknown }
-      : {};
-    process.stderr.write(`${JSON.stringify({
-      ok: false,
-      code: typeof envelope.code === "string" ? envelope.code : "RENDERING_SMOKE_FAILED",
-      message: typeof envelope.message === "string" ? envelope.message : "装修生图验证失败",
-    })}\n`);
+    process.stderr.write(`${JSON.stringify(safeCustomerRenderingArkSmokeError(error))}\n`);
     process.exitCode = 1;
   }
 }

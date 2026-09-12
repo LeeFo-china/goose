@@ -3,6 +3,10 @@
 `generateArkRendering(config, input, dependencies?)` performs one HTTP attempt to
 `/images/generations`. References are positional: original room first, style image
 second. It requests one watermarked image and accepts exactly one HTTPS image URL.
+The request omits `sequential_image_generation`: the configured Seedream 5.0 Pro
+endpoint rejected that parameter during the 2026-09-12 development smoke, while
+the next request no longer returned that parameter rejection. The successful live
+smoke needed 93.6 seconds, so callers must not assume a 60-second response window.
 
 `requestArkVision(config, input, dependencies?)` submits the original room and the
 actual generated result to `/chat/completions`. Returned text is **untrusted**.

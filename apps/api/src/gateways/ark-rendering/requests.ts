@@ -60,7 +60,6 @@ export function buildArkRenderingRequest(config: ArkGatewayConfig, input: ArkRen
     prompt: `图1是原始房间照片，图2是装修风格参考图。保留图1的房间结构，参考图2的装修风格。\n${input.prompt}`,
     image: [input.roomImageUrl, input.referenceImageUrl],
     size: input.size,
-    sequential_image_generation: "disabled" as const,
     response_format: "url" as const,
     watermark: true,
     stream: false,

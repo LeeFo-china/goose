@@ -26,7 +26,6 @@ export interface ArkRenderingRequest {
   prompt: string;
   image: [string, string];
   size: ArkImageSize;
-  sequential_image_generation: "disabled";
   response_format: "url";
   watermark: true;
   stream: false;

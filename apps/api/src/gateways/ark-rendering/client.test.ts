@@ -57,10 +57,10 @@ describe("Ark rendering HTTP boundary", () => {
       image: [input.roomImageUrl, input.referenceImageUrl],
       size: "2K",
       watermark: true,
-      sequential_image_generation: "disabled",
       response_format: "url",
       stream: false,
     });
+    expect(requestBody).not.toHaveProperty("sequential_image_generation");
     expect(requestBody).not.toHaveProperty("n");
     expect(requestBody).not.toHaveProperty("idempotency_key");
     expect(result).toEqual({ imageUrl: successPayload.data[0]!.url, usage: successPayload.usage, requestId: "req_123-abc" });
@@ -117,6 +117,31 @@ describe("Ark rendering HTTP boundary", () => {
     expect(JSON.stringify(error)).not.toContain(config.apiKey);
     expect(JSON.stringify(error)).not.toContain("assets.example.com");
     expect(calls).toBe(1);
+  });
+
+  test("keeps a safe provider error code while discarding its message", async () => {
+    const error = await generateArkRendering(config, input, {
+      fetch: async () => Response.json({
+        error: {
+          code: "InvalidParameter.ImageURL",
+          param: "image",
+          message: `The image URL could not be downloaded ${config.apiKey} ${input.roomImageUrl}`,
+        },
+      }, { status: 400 }),
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toMatchObject({
+      code: "ARK_UPSTREAM_REJECTED",
+      details: {
+        outcome: "rejected",
+        upstreamStatus: 400,
+        upstreamCode: "InvalidParameter.ImageURL",
+        upstreamParam: "image",
+        upstreamReason: "image_input_unavailable",
+      },
+    });
+    expect(JSON.stringify(error)).not.toContain(config.apiKey);
+    expect(JSON.stringify(error)).not.toContain("assets.example.com");
   });
 
   test.each([408, 409, 500, 502, 503])("conservatively marks ambiguous HTTP %i submission unknown", async (status) => {
