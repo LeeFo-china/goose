@@ -38,7 +38,7 @@ bun test src/controllers/visitor-renderings/index.test.ts \
   62 pass, 0 fail, 297 expectations
 
 最终把上述 API 用例合并为一次回归执行
-  89 pass, 0 fail, 428 expectations
+  89 pass, 0 fail, 430 expectations
 
 bun run typecheck
   exit 0
