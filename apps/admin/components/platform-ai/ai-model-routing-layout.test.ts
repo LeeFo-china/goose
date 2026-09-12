@@ -42,13 +42,16 @@ describe("supplier master-detail workspace", () => {
   });
   test("workspace owns one semantic provider detail card without nested cards", () => {
     const workspace = source("./ai-provider-workspace.tsx");
+    const detailCard = workspace.match(/<Card\b[^>]*>/)?.[0] || "";
     expect(workspace).toContain("<ProviderDetail");
     expect(occurrences(workspace, "<ProviderDetail")).toBe(1);
     expect(occurrences(workspace, "page.list.map")).toBe(1);
-    expect(workspace).toContain("<Card key={detailId}");
-    expect(workspace).toContain('aria-labelledby="ai-provider-detail-label"');
-    expect(workspace).toContain("data-provider-detail-id={detailId}");
-    expect(workspace).toContain('<span id="ai-provider-detail-label" className="sr-only">供应商详情</span>');
+    expect(workspace.match(/<Card(?:\s|>)/g)).toHaveLength(1);
+    expect(detailCard).toContain("key={detailId}");
+    expect(detailCard).toContain('role="region"');
+    expect(detailCard).toContain('aria-labelledby="ai-provider-detail-label"');
+    expect(detailCard).toContain("data-provider-detail-id={detailId}");
+    expect(workspace).toMatch(/<span\b(?=[^>]*id="ai-provider-detail-label")(?=[^>]*className="sr-only")[^>]*>供应商详情<\/span>/);
     expect(workspace).toContain("<CardHeader");
     expect(workspace).toContain("<CardDescription");
     expect(workspace).toContain("<CardContent");
@@ -57,10 +60,20 @@ describe("supplier master-detail workspace", () => {
     expect(source("./ai-provider-editor.tsx")).not.toContain("<Card");
     expect(source("./ai-provider-models.tsx")).not.toContain("<Card");
   });
+  test("provider detail uses a non-heading visible name", () => {
+    const workspace = source("./ai-provider-workspace.tsx");
+    expect(workspace).toMatch(/<p\b(?=[^>]*id="ai-provider-detail-title")[^>]*>/);
+    expect(workspace).not.toContain("<CardTitle");
+  });
+  test("provider detail wraps long system codes", () => {
+    const workspace = source("./ai-provider-workspace.tsx");
+    const detailDescription = workspace.match(/<CardDescription\b[^>]*>/)?.[0] || "";
+    expect(detailDescription).toContain("break-all");
+  });
   test("provider rail exposes current selection and stable provider identity", () => {
     const workspace = source("./ai-provider-workspace.tsx");
-    expect(workspace).toContain('aria-current={selectedId === provider.id ? "true" : undefined}');
-    expect(workspace).toContain("data-provider-id={provider.id}");
+    expect(workspace).toMatch(/aria-current=\{\s*selectedId\s*===\s*provider\.id\s*\?\s*"true"\s*:\s*undefined\s*\}/);
+    expect(workspace).toMatch(/data-provider-id=\{\s*provider\.id\s*\}/);
     expect(workspace).toContain("border-primary/40 bg-primary/10");
     expect(workspace).toContain("font-semibold text-primary");
   });

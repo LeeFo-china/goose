@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusAlert } from "@/components/admin/status-alert";
@@ -66,10 +66,10 @@ function ProviderDetail({ provider, canManage, onSaved, onReload }: {
     <CardHeader className="shrink-0 border-b">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-1.5">
-          <CardTitle id="ai-provider-detail-title" className="truncate" title={provider?.name || "新增供应商"}>
+          <p id="ai-provider-detail-title" className="truncate text-base font-semibold leading-none tracking-normal" title={provider?.name || "新增供应商"}>
             {provider?.name || "新增供应商"}
-          </CardTitle>
-          <CardDescription>{provider ? `系统编码：${provider.code}` : "保存后由系统生成供应商编码。"}</CardDescription>
+          </p>
+          <CardDescription className="break-all">{provider ? `系统编码：${provider.code}` : "保存后由系统生成供应商编码。"}</CardDescription>
         </div>
         {provider ? <Badge variant={provider.status === "active" ? "success" : "outline"}>
           {provider.status === "active" ? "启用" : "停用"}
