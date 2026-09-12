@@ -2,7 +2,7 @@
 
 日期：2026-09-12
 分支：`feat/customer-rendering-quota`
-结论：代码、合同、构建及独立数据库行为通过；完整 migration 历史未对齐，禁止据此发布到开发环境。
+结论：代码、合同、构建及独立数据库行为通过；开发库只读 history 已确认仅待本次 migration，必须继续使用仓库专用 workflow plan/apply，禁止直接 `db push`。
 
 ## 已验证范围
 
@@ -85,7 +85,7 @@ merge_settlement_race=pass
 
 三组场景分别证明：最后一次额度并发只允许一个预占；同一请求并发重放只生成一份事实；微信/抖音手机号归并与旧 reservation 结算并发后仍落到一个规范账户。
 
-## migration 阻塞
+## migration 路径核对
 
 此前执行完整 `supabase db reset --local` 时，在既有 migration：
 
@@ -93,11 +93,32 @@ merge_settlement_race=pass
 20260826141500_prepare_supplier_purchase_batch_catalog_search.sql
 ```
 
-失败，原因为当前 Supabase CLI 的 migration pipeline 不允许 `CREATE INDEX CONCURRENTLY`，数据库返回 `SQLSTATE 25001`。因此 reset 在该版本中止；为验证本次账本 SQL 的独立行为，曾直接从已提交的 migration 文件把本次 SQL 应用到本地临时数据库，但没有写入 migration history。
+失败，原因为当前 Supabase CLI 2.99 的 migration pipeline 不允许
+`CREATE INDEX CONCURRENTLY`，数据库返回 `SQLSTATE 25001`。根因不是该
+migration 损坏：它的首行明确声明 `gooes:migration-mode=nontransactional`，仓库
+`docs/runbooks/supplier-purchase-batch-nontransactional-migrations.md` 也规定必须由
+`.github/workflows/migrate-dev-database.yml` 在事务外执行并在索引校验通过后登记
+history。直接 `db reset` / `db push` 本来就不是这组 migration 的支持路径。
 
-2026-09-12 再次运行 `supabase migration list --local`：文件侧包含 `20260912150000`，本地数据库 migration history 仍只对齐到 `20260826141000`，`20260826141500` 及其后的 history 均为空。该状态不满足项目“Local/Remote 对齐”要求。
+本地行为复验通过临时 migration 视图把 Docker 数据库完整重建到
+`20260826141000`。Supabase CLI 2.99 的 migration `--version` 参数被同名全局
+布尔参数抢占，因此未依赖该参数。随后从已提交的 `20260912150000` 文件直接创建
+本次测试对象，并重新执行顺序和三组并发测试，结果均通过；没有手工登记 history，
+本地 history 的最大版本仍是 `20260826141000`，也没有把该方式用于远端。它证明
+账本 SQL 可在干净前置 schema 上运行，不代表完整 migration runner 验收。
 
-发布前必须先由独立任务修正既有 `20260826141500` 对当前 CLI 的兼容性，重新执行完整 reset/up，再确认 `20260912150000` 同时出现在文件和本地数据库历史中。禁止用 `migration repair`、手工写 history 或手工远端 DDL/DML 掩盖该问题。
+2026-09-12 通过开发服务器的只读 PostgreSQL 会话查询
+`supabase_migrations.schema_migrations`，开发库最新版本为 `20260912100000`；与
+当前分支 migration 文件比对后，唯一待执行版本是
+`20260912150000_create_customer_rendering_quota_ledger.sql`。查询强制
+`default_transaction_read_only=on` 和 15 秒超时，没有执行数据库写入。
+
+仓库 migration runner 合同以 `bun test --timeout 20000` 完整复验：155 项通过、
+0 项失败、5045 次断言，包含非事务 migration 的事务外执行、失败不登记 history
+及索引后验校验。发布仍需先运行 `migrate-dev-database.yml` 的 `plan`，确认其输出
+仍只有上述一个版本，再运行同一 workflow 的 `apply`。禁止修改既有并发索引
+migration、使用 `migration repair`、手工写 history 或手工远端 DDL/DML 来掩盖
+CLI 限制。
 
 ## 配置与边界
 
@@ -109,6 +130,11 @@ CUSTOMER_RENDERING_IDENTITY_HMAC_KEY_VERSION 正整数，默认 1
 ```
 
 身份摘要密钥不回退到 `JWT_SECRET`。本证据未记录任何密钥值、真实手机号、openid、subject 或摘要。
+
+开发服务器 `/opt/gooes-dev/docker/.env.dev.api` 已在服务器本机生成并原子写入
+64 位十六进制 HMAC 值及版本 `1`，文件权限保持 `0600`；可恢复备份为
+`/opt/gooes-dev/docker/.env.dev.api.bak.customer-rendering-20260912T152825Z`。
+更新后尚未重启或部署 API，密钥值没有离开服务器或进入日志/证据。
 
 本次没有：
 

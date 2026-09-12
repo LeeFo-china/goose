@@ -233,24 +233,49 @@ git commit -m "feat(rendering): 增加客户生图额度账本"
 2. 同幂等键同时重放，只生成一个 reservation 和一个 reserve event。
 3. 一边把微信/抖音账户绑定同一手机号，一边 consume 旧 reservation，最终 `consumed=2` 且无悬空 binding。
 
-- [ ] **Step 3: 应用到本地隔离数据库并验证 RED/GREEN**
+- [ ] **Step 3: 应用到本地隔离数据库并验证行为**
 
 Run:
 
 ```bash
-supabase db reset --local
-psql postgresql://postgres:postgres@127.0.0.1:54322/postgres \
-  -X -v ON_ERROR_STOP=1 -f supabase/tests/customer_rendering_quota.sql
+quota_reset_dir="$(mktemp -d /tmp/gooes-quota-reset.XXXXXX)"
+trap '/usr/bin/trash "${quota_reset_dir}"' EXIT
+mkdir -p "${quota_reset_dir}/supabase/migrations"
+ln -s "$PWD/supabase/config.toml" "${quota_reset_dir}/supabase/config.toml"
+for migration_file in "$PWD"/supabase/migrations/*.sql; do
+  migration_name="$(basename "${migration_file}")"
+  migration_version="${migration_name%%_*}"
+  if [[ "${migration_version}" > "20260826141000" ]]; then
+    continue
+  fi
+  ln -s "${migration_file}" \
+    "${quota_reset_dir}/supabase/migrations/${migration_name}"
+done
+supabase --workdir "${quota_reset_dir}" db reset --local --no-seed
+docker exec -i supabase_db_gooes psql -h /var/run/postgresql \
+  -X -U postgres -d postgres -v ON_ERROR_STOP=1 \
+  < supabase/migrations/20260912150000_create_customer_rendering_quota_ledger.sql
+docker exec -i supabase_db_gooes psql -h /var/run/postgresql \
+  -X -U postgres -d postgres -v ON_ERROR_STOP=1 \
+  < supabase/tests/customer_rendering_quota.sql
 bash supabase/tests/customer_rendering_quota_concurrency.sh
 ```
 
 Expected: 顺序和并发测试均退出 0；若本机 Supabase/Docker 不可用，停止数据库实现验收并明确报告，不以静态测试替代并发证据。
 
-- [ ] **Step 4: 检查 migration 对齐**
+仓库从 `20260826141500` 开始包含必须在事务外执行的并发索引 migration，
+Supabase CLI 2.99 的 `db reset` 不支持这类文件，且其 migration `--version`
+参数会被同名全局布尔参数抢占。这里通过临时 migration 视图把本地数据库重建到
+`20260826141000`，再从版本控制中的账本 migration 文件直接创建本次测试对象；
+不得为本地测试手工登记 migration history，也不得把该方式用于远端数据库。
 
-Run: `supabase migration list --local`
+- [ ] **Step 4: 检查开发库发布前 migration 对齐**
 
-Expected: Local 列包含 `20260912150000`，历史 migration 无漂移。此步骤只检查本地，不连接或修改远端。
+通过仓库专用 `.github/workflows/migrate-dev-database.yml` 的 `plan` 模式检查。
+
+Expected: 开发库已对齐到 `20260912100000`，唯一待执行版本为
+`20260912150000`。plan 模式不得写数据库；确认清单后才允许使用同一 workflow
+的 `apply` 模式。禁止直接用 `supabase db push` 绕过非事务 migration runner。
 
 - [ ] **Step 5: 提交**
 
