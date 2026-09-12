@@ -48,6 +48,15 @@ test('publish idempotency conflicts tell operators to close and start a new atte
       message: '本次发布标识已用于其他请求，请关闭弹窗后重新发起发布' });
 });
 
+test('in-progress publication directs same-request retry without latest-version recovery', async () => {
+  const api = createLibraryRequests(async () => Response.json({ success: false,
+    code: 'RENDERING_STYLE_PUBLISH_IN_PROGRESS', message: 'raw detail' }, { status: 409 }));
+  await expect(api.publish(style.id, { expected_version: 1,
+    idempotency_key: '9d152539-6344-4ad5-8e53-24ae6b3dc0d8', responsibility_confirmed: true }))
+    .rejects.toMatchObject({ code: 'RENDERING_STYLE_PUBLISH_IN_PROGRESS',
+      message: '该素材正在发布，请稍后在当前弹窗重试同一请求' });
+});
+
 test('publish sends a validated version, UUID idempotency key and responsibility confirmation', async () => {
   const calls: Array<{ path: string; init: RequestInit }> = [];
   const api = createLibraryRequests(async (path, init) => {

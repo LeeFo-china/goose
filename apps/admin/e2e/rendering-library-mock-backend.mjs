@@ -88,16 +88,30 @@ const server = createServer(async (request, response) => {
       const prior = publishKeys.get(input.idempotency_key);
       if (prior && (prior.styleId !== row.id || prior.expectedVersion !== input.expected_version))
         return send(response, 409, '发布幂等键已用于其他请求', 'RENDERING_STYLE_PUBLISH_IDEMPOTENCY_CONFLICT');
-      if (prior) return send(response, 200, row);
+      if (prior?.status === 'succeeded') return send(response, 200, row);
+      if (prior?.status === 'preparing') publishKeys.delete(input.idempotency_key);
       if (input.responsibility_confirmed !== true) return send(response, 400, '请确认发布责任', 'BAD_REQUEST');
+      if (options.version_conflict_same_version_next) { options.version_conflict_same_version_next = false;
+        return send(response, 409, '测试版本冲突但资料未变化', 'RENDERING_STYLE_VERSION_CONFLICT'); }
       if (input.expected_version !== row.version) return send(response, 409, '素材已被其他人修改，请刷新后重试', 'RENDERING_STYLE_VERSION_CONFLICT');
+      if (options.complete_conflict_next) { options.complete_conflict_next = false;
+        publishKeys.set(input.idempotency_key, { styleId: row.id, expectedVersion: input.expected_version, status: 'preparing' });
+        row.version += 1; row.title = '其他员工已修改的素材';
+        return send(response, 409, '发布完成阶段版本冲突', 'RENDERING_STYLE_VERSION_CONFLICT'); }
+      if (options.publish_in_progress_next) { options.publish_in_progress_next = false;
+        publishKeys.set(input.idempotency_key, { styleId: row.id, expectedVersion: input.expected_version, status: 'preparing' });
+        return send(response, 409, '发布准备中', 'RENDERING_STYLE_PUBLISH_IN_PROGRESS'); }
       if (options.fail_publish_next) { options.fail_publish_next = false; return send(response, 503, '发布结果尚未确认', 'RENDERING_STORAGE_UNAVAILABLE'); }
+      if (options.public_copy_failed_next) { options.public_copy_failed_next = false;
+        return send(response, 502, '公开副本准备失败', 'RENDERING_STYLE_PUBLIC_COPY_FAILED'); }
       const snapshot = { title: row.title, space: row.space, style: row.style, source_type: row.source_type,
         color_notes: row.color_notes, material_notes: row.material_notes, file_id: row.file_id, version: row.version + 1 };
       publishedSnapshots.set(row.id, snapshot);
-      publishKeys.set(input.idempotency_key, { styleId: row.id, expectedVersion: input.expected_version });
+      publishKeys.set(input.idempotency_key, { styleId: row.id, expectedVersion: input.expected_version, status: 'succeeded' });
       Object.assign(row, { status: 'published', published_version: row.version + 1,
         published_at: new Date().toISOString(), published_by_employee_id: employeeId, version: row.version + 1 });
+      if (options.commit_lost_response_next) { options.commit_lost_response_next = false;
+        return send(response, 503, '提交后响应丢失', 'RENDERING_STORAGE_UNAVAILABLE'); }
       return send(response, 200, row);
     }
     if (input.expected_version !== row.version) return send(response, 409, '素材已被其他人修改，请刷新后重试', 'RENDERING_STYLE_VERSION_CONFLICT');

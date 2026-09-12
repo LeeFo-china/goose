@@ -10,6 +10,13 @@ import { SOURCE_LABELS, SPACE_LABELS, STYLE_LABELS } from './contracts';
 import { libraryRequests, LibraryRequestError } from './requests';
 import { getStyleWriteBlock } from './style-write-state';
 
+function publicationReviewChanged(before: RenderingLibraryStyle, after: RenderingLibraryStyle): boolean {
+  return before.version !== after.version || before.status !== after.status || before.file_id !== after.file_id
+    || before.title !== after.title || before.space !== after.space || before.style !== after.style
+    || before.source_type !== after.source_type || before.rights_confirmed !== after.rights_confirmed
+    || before.color_notes !== after.color_notes || before.material_notes !== after.material_notes;
+}
+
 export function StyleMutation({ style, preview, command, onClose, onSuccess }: {
   style: RenderingLibraryStyle; preview?: RenderingLibraryFilePreviewResult;
   command: 'publish' | 'hide' | 'remove'; onClose: () => void; onSuccess: () => void;
@@ -18,7 +25,7 @@ export function StyleMutation({ style, preview, command, onClose, onSuccess }: {
   const [current, setCurrent] = useState(style);
   const [currentPreview, setCurrentPreview] = useState(preview);
   const [responsibilityConfirmed, setResponsibilityConfirmed] = useState(false);
-  const [publicationKey] = useState(() => crypto.randomUUID());
+  const [publicationKey, setPublicationKey] = useState(() => crypto.randomUUID());
   const [writeBlock, setWriteBlock] = useState<ReturnType<typeof getStyleWriteBlock>>();
   const [reloaded, setReloaded] = useState(false);
   async function submit() {
@@ -33,7 +40,8 @@ export function StyleMutation({ style, preview, command, onClose, onSuccess }: {
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '操作失败，请重试');
       setWriteBlock(cause instanceof LibraryRequestError && cause.code === 'RENDERING_STYLE_PUBLISH_IDEMPOTENCY_CONFLICT'
-        ? 'unavailable' : getStyleWriteBlock(cause));
+        ? 'unavailable' : cause instanceof LibraryRequestError && cause.code === 'RENDERING_STYLE_PUBLISH_IN_PROGRESS'
+          ? undefined : getStyleWriteBlock(cause));
       setReloaded(false);
     }
     finally { lock.current = false; setBusy(false); }
@@ -44,6 +52,9 @@ export function StyleMutation({ style, preview, command, onClose, onSuccess }: {
     try {
       const latest = await libraryRequests.get(current.id);
       const latestPreview = command === 'publish' && latest.file_id !== current.file_id ? await libraryRequests.preview(latest.file_id) : currentPreview;
+      if (command === 'publish' && publicationReviewChanged(current, latest)) setResponsibilityConfirmed(false);
+      // The server's idempotency digest includes expected_version. A new version is a new command.
+      if (command === 'publish' && latest.version !== current.version) setPublicationKey(crypto.randomUUID());
       setCurrent(latest); setCurrentPreview(latestPreview); setWriteBlock(undefined); setReloaded(true);
     }
     catch (cause) { setError(cause instanceof Error ? cause.message : '读取最新资料失败'); if (getStyleWriteBlock(cause) === 'unavailable') setWriteBlock('unavailable'); }

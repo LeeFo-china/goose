@@ -3,7 +3,7 @@ import { defineConfig, devices } from '@playwright/test';
 if (process.env.FORCE_COLOR && process.env.NO_COLOR) delete process.env.NO_COLOR;
 
 export default defineConfig({
-  testDir: './e2e', testMatch: 'rendering-library-workflow.spec.ts',
+  testDir: './e2e', testMatch: ['rendering-library-workflow.spec.ts', 'rendering-library-publication-recovery.spec.ts'],
   timeout: 45000, workers: 1, fullyParallel: false, retries: 0,
   forbidOnly: Boolean(process.env.CI), reporter: [['list']],
   use: { baseURL: 'http://127.0.0.1:3038', trace: 'retain-on-failure', screenshot: 'only-on-failure' },

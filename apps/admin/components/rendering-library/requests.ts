@@ -28,6 +28,7 @@ export function createLibraryRequests(fetcher: FetchPort = (path, init) => fetch
       const status = error && typeof error === 'object' && 'status' in error && typeof error.status === 'number' ? error.status : 0;
       const known = code === 'RENDERING_STYLE_FILE_USED' ? '该原图已用于装修效果素材，请核对素材库'
         : code === 'RENDERING_STYLE_PUBLISH_IDEMPOTENCY_CONFLICT' ? '本次发布标识已用于其他请求，请关闭弹窗后重新发起发布'
+        : code === 'RENDERING_STYLE_PUBLISH_IN_PROGRESS' ? '该素材正在发布，请稍后在当前弹窗重试同一请求'
         : status === 404 && path.startsWith('/styles/') ? '素材已删除或不可用，请关闭后刷新素材列表'
         : status === 409 ? '素材已更新，请加载最新资料后再操作' : message;
       throw new LibraryRequestError(known, code, status);

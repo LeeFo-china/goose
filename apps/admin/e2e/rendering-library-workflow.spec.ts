@@ -328,7 +328,7 @@ test('发布处理中阻止取消、Escape 和重复提交', async ({ page, requ
   } finally { release(); }
 });
 
-test('发布冲突加载最新资料后复用弹窗幂等键', async ({ page, request }) => {
+test('发布版本冲突加载最新后重新确认并使用新幂等键', async ({ page, request }) => {
   await page.goto('/rendering-library', { waitUntil: 'networkidle' });
   const card = page.getByRole('article').filter({ hasText: '测试素材 01' });
   await card.getByRole('button', { name: '发布', exact: true }).click();
@@ -339,11 +339,14 @@ test('发布冲突加载最新资料后复用弹窗幂等键', async ({ page, re
   await expect(dialog.getByRole('button', { name: '发布素材' })).toBeDisabled();
   await dialog.getByRole('button', { name: '加载最新资料' }).click();
   await expect(dialog.getByText('其他员工已修改的素材', { exact: true })).toBeVisible();
+  await expect(dialog.getByRole('checkbox', { name: /本公司承担内容及版权责任/ })).not.toBeChecked();
+  await expect(dialog.getByRole('button', { name: '发布素材' })).toBeDisabled();
+  await dialog.getByRole('checkbox', { name: /本公司承担内容及版权责任/ }).check();
   await dialog.getByRole('button', { name: '发布素材' }).click();
   await expect(dialog).toBeHidden();
   const writes = (await events(request)).filter((event) => event.path.endsWith('/publish'));
   expect(writes.map((event) => event.input?.expected_version)).toEqual([1, 2]);
-  expect(writes[0]?.input?.idempotency_key).toBe(writes[1]?.input?.idempotency_key);
+  expect(writes[0]?.input?.idempotency_key).not.toBe(writes[1]?.input?.idempotency_key);
 });
 
 test('发布幂等键冲突阻止误导性加载最新并提示重新发起', async ({ page, request }) => {
