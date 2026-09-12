@@ -70,10 +70,18 @@ test('发布仍在进行时提示同请求重试，不显示加载最新', async
   await expect(dialog.getByText(/正在发布.*当前弹窗重试同一请求/)).toBeVisible();
   await expect(dialog.getByRole('button', { name: '加载最新资料' })).toHaveCount(0);
   await dialog.getByRole('button', { name: '发布素材' }).click();
+  await expect(dialog.getByText(/正在发布.*当前弹窗重试同一请求/)).toBeVisible();
+  const inProgress = publications(await events(request));
+  expect(inProgress).toHaveLength(2);
+  expect(inProgress[0]?.input?.idempotency_key).toBe(inProgress[1]?.input?.idempotency_key);
+  expect((await request.post(`${backend}/__test/expire-publish-lease`, {
+    data: { idempotency_key: inProgress[0]?.input?.idempotency_key },
+  })).ok()).toBe(true);
+  await dialog.getByRole('button', { name: '发布素材' }).click();
   await expect(dialog).toBeHidden();
   const writes = publications(await events(request));
-  expect(writes).toHaveLength(2);
-  expect(writes[0]?.input?.idempotency_key).toBe(writes[1]?.input?.idempotency_key);
+  expect(writes).toHaveLength(3);
+  expect(writes[0]?.input?.idempotency_key).toBe(writes[2]?.input?.idempotency_key);
 });
 
 test('数据库已提交但首次响应丢失时同键重放且不生成第二个快照', async ({ page, request }) => {

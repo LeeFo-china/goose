@@ -36,6 +36,13 @@ const server = createServer(async (request, response) => {
   if (path === '/__test/options') { options = { ...options, ...JSON.parse((await read(request))?.toString() || '{}') }; return send(response, 200, {}); }
   if (path === '/__test/events') return send(response, 200, events);
   if (path === '/__test/snapshots') return send(response, 200, Object.fromEntries(publishedSnapshots));
+  if (path === '/__test/expire-publish-lease' && request.method === 'POST') {
+    const { idempotency_key: key } = JSON.parse((await read(request))?.toString() || '{}');
+    const command = publishKeys.get(key);
+    if (!command || command.status !== 'preparing') return send(response, 404, '测试租约不存在', 'NOT_FOUND');
+    command.leaseExpiresAt = Date.now() - 1;
+    return send(response, 200, { expired: true });
+  }
   if (path === '/admin/auth/me') return send(response, 200, sessionFor(request.headers.authorization || ''));
   if (path === '/employee/service-access') return send(response, 200, serviceAccess);
   if (path === '/notifications/summary') return send(response, 200, { unread_count: 0 });
@@ -89,17 +96,20 @@ const server = createServer(async (request, response) => {
       if (prior && (prior.styleId !== row.id || prior.expectedVersion !== input.expected_version))
         return send(response, 409, '发布幂等键已用于其他请求', 'RENDERING_STYLE_PUBLISH_IDEMPOTENCY_CONFLICT');
       if (prior?.status === 'succeeded') return send(response, 200, row);
-      if (prior?.status === 'preparing') publishKeys.delete(input.idempotency_key);
+      if (prior?.status === 'preparing' && prior.leaseExpiresAt > Date.now())
+        return send(response, 409, '发布租约仍有效', 'RENDERING_STYLE_PUBLISH_IN_PROGRESS');
       if (input.responsibility_confirmed !== true) return send(response, 400, '请确认发布责任', 'BAD_REQUEST');
       if (options.version_conflict_same_version_next) { options.version_conflict_same_version_next = false;
         return send(response, 409, '测试版本冲突但资料未变化', 'RENDERING_STYLE_VERSION_CONFLICT'); }
       if (input.expected_version !== row.version) return send(response, 409, '素材已被其他人修改，请刷新后重试', 'RENDERING_STYLE_VERSION_CONFLICT');
       if (options.complete_conflict_next) { options.complete_conflict_next = false;
-        publishKeys.set(input.idempotency_key, { styleId: row.id, expectedVersion: input.expected_version, status: 'preparing' });
+        publishKeys.set(input.idempotency_key, { styleId: row.id, expectedVersion: input.expected_version,
+          status: 'preparing', leaseExpiresAt: Date.now() + 120000 });
         row.version += 1; row.title = '其他员工已修改的素材';
         return send(response, 409, '发布完成阶段版本冲突', 'RENDERING_STYLE_VERSION_CONFLICT'); }
       if (options.publish_in_progress_next) { options.publish_in_progress_next = false;
-        publishKeys.set(input.idempotency_key, { styleId: row.id, expectedVersion: input.expected_version, status: 'preparing' });
+        publishKeys.set(input.idempotency_key, { styleId: row.id, expectedVersion: input.expected_version,
+          status: 'preparing', leaseExpiresAt: Date.now() + 120000 });
         return send(response, 409, '发布准备中', 'RENDERING_STYLE_PUBLISH_IN_PROGRESS'); }
       if (options.fail_publish_next) { options.fail_publish_next = false; return send(response, 503, '发布结果尚未确认', 'RENDERING_STORAGE_UNAVAILABLE'); }
       if (options.public_copy_failed_next) { options.public_copy_failed_next = false;
