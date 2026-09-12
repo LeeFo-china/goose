@@ -50,7 +50,10 @@ describe('customer rendering context repository', () => {
   });
 
   test('returns only an active tenant identity', async () => {
-    const tenant = { id: '11111111-1111-4111-8111-111111111111', status: 'active' };
+    const tenant = {
+      id: '11111111-1111-4111-8111-111111111111',
+      status: 'active' as const,
+    };
     const { client, calls } = harness({ data: tenant, error: null });
     const repository = new Repository(client as never);
 

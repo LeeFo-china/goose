@@ -4,11 +4,31 @@ import { CustomerRenderingContextService } from './context';
 
 const tenantId = '11111111-1111-4111-8111-111111111111';
 const installationId = '22222222-2222-4222-8222-222222222222';
+const defaultInstallation = {
+  id: installationId,
+  tenant_id: tenantId,
+  authorizer_appid: 'tt-app',
+  authorization_status: 'active' as const,
+  installation_kind: 'merchant' as const,
+  template_version: '1.0.0',
+  deployment_key: null,
+  runtime_config: {
+    brand: { logo_url: null, qualifications: [] },
+    theme: { primary_color: '#1677FF', navigation_text_color: 'white' },
+    features: {
+      cases: true, sites: true, sms_lead: true,
+      douyin_phone: false, phone_capture_mode: 'sms',
+    },
+    home_banners: [], trust_metrics: [], privacy_policy_version: 'v1',
+    contact_sla_text: '提交后一个工作日内联系',
+  },
+  tenant: { id: tenantId, status: 'active' as const },
+};
 
 function service(overrides: {
   selectedTenantId?: string | null;
-  tenantStatus?: string | null;
-  installation?: unknown;
+  tenantStatus?: 'active' | null;
+  installation?: typeof defaultInstallation | null;
 } = {}) {
   const contextRepository = {
     findLatestSelectedVisitorTenant: mock(async () =>
@@ -16,26 +36,6 @@ function service(overrides: {
     findActiveTenant: mock(async (id: string) =>
       overrides.tenantStatus === null ? null : { id, status: overrides.tenantStatus ?? 'active' }),
   };
-  const defaultInstallation = {
-      id: installationId,
-      tenant_id: tenantId,
-      authorizer_appid: 'tt-app',
-      authorization_status: 'active',
-      installation_kind: 'merchant',
-      template_version: '1.0.0',
-      deployment_key: null,
-      runtime_config: {
-        brand: { logo_url: null, qualifications: [] },
-        theme: { primary_color: '#1677FF', navigation_text_color: 'white' },
-        features: {
-          cases: true, sites: true, sms_lead: true,
-          douyin_phone: false, phone_capture_mode: 'sms',
-        },
-        home_banners: [], trust_metrics: [], privacy_policy_version: 'v1',
-        contact_sla_text: '提交后一个工作日内联系',
-      },
-      tenant: { id: tenantId, status: 'active' },
-    };
   const installationRepository = {
     findActiveInstallation: mock(async () =>
       overrides.installation === undefined ? defaultInstallation : overrides.installation),
