@@ -4,9 +4,11 @@ import { useState } from "react";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusAlert } from "@/components/admin/status-alert";
+import { cn } from "@/lib/utils";
 import type { AiProviderRecord, PageData } from "./ai-config-types";
 import { AiProviderDelete } from "./ai-provider-delete";
 import { AiProviderEditor } from "./ai-provider-editor";
@@ -30,9 +32,13 @@ function ProviderRail({ page, selectedId, pending, error, canManage, deleteDisab
     </div>
     {error ? <StatusAlert>{error}<Button variant="outline" onClick={() => onPageChange(page.pagination.page)}>重试</Button></StatusAlert> : null}
     <div className="flex min-h-0 flex-col gap-2 overflow-auto" aria-busy={pending}>
-      {pending ? <Skeleton className="h-20 w-full motion-reduce:animate-none" aria-label="供应商列表加载中" /> : page.list.length ? page.list.map((provider) => <div key={provider.id} className="flex flex-col gap-2 rounded-md border p-3">
-        <Button variant={selectedId === provider.id ? "secondary" : "ghost"} className="h-auto min-w-0 justify-start" aria-pressed={selectedId === provider.id} onClick={() => onSelect(provider.id)}>
-          <span className="truncate" title={provider.name}>{provider.name}</span>
+      {pending ? <Skeleton className="h-20 w-full motion-reduce:animate-none" aria-label="供应商列表加载中" /> : page.list.length ? page.list.map((provider) => <div key={provider.id} data-provider-id={provider.id} className={cn(
+        "flex flex-col gap-2 rounded-md border p-3 transition-colors",
+        selectedId === provider.id ? "border-primary/40 bg-primary/10" : "border bg-card",
+      )}>
+        <Button variant="ghost" className="h-auto min-w-0 justify-start px-1" aria-pressed={selectedId === provider.id}
+          aria-current={selectedId === provider.id ? "true" : undefined} onClick={() => onSelect(provider.id)}>
+          <span className={cn("truncate", selectedId === provider.id && "font-semibold text-primary")} title={provider.name}>{provider.name}</span>
         </Button>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <Badge variant={provider.status === "active" ? "success" : "outline"}>{provider.status === "active" ? "启用" : "停用"}</Badge>
@@ -48,6 +54,37 @@ function ProviderRail({ page, selectedId, pending, error, canManage, deleteDisab
   </aside>;
 }
 
+function ProviderDetail({ provider, canManage, onSaved, onReload }: {
+  provider: AiProviderRecord | null; canManage: boolean;
+  onSaved: (provider: AiProviderRecord) => Promise<void>;
+  onReload?: (id: string) => Promise<AiProviderRecord | null>;
+}) {
+  const detailId = provider?.id || "new";
+  return <Card key={detailId} role="region" aria-labelledby="ai-provider-detail-label"
+    data-provider-detail-id={detailId} className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+    <span id="ai-provider-detail-label" className="sr-only">供应商详情</span>
+    <CardHeader className="shrink-0 border-b">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <CardTitle id="ai-provider-detail-title" className="truncate" title={provider?.name || "新增供应商"}>
+            {provider?.name || "新增供应商"}
+          </CardTitle>
+          <CardDescription>{provider ? `系统编码：${provider.code}` : "保存后由系统生成供应商编码。"}</CardDescription>
+        </div>
+        {provider ? <Badge variant={provider.status === "active" ? "success" : "outline"}>
+          {provider.status === "active" ? "启用" : "停用"}
+        </Badge> : null}
+      </div>
+    </CardHeader>
+    <CardContent className="flex min-h-0 flex-1 flex-col gap-6 overflow-auto pt-5">
+      <AiProviderEditor provider={provider} canManage={canManage} onSaved={onSaved}
+        onReload={provider ? () => onReload?.(provider.id) ?? Promise.resolve(null) : undefined} />
+      <Separator />
+      <AiProviderModels providerId={provider?.id || ""} providerName={provider?.name || "新供应商"} canManage={canManage} />
+    </CardContent>
+  </Card>;
+}
+
 export function AiProviderWorkspace(props: WorkspaceProps) {
   const [selectedId, setSelectedId] = useState<string | null>(props.page.list[0]?.id || null);
   const provider = props.page.list.find((item) => item.id === selectedId) || props.providers.find((item) => item.id === selectedId) || null;
@@ -61,11 +98,6 @@ export function AiProviderWorkspace(props: WorkspaceProps) {
   }
   return <div className="grid h-full min-h-0 auto-rows-max grid-cols-1 gap-4 overflow-auto xl:auto-rows-fr xl:grid-cols-[320px_minmax(0,1fr)] xl:overflow-hidden">
     <ProviderRail {...props} selectedId={selectedId} onSelect={setSelectedId} onCreate={() => setSelectedId(null)} onDeleted={deleted} />
-    <div className="flex min-h-0 min-w-0 flex-col gap-6 overflow-auto rounded-lg border bg-card p-5">
-      <AiProviderEditor key={provider?.id || "new"} provider={provider} canManage={props.canManage} onSaved={saved}
-        onReload={provider ? () => props.onReload?.(provider.id) ?? Promise.resolve(null) : undefined} />
-      <Separator />
-      <AiProviderModels key={provider?.id || "new"} providerId={provider?.id || ""} providerName={provider?.name || "新供应商"} canManage={props.canManage} />
-    </div>
+    <ProviderDetail provider={provider} canManage={props.canManage} onSaved={saved} onReload={props.onReload} />
   </div>;
 }

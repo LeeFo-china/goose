@@ -7,6 +7,10 @@ function source(path: string) {
   return readFileSync(url, "utf8");
 }
 
+function occurrences(value: string, fragment: string) {
+  return value.split(fragment).length - 1;
+}
+
 describe("supplier master-detail workspace", () => {
   test("keeps the page summary compact on narrow screens", () => {
     const page = source("../../app/(console)/platform/ai-models/page.tsx");
@@ -35,6 +39,30 @@ describe("supplier master-detail workspace", () => {
     expect(models).toContain("containerClassName=");
     expect(models).toContain('className="break-all text-xs text-muted-foreground"');
     expect(models).not.toContain('className="truncate text-xs text-muted-foreground"');
+  });
+  test("workspace owns one semantic provider detail card without nested cards", () => {
+    const workspace = source("./ai-provider-workspace.tsx");
+    expect(workspace).toContain("<ProviderDetail");
+    expect(occurrences(workspace, "<ProviderDetail")).toBe(1);
+    expect(occurrences(workspace, "page.list.map")).toBe(1);
+    expect(workspace).toContain("<Card key={detailId}");
+    expect(workspace).toContain('aria-labelledby="ai-provider-detail-label"');
+    expect(workspace).toContain("data-provider-detail-id={detailId}");
+    expect(workspace).toContain('<span id="ai-provider-detail-label" className="sr-only">供应商详情</span>');
+    expect(workspace).toContain("<CardHeader");
+    expect(workspace).toContain("<CardDescription");
+    expect(workspace).toContain("<CardContent");
+    expect(occurrences(workspace, "<AiProviderEditor")).toBe(1);
+    expect(occurrences(workspace, "<AiProviderModels")).toBe(1);
+    expect(source("./ai-provider-editor.tsx")).not.toContain("<Card");
+    expect(source("./ai-provider-models.tsx")).not.toContain("<Card");
+  });
+  test("provider rail exposes current selection and stable provider identity", () => {
+    const workspace = source("./ai-provider-workspace.tsx");
+    expect(workspace).toContain('aria-current={selectedId === provider.id ? "true" : undefined}');
+    expect(workspace).toContain("data-provider-id={provider.id}");
+    expect(workspace).toContain("border-primary/40 bg-primary/10");
+    expect(workspace).toContain("font-semibold text-primary");
   });
   test("models expose modality controls and only a read-only existing system code", () => {
     const models = source("./ai-provider-models.tsx");
