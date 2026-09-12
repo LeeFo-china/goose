@@ -4,7 +4,7 @@ import { Writable } from 'node:stream';
 import { RenderingLibraryStyleSchema, type RenderingLibraryStyle } from '@gooes/domain';
 import { Errors } from '@/errors/error-factory';
 import { RenderingLibraryStorage } from '@/gateways/rendering-library-storage/client';
-import type { BeginDecision, CompleteDecision, FailDecision, TenantRenderingPublicationRepository } from '@/repositories/tenant-rendering-publication';
+import type { BeginDecision, CompleteDecision, FailDecision, TenantRenderingPublicationDatabaseClient, TenantRenderingPublicationRepository } from '@/repositories/tenant-rendering-publication';
 import type { RenderingLibrarySourceFile, TenantRenderingLibraryRepository } from '@/repositories/tenant-rendering-library';
 import { createInput, fileId, makeAuth, otherTenantId, styleId, tenantId } from '@/services/tenant-rendering-library/test-fixtures';
 
@@ -44,7 +44,7 @@ async function fixture() {
   const state = { current, source, missing: false, sourceMissing: false, begin: structuredClone(claimed) as BeginDecision,
     complete: { ...succeeded } as CompleteDecision, failed: { decision: 'failed' } as FailDecision,
     errorAt: '', publicExists: false, commandStatus: 'preparing', lease: leaseToken,
-    latestPatch: {} as Partial<RenderingLibraryStyle>, latestMissing: false, findCount: 0 };
+    latestPatch: {} as Partial<RenderingLibraryStyle>, latestMissing: false, findCount: 0, configReads: 0, failConfigAt: 0 };
   const repository: Pick<TenantRenderingLibraryRepository, 'find' | 'findSourceFile'> = {
     async find(tenant, id) {
       calls.push(['find', tenant, id]); events.push('find'); state.findCount++;
@@ -80,7 +80,8 @@ async function fixture() {
   // Exercise the real gateway; only persistence and COS are external replacements.
   const gateway = new RenderingLibraryStorage({ loadConfig: async () => {
     events.push('config');
-    if (state.errorAt === 'config') throw Errors.badRequest('raw config secret');
+    state.configReads++;
+    if (state.errorAt === 'config' || state.configReads === state.failConfigAt) throw Errors.badRequest('raw config secret');
     return config;
   }, createCos: () => ({
     async headObject(params) {
@@ -186,6 +187,17 @@ test('existing public copy recovers through HEAD and URL resolution without GET 
   expect(f.events).toEqual(['find', 'source', 'uuid', 'begin', 'config', 'HEAD', 'resolve', 'config', 'complete', 'find']);
 });
 
+test('complete result 2 accepts a concurrent republication to version 3 before final find', async () => {
+  const f = await fixture();
+  f.state.latestPatch = { version: 3, published_version: 3, published_at: '2026-09-13T00:00:01Z' };
+  expect(f.state.complete).toEqual(succeeded);
+  expect(await f.service.publish(makeAuth(), styleId, body)).toMatchObject({
+    status: 'published', version: 3, published_version: 3, published_at: '2026-09-13T00:00:01Z',
+  });
+  expect(f.events.slice(-2)).toEqual(['complete', 'find']);
+  expect(f.events).not.toContain('fail');
+});
+
 test('succeeded replay accepts advanced editable and publication versions without source or storage', async () => {
   const f = await fixture();
   await f.service.publish(makeAuth(), styleId, body);
@@ -228,14 +240,41 @@ test('claimed mismatches and stale claims are rejected before COS or fail', asyn
 test('definite config, path and source failures record exactly one allowlisted failure', async () => {
   for (const [errorAt, failureCode] of [['config', 'storage_unavailable'], ['GET', 'copy_failed']] as const) {
     const f = await fixture(); f.state.errorAt = errorAt;
-    await expect(f.service.publish(makeAuth(), styleId, body)).rejects.toMatchObject({ code: 'RENDERING_STYLE_PUBLIC_COPY_FAILED', details: undefined });
+    await expect(f.service.publish(makeAuth(), styleId, body)).rejects.toMatchObject({
+      statusCode: errorAt === 'config' ? 503 : 502,
+      code: errorAt === 'config' ? 'RENDERING_STORAGE_UNAVAILABLE' : 'RENDERING_STYLE_PUBLIC_COPY_FAILED', details: undefined });
     expect(f.calls.filter(([name]) => name === 'fail')).toEqual([['fail', { tenantId, commandId, leaseToken, failureCode }]]);
     expect(f.events).not.toContain('complete'); expect(f.events).not.toContain('PUT');
   }
   const f = await fixture(); f.state.begin = { ...claimed, public_location: { ...publicLocation, object_key: 'public/other' } };
-  await expect(f.service.publish(makeAuth(), styleId, body)).rejects.toMatchObject({ code: 'RENDERING_STYLE_PUBLIC_COPY_FAILED' });
+  await expect(f.service.publish(makeAuth(), styleId, body)).rejects.toMatchObject({ statusCode: 503, code: 'RENDERING_STORAGE_UNAVAILABLE' });
   expect(f.calls).toContainEqual(['fail', { tenantId, commandId, leaseToken, failureCode: 'storage_unavailable' }]);
   expect(f.events).not.toContain('HEAD');
+});
+
+for (const phase of ['head', 'copy', 'resolve'] as const) {
+  test(`known storage unavailability preserves sanitized 503 during ${phase}`, async () => {
+    const f = await fixture();
+    f.state.failConfigAt = phase === 'head' ? 1 : 2;
+    f.state.publicExists = phase === 'resolve';
+    await expect(f.service.publish(makeAuth(), styleId, body)).rejects.toMatchObject({
+      statusCode: 503, code: 'RENDERING_STORAGE_UNAVAILABLE', message: '装修效果素材存储暂不可用', details: undefined,
+    });
+    expect(f.calls.filter(([name]) => name === 'fail')).toEqual(phase === 'resolve' ? []
+      : [['fail', { tenantId, commandId, leaseToken, failureCode: 'storage_unavailable' }]]);
+    expect(f.state.commandStatus).toBe(phase === 'resolve' ? 'preparing' : 'failed');
+    expect(f.events).not.toContain('GET'); expect(f.events).not.toContain('PUT'); expect(f.events).not.toContain('complete');
+    expect(f.events.filter((event) => event === 'HEAD')).toHaveLength(phase === 'head' ? 0 : 1);
+    expect(f.events.includes('resolve')).toBe(phase === 'resolve');
+  });
+}
+
+test('storage-unavailable failure-recording errors still propagate the fixed DB error', async () => {
+  const f = await fixture(); f.state.failConfigAt = 1; f.state.errorAt = 'fail';
+  await expect(f.service.publish(makeAuth(), styleId, body)).rejects.toMatchObject({
+    code: 'DB_ERROR', message: '记录装修效果素材发布失败', details: undefined,
+  });
+  expect(f.events.filter((event) => event === 'fail')).toHaveLength(1);
 });
 
 test('HEAD, PUT and complete unknown results never fail, retry or claim success', async () => {
@@ -259,6 +298,37 @@ test('lost PUT response keeps preparing; next lease recovers with HEAD true and 
   expect(f.calls.filter(([name]) => name === 'PUT')).toHaveLength(1);
   expect(f.calls).toContainEqual(['complete', { tenantId, commandId, leaseToken: nextLease, publicUrl, employeeId: fileId }]);
   expect(f.calls.some(([name]) => name === 'fail')).toBe(false);
+});
+
+test('committed complete with a lost transport response replays the same key without another copy', async () => {
+  const f = await fixture();
+  const { TenantRenderingPublicationRepository } = await import('@/repositories/tenant-rendering-publication');
+  const commit = f.publicationRepository.complete;
+  const completeInput = { tenantId, commandId, leaseToken, publicUrl, employeeId: fileId };
+  const rpcCalls: unknown[][] = [];
+  // Preserve the real repository's error boundary while the transport commits before its response is lost.
+  const client = { async rpc(name: string, params: unknown) {
+    rpcCalls.push([name, params]);
+    f.state.begin = await commit(completeInput);
+    throw Errors.badRequest('raw SQL credential transport rejection after commit');
+  } } as unknown as TenantRenderingPublicationDatabaseClient;
+  const repository = new TenantRenderingPublicationRepository(client);
+  f.publicationRepository.complete = repository.complete.bind(repository);
+  await expect(f.service.publish(makeAuth(), styleId, body)).rejects.toMatchObject({
+    code: 'DB_ERROR', message: '完成装修效果素材发布失败', details: undefined,
+  });
+  expect(f.state.commandStatus).toBe('succeeded');
+  expect(f.current).toMatchObject({ ...summary, version: 2, status: 'published' });
+  expect(rpcCalls).toEqual([['complete_tenant_rendering_style_publish', {
+    p_tenant_id: tenantId, p_command_id: commandId, p_lease_token: leaseToken, p_public_url: publicUrl, p_employee_id: fileId,
+  }]]);
+  f.events.length = 0; f.state.lease = nextLease;
+  expect(await f.service.publish(makeAuth(), styleId, body)).toMatchObject({ ...summary, version: 2 });
+  expect(f.events).toEqual(['find', 'uuid', 'begin', 'find']);
+  expect(f.calls.filter(([name]) => name === 'PUT')).toHaveLength(1);
+  expect(f.calls.filter(([name]) => name === 'complete')).toHaveLength(1);
+  expect(f.calls.some(([name]) => name === 'fail')).toBe(false);
+  expect(rpcCalls).toHaveLength(1);
 });
 
 test('failure-recording RPC errors propagate fixed DB error', async () => {

@@ -61,15 +61,16 @@ export class TenantRenderingPublicationService {
     return { ...file, checksum: checksum.data };
   }
 
-  private async latest(tenantId: string, styleId: string, resultVersion: number, replay: boolean): Promise<RenderingLibraryStyle> {
+  private async latest(tenantId: string, styleId: string, resultVersion: number): Promise<RenderingLibraryStyle> {
     const row = await this.dependencies.repository.find(tenantId, styleId);
     if (!row) return rejectDecision('not_found');
     const parsed = RenderingLibraryStyleSchema.safeParse(row);
     if (!parsed.success) return dataError();
     const dto = parsed.data;
+    // Another publication may commit between this command's completion and the final read.
     if (dto.tenant_id !== tenantId || dto.id !== styleId || dto.status === 'draft' || dto.published_version === null
       || dto.published_at === null || dto.version < dto.published_version
-      || (replay ? dto.published_version < resultVersion : dto.published_version !== resultVersion)) return dataError();
+      || dto.published_version < resultVersion) return dataError();
     return dto;
   }
 
@@ -105,6 +106,9 @@ export class TenantRenderingPublicationService {
           rejectDecision(result.decision === 'lease_conflict' ? 'in_progress' : result.decision);
         }
       }
+      if (code === 'RENDERING_STORAGE_UNAVAILABLE') {
+        throw Errors.business(503, '装修效果素材存储暂不可用', 'RENDERING_STORAGE_UNAVAILABLE');
+      }
       throw Errors.business(502, '装修效果素材公开副本准备失败，请稍后重试', 'RENDERING_STYLE_PUBLIC_COPY_FAILED');
     }
   }
@@ -126,7 +130,7 @@ export class TenantRenderingPublicationService {
       expectedVersion: body.expected_version, idempotencyKey: body.idempotency_key, requestHash, leaseToken });
     if (begin.decision === 'succeeded') {
       if (begin.result_version !== body.expected_version + 1) return dataError();
-      return this.latest(tenantId, styleId, begin.result_version, true);
+      return this.latest(tenantId, styleId, begin.result_version);
     }
     if (begin.decision !== 'claimed') return rejectDecision(begin.decision);
     if (!source) return dataError();
@@ -137,6 +141,6 @@ export class TenantRenderingPublicationService {
       commandId: begin.command_id, leaseToken, publicUrl, employeeId });
     if (complete.decision !== 'succeeded') return rejectDecision(complete.decision === 'lease_conflict' ? 'in_progress' : complete.decision);
     if (complete.command_id !== begin.command_id || complete.result_version !== input.targetVersion) return dataError();
-    return this.latest(tenantId, styleId, complete.result_version, false);
+    return this.latest(tenantId, styleId, complete.result_version);
   }
 }
