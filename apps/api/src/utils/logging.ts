@@ -1,5 +1,9 @@
 import type { FastifyRequest } from "fastify";
 
+export function isAiSecretSettingsRequest(url: string): boolean {
+  return /^\/platform\/ai-config\/secret-settings(?:[/?]|$)/.test(url);
+}
+
 export function getLogPath(url: string) {
   try {
     return new URL(url, "http://localhost").pathname;
@@ -20,13 +24,14 @@ export function getLogQueryKeys(url: string) {
 
 export function getRequestLogContext(request: FastifyRequest) {
   const authContext = request.authContext;
+  const isSecretRequest = isAiSecretSettingsRequest(request.url);
 
   return {
     requestId: request.id,
     method: request.method,
-    path: getLogPath(request.url),
+    path: isSecretRequest ? "/platform/ai-config/secret-settings/:key" : getLogPath(request.url),
     route: request.routeOptions?.url ?? null,
-    queryKeys: getLogQueryKeys(request.url),
+    queryKeys: isSecretRequest ? [] : getLogQueryKeys(request.url),
     authUserId: authContext?.authUserId || request.user?.sub || null,
     employeeId: authContext?.employeeId || null,
     roleCodes: authContext?.roleCodes || request.user?.roles || [],

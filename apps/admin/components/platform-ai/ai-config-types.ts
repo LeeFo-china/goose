@@ -5,6 +5,7 @@ export type AiProviderRecord = {
   provider_type: "openai_compatible" | "openrouter" | string;
   endpoint_url: string | null;
   api_key_setting_key: string | null;
+  api_key_setting_invalid?: boolean;
   status: "active" | "inactive";
   sort_order: number;
   version?: number | null;
@@ -31,6 +32,10 @@ export type AiModelRecord = {
 };
 
 export type AiRouteModelOptionRecord = {
+  name?: string;
+  model_name?: string;
+  input_modalities?: string[] | null;
+  probe_status?: AiModelRecord["probe_status"];
   source: "internal" | "catalog" | "manual";
   value: string;
   model_id?: string | null;
@@ -42,13 +47,36 @@ export type AiRouteModelOptionRecord = {
   apply_status?: string | null;
 };
 
+// Successful API responses describe catalog discovery independently of the returned model list.
+export type AiRouteModelOptionPage = PageData<AiRouteModelOptionRecord> & {
+  discovery:
+    | { mode: "internal_only"; status: "unsupported" }
+    | { mode: "openrouter_catalog"; status: "ready" | "empty" };
+};
+
+export type AiSystemSceneRecord = {
+  code: string;
+  name: string;
+  modality: "text" | "image" | "video" | "speech";
+  required_input_modalities: Array<"text" | "image" | "video" | "speech">;
+  runtime_status: "connected" | "not_connected";
+  requirements_source: "runtime" | "planned_adapter" | "admin";
+  requires_streaming: boolean;
+  min_reference_images: number;
+  source: "system" | "legacy" | "custom";
+  status?: "active" | "inactive";
+  version?: number | null;
+  updated_at?: string;
+  allow_new_configuration: boolean;
+};
+
 export type AiSceneRouteRecord = {
   id: string;
   scene_code: string;
   name: string;
   primary_model_id: string | null;
   fallback_model_id: string | null;
-  quality_tier?: "fast" | "balanced" | "quality";
+  quality_tier?: "fast" | "balanced" | "quality" | null;
   modality?: "text" | "image" | "video" | "speech";
   temperature: number | null;
   response_format: "json_object" | "text" | null;

@@ -4,7 +4,8 @@ import { AppError } from "../errors/app-error";
 import { fail } from "@/utils/response";
 import { ErrorCodes } from "../errors/error-codes";
 import { ZodError } from "zod";
-import { getRequestLogContext } from "@/utils/logging";
+import { getRequestLogContext, isAiSecretSettingsRequest } from "@/utils/logging";
+import { Errors } from "@/errors/error-factory";
 
 function hasFastifyValidation(error: unknown): error is { validation: unknown } {
   return Boolean(
@@ -93,6 +94,18 @@ function getErrorLogMeta(error: unknown) {
 
 const errorHandler = (app: FastifyInstance) => {
   app.setErrorHandler((error, request, reply) => {
+    if (isAiSecretSettingsRequest(request.url)) {
+      reply.header("Cache-Control", "private, no-store");
+      const statusCode = getErrorLogMeta(error).statusCode;
+      // JSON 解析错误也可能含请求体片段；该密钥入口只记录并返回固定错误。
+      error = Errors.business(
+        statusCode,
+        statusCode >= 500 ? "AI 密钥操作结果未确认，请刷新状态后重试"
+          : statusCode === 401 ? "未授权" : statusCode === 403 ? "无权限" : "AI 密钥配置请求无效",
+        statusCode >= 500 ? ErrorCodes.INTERNAL_ERROR
+          : statusCode === 401 ? ErrorCodes.UNAUTHORIZED : statusCode === 403 ? ErrorCodes.FORBIDDEN : ErrorCodes.VALIDATION_ERROR,
+      );
+    }
     const requestId = request.id;
     const logMeta = getErrorLogMeta(error);
     const logPayload = getErrorLogPayload(

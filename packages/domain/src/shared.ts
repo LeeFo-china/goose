@@ -28,6 +28,7 @@ export type {
   AiQualityTier,
   AiScope,
 } from './ai-generation';
+export * from './ai-scenes';
 
 export {
   AUTH_TARGET_ROLE_VALUES,
@@ -274,3 +275,5 @@ export type {
 
 export { TENANT_STATUS_VALUES, isTenantStatus } from './tenant';
 export type { TenantBasicInfo, TenantStatus } from './tenant';
+export * from './customer-rendering';
+export * from './rendering-library';

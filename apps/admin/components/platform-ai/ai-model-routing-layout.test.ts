@@ -1,66 +1,66 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 
-function readSource(path: string) {
-  return readFileSync(new URL(path, import.meta.url), "utf8");
+function source(path: string) {
+  const url = new URL(path, import.meta.url);
+  expect(existsSync(url)).toBe(true);
+  return readFileSync(url, "utf8");
 }
 
-describe("AI model routing page layout", () => {
-  test("keeps the routing workspace inside the console viewport", () => {
-    const page = readSource("../../app/(console)/platform/ai-models/page.tsx");
-    const panel = readSource("./ai-model-routing-panel.tsx");
-    const routeTab = readSource("./ai-model-route-tab.tsx");
-    const sections = readSource("./ai-model-routing-sections.tsx");
-    const table = readSource("../ui/table.tsx");
-
-    expect(page).toContain("h-[calc(100vh-6.5625rem)]");
-    expect(page).toContain("min-h-0 flex-col gap-5 overflow-hidden");
-    expect(page).toContain('className="shrink-0"');
-    expect(page).toContain('className="grid shrink-0 gap-3 md:grid-cols-3"');
-    expect(page).not.toContain("openRouterProviderId");
-    expect(page).not.toContain("catalog-runs?page=1&pageSize=20");
-    expect(page).not.toContain("/platform/ai-config/models?page=1&pageSize=100");
-
-    expect(panel).toContain('className="flex min-h-0 flex-1 flex-col gap-4"');
-    expect(panel).toContain('className="w-fit shrink-0"');
+describe("supplier master-detail workspace", () => {
+  test("keeps the page summary compact on narrow screens", () => {
+    const page = source("../../app/(console)/platform/ai-models/page.tsx");
+    expect(page).not.toContain('className="grid shrink-0 gap-3 md:grid-cols-3"');
+    expect(page).toContain("text-xl font-semibold");
+  });
+  test("supplier tab mounts one workspace and route tab remains separate", () => {
+    const panel = source("./ai-model-routing-panel.tsx");
+    expect(panel).toContain("<AiProviderWorkspace");
     expect(panel).toContain('<TabsTrigger value="routes">场景路由</TabsTrigger>');
     expect(panel).toContain('<TabsTrigger value="providers">供应商</TabsTrigger>');
-    expect(panel).not.toContain('<TabsTrigger value="catalog">OpenRouter 目录</TabsTrigger>');
-    expect(panel).not.toContain('<TabsTrigger value="models">模型</TabsTrigger>');
-    expect(panel.match(/className="m-0 min-h-0 flex-1 overflow-hidden"/g)?.length ?? 0).toBe(2);
-    expect(panel).toContain("page={providerPage}");
-    expect(panel).not.toContain("page={modelPage}");
-    expect(panel).toContain("routePage={routePage}");
-    expect(panel).toContain("providerOptions");
-    expect(panel).not.toContain("modelOptions");
-    expect(panel).toContain("providers={providerOptions}");
-    expect(panel).toContain("route-model-options");
-    expect(panel).toContain("await reloadProviderState()");
-    expect(panel).toContain("await reloadRouteState()");
-    expect(panel).toContain("/platform/ai-config/providers?page=");
-    expect(panel).toContain("/platform/ai-config/routes?page=");
-    expect(panel).toContain("/platform/ai-config/providers?page=1&pageSize=100");
-    expect(sections).toContain("pending ? (");
-    expect(routeTab).toContain("isRouteLoading ? (");
-    expect(panel).not.toContain('className="m-0 min-h-0 flex-1 overflow-auto pr-1"');
-    expect(panel.match(/className="grid h-full min-h-0 gap-4 overflow-auto xl:grid-cols-\[360px_minmax\(0,1fr\)\] xl:overflow-hidden"/g)?.length ?? 0).toBe(1);
-
-    expect(table).toContain("containerClassName");
-    expect(routeTab).toContain('className="grid h-full min-h-0 gap-4 overflow-auto xl:grid-cols-[360px_minmax(0,1fr)] xl:overflow-hidden"');
-    expect(routeTab).toContain("选择供应商");
-    expect(routeTab).toContain("搜索模型");
-    expect(routeTab).toContain("primaryOptions");
-    expect(routeTab.match(/<Card className="flex min-h-0 flex-col overflow-hidden">/g)?.length ?? 0).toBe(2);
-    expect(routeTab).toContain('<CardContent className="min-h-0 flex-1 overflow-auto">');
-    expect(routeTab).toContain('<CardHeader className="shrink-0">');
-    expect(routeTab).toContain('<CardContent className="min-h-0 flex-1 p-0">');
-    expect(routeTab).toContain('<Table containerClassName="h-full" className="min-w-[980px]">');
-    expect(routeTab).toContain('<TableHeader className="sticky top-0 bg-card">');
-    expect(sections.match(/<Card className="flex min-h-0 flex-col overflow-hidden">/g)?.length ?? 0).toBe(4);
-    expect(sections.match(/<CardHeader className="shrink-0">/g)?.length ?? 0).toBe(4);
-    expect(sections.match(/<CardContent className="min-h-0 flex-1 overflow-auto">/g)?.length ?? 0).toBe(2);
-    expect(sections.match(/<CardContent className="min-h-0 flex-1 p-0">/g)?.length ?? 0).toBe(2);
-    expect(sections.match(/containerClassName="h-full"/g)?.length ?? 0).toBe(2);
-    expect(sections.match(/<TableHeader className="sticky top-0 bg-card">/g)?.length ?? 0).toBe(2);
+    expect(panel).not.toContain("<ProviderFormCard");
+    expect(panel).not.toContain("<ModelFormCard");
+    expect(panel).not.toContain("providerForm");
+  });
+  test("workspace keeps table overflow local with a single-column mobile layout", () => {
+    const workspace = source("./ai-provider-workspace.tsx");
+    expect(workspace).toContain("xl:grid-cols-[320px_minmax(0,1fr)]");
+    expect(workspace).toContain("<ProviderRail");
+    expect(workspace).toContain("min-w-0");
+    expect(workspace).toContain("overflow-auto");
+    expect(workspace).toContain("<AiProviderEditor");
+    expect(workspace).toContain("<Separator");
+    expect(workspace).toContain("<AiProviderModels");
+    const models = source("./ai-provider-models.tsx");
+    expect(models).toContain("containerClassName=");
+    expect(models).toContain('className="break-all text-xs text-muted-foreground"');
+    expect(models).not.toContain('className="truncate text-xs text-muted-foreground"');
+  });
+  test("models expose modality controls and only a read-only existing system code", () => {
+    const models = source("./ai-provider-models.tsx");
+    expect(models).toContain("模型模态");
+    expect(models).toContain("输入模态");
+    expect(models).toContain("系统编码");
+    expect(models).toContain("readOnly");
+    expect(models).not.toMatch(/onChange\(\{\s*\.\.\.form,\s*code:/);
+    expect(source("./ai-model-routing-sections.tsx")).not.toMatch(/onChange\(\{\s*\.\.\.form,\s*code:/);
+  });
+  test("provider editor has supported protocols and factual validation results", () => {
+    const editor = source("./ai-provider-editor.tsx");
+    expect(editor).toContain("Endpoint Base URL");
+    expect(editor).toContain("openai_compatible");
+    expect(editor).toContain("openrouter");
+    expect(editor).not.toContain("anthropic");
+    expect(editor).toContain("/validate");
+    expect(editor).toContain('status === "verified"');
+    expect(editor).toContain("配置已保存，当前协议没有无损验证方式");
+  });
+  test("secret editor can manage a registered reference before provider save", () => {
+    const secret = source("./ai-provider-secret-editor.tsx");
+    expect(secret).not.toContain("Boolean(form.id &&");
+    expect(secret).toContain("已配置，模型调用未验证");
+    expect(secret).toContain("没有密钥管理权限");
+    expect(secret).not.toContain("selected?.key");
+    expect(secret).not.toMatch(/<FieldDescription>\s*\{form\.api_key_setting_key/);
   });
 });

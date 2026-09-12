@@ -2,6 +2,7 @@ import { AppError } from "@/errors/app-error";
 import { Errors } from "@/errors/error-factory";
 import { matchesPostgresError } from "@/errors/postgres-error-details";
 import { SupabaseDB } from "@/utils/supabase";
+import { AI_SECRET_SETTING_KEYS, isAiSecretSettingKey } from "@/schema/ai-secret-settings";
 
 export type SystemSettingValueType = "string" | "number" | "boolean" | "json";
 export type SystemSettingStatus = "active" | "inactive";
@@ -31,6 +32,10 @@ export type PlatformSecretSettingSnapshot = PlatformSecretSettingRecord & Pick<
   SystemSettingRecord,
   "updated_at"
 >;
+
+export type PlatformAiSecretMetadata = Pick<SystemSettingRecord,
+  "key" | "group_code" | "is_secret" | "status" | "value_type"
+> & { has_value: boolean };
 
 type AdminClient = ReturnType<typeof SupabaseDB.getAdminClient>;
 
@@ -146,6 +151,26 @@ export class SystemSettingRepository {
     return Array.isArray(data) ? data as PlatformSecretSettingRecord[] : [];
   }
 
+  async listPlatformAiSecretMetadata(): Promise<PlatformAiSecretMetadata[]> {
+    // 固定四项内部辅助配置，小于 50，豁免分页；一次有界查询避免逐项读取。
+    const { data, error } = await this.table()
+      .select("key,group_code,is_secret,status,value_type,value_text")
+      .in("key", AI_SECRET_SETTING_KEYS)
+      .is("tenant_id", null)
+      .limit(4);
+    if (error) throw Errors.dbError("读取 AI 密钥配置状态失败");
+    return ((data ?? []) as Pick<SystemSettingRecord,
+      "key" | "group_code" | "is_secret" | "status" | "value_type" | "value_text"
+    >[]).map(record => ({
+      key: record.key,
+      group_code: record.group_code,
+      is_secret: record.is_secret,
+      status: record.status,
+      value_type: record.value_type,
+      has_value: Boolean(record.value_text?.trim()),
+    }));
+  }
+
   async findPlatformSecretByKey(
     key: string,
   ): Promise<PlatformSecretSettingSnapshot | null> {
@@ -197,8 +222,8 @@ export class SystemSettingRepository {
       .insert({
         tenant_id: input.tenantId || null,
         setting_key: input.key,
-        old_value_text: existing.is_secret ? null : existing.value_text,
-        new_value_text: existing.is_secret ? null : input.valueText,
+        old_value_text: existing.is_secret || isAiSecretSettingKey(input.key) ? null : existing.value_text,
+        new_value_text: existing.is_secret || isAiSecretSettingKey(input.key) ? null : input.valueText,
         changed_by_employee_id: input.employeeId,
       });
 
@@ -246,7 +271,7 @@ export class SystemSettingRepository {
         tenant_id: input.tenantId,
         setting_key: input.key,
         old_value_text: null,
-        new_value_text: input.isSecret ? null : input.valueText,
+        new_value_text: input.isSecret || isAiSecretSettingKey(input.key) ? null : input.valueText,
         changed_by_employee_id: input.employeeId,
       });
 

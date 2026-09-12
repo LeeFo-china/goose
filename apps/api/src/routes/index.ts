@@ -100,6 +100,8 @@ import TenantDouyinMiniappController from "@/controllers/tenant-douyin-miniapp";
 import TenantDouyinProjectsController from "@/controllers/tenant-douyin-projects";
 import TenantDouyinLeadsController from "@/controllers/tenant-douyin-leads";
 import TenantCustomerLeadsController from "@/controllers/tenant-customer-leads";
+import TenantRenderingLibraryController from "@/controllers/tenant-rendering-library";
+import TenantRenderingLibraryFilesController from "@/controllers/tenant-rendering-library/files";
 import TenantDouyinMaterialNotesController from "@/controllers/tenant-douyin-material-notes";
 import TenantOwnerDailyDashboardController from "@/controllers/tenant-owner-daily-dashboard";
 import PlatformDouyinMiniappsController from "@/controllers/platform-douyin-miniapps";
@@ -235,6 +237,8 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   TenantDouyinProjectsController.registerExtraRoutes(app);
   TenantDouyinLeadsController.registerExtraRoutes(app);
   TenantCustomerLeadsController.registerExtraRoutes(app);
+  TenantRenderingLibraryController.registerExtraRoutes(app);
+  TenantRenderingLibraryFilesController.registerExtraRoutes(app);
   TenantDouyinMaterialNotesController.registerExtraRoutes(app);
   TenantOwnerDailyDashboardController.registerExtraRoutes(app);
   PlatformDouyinMiniappsController.registerExtraRoutes(app);

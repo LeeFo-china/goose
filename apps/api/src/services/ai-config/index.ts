@@ -1,7 +1,6 @@
 import { Errors } from "@/errors/error-factory";
 import {
   aiConfigRepository,
-  type AiModelRecord,
   type AiProviderRecord,
 } from "@/repositories/ai-config";
 import { aiModelCatalogRepository } from "@/repositories/ai-model-catalog";
@@ -18,9 +17,15 @@ import type {
   AiRouteModelOptionResolvePayload,
   AiSceneRouteListQuery,
   AiSceneRoutePayload,
+  CreateAiSceneRoutePayload,
+  AiSceneListQuery,
+  UpdateAiCustomScenePayload,
+  DeleteAiCustomScenePayload,
+  DeleteAiProviderPayload,
   OpenRouterCatalogApplyPayload,
   OpenRouterCatalogPreviewPayload,
   OpenRouterProviderQuery,
+  SystemAiSceneListQuery,
   UpdateAiModelPayload,
   UpdateAiProviderPayload,
   UpdateAiSceneRoutePayload,
@@ -28,6 +33,12 @@ import type {
 import { openRouterModelSyncService } from "@/services/ai-config/openrouter-model-sync";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import { isAiSecretSettingKey } from "@/schema/ai-secret-settings";
+import { aiSecretSettingsService } from "@/services/ai-config/secret-settings";
+import { AiSceneRoutePolicy } from "@/services/ai-config/scene-route-policy";
+import { aiSystemSceneRepository, aiSceneRegistryRepository } from "@/repositories/ai-system-scenes";
+import { createAiResourceCode } from "./resource-codes";
+import { normalizeAiProviderBaseUrl } from "./endpoint-normalizer";
 
 const READ_PERMISSION = "platform.ai_config.read";
 const MANAGE_PERMISSION = "platform.ai_config.manage";
@@ -37,14 +48,24 @@ type ConfigRepositoryPort = Pick<typeof aiConfigRepository,
   | "createModel"
   | "createProvider"
   | "createSceneRoute"
+  | "deleteProvider"
   | "findModelByProviderAndCallName"
   | "getModelById"
+  | "getSceneRouteById"
   | "getProviderById"
+  | "hasModelRouteReference"
+  | "listModels"
   | "listRouteModels"
   | "updateModel"
   | "updateProvider"
   | "updateSceneRoute"
 >;
+
+type SystemSceneRepositoryPort = Pick<typeof aiSystemSceneRepository,
+  | "getByCode"
+  | "list"
+>;
+type SceneRegistryPort = Pick<typeof aiSceneRegistryRepository, "list" | "updateCustom" | "deleteCustom" | "createCustomSceneRoute">;
 
 type CatalogRepositoryPort = Pick<typeof aiModelCatalogRepository,
   | "applyOpenRouterCatalog"
@@ -68,25 +89,46 @@ type OpenRouterSyncServicePort = Pick<typeof openRouterModelSyncService,
 >;
 
 type AuditRepositoryPort = Pick<typeof platformAuditLogRepository, "create">;
+type CatalogConnectivityPort = Pick<typeof openRouterModelSyncService, "checkCatalogConnectivity">;
+export type AiProviderValidationResult =
+  | { status: "verified"; checked_at: string; method: "openrouter_catalog" }
+  | { status: "unsupported"; checked_at: string; method: "none"; message: string };
 
 type AiConfigServiceDependencies = {
+  codeFactory?: typeof createAiResourceCode;
+  catalogConnectivity?: CatalogConnectivityPort;
   configRepository?: Partial<ConfigRepositoryPort>;
   catalogRepository?: Partial<CatalogRepositoryPort>;
   openRouterSyncService?: OpenRouterSyncServicePort;
   auditRepository?: AuditRepositoryPort;
+  secretSettingsService?: Pick<typeof aiSecretSettingsService, "assertReference">;
+  systemSceneRepository?: Partial<SystemSceneRepositoryPort>;
+  sceneRegistryRepository?: Partial<SceneRegistryPort>;
 };
 
 export class AiConfigService {
+  private readonly codeFactory: typeof createAiResourceCode;
+  private readonly catalogConnectivity: CatalogConnectivityPort;
   private readonly configRepository: Partial<ConfigRepositoryPort>;
   private readonly catalogRepository: Partial<CatalogRepositoryPort>;
   private readonly openRouterSyncService: OpenRouterSyncServicePort;
   private readonly auditRepository: AuditRepositoryPort;
+  private readonly secretSettingsService: Pick<typeof aiSecretSettingsService, "assertReference">;
+  private readonly systemSceneRepository: Partial<SystemSceneRepositoryPort>;
+  private readonly sceneRoutePolicy: AiSceneRoutePolicy;
+  private readonly sceneRegistryRepository: Partial<SceneRegistryPort>;
 
   constructor(dependencies: AiConfigServiceDependencies = {}) {
+    this.codeFactory = dependencies.codeFactory ?? createAiResourceCode;
+    this.catalogConnectivity = dependencies.catalogConnectivity ?? openRouterModelSyncService;
     this.configRepository = dependencies.configRepository ?? aiConfigRepository;
     this.catalogRepository = dependencies.catalogRepository ?? aiModelCatalogRepository;
     this.openRouterSyncService = dependencies.openRouterSyncService ?? openRouterModelSyncService;
     this.auditRepository = dependencies.auditRepository ?? platformAuditLogRepository;
+    this.secretSettingsService = dependencies.secretSettingsService ?? aiSecretSettingsService;
+    this.systemSceneRepository = dependencies.systemSceneRepository ?? aiSystemSceneRepository;
+    this.sceneRegistryRepository = dependencies.sceneRegistryRepository ?? aiSceneRegistryRepository;
+    this.sceneRoutePolicy = new AiSceneRoutePolicy(this.configRepository, this.systemSceneRepository);
   }
 
   async getConfig(authContext: AuthContext) {
@@ -111,12 +153,32 @@ export class AiConfigService {
 
   async listModels(authContext: AuthContext, query: AiModelListQuery) {
     this.assertPlatformPermission(authContext, READ_PERMISSION);
-    return this.requireCatalogRepository("listModels").call(this.catalogRepository, query);
+    return this.requireConfigRepository("listModels").call(this.configRepository, query);
   }
 
   async listSceneRoutes(authContext: AuthContext, query: AiSceneRouteListQuery) {
     this.assertPlatformPermission(authContext, READ_PERMISSION);
     return this.requireCatalogRepository("listSceneRoutes").call(this.catalogRepository, query);
+  }
+
+  async listSystemScenes(authContext: AuthContext, query: SystemAiSceneListQuery) {
+    this.assertPlatformPermission(authContext, READ_PERMISSION);
+    return this.requireSystemSceneRepository("list").call(this.systemSceneRepository, query);
+  }
+
+  async listScenes(authContext: AuthContext, query: AiSceneListQuery) {
+    this.assertPlatformPermission(authContext, READ_PERMISSION);
+    return this.requireSceneRegistry("list").call(this.sceneRegistryRepository, query);
+  }
+
+  async updateCustomScene(authContext: AuthContext, code: string, input: UpdateAiCustomScenePayload) {
+    this.assertPlatformPermission(authContext, MANAGE_PERMISSION);
+    return this.requireSceneRegistry("updateCustom").call(this.sceneRegistryRepository, code, input);
+  }
+
+  async deleteCustomScene(authContext: AuthContext, code: string, input: DeleteAiCustomScenePayload) {
+    this.assertPlatformPermission(authContext, MANAGE_PERMISSION);
+    return this.requireSceneRegistry("deleteCustom").call(this.sceneRegistryRepository, code, input.expected_version);
   }
 
   async listCatalogRuns(authContext: AuthContext, query: AiCatalogRunListQuery) {
@@ -153,27 +215,71 @@ export class AiConfigService {
 
   async createProvider(authContext: AuthContext, input: AiProviderPayload) {
     this.assertPlatformPermission(authContext, MANAGE_PERMISSION);
-    const record = await this.requireConfigRepository("createProvider").call(this.configRepository, input);
+    await this.assertProviderReference(input.provider_type, input.api_key_setting_key);
+    const record = await this.requireConfigRepository("createProvider").call(this.configRepository, {
+      ...input, ...this.normalizeProviderEndpoint(input.endpoint_url), code: this.codeFactory("prv"),
+    });
     await this.audit(authContext, "ai_provider", record.id, record.name, "创建 AI 供应商");
     return record;
   }
 
+  async validateProvider(authContext: AuthContext, id: string): Promise<AiProviderValidationResult> {
+    this.assertPlatformPermission(authContext, MANAGE_PERMISSION);
+    const provider = await this.requireActiveProvider(id);
+    if (provider.provider_type === "openai_compatible") {
+      return { status: "unsupported", checked_at: new Date().toISOString(), method: "none",
+        message: "OpenAI Compatible 供应商未约定安全的只读发现接口，暂不支持连通性验证" };
+    }
+    await this.catalogConnectivity.checkCatalogConnectivity(authContext, provider);
+    return { status: "verified", checked_at: new Date().toISOString(), method: "openrouter_catalog" };
+  }
+
   async updateProvider(authContext: AuthContext, id: string, input: UpdateAiProviderPayload) {
     this.assertPlatformPermission(authContext, MANAGE_PERMISSION);
-    const record = await this.requireConfigRepository("updateProvider").call(this.configRepository, id, input);
+    if (Object.hasOwn(input, "api_key_setting_key") && !isAiSecretSettingKey(input.api_key_setting_key)) {
+      throw Errors.badRequest("请选择已登记的 AI 密钥配置");
+    }
+    if (Object.hasOwn(input, "api_key_setting_key") || Object.hasOwn(input, "provider_type")) {
+      const current = await this.requireConfigRepository("getProviderById").call(this.configRepository, id);
+      if (!current) throw Errors.notFound("AI 供应商不存在");
+      const changesType = input.provider_type !== undefined && input.provider_type !== current.provider_type;
+      if (Object.hasOwn(input, "api_key_setting_key") || changesType) {
+        await this.assertProviderReference(input.provider_type ?? current.provider_type, input.api_key_setting_key ?? current.api_key_setting_key);
+      }
+    }
+    const record = await this.requireConfigRepository("updateProvider").call(this.configRepository, id, {
+      ...input, ...this.normalizeProviderEndpoint(input.endpoint_url),
+    });
     await this.audit(authContext, "ai_provider", record.id, record.name, "更新 AI 供应商");
     return record;
   }
 
+  async deleteProvider(authContext: AuthContext, id: string, input: DeleteAiProviderPayload): Promise<{ id: string; deleted: true }> {
+    this.assertPlatformPermission(authContext, MANAGE_PERMISSION);
+    const record = await this.requireConfigRepository("deleteProvider").call(this.configRepository, id, input);
+    await this.audit(authContext, "ai_provider", record.id, record.name, "删除 AI 供应商");
+    return { id: record.id, deleted: true };
+  }
+
   async createModel(authContext: AuthContext, input: AiModelPayload) {
     this.assertPlatformPermission(authContext, MANAGE_PERMISSION);
-    const record = await this.requireConfigRepository("createModel").call(this.configRepository, input);
+    const record = await this.requireConfigRepository("createModel").call(this.configRepository, {
+      ...input, code: this.codeFactory("mdl"),
+    });
     await this.audit(authContext, "ai_model", record.id, record.name, "创建 AI 模型");
     return record;
   }
 
   async updateModel(authContext: AuthContext, id: string, input: UpdateAiModelPayload) {
     this.assertPlatformPermission(authContext, MANAGE_PERMISSION);
+    if (input.modality !== undefined) {
+      const current = await this.requireConfigRepository("getModelById").call(this.configRepository, id);
+      if (!current) throw Errors.business(404, "AI 模型不存在", "AI_MODEL_NOT_FOUND");
+      if (input.modality !== current.modality
+        && await this.requireConfigRepository("hasModelRouteReference").call(this.configRepository, id)) {
+        throw Errors.business(409, "模型已有场景路由引用，不能修改模态", "AI_MODEL_MODALITY_IN_USE");
+      }
+    }
     const record = await this.requireConfigRepository("updateModel").call(this.configRepository, id, input);
     await this.audit(authContext, "ai_model", record.id, record.name, "更新 AI 模型");
     return record;
@@ -186,33 +292,23 @@ export class AiConfigService {
   ) {
     this.assertPlatformPermission(authContext, READ_PERMISSION);
     const provider = await this.requireActiveProvider(providerId);
+    if (query.view === "inspect") {
+      const page = await this.requireConfigRepository("listRouteModels").call(this.configRepository, provider.id, query);
+      return { ...page, discovery: { mode: "internal_only" as const, status: "unsupported" as const } };
+    }
     const internalOptions = await this.requireConfigRepository("listRouteModels")
       .call(this.configRepository, provider.id, { ...query, status: query.status ?? "active" });
 
     if (provider.provider_type !== "openrouter") {
-      const manualOption = query.keyword && (!query.modality || query.modality === "text")
-        ? [{
-          source: "manual" as const,
-          value: `manual:${query.keyword}`,
-          model_id: null,
-          provider_id: provider.id,
-          label: query.keyword,
-          description: "使用该模型调用名称",
-          modality: "text" as const,
-          status: "active",
-        }]
-        : [];
-      return {
-        ...internalOptions,
-        list: [...internalOptions.list, ...manualOption],
-      };
+      return { ...internalOptions, discovery: { mode: "internal_only" as const, status: "unsupported" as const } };
     }
-
-    if (!query.keyword && internalOptions.list.length > 0) return internalOptions;
 
     const catalogOptions = await this.requireCatalogRepository("listLatestEligibleCatalogRouteOptions")
       .call(this.catalogRepository, provider.id, query);
-    return catalogOptions.list.length > 0 ? catalogOptions : internalOptions;
+    return {
+      ...((!query.keyword && internalOptions.pagination.total > 0) || catalogOptions.pagination.total === 0 ? internalOptions : catalogOptions),
+      discovery: { mode: "openrouter_catalog" as const, status: catalogOptions.pagination.total > 0 ? "ready" as const : "empty" as const },
+    };
   }
 
   async resolveRouteModelOption(
@@ -224,20 +320,23 @@ export class AiConfigService {
     const provider = await this.requireActiveProvider(providerId);
 
     if (input.source === "manual") {
-      if (provider.provider_type !== "openai_compatible") {
-        throw Errors.business(
-          400,
-          "OpenRouter 供应商请从目录选择模型",
-          "AI_ROUTE_MODEL_MANUAL_UNSUPPORTED",
-        );
-      }
       const existingModel = await this.requireConfigRepository("findModelByProviderAndCallName")
-        .call(this.configRepository, provider.id, input.model_name, "text");
-      const modelRecord = existingModel ?? await this.requireConfigRepository("createManualModel")
+        .call(this.configRepository, provider.id, input.model_name, input.modality);
+      if (existingModel) return { model_id: existingModel.id, model: existingModel };
+      const modelRecord = await this.requireConfigRepository("createManualModel")
         .call(this.configRepository, {
+          code: this.codeFactory("mdl"),
           provider,
           modelName: input.model_name,
           displayName: input.name,
+          modality: input.modality,
+          inputModalities: input.input_modalities ?? [input.modality],
+        }).catch(async (error: unknown) => {
+          if (!(error && typeof error === "object" && "code" in error && error.code === "AI_MODEL_ALREADY_REGISTERED")) throw error;
+          const winner = await this.requireConfigRepository("findModelByProviderAndCallName")
+            .call(this.configRepository, provider.id, input.model_name, input.modality);
+          if (!winner) throw error;
+          return winner;
         });
       return { model_id: modelRecord.id, model: modelRecord };
     }
@@ -267,18 +366,28 @@ export class AiConfigService {
     return { model_id: materializedModel.id, model: materializedModel };
   }
 
-  async createSceneRoute(authContext: AuthContext, input: AiSceneRoutePayload) {
+  async createSceneRoute(authContext: AuthContext, input: CreateAiSceneRoutePayload | AiSceneRoutePayload) {
     this.assertPlatformPermission(authContext, MANAGE_PERMISSION);
-    await this.assertRouteModels(input);
-    const record = await this.requireConfigRepository("createSceneRoute").call(this.configRepository, input);
+    if ("scene_source" in input && input.scene_source === "custom") {
+      const { scene_source, scene_name, ...fields } = input;
+      await this.sceneRoutePolicy.assertRouteModels(fields, [fields.modality]);
+      const result = await this.requireSceneRegistry("createCustomSceneRoute").call(this.sceneRegistryRepository, {
+        ...fields, scene_code: this.codeFactory("scene"), name: scene_name,
+      });
+      await this.audit(authContext, "ai_scene_route", result.route.id, result.route.name, "创建自定义 AI 场景路由");
+      return result.route;
+    }
+    const { scene_source, ...registered } = { scene_source: "registered", ...input };
+    const prepared = await this.sceneRoutePolicy.prepareCreate(registered);
+    const record = await this.requireConfigRepository("createSceneRoute").call(this.configRepository, prepared);
     await this.audit(authContext, "ai_scene_route", record.id, record.name, "创建 AI 场景路由");
     return record;
   }
 
   async updateSceneRoute(authContext: AuthContext, id: string, input: UpdateAiSceneRoutePayload) {
     this.assertPlatformPermission(authContext, MANAGE_PERMISSION);
-    await this.assertRouteModels(input);
-    const record = await this.requireConfigRepository("updateSceneRoute").call(this.configRepository, id, input);
+    const prepared = await this.sceneRoutePolicy.prepareUpdate(id, input);
+    const record = await this.requireConfigRepository("updateSceneRoute").call(this.configRepository, id, prepared);
     await this.audit(authContext, "ai_scene_route", record.id, record.name, "更新 AI 场景路由");
     return record;
   }
@@ -301,6 +410,21 @@ export class AiConfigService {
     }).catch(() => null);
   }
 
+  private async assertProviderReference(providerType: string, key: unknown): Promise<void> {
+    if (!isAiSecretSettingKey(key)) throw Errors.badRequest("请选择已登记的 AI 密钥配置");
+    if (providerType === "openrouter" && key !== "OPENROUTER_API_KEY") {
+      throw Errors.badRequest("OpenRouter 必须使用已登记的 OpenRouter 密钥配置");
+    }
+    await this.secretSettingsService.assertReference(key);
+  }
+
+  private normalizeProviderEndpoint(endpoint: string | null | undefined): { endpoint_url?: string | null } {
+    if (endpoint === undefined) return {};
+    if (!endpoint) return { endpoint_url: endpoint };
+    try { return { endpoint_url: normalizeAiProviderBaseUrl(endpoint) }; }
+    catch { throw Errors.business(400, "供应商 API 基础地址无效，请使用 HTTPS 基础路径", "AI_PROVIDER_ENDPOINT_INVALID"); }
+  }
+
   private async requireActiveProvider(providerId: string): Promise<AiProviderRecord> {
     const provider = await this.requireConfigRepository("getProviderById")
       .call(this.configRepository, providerId);
@@ -313,47 +437,6 @@ export class AiConfigService {
     return provider;
   }
 
-  private async assertRouteModels(input: {
-    primary_model_id?: string | null;
-    fallback_model_id?: string | null;
-    modality?: AiSceneRoutePayload["modality"];
-  }) {
-    if (!input.primary_model_id && !input.fallback_model_id) return;
-    if (
-      input.primary_model_id
-      && input.fallback_model_id
-      && input.primary_model_id === input.fallback_model_id
-    ) {
-      throw Errors.business(409, "主模型和备用模型不能相同", "AI_ROUTE_MODEL_DUPLICATED");
-    }
-
-    await Promise.all([
-      input.primary_model_id ? this.assertRouteModel(input.primary_model_id, input.modality) : null,
-      input.fallback_model_id ? this.assertRouteModel(input.fallback_model_id, input.modality) : null,
-    ]);
-  }
-
-  private async assertRouteModel(
-    modelId: string,
-    modality?: AiSceneRoutePayload["modality"],
-  ): Promise<AiModelRecord> {
-    const modelRecord = await this.requireConfigRepository("getModelById")
-      .call(this.configRepository, modelId);
-    if (!modelRecord) {
-      throw Errors.business(404, "AI 模型不存在", "AI_MODEL_NOT_FOUND");
-    }
-    if (modelRecord.status !== "active") {
-      throw Errors.business(409, "AI 模型已停用", "AI_MODEL_INACTIVE");
-    }
-    if (modality && modelRecord.modality && modelRecord.modality !== modality) {
-      throw Errors.business(409, "AI 模型模态与场景路由不匹配", "AI_ROUTE_MODEL_MODALITY_MISMATCH");
-    }
-    if (modelRecord.provider?.status && modelRecord.provider.status !== "active") {
-      throw Errors.business(409, "AI 供应商已停用", "AI_PROVIDER_INACTIVE");
-    }
-    return modelRecord;
-  }
-
   private requireConfigRepository<K extends keyof ConfigRepositoryPort>(
     method: K,
   ): ConfigRepositoryPort[K] {
@@ -364,6 +447,12 @@ export class AiConfigService {
     return target as ConfigRepositoryPort[K];
   }
 
+  private requireSceneRegistry<K extends keyof SceneRegistryPort>(method: K): SceneRegistryPort[K] {
+    const target = this.sceneRegistryRepository[method];
+    if (!target) throw Errors.business(500, "AI 场景仓储未配置", "AI_SCENE_REPOSITORY_METHOD_MISSING");
+    return target as SceneRegistryPort[K];
+  }
+
   private requireCatalogRepository<K extends keyof CatalogRepositoryPort>(
     method: K,
   ): CatalogRepositoryPort[K] {
@@ -372,6 +461,16 @@ export class AiConfigService {
       throw Errors.business(500, "AI 目录仓储未配置", "AI_CATALOG_REPOSITORY_METHOD_MISSING");
     }
     return target as CatalogRepositoryPort[K];
+  }
+
+  private requireSystemSceneRepository<K extends keyof SystemSceneRepositoryPort>(
+    method: K,
+  ): SystemSceneRepositoryPort[K] {
+    const target = this.systemSceneRepository[method];
+    if (!target) {
+      throw Errors.business(500, "AI 场景仓储未配置", "AI_SCENE_REPOSITORY_METHOD_MISSING");
+    }
+    return target as SystemSceneRepositoryPort[K];
   }
 
   private assertPlatformPermission(authContext: AuthContext, permission: string) {
