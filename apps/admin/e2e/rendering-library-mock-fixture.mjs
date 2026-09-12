@@ -33,6 +33,7 @@ export function initialStyles() {
     color_notes: '浅灰与木色', material_notes: '木质家具搭配棉麻织物',
     source_type: 'design', rights_confirmed: true, status: 'draft',
     sort_order: index, version: 1, created_by_employee_id: employeeId,
+    published_version: null, published_at: null, published_by_employee_id: null,
     created_at: '2026-09-11T10:00:00+08:00', updated_at: '2026-09-11T10:00:00+08:00',
   }));
 }

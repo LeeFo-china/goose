@@ -49,7 +49,7 @@ export function StyleEditor({ style, preview: initialPreview, canManage, onClose
   const available = preview && preview.url !== failedUrl && Date.parse(preview.expires_at) > Date.now();
   return <Dialog open onOpenChange={(open) => { if (!open && !busy) onClose(); }}>
     <DialogContent className="max-h-[90dvh] w-[calc(100%-2rem)] max-w-2xl overflow-y-auto rounded-lg motion-reduce:animate-none" onEscapeKeyDown={(event) => { if (busy) event.preventDefault(); }} onInteractOutside={(event) => { if (busy) event.preventDefault(); }}>
-      <DialogHeader><DialogTitle>{canManage ? '编辑素材' : '素材详情'}</DialogTitle><DialogDescription>仅用于公司内部素材整理，当前尚未向客户开放。</DialogDescription></DialogHeader>
+      <DialogHeader><DialogTitle>{canManage ? '编辑素材' : '素材详情'}</DialogTitle><DialogDescription>保存的资料仅在发布后向客户展示；后续修改需要重新发布。</DialogDescription></DialogHeader>
       <div className="flex aspect-[4/3] items-center justify-center overflow-hidden rounded-md bg-muted">
         {available ? <img src={preview.url} alt={current.title} referrerPolicy="no-referrer" className="size-full object-contain" onError={() => setFailedUrl(preview.url)} />
           : <Button variant="outline" disabled={detail.loading} onClick={() => { setFailedUrl(undefined); void detail.refresh(); }}>{detail.loading ? '正在加载预览' : '刷新预览'}</Button>}

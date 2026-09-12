@@ -33,3 +33,31 @@ test('deleted or unavailable styles have a clear fixed recovery error', async ()
   const api = createLibraryRequests(async () => Response.json({ success: false, code: 'RENDERING_STYLE_NOT_FOUND', message: 'raw detail' }, { status: 404 }));
   await expect(api.update(style.id, { title: '保留本地标题', expected_version: 1 })).rejects.toMatchObject({ status: 404, message: '素材已删除或不可用，请关闭后刷新素材列表' });
 });
+
+test('write conflicts ask to reload before acting rather than assuming a save', async () => {
+  const api = createLibraryRequests(async () => Response.json({ success: false, code: 'RENDERING_STYLE_VERSION_CONFLICT', message: 'raw' }, { status: 409 }));
+  await expect(api.hide(style.id, style.version)).rejects.toMatchObject({ message: '素材已更新，请加载最新资料后再操作' });
+});
+
+test('publish idempotency conflicts tell operators to close and start a new attempt', async () => {
+  const api = createLibraryRequests(async () => Response.json({ success: false,
+    code: 'RENDERING_STYLE_PUBLISH_IDEMPOTENCY_CONFLICT', message: 'raw key detail' }, { status: 409 }));
+  await expect(api.publish(style.id, { expected_version: 1,
+    idempotency_key: '9d152539-6344-4ad5-8e53-24ae6b3dc0d8', responsibility_confirmed: true }))
+    .rejects.toMatchObject({ code: 'RENDERING_STYLE_PUBLISH_IDEMPOTENCY_CONFLICT',
+      message: '本次发布标识已用于其他请求，请关闭弹窗后重新发起发布' });
+});
+
+test('publish sends a validated version, UUID idempotency key and responsibility confirmation', async () => {
+  const calls: Array<{ path: string; init: RequestInit }> = [];
+  const api = createLibraryRequests(async (path, init) => {
+    calls.push({ path, init });
+    return Response.json({ success: true, data: style });
+  });
+  const key = '9d152539-6344-4ad5-8e53-24ae6b3dc0d8';
+  await api.publish(style.id, { expected_version: 2, idempotency_key: key, responsibility_confirmed: true });
+  expect(calls).toHaveLength(1);
+  expect(calls[0]?.path).toBe(`/api/backend/tenant/rendering-library/styles/${style.id}/publish`);
+  expect(calls[0]?.init.method).toBe('POST');
+  expect(JSON.parse(String(calls[0]?.init.body))).toEqual({ expected_version: 2, idempotency_key: key, responsibility_confirmed: true });
+});

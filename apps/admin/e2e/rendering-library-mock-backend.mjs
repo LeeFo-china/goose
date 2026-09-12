@@ -6,6 +6,8 @@ let events = [];
 let options = {};
 let uploads = 100;
 let nextStyle = 1000;
+let publishedSnapshots = new Map();
+let publishKeys = new Map();
 const prefix = '/tenant/rendering-library';
 function send(response, status, data, code) {
   response.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store' });
@@ -30,9 +32,10 @@ const server = createServer(async (request, response) => {
   const url = new URL(request.url || '/', 'http://127.0.0.1:3988');
   const path = url.pathname;
   if (path === '/health') return send(response, 200, {});
-  if (path === '/__test/reset') { rows = initialStyles(); events = []; options = {}; uploads = 100; nextStyle = 1000; return send(response, 200, {}); }
+  if (path === '/__test/reset') { rows = initialStyles(); events = []; options = {}; uploads = 100; nextStyle = 1000; publishedSnapshots = new Map(); publishKeys = new Map(); return send(response, 200, {}); }
   if (path === '/__test/options') { options = { ...options, ...JSON.parse((await read(request))?.toString() || '{}') }; return send(response, 200, {}); }
   if (path === '/__test/events') return send(response, 200, events);
+  if (path === '/__test/snapshots') return send(response, 200, Object.fromEntries(publishedSnapshots));
   if (path === '/admin/auth/me') return send(response, 200, sessionFor(request.headers.authorization || ''));
   if (path === '/employee/service-access') return send(response, 200, serviceAccess);
   if (path === '/notifications/summary') return send(response, 200, { unread_count: 0 });
@@ -72,13 +75,31 @@ const server = createServer(async (request, response) => {
     rows.unshift(row);
     return send(response, 200, row);
   }
-  const match = path.match(/^\/tenant\/rendering-library\/styles\/([^/]+)(\/hide)?$/);
+  const match = path.match(/^\/tenant\/rendering-library\/styles\/([^/]+)(\/(?:hide|publish))?$/);
   if (match) {
     if (options.delete_next) { options.delete_next = false; rows = rows.filter((entry) => entry.id !== match[1]); }
     const row = rows.find((entry) => entry.id === match[1]);
     if (!row) return send(response, 404, '素材不存在', 'NOT_FOUND');
     if (request.method === 'GET') return send(response, 200, row);
     if (options.conflict_next) { options.conflict_next = false; row.version += 1; row.title = '其他员工已修改的素材'; }
+    if (match[2] === '/publish') {
+      if (options.idempotency_conflict_next) { options.idempotency_conflict_next = false;
+        return send(response, 409, '测试幂等键冲突', 'RENDERING_STYLE_PUBLISH_IDEMPOTENCY_CONFLICT'); }
+      const prior = publishKeys.get(input.idempotency_key);
+      if (prior && (prior.styleId !== row.id || prior.expectedVersion !== input.expected_version))
+        return send(response, 409, '发布幂等键已用于其他请求', 'RENDERING_STYLE_PUBLISH_IDEMPOTENCY_CONFLICT');
+      if (prior) return send(response, 200, row);
+      if (input.responsibility_confirmed !== true) return send(response, 400, '请确认发布责任', 'BAD_REQUEST');
+      if (input.expected_version !== row.version) return send(response, 409, '素材已被其他人修改，请刷新后重试', 'RENDERING_STYLE_VERSION_CONFLICT');
+      if (options.fail_publish_next) { options.fail_publish_next = false; return send(response, 503, '发布结果尚未确认', 'RENDERING_STORAGE_UNAVAILABLE'); }
+      const snapshot = { title: row.title, space: row.space, style: row.style, source_type: row.source_type,
+        color_notes: row.color_notes, material_notes: row.material_notes, file_id: row.file_id, version: row.version + 1 };
+      publishedSnapshots.set(row.id, snapshot);
+      publishKeys.set(input.idempotency_key, { styleId: row.id, expectedVersion: input.expected_version });
+      Object.assign(row, { status: 'published', published_version: row.version + 1,
+        published_at: new Date().toISOString(), published_by_employee_id: employeeId, version: row.version + 1 });
+      return send(response, 200, row);
+    }
     if (input.expected_version !== row.version) return send(response, 409, '素材已被其他人修改，请刷新后重试', 'RENDERING_STYLE_VERSION_CONFLICT');
     if (request.method === 'DELETE') { rows = rows.filter((entry) => entry.id !== row.id); return send(response, 200, { id: row.id, deleted: true }); }
     const { expected_version, ...changes } = input;

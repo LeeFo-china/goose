@@ -33,6 +33,7 @@ test('gallery has loading, empty, no-results and recoverable error states', () =
   const props = { list: [], previews: {}, canManage: false, onView: () => {}, onEdit: () => {}, onCommand: () => {}, onRetry: () => {} };
   expect(renderToStaticMarkup(<LibraryGrid {...props} loading />)).toContain('正在读取素材');
   expect(renderToStaticMarkup(<LibraryGrid {...props} />)).toContain('还没有素材');
+  expect(renderToStaticMarkup(<LibraryGrid {...props} canManage />)).toContain('发布给客户浏览');
   expect(renderToStaticMarkup(<LibraryGrid {...props} filtered />)).toContain('没有符合筛选条件的素材');
   expect(renderToStaticMarkup(<LibraryGrid {...props} error="读取素材列表失败" />)).toContain('重新加载');
 });
@@ -42,4 +43,21 @@ test('failed metadata save exposes the original error and a save-only retry', ()
   expect(html).toContain('保存素材资料失败');
   expect(html).toContain('重试保存资料');
   expect(html).not.toContain('重新上传');
+});
+
+test('card distinguishes draft, published, unpublished edits and read-only operations', () => {
+  const props = { preview: undefined, canManage: true, onView: () => {}, onEdit: () => {}, onCommand: () => {} };
+  const draft = renderToStaticMarkup(<StyleCard {...props} style={style} />);
+  expect(draft).toContain('>发布<');
+  const published = { ...style, status: 'published' as const, published_version: 2, version: 2, published_at: '2026-09-13T00:00:00Z' };
+  const clean = renderToStaticMarkup(<StyleCard {...props} style={published} />);
+  expect(clean).toContain('>已发布<');
+  expect(clean).toContain('>重新发布<');
+  expect(clean).toContain('>隐藏<');
+  const dirty = renderToStaticMarkup(<StyleCard {...props} style={{ ...published, version: 3 }} />);
+  expect(dirty).toContain('线上仍为上一版本');
+  expect(dirty).toContain('发布最新修改');
+  const readonly = renderToStaticMarkup(<StyleCard {...props} style={published} canManage={false} />);
+  expect(readonly).not.toContain('>重新发布<');
+  expect(readonly).not.toContain('>隐藏<');
 });

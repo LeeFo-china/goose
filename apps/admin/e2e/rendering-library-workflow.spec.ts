@@ -35,7 +35,7 @@ test('分页和筛选使用有界列表及每页一次批量预览', async ({ pa
   await expect(page.getByRole('heading', { name: '装修效果库', exact: true })).toBeVisible();
   await expect(page.getByText('测试素材 01', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '上传素材', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: '发布', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '发布', exact: true }).first()).toBeVisible();
   const first = await events(request);
   expect(first.filter((event) => event.path.endsWith('/files/previews'))).toHaveLength(1);
   expect(first.filter((event) => /\/files\/[^/]+\/preview$/.test(event.path))).toHaveLength(0);
@@ -57,6 +57,7 @@ test('只读与无权限身份不出现写入操作', async ({ page, request }) 
   await expect(page.getByText('测试素材 01', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '上传素材', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: '编辑', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /发布/ })).toHaveCount(0);
   await request.post(`${backend}/__test/reset`);
   await identity(page, 'denied');
   await page.goto('/rendering-library', { waitUntil: 'networkidle' });
@@ -163,9 +164,15 @@ test('空库和列表失败可恢复，仍保留筛选及分页结构', async ({
 test('隐藏与删除需要确认且携带当前版本', async ({ page, request }) => {
   await page.goto('/rendering-library', { waitUntil: 'networkidle' });
   const card = page.getByRole('article').filter({ hasText: '测试素材 01' });
+  await card.getByRole('button', { name: '发布', exact: true }).click();
+  await page.getByRole('alertdialog').getByRole('checkbox', { name: /本公司承担内容及版权责任/ }).check();
+  await page.getByRole('alertdialog').getByRole('button', { name: '发布素材', exact: true }).click();
+  await expect(card.getByText('已发布', { exact: true })).toBeVisible();
   await card.getByRole('button', { name: '隐藏', exact: true }).click();
   let confirmation = page.getByRole('alertdialog');
   await expect(confirmation).toBeVisible();
+  await expect(confirmation.getByText(/不会删除历史引用/)).toBeVisible();
+  await expect(confirmation.getByText(/CDN 已缓存/)).toBeVisible();
   expect((await events(request)).filter((event) => event.path.endsWith('/hide'))).toHaveLength(0);
   await confirmation.getByRole('button', { name: /隐藏素材|确认隐藏/ }).click();
   await expect(confirmation).toBeHidden();
@@ -178,7 +185,7 @@ test('隐藏与删除需要确认且携带当前版本', async ({ page, request 
   await expect(page.getByText('测试素材 02', { exact: true })).toBeVisible();
   await expect(card).toHaveCount(0);
   const writes = (await events(request)).filter((event) => event.path.endsWith('/hide') || event.method === 'DELETE');
-  expect(writes.map((event) => event.input?.expected_version)).toEqual([1, 2]);
+  expect(writes.map((event) => event.input?.expected_version)).toEqual([2, 3]);
 });
 
 test('删除末页唯一素材后回到有效分页，键盘可打开筛选', async ({ page }) => {
@@ -202,6 +209,9 @@ test('删除末页唯一素材后回到有效分页，键盘可打开筛选', as
 
 test('隐藏冲突必须显式核对新版本后重新确认', async ({ page, request }) => {
   await page.goto('/rendering-library', { waitUntil: 'networkidle' });
+  await page.getByRole('article').filter({ hasText: '测试素材 01' }).getByRole('button', { name: '发布', exact: true }).click();
+  await page.getByRole('alertdialog').getByRole('checkbox', { name: /本公司承担内容及版权责任/ }).check();
+  await page.getByRole('alertdialog').getByRole('button', { name: '发布素材', exact: true }).click();
   await page.getByRole('article').filter({ hasText: '测试素材 01' }).getByRole('button', { name: '隐藏', exact: true }).click();
   const confirmation = page.getByRole('alertdialog');
   await options(request, { conflict_next: true });
@@ -212,7 +222,151 @@ test('隐藏冲突必须显式核对新版本后重新确认', async ({ page, re
   await confirmation.getByRole('button', { name: '隐藏素材', exact: true }).click();
   await expect(confirmation).toBeHidden();
   const writes = (await events(request)).filter((event) => event.path.endsWith('/hide'));
+  expect(writes.map((event) => event.input?.expected_version)).toEqual([2, 3]);
+});
+
+test('草稿发布须确认责任，双击只提交一次且可按已发布筛选', async ({ page, request }, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto('/rendering-library', { waitUntil: 'networkidle' });
+  const card = page.getByRole('article').filter({ hasText: '测试素材 01' });
+  await card.getByRole('button', { name: '发布', exact: true }).click();
+  const dialog = page.getByRole('alertdialog', { name: '发布素材' });
+  await expect(dialog.getByText('浅灰与木色')).toBeVisible();
+  await expect(dialog.getByRole('img', { name: '测试素材 01' })).toBeVisible();
+  const confirm = dialog.getByRole('checkbox', { name: /本公司承担内容及版权责任/ });
+  await expect(confirm).not.toBeChecked();
+  await expect(dialog.getByRole('button', { name: '发布素材' })).toBeDisabled();
+  expect((await events(request)).filter((event) => event.path.endsWith('/publish'))).toHaveLength(0);
+  await page.screenshot({ path: testInfo.outputPath('publish-desktop.png'), fullPage: true });
+  await confirm.check();
+  await dialog.getByRole('button', { name: '发布素材' }).dblclick();
+  await expect(dialog).toBeHidden();
+  await expect(card.getByText('已发布', { exact: true })).toBeVisible();
+  const published = (await events(request)).filter((event) => event.path.endsWith('/publish'));
+  expect(published).toHaveLength(1);
+  expect(published[0]?.input).toMatchObject({ expected_version: 1, responsibility_confirmed: true });
+  expect(String(published[0]?.input?.idempotency_key)).toMatch(/^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i);
+  await page.getByRole('combobox', { name: '状态' }).click();
+  await page.getByRole('option', { name: '已发布' }).click();
+  await expect(card).toBeVisible();
+  await expect(page.getByText('测试素材 02', { exact: true })).toHaveCount(0);
+});
+
+test('编辑已发布素材显示线上旧版，重新发布后隐藏', async ({ page, request }) => {
+  await page.goto('/rendering-library', { waitUntil: 'networkidle' });
+  let card = page.getByRole('article').filter({ hasText: '测试素材 01' });
+  await card.getByRole('button', { name: '发布', exact: true }).click();
+  let dialog = page.getByRole('alertdialog', { name: '发布素材' });
+  await dialog.getByRole('checkbox', { name: /本公司承担内容及版权责任/ }).check();
+  await dialog.getByRole('button', { name: '发布素材' }).click();
+  await expect(card.getByRole('button', { name: '重新发布' })).toBeVisible();
+  await card.getByRole('button', { name: '编辑', exact: true }).click();
+  const editor = page.getByRole('dialog', { name: '编辑素材' });
+  await expect(editor.getByText(/保存的资料仅在发布后向客户展示/)).toBeVisible();
+  await editor.getByLabel('标题', { exact: true }).fill('新的装修标题');
+  await editor.getByRole('button', { name: '保存资料' }).click();
+  card = page.getByRole('article').filter({ hasText: '新的装修标题' });
+  await expect(card.getByText('线上仍为上一版本')).toBeVisible();
+  const firstSnapshot = (await (await request.get(`${backend}/__test/snapshots`)).json()).data;
+  expect(firstSnapshot[Object.keys(firstSnapshot)[0]].title).toBe('测试素材 01');
+  await card.getByRole('button', { name: '发布最新修改' }).click();
+  dialog = page.getByRole('alertdialog', { name: '发布素材' });
+  await expect(dialog.getByText('新的装修标题')).toBeVisible();
+  await dialog.getByRole('checkbox', { name: /本公司承担内容及版权责任/ }).check();
+  await dialog.getByRole('button', { name: '发布素材' }).click();
+  await expect(card.getByText('线上仍为上一版本')).toHaveCount(0);
+  await card.getByRole('button', { name: '隐藏' }).click();
+  await expect(page.getByRole('alertdialog').getByText(/客户端或 CDN 已缓存/)).toBeVisible();
+  await page.getByRole('alertdialog').getByRole('button', { name: '隐藏素材' }).click();
+  await expect(card.getByText('已隐藏', { exact: true })).toBeVisible();
+  const publications = (await events(request)).filter((event) => event.path.endsWith('/publish'));
+  expect(publications).toHaveLength(2);
+  expect(publications[0]?.input?.idempotency_key).not.toBe(publications[1]?.input?.idempotency_key);
+  const secondSnapshot = (await (await request.get(`${backend}/__test/snapshots`)).json()).data;
+  expect(secondSnapshot[Object.keys(secondSnapshot)[0]].title).toBe('新的装修标题');
+});
+
+test('发布结果未知时在同一弹窗复用幂等键重试', async ({ page, request }) => {
+  await page.goto('/rendering-library', { waitUntil: 'networkidle' });
+  await page.getByRole('article').filter({ hasText: '测试素材 01' }).getByRole('button', { name: '发布', exact: true }).click();
+  const dialog = page.getByRole('alertdialog', { name: '发布素材' });
+  await dialog.getByRole('checkbox', { name: /本公司承担内容及版权责任/ }).check();
+  await options(request, { fail_publish_next: true });
+  await dialog.getByRole('button', { name: '发布素材' }).click();
+  await expect(dialog.getByText(/发布素材失败/)).toBeVisible();
+  await dialog.getByRole('button', { name: '发布素材' }).click();
+  await expect(dialog).toBeHidden();
+  const writes = (await events(request)).filter((event) => event.path.endsWith('/publish'));
+  expect(writes).toHaveLength(2);
+  expect(writes[0]?.input?.idempotency_key).toBe(writes[1]?.input?.idempotency_key);
+});
+
+test('发布处理中阻止取消、Escape 和重复提交', async ({ page, request }) => {
+  let release = () => {};
+  const pending = new Promise<void>((resolve) => { release = resolve; });
+  await page.route('**/api/backend/tenant/rendering-library/styles/*/publish', async (route) => {
+    await pending;
+    await route.continue();
+  });
+  try {
+    await page.goto('/rendering-library', { waitUntil: 'networkidle' });
+    await page.getByRole('article').filter({ hasText: '测试素材 01' }).getByRole('button', { name: '发布', exact: true }).click();
+    const dialog = page.getByRole('alertdialog', { name: '发布素材' });
+    await dialog.getByRole('checkbox', { name: /本公司承担内容及版权责任/ }).check();
+    await dialog.getByRole('button', { name: '发布素材' }).click();
+    await expect(dialog.getByRole('button', { name: '处理中' })).toBeDisabled();
+    await expect(dialog.getByRole('button', { name: '取消' })).toBeDisabled();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeVisible();
+    release();
+    await expect(dialog).toBeHidden();
+    expect((await events(request)).filter((event) => event.path.endsWith('/publish'))).toHaveLength(1);
+  } finally { release(); }
+});
+
+test('发布冲突加载最新资料后复用弹窗幂等键', async ({ page, request }) => {
+  await page.goto('/rendering-library', { waitUntil: 'networkidle' });
+  const card = page.getByRole('article').filter({ hasText: '测试素材 01' });
+  await card.getByRole('button', { name: '发布', exact: true }).click();
+  const dialog = page.getByRole('alertdialog', { name: '发布素材' });
+  await dialog.getByRole('checkbox', { name: /本公司承担内容及版权责任/ }).check();
+  await options(request, { conflict_next: true });
+  await dialog.getByRole('button', { name: '发布素材' }).click();
+  await expect(dialog.getByRole('button', { name: '发布素材' })).toBeDisabled();
+  await dialog.getByRole('button', { name: '加载最新资料' }).click();
+  await expect(dialog.getByText('其他员工已修改的素材', { exact: true })).toBeVisible();
+  await dialog.getByRole('button', { name: '发布素材' }).click();
+  await expect(dialog).toBeHidden();
+  const writes = (await events(request)).filter((event) => event.path.endsWith('/publish'));
   expect(writes.map((event) => event.input?.expected_version)).toEqual([1, 2]);
+  expect(writes[0]?.input?.idempotency_key).toBe(writes[1]?.input?.idempotency_key);
+});
+
+test('发布幂等键冲突阻止误导性加载最新并提示重新发起', async ({ page, request }) => {
+  await page.goto('/rendering-library', { waitUntil: 'networkidle' });
+  await page.getByRole('article').filter({ hasText: '测试素材 01' }).getByRole('button', { name: '发布', exact: true }).click();
+  const dialog = page.getByRole('alertdialog', { name: '发布素材' });
+  await dialog.getByRole('checkbox', { name: /本公司承担内容及版权责任/ }).check();
+  await options(request, { idempotency_conflict_next: true });
+  await dialog.getByRole('button', { name: '发布素材' }).click();
+  await expect(dialog.getByText(/请关闭弹窗后重新发起发布/)).toBeVisible();
+  await expect(dialog.getByRole('button', { name: '加载最新资料' })).toHaveCount(0);
+  await expect(dialog.getByRole('button', { name: '发布素材' })).toBeDisabled();
+  await dialog.getByRole('button', { name: '取消' }).click();
+  await expect(dialog).toBeHidden();
+});
+
+test('400px 发布弹窗和操作按钮完整可见，无横向溢出', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 400, height: 860 });
+  await page.goto('/rendering-library', { waitUntil: 'networkidle' });
+  const card = page.getByRole('article').filter({ hasText: '测试素材 01' });
+  await expect(card.getByRole('button', { name: '发布' })).toBeInViewport();
+  await card.getByRole('button', { name: '发布' }).click();
+  const dialog = page.getByRole('alertdialog', { name: '发布素材' });
+  await expect(dialog.getByRole('checkbox', { name: /本公司承担内容及版权责任/ })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: '发布素材' })).toBeInViewport();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('publish-mobile.png'), fullPage: true });
 });
 
 test('浏览器后退确认保留队列，显式放弃后继续原历史导航', async ({ page }, testInfo) => {

@@ -28,7 +28,7 @@ export function LibraryGrid({ list, previews, canManage, loading, error, filtere
   if (error) return <div className="flex flex-col gap-3"><StatusAlert>{error}</StatusAlert><Button variant="outline" className="self-start" onClick={onRetry}>重新加载</Button></div>;
   if (!list.length) return <Empty><EmptyHeader><EmptyMedia variant="icon"><Images aria-hidden="true" /></EmptyMedia>
     <EmptyTitle>{filtered ? '没有符合筛选条件的素材' : '还没有素材'}</EmptyTitle>
-    <EmptyDescription>{filtered ? '调整空间、风格或状态筛选后重试。' : canManage ? '上传有使用授权的图片，整理成公司内部素材。' : '管理员添加素材后，你可以在这里查看。'}</EmptyDescription>
+    <EmptyDescription>{filtered ? '调整空间、风格或状态筛选后重试。' : canManage ? '上传有使用授权的图片，整理后可发布给客户浏览。' : '管理员添加素材后，你可以在这里查看。'}</EmptyDescription>
   </EmptyHeader></Empty>;
   return <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">{list.map((style) => <StyleCard key={style.id} style={style} preview={previews[style.file_id]} canManage={canManage} {...actions} />)}</div>;
 }
@@ -36,12 +36,12 @@ export function LibraryClient({ access }: { access: LibraryAccess }) {
   const library = useLibraryData();
   const [uploadOpen, setUploadOpen] = useState(false);
   const [editor, setEditor] = useState<{ style: RenderingLibraryStyle; editable: boolean }>();
-  const [mutation, setMutation] = useState<{ style: RenderingLibraryStyle; command: 'hide' | 'remove' }>();
+  const [mutation, setMutation] = useState<{ style: RenderingLibraryStyle; command: 'publish' | 'hide' | 'remove' }>();
   const { query, data } = library;
   const pages = Math.max(1, data?.pagination.totalPages ?? 1);
   return <div className="flex h-[calc(100dvh-8rem)] min-h-0 min-w-0 flex-col gap-4 overflow-hidden">
     <header className="flex shrink-0 flex-wrap items-start justify-between gap-3">
-      <div className="min-w-0"><h1 className="text-xl font-semibold">装修效果库</h1><p className="mt-1 text-sm text-muted-foreground">当前仅公司内部草稿，尚未向客户开放。</p></div>
+      <div className="min-w-0"><h1 className="text-xl font-semibold">装修效果库</h1><p className="mt-1 text-sm text-muted-foreground">整理并发布公司装修风格素材，已发布内容可供客户浏览。</p></div>
       {access.canManage && !uploadOpen ? <Button onClick={() => setUploadOpen(true)}><Upload data-icon="inline-start" />上传素材</Button> : null}
     </header>
     {uploadOpen && access.canManage ? <UploadPanel onClose={() => setUploadOpen(false)} onSaved={library.refresh} onEdit={(style) => setEditor({ style, editable: true })} /> : <>
@@ -66,6 +66,6 @@ export function LibraryClient({ access }: { access: LibraryAccess }) {
     </>}
     {editor ? <StyleEditor key={editor.style.id} style={editor.style} preview={library.previews[editor.style.file_id]} canManage={access.canManage && editor.editable}
       onClose={() => setEditor(undefined)} onSaved={library.refresh} /> : null}
-    {mutation && access.canManage ? <StyleMutation {...mutation} onClose={() => setMutation(undefined)} onSuccess={library.refresh} /> : null}
+    {mutation && access.canManage ? <StyleMutation {...mutation} preview={library.previews[mutation.style.file_id]} onClose={() => setMutation(undefined)} onSuccess={library.refresh} /> : null}
   </div>;
 }

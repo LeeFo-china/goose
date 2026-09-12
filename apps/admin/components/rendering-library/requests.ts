@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { RenderingLibraryCreateSchema, RenderingLibraryUpdateSchema, RenderingLibraryVersionSchema, RenderingLibraryListSchema,
+import { RenderingLibraryCreateSchema, RenderingLibraryUpdateSchema, RenderingLibraryVersionSchema, RenderingLibraryPublishSchema, RenderingLibraryListSchema,
   RenderingLibraryStyleSchema, RenderingLibraryFileUploadResultSchema, RenderingLibraryFilePreviewResultSchema, RenderingLibraryBatchPreviewSchema,
   RenderingLibraryBatchPreviewResultSchema, type RenderingLibraryList } from '@gooes/domain';
 import { parseBackendJson } from '@/lib/backend';
@@ -27,8 +27,9 @@ export function createLibraryRequests(fetcher: FetchPort = (path, init) => fetch
       const code = error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' ? error.code : 'RENDERING_REQUEST_FAILED';
       const status = error && typeof error === 'object' && 'status' in error && typeof error.status === 'number' ? error.status : 0;
       const known = code === 'RENDERING_STYLE_FILE_USED' ? '该原图已用于装修效果素材，请核对素材库'
+        : code === 'RENDERING_STYLE_PUBLISH_IDEMPOTENCY_CONFLICT' ? '本次发布标识已用于其他请求，请关闭弹窗后重新发起发布'
         : status === 404 && path.startsWith('/styles/') ? '素材已删除或不可用，请关闭后刷新素材列表'
-        : status === 409 ? '素材已更新，请加载最新资料后再保存' : message;
+        : status === 409 ? '素材已更新，请加载最新资料后再操作' : message;
       throw new LibraryRequestError(known, code, status);
     }
   }
@@ -47,6 +48,7 @@ export function createLibraryRequests(fetcher: FetchPort = (path, init) => fetch
     upload(file: File) { const data = new FormData(); data.set('file', file); return request('/files', RenderingLibraryFileUploadResultSchema, '上传图片失败，结果可能未确认，请核对后再重新上传', { method: 'POST', body: data }); },
     create(input: unknown) { return request('/styles', RenderingLibraryStyleSchema, '保存素材资料失败', json('POST', parse(RenderingLibraryCreateSchema, input, '素材资料不完整'))); },
     update(id: string, input: unknown) { return request(`/styles/${parse(z.uuid(), id, '素材 ID 无效')}`, RenderingLibraryStyleSchema, '保存素材资料失败', json('PATCH', parse(RenderingLibraryUpdateSchema, input, '素材资料不完整'))); },
+    publish(id: string, input: unknown) { return request(`/styles/${parse(z.uuid(), id, '素材 ID 无效')}/publish`, RenderingLibraryStyleSchema, '发布素材失败', json('POST', parse(RenderingLibraryPublishSchema, input, '发布请求无效'))); },
     hide(id: string, version: number) { return request(`/styles/${parse(z.uuid(), id, '素材 ID 无效')}/hide`, RenderingLibraryStyleSchema, '隐藏素材失败', json('POST', parse(RenderingLibraryVersionSchema, { expected_version: version }, '素材版本无效'))); },
     remove(id: string, version: number) { return request(`/styles/${parse(z.uuid(), id, '素材 ID 无效')}`, z.strictObject({ id: z.uuid(), deleted: z.literal(true) }), '删除素材失败', json('DELETE', parse(RenderingLibraryVersionSchema, { expected_version: version }, '素材版本无效'))); },
     preview(id: string, signal?: AbortSignal) { return request(`/files/${parse(z.uuid(), id, '文件 ID 无效')}/preview`, RenderingLibraryFilePreviewResultSchema, '预览加载失败，素材资料仍可查看', { signal }); },
