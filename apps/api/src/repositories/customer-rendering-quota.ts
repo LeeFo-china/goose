@@ -68,6 +68,11 @@ const SettleResultSchema = z.discriminatedUnion("decision", [
   z.strictObject({ decision: z.literal("not_found") }),
 ]);
 
+export type CustomerRenderingQuotaReadResult = z.infer<typeof ReadResultSchema>;
+export type CustomerRenderingQuotaBindResult = z.infer<typeof BindResultSchema>;
+export type CustomerRenderingQuotaReserveResult = z.infer<typeof ReserveResultSchema>;
+export type CustomerRenderingQuotaSettleResult = z.infer<typeof SettleResultSchema>;
+
 type IdentityRpcParams = CustomerRenderingQuotaIdentity & CustomerRenderingPhoneIdentity;
 
 function identityParams(input: IdentityRpcParams) {
