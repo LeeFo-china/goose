@@ -1,5 +1,8 @@
 import { expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
+import { createServer } from 'node:http';
+import { once } from 'node:events';
+import { Writable } from 'node:stream';
 import COS from 'cos-nodejs-sdk-v5';
 import { Errors } from '@/errors/error-factory';
 import { RenderingLibraryStorage, loadRenderingStorageConfig, type RenderingPublicCopyInput } from './client';
@@ -25,7 +28,7 @@ function publicHead(): COS.HeadObjectResult {
 function fixture() {
   const calls: unknown[][] = [];
   const state = { config: { ...config, publicBaseUrl: '' }, url: signedUrl, fail: false, failPut: false,
-    body: sourceBytes as unknown, head: publicHead(), headError: undefined as unknown };
+    body: sourceBytes as unknown, head: publicHead(), headError: undefined as unknown, streamError: false };
   const storage = new RenderingLibraryStorage({
     loadConfig: async () => state.config,
     createCos: (options) => {
@@ -34,6 +37,15 @@ function fixture() {
         async getObject(params): Promise<COS.GetObjectResult> {
           calls.push(['get', params]);
           if (state.fail) throw Errors.badRequest('raw key signature secret');
+          if (params.Output instanceof Writable) {
+            const output = params.Output;
+            await new Promise<void>((resolve, reject) => {
+              output.once('error', reject);
+              output.once('finish', resolve);
+              if (state.streamError) output.destroy(Errors.badRequest('raw stream secret'));
+              else output.end(Buffer.isBuffer(state.body) ? state.body : undefined);
+            });
+          }
           // Deliberately allow malformed runtime SDK output to test the trust boundary.
           return { Body: state.body as Buffer, ETag: 'dummy-etag', statusCode: 200 };
         },
@@ -177,7 +189,7 @@ test('public copy reads only the private source and puts one deterministic immut
     expect(result).toEqual({ publicUrl: `${base || canonicalBase}${publicLocation.object_key}` });
     expect(calls).toEqual([
       ['construct', { SecretId: config.secretId, SecretKey: config.secretKey, Protocol: 'https:', Timeout: 30000, FollowRedirect: false }],
-      ['get', { Bucket: config.bucket, Region: config.region, Key: location.object_key }],
+      ['get', { Bucket: config.bucket, Region: config.region, Key: location.object_key, Output: expect.any(Writable) }],
       ['put', { Bucket: config.bucket, Region: config.region, Key: publicLocation.object_key, Body: sourceBytes,
         ContentLength: sourceBytes.length, ContentType: 'image/webp', ACL: 'public-read',
         CacheControl: 'public, max-age=31536000, immutable', 'x-cos-meta-source-sha256': checksum }],
@@ -274,4 +286,105 @@ test('public copy accepts maximum version and source size at their inclusive bou
     publicLocation: { ...publicLocation, object_key: publicLocation.object_key.replace('/1.webp', '/2147483647.webp') } };
   expect(await storage.copyPublic(input)).toEqual({ publicUrl: `${canonicalBase}${input.publicLocation.object_key}` });
   expect(calls.filter(([method]) => method === 'put')).toHaveLength(1);
+});
+
+test('public URL recovery shares copy validation without any COS call', async () => {
+  const { storage, calls, state } = fixture();
+  state.config.publicBaseUrl = 'https://cdn.example.test:8443';
+  const url = await storage.resolvePublicUrl(copyInput);
+  expect(calls).toEqual([]);
+  expect(await storage.copyPublic(copyInput)).toEqual({ publicUrl: url });
+});
+
+test('public URL respects SQL DNS syntax and 2048 character limit before COS calls', async () => {
+  for (const base of ['https://[::1]', 'https://cdn_test.example.test', 'https://cdn.example.test:000080',
+    `https://${'a'.repeat(2050)}.test`]) {
+    const { storage, calls, state } = fixture();
+    state.config.publicBaseUrl = base;
+    await expect(storage.copyPublic(copyInput)).rejects.toMatchObject({ code: 'RENDERING_STORAGE_UNAVAILABLE' });
+    await expect(storage.resolvePublicUrl(copyInput)).rejects.toMatchObject({ code: 'RENDERING_STORAGE_UNAVAILABLE' });
+    expect(calls).toEqual([]);
+  }
+  const { storage, state, calls } = fixture();
+  const hostLength = 2048 - 'https:///'.length - publicLocation.object_key.length;
+  state.config.publicBaseUrl = `https://${'a'.repeat(hostLength)}`;
+  expect((await storage.resolvePublicUrl(copyInput)).length).toBe(2048);
+  state.config.publicBaseUrl += 'a';
+  await expect(storage.resolvePublicUrl(copyInput)).rejects.toMatchObject({ code: 'RENDERING_STORAGE_UNAVAILABLE' });
+  expect(calls).toEqual([]);
+});
+
+test('stream failures are sanitized and never uploaded', async () => {
+  const { storage, calls, state } = fixture();
+  state.streamError = true;
+  await expect(storage.copyPublic(copyInput)).rejects.toMatchObject({ code: 'RENDERING_STORAGE_FAILED',
+    message: '装修效果素材存储操作失败', details: undefined });
+  expect(calls.filter(([method]) => method === 'put')).toHaveLength(0);
+});
+
+test('installed SDK aborts an oversized loopback download before receiving the complete body', async () => {
+  const total = 256 * 1024;
+  let sent = 0;
+  let puts = 0;
+  let gets = 0;
+  let responseClosed: Promise<unknown> | undefined;
+  const server = createServer((request, response) => {
+    if (request.method !== 'GET') { puts++; response.end(); return; }
+    gets++;
+    responseClosed = once(request.socket, 'close');
+    expect(request.url).toBe(`/${location.object_key}`);
+    response.writeHead(200, { 'Content-Type': 'image/webp', 'Content-Length': total });
+    const timer = setInterval(() => {
+      sent += 4096;
+      response.write(Buffer.alloc(4096));
+      if (sent >= total) { clearInterval(timer); response.end(); }
+    }, 2);
+    request.socket.once('close', () => clearInterval(timer));
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  if (!address || typeof address === 'string') throw Errors.badRequest('loopback test listener unavailable');
+  const storage = new RenderingLibraryStorage({ loadConfig: async () => config,
+    createCos: (options) => new COS({ ...options, Protocol: 'http:', Domain: `127.0.0.1:${address.port}` }) });
+  try {
+    await expect(storage.copyPublic(copyInput)).rejects.toMatchObject({ code: 'RENDERING_STORAGE_FAILED', details: undefined });
+    expect(gets).toBe(1);
+    expect(puts).toBe(0);
+    await responseClosed;
+    expect(sent).toBeLessThan(total);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
+test('installed SDK streams an exact source into one public upload after finish', async () => {
+  const requests: string[] = [];
+  let uploaded = Buffer.alloc(0);
+  const server = createServer((request, response) => {
+    requests.push(`${request.method} ${request.url}`);
+    if (request.method === 'GET') {
+      response.writeHead(200, { 'Content-Length': sourceBytes.length, ETag: 'source-etag' });
+      response.write(sourceBytes.subarray(0, 3));
+      response.end(sourceBytes.subarray(3));
+    } else {
+      request.on('data', (chunk: Buffer) => { uploaded = Buffer.concat([uploaded, chunk]); });
+      request.on('end', () => { response.writeHead(200, { ETag: 'public-etag' }); response.end(); });
+    }
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  if (!address || typeof address === 'string') throw Errors.badRequest('loopback test listener unavailable');
+  const storage = new RenderingLibraryStorage({ loadConfig: async () => config,
+    createCos: (options) => new COS({ ...options, Protocol: 'http:', Domain: `127.0.0.1:${address.port}` }) });
+  try {
+    expect(await storage.copyPublic(copyInput)).toEqual({ publicUrl: `${canonicalBase}${publicLocation.object_key}` });
+    expect(uploaded).toEqual(sourceBytes);
+    expect(requests).toEqual([`GET /${location.object_key}`, `PUT /${publicLocation.object_key}`]);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
 });

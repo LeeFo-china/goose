@@ -1,5 +1,7 @@
 import COS from 'cos-nodejs-sdk-v5';
 import { createHash } from 'node:crypto';
+import { Writable } from 'node:stream';
+import { finished } from 'node:stream/promises';
 import { z } from 'zod';
 import { RENDERING_UPLOAD_MAX_BYTES, RenderingLibraryBatchPreviewSchema } from '@gooes/domain';
 import { Errors } from '@/errors/error-factory';
@@ -61,7 +63,7 @@ function parseConfig(input: unknown): RenderingStorageConfig {
   const base = config.publicBaseUrl || `https://${config.bucket}.cos.${config.region}.myqcloud.com/`;
   try {
     // Check the raw form too: URL parsing otherwise silently removes dot paths and whitespace.
-    if (!/^https:\/\/[^/\\@?#\s]+\/?$/.test(base)) return unavailable();
+    if (!/^https:\/\/[A-Za-z0-9.-]+(?::\d{1,5})?\/?$/.test(base)) return unavailable();
     const url = new URL(base);
     if (url.protocol !== 'https:' || url.username || url.password || url.pathname !== '/' || url.search || url.hash) return unavailable();
     return { ...config, publicBaseUrl: url.href };
@@ -137,17 +139,48 @@ export class RenderingLibraryStorage {
       const base = new URL(config.publicBaseUrl ?? unavailable());
       const url = new URL(target.object_key.split('/').map(encodeURIComponent).join('/'), base);
       if (url.protocol !== 'https:' || url.origin !== base.origin || url.username || url.password || url.search || url.hash
-        || decodeURIComponent(url.pathname) !== `/${target.object_key}`) return unavailable();
+        || url.href.length > 2048 || decodeURIComponent(url.pathname) !== `/${target.object_key}`) return unavailable();
       return { config, publicUrl: url.href };
     } catch { return unavailable(); }
+  }
+
+  async resolvePublicUrl(input: RenderingPublicCopyInput): Promise<string> {
+    return (await this.verifiedPublicCopy(input)).publicUrl;
+  }
+
+  private async readPublicSource(cos: RenderingCosPort, input: RenderingPublicCopyInput): Promise<Buffer> {
+    const bytes = Buffer.alloc(input.sourceSizeBytes);
+    let received = 0;
+    const streamError = () => Errors.business(502, '装修效果素材存储操作失败', 'RENDERING_STORAGE_FAILED');
+    const output = new Writable({
+      highWaterMark: Math.min(input.sourceSizeBytes, 64 * 1024),
+      write(chunk: Buffer, _encoding, callback) {
+        if (!Buffer.isBuffer(chunk) || chunk.length > bytes.length - received) return callback(streamError());
+        chunk.copy(bytes, received);
+        received += chunk.length;
+        callback();
+      },
+      final(callback) { callback(received === bytes.length ? undefined : streamError()); },
+    });
+    const source = input.sourceLocation;
+    try {
+      // SDK 2.15.4 aborts its request on Output error and waits for finish before resolving.
+      // Keep finished's error listener: the SDK may re-emit the same error during callback cleanup.
+      await Promise.all([finished(output), Promise.resolve().then(() => cos.getObject({
+        Bucket: source.bucket, Region: source.region, Key: source.object_key, Output: output,
+      }))]);
+      return bytes;
+    } catch {
+      output.destroy();
+      return failed();
+    }
   }
 
   async copyPublic(input: RenderingPublicCopyInput): Promise<{ publicUrl: string }> {
     const { config, publicUrl } = await this.verifiedPublicCopy(input);
     try {
       const cos = this.cos(config);
-      const source = input.sourceLocation;
-      const { Body: bytes } = await cos.getObject({ Bucket: source.bucket, Region: source.region, Key: source.object_key });
+      const bytes = await this.readPublicSource(cos, input);
       if (!Buffer.isBuffer(bytes) || bytes.length === 0 || bytes.length > RENDERING_UPLOAD_MAX_BYTES
         || bytes.length !== input.sourceSizeBytes || createHash('sha256').update(bytes).digest('hex') !== input.sourceChecksum) return failed();
       const target = input.publicLocation;
