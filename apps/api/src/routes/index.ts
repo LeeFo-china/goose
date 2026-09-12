@@ -88,6 +88,7 @@ import UserAuthEventsController from "@/controllers/user-auth-events";
 import IdentityDiagnosticsController from "@/controllers/identity-diagnostics";
 import PictureLibraryController from "@/controllers/picture-library";
 import VisitorPictureLibraryController from "@/controllers/visitor-picture-library";
+import VisitorRenderingsController from "@/controllers/visitor-renderings";
 import WorkflowController from "@/controllers/workflows";
 import WorkflowSubjectsController from "@/controllers/workflow-subjects";
 import WorkflowTasksController from "@/controllers/workflow-tasks";
@@ -226,6 +227,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   IdentityDiagnosticsController.registerExtraRoutes(app);
   PictureLibraryController.registerExtraRoutes(app);
   VisitorPictureLibraryController.registerExtraRoutes(app);
+  VisitorRenderingsController.registerExtraRoutes(app);
   WorkflowSubjectsController.registerExtraRoutes(app);
   WorkflowTasksController.registerExtraRoutes(app);
   WechatPayCallbacksController.registerExtraRoutes(app);

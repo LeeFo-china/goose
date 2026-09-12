@@ -43,6 +43,12 @@ describe("tenant service capability map", () => {
     expect(resolveTenantServiceRouteCapability(
       route("GET", "/auth/me/permissions", "session"),
     )).toEqual({ kind: "excluded", reason: "route_access" });
+    expect(resolveTenantServiceRouteCapability(
+      route("GET", "/visitor/renderings/quota", "session"),
+    )).toEqual({ kind: "excluded", reason: "route_access" });
+    expect(resolveTenantServiceRouteCapability(
+      route("POST", "/douyin-mini/renderings/phone:bind", "session"),
+    )).toEqual({ kind: "excluded", reason: "route_access" });
   });
 
   test("explicitly excludes platform, config, payment, and independent add-ons", async () => {

@@ -107,6 +107,17 @@ async function authenticateRequest(
   }
 
   if (isDouyinRoute) {
+    if (
+      payload.token_type === "auth"
+      && payload.login_channel === "douyin"
+      && isDouyinRenderingRoute(method, url)
+    ) {
+      await logAuthStage(request, "assert_douyin_customer_binding", () =>
+        assertDouyinCustomerIdentityBinding(payload)
+      );
+      request.user = payload;
+      return true;
+    }
     const error = Errors.unauthorized(
       "该接口仅支持抖音小程序会话",
       ErrorCodes.TOKEN_INVALID,
@@ -230,4 +241,10 @@ export default authPlugin;
 
 function isCustomerSelfServiceRoute(url: string) {
   return url === "/customer" || url.startsWith("/customer/");
+}
+
+function isDouyinRenderingRoute(method: string, url: string) {
+  return ((method === "GET" || method === "HEAD")
+    && url === "/douyin-mini/renderings/quota")
+    || (method === "POST" && url === "/douyin-mini/renderings/phone:bind");
 }

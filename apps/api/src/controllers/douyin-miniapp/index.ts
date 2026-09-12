@@ -38,6 +38,7 @@ import {
   type DouyinMiniappMaterialNotesService,
 } from "@/services/douyin-miniapp/material-notes";
 import { DouyinCustomerAuthController } from "./customer-auth-controller";
+import { DouyinRenderingsController } from "./renderings-controller";
 import { ResponseHandler } from "@/utils/response";
 import { resolveTrustedClientIp } from "@/utils/trusted-proxy-client-ip";
 
@@ -55,6 +56,7 @@ type MaterialNotesService = Pick<DouyinMiniappMaterialNotesService,
 type CustomerAuthService = ConstructorParameters<
   typeof DouyinCustomerAuthController
 >[0];
+type RenderingService = ConstructorParameters<typeof DouyinRenderingsController>[0];
 
 export class DouyinMiniappController {
   constructor(
@@ -64,11 +66,13 @@ export class DouyinMiniappController {
     private readonly qaService?: QaService,
     private readonly materialNotesService?: MaterialNotesService,
     private readonly customerAuthService?: CustomerAuthService,
+    private readonly renderingService?: RenderingService,
   ) {}
 
   registerExtraRoutes(fastify: FastifyInstance): void {
     fastify.post("/douyin-mini/auth/session", this.createSession);
     this.customerAuth().registerExtraRoutes(fastify);
+    this.renderings().registerExtraRoutes(fastify);
     fastify.get("/douyin-mini/bootstrap", this.bootstrap);
     fastify.get("/douyin-mini/company", this.company);
     fastify.get("/douyin-mini/cases", this.listCases);
@@ -267,6 +271,10 @@ export class DouyinMiniappController {
 
   private customerAuth() {
     return new DouyinCustomerAuthController(this.customerAuthService);
+  }
+
+  private renderings() {
+    return new DouyinRenderingsController(this.renderingService);
   }
 }
 

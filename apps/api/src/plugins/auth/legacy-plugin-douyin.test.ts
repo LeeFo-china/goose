@@ -29,6 +29,7 @@ async function createApp() {
   app.get("/douyin-mini/bootstrap", async (request) => ({ user: request.user }));
   app.get("/douyin-mini/material-notes", async (request) => ({ user: request.user }));
   app.get("/douyin-mini/material-notes/:id", async (request) => ({ user: request.user }));
+  app.get("/douyin-mini/renderings/quota", async (request) => ({ user: request.user }));
   app.post("/douyin-mini/material-notes/:id/claim", async (request) => ({ user: request.user }));
   app.get("/douyin-mini/my-material-notes", async (request) => ({ user: request.user }));
   app.get("/douyin-mini/my-material-notes/:claimId", async (request) => ({ user: request.user }));
@@ -79,8 +80,13 @@ describe("auth plugin Douyin miniapp isolation", () => {
     });
     expect(accepted.statusCode).toBe(200);
     expect(accepted.json().user).toMatchObject({ token_type: "douyin_miniapp" });
+    expect((await app.inject({ method: "GET", url: "/douyin-mini/renderings/quota",
+      headers: { authorization: `Bearer ${douyinToken}` },
+    })).statusCode).toBe(200);
 
     expect((await app.inject({ method: "GET", url: "/douyin-mini/bootstrap",
+      headers: { authorization: `Bearer ${regularToken}` } })).statusCode).toBe(401);
+    expect((await app.inject({ method: "GET", url: "/douyin-mini/renderings/quota",
       headers: { authorization: `Bearer ${regularToken}` } })).statusCode).toBe(401);
     expect((await app.inject({ method: "GET", url: "/ordinary",
       headers: { authorization: `Bearer ${douyinToken}` } })).statusCode).toBe(401);
@@ -227,6 +233,17 @@ describe("auth plugin Douyin miniapp isolation", () => {
       login_channel: "douyin",
       customer_id: "11111111-1111-4111-8111-111111111111",
     });
+    const renderingQuota = await app.inject({
+      method: "GET",
+      url: "/douyin-mini/renderings/quota",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(renderingQuota.statusCode).toBe(200);
+    expect((await app.inject({
+      method: "GET",
+      url: "/douyin-mini/bootstrap",
+      headers: { authorization: `Bearer ${token}` },
+    })).statusCode).toBe(401);
     expect((await app.inject({
       method: "GET",
       url: "/ordinary",

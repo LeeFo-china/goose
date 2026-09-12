@@ -35,6 +35,10 @@ describe("authPlugin WeChat virtual-payment reachability", () => {
         "/visitor/local-service-providers",
         async (request) => ({ reached: true, visitorId: request.user?.visitor_id }),
       );
+      scope.get("/visitor/renderings/quota", async (request) => ({
+        reached: true,
+        visitorId: request.user?.visitor_id,
+      }));
     });
 
     for (const method of ["GET", "POST"] as const) {
@@ -67,14 +71,15 @@ describe("authPlugin WeChat virtual-payment reachability", () => {
     expect(invalidBearer.statusCode).toBe(401);
 
     const { signVisitorSessionToken } = await import("@/utils/jwt");
+    const visitorAuthorization = `Bearer ${signVisitorSessionToken({
+      openid: "openid-auth-hook-smoke",
+      visitor_id: "visitor-auth-hook-smoke",
+    })}`;
     const validVisitor = await app.inject({
       method: "GET",
       url: "/visitor/local-service-providers",
       headers: {
-        authorization: `Bearer ${signVisitorSessionToken({
-          openid: "openid-auth-hook-smoke",
-          visitor_id: "visitor-auth-hook-smoke",
-        })}`,
+        authorization: visitorAuthorization,
       },
     });
     expect(validVisitor.statusCode).toBe(200);
@@ -82,6 +87,24 @@ describe("authPlugin WeChat virtual-payment reachability", () => {
       reached: true,
       visitorId: "visitor-auth-hook-smoke",
     });
+    const renderingQuota = await app.inject({
+      method: "GET",
+      url: "/visitor/renderings/quota",
+      headers: { authorization: visitorAuthorization },
+    });
+    expect(renderingQuota.statusCode).toBe(200);
+    const { signDouyinMiniappToken } = await import("@/utils/jwt");
+    const douyinToken = signDouyinMiniappToken({
+      tenant_id: "11111111-1111-4111-8111-111111111111",
+      douyin_installation_id: "22222222-2222-4222-8222-222222222222",
+      douyin_app_id: "tt-app",
+      subject_hash: "a".repeat(64),
+    });
+    expect((await app.inject({
+      method: "GET",
+      url: "/visitor/renderings/quota",
+      headers: { authorization: `Bearer ${douyinToken}` },
+    })).statusCode).toBe(401);
   });
 
   test("lets visitor session tokens reach share campaign open, detail, and assist handlers", async () => {

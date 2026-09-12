@@ -79,6 +79,8 @@ describe("DouyinMiniappController", () => {
       "POST /douyin-mini/customer-auth/sms/send-code",
       "POST /douyin-mini/customer-auth/sms/verify",
       "POST /douyin-mini/customer-auth/select",
+      "GET /douyin-mini/renderings/quota",
+      "POST /douyin-mini/renderings/phone:bind",
       "GET /douyin-mini/bootstrap",
       "GET /douyin-mini/company",
       "GET /douyin-mini/cases",
