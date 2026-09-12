@@ -18,6 +18,13 @@ export const STYLE_LABELS: Record<RenderingLibraryStyle['style'], string> = {
 };
 export const SOURCE_LABELS: Record<RenderingLibraryStyle['source_type'], string> = { real_case: '实景案例', design: '设计效果图', ai_concept: 'AI 概念图' };
 export const STATUS_LABELS = { draft: '草稿', published: '已发布', hidden: '已隐藏' } as const;
+export function hasUnpublishedChanges(style: RenderingLibraryStyle): boolean {
+  return style.status === 'published' && style.published_version !== null && style.version > style.published_version;
+}
+export function publishActionLabel(style: RenderingLibraryStyle): '发布' | '重新发布' | '发布最新修改' {
+  if (style.status !== 'published') return '发布';
+  return hasUnpublishedChanges(style) ? '发布最新修改' : '重新发布';
+}
 export const StyleFieldsSchema = RenderingLibraryCreateSchema.omit({ file_id: true, rights_confirmed: true });
 export type StyleFieldsValue = z.infer<typeof StyleFieldsSchema>;
 export const DEFAULT_STYLE_FIELDS: StyleFieldsValue = { title: '', space: 'living_room', style: 'modern_simple', source_type: 'design',

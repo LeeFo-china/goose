@@ -36,7 +36,7 @@ export function LibraryClient({ access }: { access: LibraryAccess }) {
   const library = useLibraryData();
   const [uploadOpen, setUploadOpen] = useState(false);
   const [editor, setEditor] = useState<{ style: RenderingLibraryStyle; editable: boolean }>();
-  const [mutation, setMutation] = useState<{ style: RenderingLibraryStyle; command: 'publish' | 'hide' | 'remove' }>();
+  const [mutation, setMutation] = useState<{ style: RenderingLibraryStyle; command: 'publish' | 'hide' | 'remove'; preview?: RenderingLibraryFilePreviewResult }>();
   const { query, data } = library;
   const pages = Math.max(1, data?.pagination.totalPages ?? 1);
   return <div className="flex h-[calc(100dvh-8rem)] min-h-0 min-w-0 flex-col gap-4 overflow-hidden">
@@ -55,7 +55,7 @@ export function LibraryClient({ access }: { access: LibraryAccess }) {
       <div className="min-h-0 min-w-0 flex-1 overflow-y-auto pb-1">
         <LibraryGrid list={data?.list ?? []} previews={library.previews} canManage={access.canManage} loading={library.loading} error={library.error}
           filtered={Boolean(query.space || query.style || query.status)} onRetry={library.refresh}
-          onView={(style) => setEditor({ style, editable: false })} onEdit={(style) => setEditor({ style, editable: true })}
+          onView={(style) => setEditor({ style, editable: access.canManage })} onEdit={(style) => setEditor({ style, editable: true })}
           onCommand={(style, command) => setMutation({ style, command })} />
       </div>
       <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t pt-3">
@@ -65,7 +65,8 @@ export function LibraryClient({ access }: { access: LibraryAccess }) {
       </footer>
     </>}
     {editor ? <StyleEditor key={editor.style.id} style={editor.style} preview={library.previews[editor.style.file_id]} canManage={access.canManage && editor.editable}
-      onClose={() => setEditor(undefined)} onSaved={library.refresh} /> : null}
-    {mutation && access.canManage ? <StyleMutation {...mutation} preview={library.previews[mutation.style.file_id]} onClose={() => setMutation(undefined)} onSuccess={library.refresh} /> : null}
+      onClose={() => setEditor(undefined)} onSaved={library.refresh}
+      onCommand={(style, command, preview) => { setEditor(undefined); setMutation({ style, command, preview }); }} /> : null}
+    {mutation && access.canManage ? <StyleMutation {...mutation} preview={mutation.preview ?? library.previews[mutation.style.file_id]} onClose={() => setMutation(undefined)} onSuccess={library.refresh} /> : null}
   </div>;
 }

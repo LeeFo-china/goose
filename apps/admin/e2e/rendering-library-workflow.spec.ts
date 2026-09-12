@@ -58,6 +58,9 @@ test('只读与无权限身份不出现写入操作', async ({ page, request }) 
   await expect(page.getByRole('button', { name: '上传素材', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: '编辑', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /发布/ })).toHaveCount(0);
+  await page.getByRole('article').filter({ hasText: '测试素材 01' }).getByRole('button', { name: '查看测试素材 01详情' }).click();
+  await expect(page.getByRole('dialog', { name: '素材详情' }).getByRole('button', { name: /发布|隐藏/ })).toHaveCount(0);
+  await page.getByRole('dialog', { name: '素材详情' }).getByRole('button', { name: '关闭' }).click();
   await request.post(`${backend}/__test/reset`);
   await identity(page, 'denied');
   await page.goto('/rendering-library', { waitUntil: 'networkidle' });
@@ -232,6 +235,7 @@ test('草稿发布须确认责任，双击只提交一次且可按已发布筛�
   await card.getByRole('button', { name: '发布', exact: true }).click();
   const dialog = page.getByRole('alertdialog', { name: '发布素材' });
   await expect(dialog.getByText('浅灰与木色')).toBeVisible();
+  await expect(dialog.getByText(/客户端或 CDN 已缓存的图片.*无法保证立即清除/)).toBeVisible();
   await expect(dialog.getByRole('img', { name: '测试素材 01' })).toBeVisible();
   const confirm = dialog.getByRole('checkbox', { name: /本公司承担内容及版权责任/ });
   await expect(confirm).not.toBeChecked();
@@ -367,6 +371,51 @@ test('400px 发布弹窗和操作按钮完整可见，无横向溢出', async ({
   await expect(dialog.getByRole('button', { name: '发布素材' })).toBeInViewport();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('publish-mobile.png'), fullPage: true });
+});
+
+test('详情只发布已保存资料，并沿用发布及隐藏状态操作', async ({ page, request }, testInfo) => {
+  await page.setViewportSize({ width: 400, height: 860 });
+  await page.goto('/rendering-library', { waitUntil: 'networkidle' });
+  let card = page.getByRole('article').filter({ hasText: '测试素材 01' });
+  await card.getByRole('button', { name: '查看测试素材 01详情' }).click();
+  let detail = page.getByRole('dialog', { name: '编辑素材' });
+  await expect(detail.getByText('草稿', { exact: true })).toBeVisible();
+  await expect(detail.getByRole('button', { name: '发布', exact: true })).toBeVisible();
+  await detail.getByLabel('标题', { exact: true }).fill('详情保存后的标题');
+  await expect(detail.getByText(/先保存资料/)).toBeVisible();
+  await expect(detail.getByRole('button', { name: '发布', exact: true })).toBeDisabled();
+  const cover = await detail.getByRole('img', { name: '测试素材 01' }).boundingBox();
+  const status = await detail.getByText('草稿', { exact: true }).boundingBox();
+  expect(cover && status && cover.y + cover.height <= status.y).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('detail-mobile.png'), fullPage: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('detail-desktop.png'), fullPage: true });
+  await detail.getByRole('button', { name: '保存资料' }).click();
+  card = page.getByRole('article').filter({ hasText: '详情保存后的标题' });
+  await card.getByRole('button', { name: '查看详情保存后的标题详情' }).click();
+  detail = page.getByRole('dialog', { name: '编辑素材' });
+  await detail.getByRole('button', { name: '发布', exact: true }).click();
+  await expect(detail).toBeHidden();
+  const publish = page.getByRole('alertdialog', { name: '发布素材' });
+  await expect(publish.getByText('详情保存后的标题', { exact: true })).toBeVisible();
+  await publish.getByRole('checkbox', { name: /本公司承担内容及版权责任/ }).check();
+  await publish.getByRole('button', { name: '发布素材' }).click();
+  await card.getByRole('button', { name: '查看详情保存后的标题详情' }).click();
+  detail = page.getByRole('dialog', { name: '编辑素材' });
+  await expect(detail.getByRole('button', { name: '重新发布' })).toBeVisible();
+  await expect(detail.getByRole('button', { name: '隐藏' })).toBeVisible();
+  await detail.getByLabel('颜色说明', { exact: true }).fill('最新搭配说明');
+  await detail.getByRole('button', { name: '保存资料' }).click();
+  await card.getByRole('button', { name: '查看详情保存后的标题详情' }).click();
+  detail = page.getByRole('dialog', { name: '编辑素材' });
+  await expect(detail.getByText(/线上仍为上一版本/)).toBeVisible();
+  await expect(detail.getByRole('button', { name: '发布最新修改' })).toBeVisible();
+  await detail.getByRole('button', { name: '隐藏' }).click();
+  await expect(detail).toBeHidden();
+  await expect(page.getByRole('alertdialog', { name: '隐藏素材' })).toBeVisible();
+  expect((await events(request)).filter((event) => event.path.endsWith('/publish'))).toHaveLength(1);
 });
 
 test('浏览器后退确认保留队列，显式放弃后继续原历史导航', async ({ page }, testInfo) => {

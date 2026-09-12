@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { StyleCard } from './style-card';
 import { StyleFields } from './style-fields';
@@ -60,4 +61,9 @@ test('card distinguishes draft, published, unpublished edits and read-only opera
   const readonly = renderToStaticMarkup(<StyleCard {...props} style={published} canManage={false} />);
   expect(readonly).not.toContain('>重新发布<');
   expect(readonly).not.toContain('>隐藏<');
+});
+
+test('publication confirmation statically includes the public-cache limitation', () => {
+  const source = readFileSync(new URL('./style-mutations.tsx', import.meta.url), 'utf8');
+  expect(source).toContain('客户端或 CDN 已缓存的图片无法保证立即清除');
 });

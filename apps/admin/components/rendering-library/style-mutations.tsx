@@ -70,6 +70,7 @@ export function StyleMutation({ style, preview, command, onClose, onSuccess }: {
           {current.color_notes ? <><dt className="text-muted-foreground">颜色说明</dt><dd className="min-w-0 break-words">{current.color_notes}</dd></> : null}
           {current.material_notes ? <><dt className="text-muted-foreground">材质说明</dt><dd className="min-w-0 break-words">{current.material_notes}</dd></> : null}
         </dl>
+        <p className="text-xs leading-5 text-muted-foreground">公开图片可能被客户保存或缓存；之后隐藏会停止 API 返回，但客户端或 CDN 已缓存的图片无法保证立即清除。</p>
         <Field orientation="horizontal" className="items-start gap-2">
           <Checkbox id="rendering-publish-responsibility" checked={responsibilityConfirmed} disabled={busy}
             onCheckedChange={(checked) => setResponsibilityConfirmed(checked === true)} />
