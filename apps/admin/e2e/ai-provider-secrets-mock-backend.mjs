@@ -6,6 +6,8 @@ const id = '10000000-0000-4000-8000-000000000001';
 const initial = () => ({ id, code: 'ark', name: '方舟测试', provider_type: 'openai_compatible',
   endpoint_url: 'https://ark.example.test/api/v3', api_key_setting_key: 'ARK_API_KEY',
   status: 'active', sort_order: 0, version: 1, created_at: '2026-09-11T00:00:00Z', updated_at: '2026-09-11T00:00:00Z' });
+const secondProvider = () => ({ ...initial(), id: secondProviderId, name: '第二供应商', code: 'second',
+  endpoint_url: 'https://second.example.test/v1' });
 let provider = initial();
 let options = {};
 let configured = false;
@@ -20,6 +22,7 @@ let customScenes = [];
 const secondProviderId = '10000000-0000-4000-8000-000000000002';
 const routeId = '30000000-0000-4000-8000-000000000001';
 const modelId = '40000000-0000-4000-8000-000000000001';
+const secondModelId = '40000000-0000-4000-8000-000000000002';
 const createdModelId = '40000000-0000-4000-8000-000000000050';
 const createdModelCode = 'mdl_0123456789abcdef0123456789abcdef';
 const opaqueModelCode = (recordId) => recordId === createdModelId
@@ -49,7 +52,7 @@ const routeRecord = () => savedRoute || (options.legacy_missing
 const visibleProvider = () => options.ark_workspace ? { ...provider, name: '火山方舟' } : provider;
 const providerList = () => options.paginated || options.bound_provider_off_page
   ? [...Array.from({ length: options.bound_provider_off_page ? 100 : 20 }, (_, index) => ({ ...initial(), id: `20000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`, name: `保留供应商 ${index + 1}`, code: `retained_${index + 1}` })), ...(deleted ? [] : [visibleProvider()])]
-  : deleted ? [] : [visibleProvider(), ...(options.second_provider && !secondDeleted ? [{ ...initial(), id: secondProviderId, name: '第二供应商', code: 'second' }] : [])];
+  : deleted ? [] : [visibleProvider(), ...(options.second_provider && !secondDeleted ? [secondProvider()] : [])];
 const page = (list) => ({ list, pagination: { page: 1, pageSize: 20, total: list.length, totalPages: list.length ? 1 : 0 } });
 const send = (res, status, data) => {
   res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'private, no-store' });
@@ -202,9 +205,23 @@ const server = createServer(async (req, res) => {
     const keyword = url.searchParams.get('keyword') || '';
     const modality = url.searchParams.get('modality');
     const status = url.searchParams.get('status');
-    const filtered = models.filter((item) => (!providerId || item.provider_id === providerId)
+    if (options.delay_first_provider_models && providerId === id) {
+      // Keep the first provider response stale long enough to exercise the switch regression.
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+    }
+    let filtered = models.filter((item) => (!providerId || item.provider_id === providerId)
       && (!keyword || item.name.includes(keyword) || item.model_name.includes(keyword))
       && (!modality || item.modality === modality) && (!status || item.status === status));
+    if (options.provider_models_by_supplier && providerId === secondProviderId && !filtered.length) {
+      const synthetic = modelRecord({
+        provider_id: secondProviderId, name: '第二供应商模型', model_name: 'second-model',
+        modality: 'text', input_modalities: ['text'], status: 'active', sort_order: 0,
+      }, secondModelId);
+      if ((!keyword || synthetic.name.includes(keyword) || synthetic.model_name.includes(keyword))
+        && (!modality || synthetic.modality === modality) && (!status || synthetic.status === status)) {
+        filtered = [synthetic];
+      }
+    }
     return send(res, 200, { list: filtered.slice((current - 1) * size, current * size), pagination: { page: current, pageSize: size, total: filtered.length, totalPages: Math.ceil(filtered.length / size) } });
   }
   if (path === '/platform/ai-config/models' && req.method === 'POST') {

@@ -45,6 +45,9 @@ test('已登记的新密钥引用可预先配置，失败不自动重试且窄�
   await page.setViewportSize({ width: 400, height: 900 });
   await page.goto('/platform/ai-models', { waitUntil: 'networkidle' });
   await page.getByRole('tab', { name: '供应商', exact: true }).click();
+  const providerTab = page.getByRole('tabpanel', { name: '供应商', exact: true });
+  await expect(providerTab.getByRole('region', { name: '供应商详情', exact: true })).toHaveCount(1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.getByRole('combobox', { name: '密钥配置', exact: true }).click();
   await page.getByRole('option', { name: 'DeepSeek 接口密钥', exact: true }).click();
   await expect(page.getByRole('button', { name: '配置密钥', exact: true })).toBeVisible();
@@ -59,6 +62,66 @@ test('已登记的新密钥引用可预先配置，失败不自动重试且窄�
   await page.screenshot({ path: info.outputPath('provider-secret-mobile-error.png'), fullPage: true });
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
+});
+
+test('供应商切换只替换右侧唯一详情和对应模型', async ({ page, request }, info) => {
+  await request.post(`${backend}/__test/options`, { data: {
+    second_provider: true, provider_models_by_supplier: true,
+  } });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto('/platform/ai-models', { waitUntil: 'networkidle' });
+  await page.getByRole('tab', { name: '供应商', exact: true }).click();
+  const providerTab = page.getByRole('tabpanel', { name: '供应商', exact: true });
+  const detail = providerTab.getByRole('region', { name: '供应商详情', exact: true });
+  await expect(detail).toHaveCount(1);
+  await expect(detail).toHaveAttribute('data-provider-detail-id', '10000000-0000-4000-8000-000000000001');
+  await expect(detail.getByLabel('名称', { exact: true })).toHaveValue('方舟测试');
+  await expect(detail.getByLabel('Endpoint Base URL', { exact: true })).toHaveValue('https://ark.example.test/api/v3');
+
+  const rail = providerTab.getByRole('complementary', { name: '供应商列表' });
+  await rail.getByRole('button', { name: '第二供应商', exact: true }).click();
+  await expect(detail).toHaveCount(1);
+  await expect(detail).toHaveAttribute('data-provider-detail-id', '10000000-0000-4000-8000-000000000002');
+  await expect(detail.getByLabel('名称', { exact: true })).toHaveValue('第二供应商');
+  await expect(detail.getByLabel('Endpoint Base URL', { exact: true })).toHaveValue('https://second.example.test/v1');
+  const secondModels = detail.getByRole('table', { name: '第二供应商的模型', exact: true });
+  await expect(secondModels.getByText('第二供应商模型', { exact: true })).toBeVisible();
+  await expect(secondModels.getByText('second-model', { exact: true })).toBeVisible();
+  await expect(providerTab.getByRole('table', { name: '方舟测试的模型', exact: true })).toHaveCount(0);
+  await page.screenshot({ path: info.outputPath('provider-master-detail-desktop.png'), fullPage: true });
+});
+
+test('快速切换时迟到的旧供应商模型不会覆盖当前详情', async ({ page, request }) => {
+  await request.post(`${backend}/__test/options`, { data: {
+    second_provider: true, provider_models_by_supplier: true, delay_first_provider_models: true,
+  } });
+  const firstProviderModelsRequest = page.waitForRequest((outgoing) => {
+    const target = new URL(outgoing.url());
+    return target.pathname.endsWith('/platform/ai-config/models')
+      && target.searchParams.get('providerId') === '10000000-0000-4000-8000-000000000001';
+  });
+  await page.goto('/platform/ai-models', { waitUntil: 'domcontentloaded' });
+  const providerTabTrigger = page.getByRole('tab', { name: '供应商', exact: true });
+  await expect(async () => {
+    await providerTabTrigger.click();
+    await expect(providerTabTrigger).toHaveAttribute('aria-selected', 'true');
+  }).toPass();
+  await firstProviderModelsRequest;
+  const providerTab = page.getByRole('tabpanel', { name: '供应商', exact: true });
+  const detail = providerTab.getByRole('region', { name: '供应商详情', exact: true });
+  await providerTab.getByRole('complementary', { name: '供应商列表' })
+    .getByRole('button', { name: '第二供应商', exact: true }).click();
+  const secondModels = detail.getByRole('table', { name: '第二供应商的模型', exact: true });
+  await expect(secondModels.getByText('第二供应商模型', { exact: true })).toBeVisible();
+
+  // Cross the mock's fixed 1.2s stale-response boundary before checking retained identity.
+  await page.waitForTimeout(1400);
+  await expect(detail).toHaveCount(1);
+  await expect(detail).toHaveAttribute('data-provider-detail-id', '10000000-0000-4000-8000-000000000002');
+  await expect(detail.getByLabel('名称', { exact: true })).toHaveValue('第二供应商');
+  await expect(secondModels.getByText('第二供应商模型', { exact: true })).toBeVisible();
+  await expect(secondModels.getByText('second-model', { exact: true })).toBeVisible();
+  await expect(providerTab.getByRole('table', { name: '方舟测试的模型', exact: true })).toHaveCount(0);
 });
 
 test('只读、无权限和状态失败不会破坏供应商列表', async ({ page, request }) => {
