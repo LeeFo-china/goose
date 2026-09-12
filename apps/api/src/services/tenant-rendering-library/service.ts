@@ -47,6 +47,7 @@ export class TenantRenderingLibraryService {
       color_notes: row.color_notes, material_notes: row.material_notes, source_type: row.source_type,
       rights_confirmed: row.rights_confirmed, file_id: row.file_id, status: row.status,
       sort_order: row.sort_order, version: row.version, created_by_employee_id: row.created_by_employee_id,
+      published_version: row.published_version, published_at: row.published_at, published_by_employee_id: row.published_by_employee_id,
       created_at: row.created_at, updated_at: row.updated_at };
   }
 

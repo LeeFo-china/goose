@@ -178,17 +178,24 @@ export class RenderingLibraryStorage {
 
   async copyPublic(input: RenderingPublicCopyInput): Promise<{ publicUrl: string }> {
     const { config, publicUrl } = await this.verifiedPublicCopy(input);
+    let cos: RenderingCosPort;
+    let bytes: Buffer;
     try {
-      const cos = this.cos(config);
-      const bytes = await this.readPublicSource(cos, input);
+      cos = this.cos(config);
+      bytes = await this.readPublicSource(cos, input);
       if (!Buffer.isBuffer(bytes) || bytes.length === 0 || bytes.length > RENDERING_UPLOAD_MAX_BYTES
         || bytes.length !== input.sourceSizeBytes || createHash('sha256').update(bytes).digest('hex') !== input.sourceChecksum) return failed();
+    } catch { return failed(); }
+    try {
       const target = input.publicLocation;
       await cos.putObject({ Bucket: target.bucket, Region: target.region, Key: target.object_key, Body: bytes,
         ContentLength: bytes.length, ContentType: 'image/webp', ACL: 'public-read',
         CacheControl: 'public, max-age=31536000, immutable', 'x-cos-meta-source-sha256': input.sourceChecksum });
       return { publicUrl };
-    } catch { return failed(); }
+    } catch {
+      // COS may have committed the object even when the PUT response is lost. Recover using HEAD under a new lease.
+      throw Errors.business(502, '装修效果素材公开副本写入结果未知', 'RENDERING_STORAGE_PUBLIC_COPY_UNKNOWN');
+    }
   }
 
   async hasPublicCopy(input: RenderingPublicCopyInput): Promise<boolean> {

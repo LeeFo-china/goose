@@ -43,6 +43,7 @@ export async function makeFilesFixture() {
       let row: Record<string, unknown> | undefined;
       if (operation === 'insert') {
         row = { deleted_at: null, created_at: '2026-09-11T00:00:00Z', updated_at: '2026-09-11T00:00:00Z',
+          published_version: null, published_at: null, published_by_employee_id: null,
           version: 1, id: crypto.randomUUID(), ...write };
         rows.set(String(row.id), row);
       } else {

@@ -24,7 +24,8 @@ export function makeRepositoryFixture() {
     status: 'active', deleted_at: null as string | null, mime_type: 'image/webp', size_bytes: 1024,
     object_key: `private/renovation-styles/${tenantId}/${fileId}.webp`, provider: 'tencent_cos',
     bucket: 'rendering-123456', region: 'ap-guangzhou', owner_type: 'tenant', owner_id: tenantId,
-    width: 32, height: 24, public_url: null as string | null, legacy_url: null as string | null, legacy_path: null as string | null };
+    width: 32, height: 24, public_url: null as string | null, legacy_url: null as string | null, legacy_path: null as string | null,
+    checksum: 'a'.repeat(64) as string | null };
   const calls: unknown[][] = [];
   const repository: RenderingLibraryRepositoryPort = {
     async list(tenant, query) {
@@ -44,6 +45,7 @@ export function makeRepositoryFixture() {
     async create(tenant, employee, input) {
       calls.push(['create', tenant, employee, input]);
       const row = { ...input, id: styleId, tenant_id: tenant, status: 'draft' as const, version: 1,
+        published_version: null, published_at: null, published_by_employee_id: null,
         created_by_employee_id: employee, created_at: '2026-09-11T00:00:00Z', updated_at: '2026-09-11T00:00:00Z', deleted_at: null };
       rows.set(styleId, row);
       return row;

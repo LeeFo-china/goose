@@ -12,8 +12,8 @@ export type RenderingLibraryChanges = Omit<RenderingLibraryUpdate, 'expected_ver
 };
 export interface RenderingLibraryRows { rows: RenderingLibraryStyle[]; total: number }
 
-const STYLE_FIELDS = 'id,tenant_id,title,space,style,color_notes,material_notes,source_type,rights_confirmed,file_id,status,sort_order,version,created_by_employee_id,created_at,updated_at';
-const SOURCE_FIELDS = 'id,tenant_id,scene,visibility,status,deleted_at,mime_type,size_bytes,object_key,provider,bucket,region,owner_type,owner_id,width,height,public_url,legacy_url,legacy_path';
+const STYLE_FIELDS = 'id,tenant_id,title,space,style,color_notes,material_notes,source_type,rights_confirmed,file_id,status,sort_order,version,created_by_employee_id,published_version,published_at,published_by_employee_id,created_at,updated_at';
+const SOURCE_FIELDS = 'id,tenant_id,scene,visibility,status,deleted_at,mime_type,size_bytes,object_key,provider,bucket,region,owner_type,owner_id,width,height,public_url,legacy_url,legacy_path,checksum';
 const SourceBatchInputSchema = z.strictObject({
   tenantId: z.uuid(), fileIds: z.array(z.uuid()).max(RENDERING_LIBRARY_PREVIEW_BATCH_MAX)
     .refine((ids) => new Set(ids).size === ids.length, '文件 ID 不得重复'),
@@ -25,6 +25,7 @@ const SourceFileSchema = z.strictObject({
   provider: z.string(), bucket: z.string(), region: z.string().nullable(),
   owner_type: z.string(), owner_id: z.uuid().nullable(), width: z.number().int().nullable(), height: z.number().int().nullable(),
   public_url: z.string().nullable(), legacy_url: z.string().nullable(), legacy_path: z.string().nullable(),
+  checksum: z.string().nullable(),
 });
 export type RenderingLibrarySourceFile = z.infer<typeof SourceFileSchema>;
 export interface StageRenderingSourceInput {

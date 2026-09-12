@@ -274,7 +274,8 @@ test('SDK-compatible not-found errors return false and other failures are saniti
   await expect(storage.copyPublic(copyInput)).rejects.toMatchObject({ statusCode: 502, code: 'RENDERING_STORAGE_FAILED', details: undefined });
   state.fail = false;
   state.failPut = true;
-  await expect(storage.copyPublic(copyInput)).rejects.toMatchObject({ statusCode: 502, code: 'RENDERING_STORAGE_FAILED', details: undefined });
+  await expect(storage.copyPublic(copyInput)).rejects.toMatchObject({ statusCode: 502,
+    code: 'RENDERING_STORAGE_PUBLIC_COPY_UNKNOWN', message: '装修效果素材公开副本写入结果未知', details: undefined });
 });
 
 test('public copy accepts maximum version and source size at their inclusive boundaries', async () => {

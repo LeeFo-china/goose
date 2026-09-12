@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { RenderingLibraryStyleSchema } from '@gooes/domain';
 import { createInput, fileId, makeAuth, makeRepositoryFixture, otherTenantId, styleId, tenantId } from './test-fixtures';
 process.env.SUPABASE_URL ??= 'http://127.0.0.1:54321';
 process.env.SUPABASE_PUBLISH ??= 'test-publish-key';
@@ -14,7 +15,8 @@ async function fixture() {
 test('private draft lifecycle preserves omitted metadata, applies CAS and returns explicit DTOs', async () => {
   const { service, rows, calls } = await fixture();
   const auth = makeAuth();
-  expect(await service.create(auth, createInput)).toMatchObject({ id: styleId, tenant_id: tenantId, status: 'draft', version: 1 });
+  expect(await service.create(auth, createInput)).toMatchObject({ id: styleId, tenant_id: tenantId, status: 'draft', version: 1,
+    published_version: null, published_at: null, published_by_employee_id: null });
   expect(calls).toContainEqual(['create', tenantId, fileId, createInput]);
   expect(await service.get(auth, styleId)).not.toHaveProperty('deleted_at');
   const updated = await service.update(auth, styleId, { expected_version: 1, title: '新客厅' });
@@ -24,6 +26,24 @@ test('private draft lifecycle preserves omitted metadata, applies CAS and return
   expect(rows.get(styleId)).toMatchObject({ status: 'hidden', version: 4, deleted_at: expect.any(String) });
   await expect(service.get(auth, styleId)).rejects.toMatchObject({ statusCode: 404, code: 'RENDERING_STYLE_NOT_FOUND' });
   expect(calls.filter(([name]) => name === 'file')).toHaveLength(1);
+});
+
+test('list, get, update, hide and remove preserve publication summary without exposing snapshot storage', async () => {
+  const { service, rows } = await fixture();
+  const auth = makeAuth();
+  await service.create(auth, createInput);
+  const row = rows.get(styleId)!;
+  const summary = { published_version: 2, published_at: '2026-09-13T00:00:00Z', published_by_employee_id: fileId };
+  Object.assign(row, summary, { status: 'published', version: 2,
+    published_file_id: fileId, public_url: 'https://cdn.secret.test/x', object_key: 'public/secret' });
+  for (const dto of [(await service.list(auth, {})).list[0], await service.get(auth, styleId),
+    await service.update(auth, styleId, { expected_version: 2, title: '新版本' }),
+    await service.hide(auth, styleId, { expected_version: 3 })]) {
+    expect(dto).toMatchObject(summary);
+    expect(RenderingLibraryStyleSchema.safeParse(dto).success).toBe(true);
+  }
+  expect(await service.remove(auth, styleId, { expected_version: 4 })).toEqual({ id: styleId, deleted: true });
+  expect(rows.get(styleId)).toMatchObject(summary);
 });
 
 test('lists with defaults and explicit pagination, and isolates tenant detail', async () => {
@@ -91,6 +111,12 @@ test('create rejects every source eligibility boundary before writing', async ()
     valid.source.height = 4096;
     expect(await valid.service.create(makeAuth(), createInput)).toMatchObject({ status: 'draft' });
   }
+});
+
+test('private draft creation still permits legacy missing checksum before publication', async () => {
+  const { service, source } = await fixture();
+  source.checksum = null;
+  expect(await service.create(makeAuth(), createInput)).toMatchObject({ status: 'draft', published_version: null });
 });
 
 test('service independently validates request bodies, ids and queries', async () => {

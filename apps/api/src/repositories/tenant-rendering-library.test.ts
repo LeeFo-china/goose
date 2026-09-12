@@ -11,13 +11,14 @@ const input = { title: '客厅', space: 'living_room' as const, style: 'cream' a
   color_notes: '暖色', material_notes: '木', source_type: 'design' as const,
   rights_confirmed: true as const, file_id: other, sort_order: 0 };
 const row = { ...input, id, tenant_id: tenantId, status: 'draft' as const, version: 1,
+  published_version: null, published_at: null, published_by_employee_id: null,
   created_by_employee_id: other, created_at: '2026-09-11T00:00:00Z', updated_at: '2026-09-11T00:00:00Z' };
 const location = { bucket: 'rendering-123456', region: 'ap-guangzhou', object_key: `private/renovation-styles/${tenantId}/${other}.webp` };
 const source = { id: other, tenant_id: tenantId, scene: 'rendering_style_source', visibility: 'private',
   status: 'active', deleted_at: null, mime_type: 'image/webp', size_bytes: 1024, ...location,
   provider: 'tencent_cos', owner_type: 'tenant', owner_id: tenantId, width: 32, height: 24,
-  public_url: null, legacy_url: null, legacy_path: null };
-const sourceFields = 'id,tenant_id,scene,visibility,status,deleted_at,mime_type,size_bytes,object_key,provider,bucket,region,owner_type,owner_id,width,height,public_url,legacy_url,legacy_path';
+  public_url: null, legacy_url: null, legacy_path: null, checksum: 'a'.repeat(64) };
+const sourceFields = 'id,tenant_id,scene,visibility,status,deleted_at,mime_type,size_bytes,object_key,provider,bucket,region,owner_type,owner_id,width,height,public_url,legacy_url,legacy_path,checksum';
 const stageInput = { id: other, tenantId, employeeId: id, authUserId: id, location, sizeBytes: 1024,
   width: 32, height: 24, checksum: 'a'.repeat(64) };
 
@@ -57,6 +58,7 @@ test('list selects explicit fields with tenant, live rows, bounded paging and st
   const select = calls.find(([name]) => name === 'select');
   expect(select?.[1]).not.toContain('*');
   expect(select?.[1]).not.toContain('object_key');
+  expect(select?.[1]).toBe('id,tenant_id,title,space,style,color_notes,material_notes,source_type,rights_confirmed,file_id,status,sort_order,version,created_by_employee_id,published_version,published_at,published_by_employee_id,created_at,updated_at');
   expect(select?.[2]).toEqual({ count: 'exact' });
 });
 
@@ -85,7 +87,7 @@ test('create fixes trusted tenant and employee and maps duplicate conflict witho
 });
 
 test('repository rejects foreign, invalid and malformed database responses', async () => {
-  for (const badRow of [{ ...row, tenant_id: other }, { ...row, status: 'published' },
+  for (const badRow of [{ ...row, tenant_id: other }, { ...row, status: 'invalid' },
     { ...row, version: 0 }, { ...row, object_key: 'private/secret' }]) {
     const { repository } = await fixture([badRow]);
     await expect(repository.list(tenantId, { page: 1, pageSize: 20 })).rejects.toMatchObject({ code: 'DB_ERROR' });
@@ -101,10 +103,12 @@ test('repository rejects foreign, invalid and malformed database responses', asy
   await expect(failed.repository.find(tenantId, id)).rejects.toMatchObject({ code: 'DB_ERROR', message: '读取装修效果素材失败' });
 });
 
-test('source lookup selects nineteen explicit fields and rejects malformed or foreign files', async () => {
+test('source lookup selects explicit fields including nullable checksum and rejects malformed or foreign files', async () => {
   const file = source;
   const { repository, calls, result } = await fixture(file);
   expect(await repository.findSourceFile(tenantId, other)).toEqual(file);
+  result.data = { ...file, checksum: null };
+  expect(await repository.findSourceFile(tenantId, other)).toEqual({ ...file, checksum: null });
   expect(calls).toContainEqual(['from', 'platform_file_objects']);
   expect(calls).toContainEqual(['select', sourceFields]);
   for (const call of [['eq', 'tenant_id', tenantId], ['eq', 'id', other], ['is', 'deleted_at', null]]) expect(calls).toContainEqual(call);
