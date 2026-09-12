@@ -210,7 +210,7 @@ git diff --cached --check
 | 5 租户发布 HTTP | 已实现 | `POST /tenant/rendering-library/styles/:id/publish`；严格 body 与现有身份边界 |
 | 6 客户公开目录 | 已实现 | 一次带关系查询、显式字段、同租户发布快照过滤、数据库分页与最小 DTO |
 | 7 微信/抖音浏览路由 | 已实现 | 各有列表和详情两个 session-only GET；404、参数和渠道身份回归 |
-| 8 Admin 发布交互 | 已实现、mock 浏览器验证 | 责任确认、未发布修改、重新发布、隐藏缓存提示、重复提交/冲突恢复、400px 窄屏 |
+| 8 Admin 发布交互 | 已实现、mock 浏览器验证 | 责任确认、未发布修改、重新发布、隐藏缓存提示、重复提交/冲突恢复；发布前须加载并核对当前有效图片，过期自动刷新、挂起可重试，400px 窄屏 |
 
 本阶段采用**租户自行发布**，不含平台或第三方人工审核。审核、真实客户生图
 质量与费用不应由上述通过项推断。管理员确认的是本公司自行公开及版权责任；
@@ -218,7 +218,7 @@ AI 概念图保留 `source_type=ai_concept`。普通编辑只改当前草稿字�
 目录读取发布快照；隐藏保留快照和旧公开对象，但立即从 API 查询结果排除，
 外部缓存无法保证即时失效。新公开文件与私有源文件物理分离。
 
-### Task 9 离线总回归（2026-09-13）
+### Task 9 离线总回归（2026-09-13，最终修补后复跑）
 
 在 `.worktrees/feat-customer-rendering-quota` 执行批准计划 Task 9 命令：
 
@@ -226,11 +226,11 @@ AI 概念图保留 `source_type=ai_concept`。普通编辑只改当前草稿字�
 | --- | --- |
 | domain 全量 Bun | 218 pass / 0 fail / 1221 `expect()`；40 文件 |
 | domain 类型检查 | `bunx tsc --noEmit` 退出 0 |
-| API 相关 Bun | 167 pass / 0 fail / 1549 `expect()`；19 文件 |
+| API 相关 Bun | 171 pass / 0 fail / 1568 `expect()`；19 文件 |
 | API 类型检查 | `bun run typecheck` 退出 0 |
-| Admin 相关 Bun | 40 pass / 0 fail / 150 `expect()`；8 文件 |
+| Admin 相关 Bun | 42 pass / 0 fail / 161 `expect()`；8 文件 |
 | Admin 类型检查 | `bunx tsc -p tsconfig.typecheck.json --noEmit --incremental false` 退出 0 |
-| Admin Chromium | 28 pass / 0 fail，Playwright 报告总用时 1.4 分钟；CLI 不汇总断言数 |
+| Admin Chromium | 36 pass / 0 fail，Playwright 报告总用时 1.6 分钟；CLI 不汇总断言数 |
 | 文件大小 | Admin 1601 个 TS/TSX 文件 ≤500 行；API 检查通过，生成的 database types 为既有排除项 |
 | 差异检查 | `git diff --check` 退出 0（文档提交前再次核验） |
 
@@ -239,6 +239,12 @@ Playwright 使用真实 Next 页面、代理与 Chromium，但后端是 loopback
 这些结果**不证明** migration 已应用、真实 PostgreSQL 并发、COS 私有策略、
 公开 URL 可匿名读取、CDN 隐藏效果或两端小程序已接入。浏览器运行出现
 `NO_COLOR`/`FORCE_COLOR` 同时设置的非失败警告。
+
+跨层审查后补齐了发布源文件失效的 `422 RENDERING_STYLE_NOT_PUBLISHABLE`
+合同，以及 Admin 发布前的私有图片核对、过期刷新、挂起超时和提交时同步
+校验。上述数字是这些修补后重新执行的结果。测试 mock 曾在一次独立审查运行中
+因空批量预览请求体退出，单例及全量重跑通过；它仍是非阻断的测试设施健壮性
+待办，不应据此宣称真实预览链路通过。
 
 静态核对：controller 只解析 HTTP 并调用 service；发布 service 只通过
 repository RPC 与 storage gateway 访问外部状态；公开目录使用显式字段、
