@@ -124,3 +124,85 @@ test('网络中断后当前弹窗重试保持原键', async ({ page, request }) 
   await expect(dialog).toBeHidden();
   expect(publications(await events(request))[0]?.input?.idempotency_key).toBe(firstKey);
 });
+
+test('批量预览缺失时自动读取私有预览；读取失败只能手动重试，不能无图发布', async ({ page, request }, testInfo) => {
+  await page.setViewportSize({ width: 400, height: 860 });
+  await options(request, { preview_failure: true });
+  let failSinglePreview = true;
+  await page.route('**/api/backend/tenant/rendering-library/files/*/preview', (route) => failSinglePreview
+    ? route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ success: false,
+      code: 'RENDERING_STORAGE_UNAVAILABLE', message: '私有预览暂不可用' }) }) : route.continue());
+  await page.goto('/rendering-library', { waitUntil: 'networkidle' });
+  await page.getByRole('article').filter({ hasText: '测试素材 01' }).getByRole('button', { name: '发布', exact: true }).click();
+  const dialog = page.getByRole('alertdialog', { name: '发布素材' });
+  const responsibility = dialog.getByRole('checkbox', { name: /本公司承担内容及版权责任/ });
+  await expect(dialog.getByText(/私有预览暂不可用|图片预览.*失败/)).toBeVisible();
+  await expect(responsibility).toBeDisabled();
+  await expect(dialog.getByRole('button', { name: '发布素材' })).toBeDisabled();
+  expect(publications(await events(request))).toHaveLength(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('publish-preview-failed-mobile.png'), fullPage: true });
+  failSinglePreview = false;
+  await dialog.getByRole('button', { name: '重试图片预览' }).click();
+  await expect(dialog.getByRole('img', { name: '测试素材 01' })).toBeVisible();
+  await expect(responsibility).toBeEnabled();
+  await responsibility.check();
+  expect((await events(request)).some((event) => /\/files\/[^/]+\/preview$/.test(event.path))).toBe(true);
+  await dialog.getByRole('button', { name: '发布素材' }).click();
+  await expect(dialog).toBeHidden();
+  expect(publications(await events(request))).toHaveLength(1);
+});
+
+test('过期批量预览自动刷新且加载中不可确认或提交', async ({ page, request }, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await options(request, { expired_batch_previews: true });
+  let releasePreview!: () => void;
+  const previewGate = new Promise<void>((resolve) => { releasePreview = resolve; });
+  let requested = false;
+  await page.route('**/api/backend/tenant/rendering-library/files/*/preview', async (route) => {
+    requested = true; await previewGate; await route.continue();
+  });
+  await page.goto('/rendering-library', { waitUntil: 'networkidle' });
+  await page.getByRole('article').filter({ hasText: '测试素材 01' }).getByRole('button', { name: '发布', exact: true }).click();
+  const dialog = page.getByRole('alertdialog', { name: '发布素材' });
+  await expect.poll(() => requested).toBe(true);
+  const responsibility = dialog.getByRole('checkbox', { name: /本公司承担内容及版权责任/ });
+  await expect(responsibility).toBeDisabled();
+  await expect(dialog.getByRole('button', { name: '发布素材' })).toBeDisabled();
+  releasePreview();
+  await expect(dialog.getByRole('img', { name: '测试素材 01' })).toBeVisible();
+  await expect(responsibility).toBeEnabled();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('publish-preview-refreshed-desktop.png'), fullPage: true });
+  expect(publications(await events(request))).toHaveLength(0);
+});
+
+test('版本冲突换图后旧图不可确认，等待新私有图并重新勾责任', async ({ page, request }) => {
+  const dialog = await openPublish(page);
+  await options(request, { conflict_new_file_next: true });
+  await dialog.getByRole('button', { name: '发布素材' }).click();
+  let releasePreview!: () => void;
+  const previewGate = new Promise<void>((resolve) => { releasePreview = resolve; });
+  let requestedPath = '';
+  await page.route('**/api/backend/tenant/rendering-library/files/*/preview', async (route) => {
+    requestedPath = new URL(route.request().url()).pathname; await previewGate; await route.continue();
+  });
+  await dialog.getByRole('button', { name: '加载最新资料' }).click();
+  await expect(dialog.getByText('其他员工已更换图片的素材', { exact: true })).toBeVisible();
+  await expect.poll(() => requestedPath).toContain('30000000-0000-4000-8000-000000000999');
+  await expect(dialog.getByRole('img', { name: '测试素材 01' })).toHaveCount(0);
+  const responsibility = dialog.getByRole('checkbox', { name: /本公司承担内容及版权责任/ });
+  await expect(responsibility).not.toBeChecked();
+  await expect(responsibility).toBeDisabled();
+  await expect(dialog.getByRole('button', { name: '发布素材' })).toBeDisabled();
+  releasePreview();
+  await expect(dialog.getByRole('img', { name: '其他员工已更换图片的素材' })).toBeVisible();
+  await expect(responsibility).toBeEnabled();
+  await expect(responsibility).not.toBeChecked();
+  await responsibility.check();
+  await dialog.getByRole('button', { name: '发布素材' }).click();
+  await expect(dialog).toBeHidden();
+  const writes = publications(await events(request));
+  expect(writes.map((event) => event.input?.expected_version)).toEqual([1, 2]);
+  expect(writes[0]?.input?.idempotency_key).not.toBe(writes[1]?.input?.idempotency_key);
+});

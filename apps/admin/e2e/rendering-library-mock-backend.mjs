@@ -64,7 +64,8 @@ const server = createServer(async (request, response) => {
   }
   if (path === `${prefix}/files/previews`) {
     if (options.preview_failure) return send(response, 503, '预览暂不可用', 'RENDERING_STORAGE_UNAVAILABLE');
-    return send(response, 200, { items: input.file_ids.map(preview) });
+    return send(response, 200, { items: input.file_ids.map((id) => options.expired_batch_previews
+      ? { ...preview(id), expires_at: new Date(Date.now() - 1000).toISOString() } : preview(id)) });
   }
   if (request.method === 'GET' && /\/files\/[^/]+\/preview$/.test(path)) return send(response, 200, preview(path.split('/').at(-2)));
   if (token.includes('viewer') && request.method !== 'GET') return send(response, 403, '无权管理素材', 'FORBIDDEN');
@@ -89,6 +90,11 @@ const server = createServer(async (request, response) => {
     if (!row) return send(response, 404, '素材不存在', 'NOT_FOUND');
     if (request.method === 'GET') return send(response, 200, row);
     if (options.conflict_next) { options.conflict_next = false; row.version += 1; row.title = '其他员工已修改的素材'; }
+    if (match[2] === '/publish' && options.conflict_new_file_next) {
+      options.conflict_new_file_next = false; row.version += 1; row.file_id = fileId(999);
+      row.title = '其他员工已更换图片的素材';
+      return send(response, 409, '素材已被其他人修改，请刷新后重试', 'RENDERING_STYLE_VERSION_CONFLICT');
+    }
     if (match[2] === '/publish') {
       if (options.idempotency_conflict_next) { options.idempotency_conflict_next = false;
         return send(response, 409, '测试幂等键冲突', 'RENDERING_STYLE_PUBLISH_IDEMPOTENCY_CONFLICT'); }
