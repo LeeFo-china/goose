@@ -18,7 +18,8 @@ describe('customer rendering public contract', () => {
   });
 
   test('includes the trial within five and counts merged channel usage', () => {
-    expect(projectRenderingQuota({ phoneVerified: true, consumed: 1, reserved: 0, activeJobId: null }).remaining).toBe(4);
+    expect(projectRenderingQuota({ phoneVerified: true, consumed: 1, reserved: 0, activeJobId: null }))
+      .toMatchObject({ trial_used: true, remaining: 4, can_generate: true, blocked_reason: null });
     expect(projectRenderingQuota({ phoneVerified: true, consumed: 2, reserved: 0, activeJobId: null }).remaining).toBe(3);
     expect(projectRenderingQuota({ phoneVerified: true, consumed: 7, reserved: 0, activeJobId: null }))
       .toMatchObject({ remaining: 0, can_generate: false, blocked_reason: 'quota_exhausted' });
