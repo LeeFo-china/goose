@@ -1,16 +1,29 @@
 import COS from 'cos-nodejs-sdk-v5';
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { RENDERING_UPLOAD_MAX_BYTES, RenderingLibraryBatchPreviewSchema } from '@gooes/domain';
 import { Errors } from '@/errors/error-factory';
 
 export interface RenderingStorageLocation { bucket: string; region: string; object_key: string }
-export interface RenderingStorageConfig { bucket: string; region: string; secretId: string; secretKey: string }
+export interface RenderingStorageConfig { bucket: string; region: string; secretId: string; secretKey: string; publicBaseUrl?: string }
+export interface RenderingPublicCopyInput {
+  tenantId: string;
+  styleId: string;
+  sourceFileId: string;
+  targetVersion: number;
+  sourceChecksum: string;
+  sourceSizeBytes: number;
+  sourceLocation: RenderingStorageLocation;
+  publicLocation: RenderingStorageLocation;
+}
 export interface RenderingStorageSettings {
   getString(key: string): Promise<string>;
   getSecretString(key: string): Promise<string>;
 }
 export interface RenderingCosPort {
   putObject(params: COS.PutObjectParams): Promise<unknown>;
+  getObject(params: COS.GetObjectParams): Promise<COS.GetObjectResult>;
+  headObject(params: COS.HeadObjectParams): Promise<COS.HeadObjectResult>;
   getObjectUrl(params: COS.GetObjectUrlParams): string;
 }
 interface Dependencies {
@@ -22,8 +35,17 @@ const ConfigSchema = z.strictObject({
   region: z.string().max(63).regex(/^[a-z]+(?:-[a-z0-9]+)+$/),
   secretId: z.string().refine((value) => value.trim().length > 0),
   secretKey: z.string().refine((value) => value.trim().length > 0),
+  publicBaseUrl: z.string().optional(),
 });
 const IdSchema = z.uuid();
+const LocationSchema = z.strictObject({ bucket: z.string(), region: z.string(), object_key: z.string() });
+const PublicCopySchema = z.strictObject({
+  tenantId: IdSchema, styleId: IdSchema, sourceFileId: IdSchema,
+  targetVersion: z.number().int().positive().max(2147483647),
+  sourceChecksum: z.string().regex(/^[a-f0-9]{64}$/),
+  sourceSizeBytes: z.number().int().positive().max(RENDERING_UPLOAD_MAX_BYTES),
+  sourceLocation: LocationSchema, publicLocation: LocationSchema,
+});
 export const RENDERING_PREVIEW_TTL_SECONDS = 120;
 
 function unavailable(): never {
@@ -35,17 +57,26 @@ function failed(): never {
 function parseConfig(input: unknown): RenderingStorageConfig {
   const parsed = ConfigSchema.safeParse(input);
   if (!parsed.success) return unavailable();
-  return parsed.data;
+  const config = parsed.data;
+  const base = config.publicBaseUrl || `https://${config.bucket}.cos.${config.region}.myqcloud.com/`;
+  try {
+    // Check the raw form too: URL parsing otherwise silently removes dot paths and whitespace.
+    if (!/^https:\/\/[^/\\@?#\s]+\/?$/.test(base)) return unavailable();
+    const url = new URL(base);
+    if (url.protocol !== 'https:' || url.username || url.password || url.pathname !== '/' || url.search || url.hash) return unavailable();
+    return { ...config, publicBaseUrl: url.href };
+  } catch { return unavailable(); }
 }
 
 export async function loadRenderingStorageConfig(settings: RenderingStorageSettings): Promise<RenderingStorageConfig> {
   try {
     if (await settings.getString('PLATFORM_STORAGE_PROVIDER') !== 'tencent_cos') return unavailable();
-    const [bucket, region, secretId, secretKey] = await Promise.all([
+    const [bucket, region, secretId, secretKey, publicBaseUrl] = await Promise.all([
       settings.getString('PLATFORM_COS_BUCKET'), settings.getString('PLATFORM_COS_REGION'),
       settings.getSecretString('TENCENT_COS_SECRET_ID'), settings.getSecretString('TENCENT_COS_SECRET_KEY'),
+      settings.getString('PLATFORM_COS_PUBLIC_BASE_URL'),
     ]);
-    return parseConfig({ bucket, region, secretId, secretKey });
+    return parseConfig({ bucket, region, secretId, secretKey, publicBaseUrl });
   } catch { return unavailable(); }
 }
 
@@ -93,6 +124,56 @@ export class RenderingLibraryStorage {
       await this.cos(config).putObject({ Bucket: location.bucket, Region: location.region, Key: location.object_key,
         Body: bytes, ContentLength: bytes.length, ContentType: 'image/webp', ACL: 'private', CacheControl: 'private, no-store' });
     } catch { return failed(); }
+  }
+
+  private async verifiedPublicCopy(input: RenderingPublicCopyInput): Promise<{ config: RenderingStorageConfig; publicUrl: string }> {
+    if (!PublicCopySchema.safeParse(input).success) return unavailable();
+    const config = await this.verifiedConfig(input.tenantId, input.sourceFileId, input.sourceLocation);
+    const target = input.publicLocation;
+    const expectedKey = `public/renovation-styles/${input.tenantId}/${input.styleId}/${input.targetVersion}.webp`;
+    if (target.bucket !== config.bucket || target.region !== config.region || target.object_key !== expectedKey
+      || target.object_key === input.sourceLocation.object_key) return unavailable();
+    try {
+      const base = new URL(config.publicBaseUrl ?? unavailable());
+      const url = new URL(target.object_key.split('/').map(encodeURIComponent).join('/'), base);
+      if (url.protocol !== 'https:' || url.origin !== base.origin || url.username || url.password || url.search || url.hash
+        || decodeURIComponent(url.pathname) !== `/${target.object_key}`) return unavailable();
+      return { config, publicUrl: url.href };
+    } catch { return unavailable(); }
+  }
+
+  async copyPublic(input: RenderingPublicCopyInput): Promise<{ publicUrl: string }> {
+    const { config, publicUrl } = await this.verifiedPublicCopy(input);
+    try {
+      const cos = this.cos(config);
+      const source = input.sourceLocation;
+      const { Body: bytes } = await cos.getObject({ Bucket: source.bucket, Region: source.region, Key: source.object_key });
+      if (!Buffer.isBuffer(bytes) || bytes.length === 0 || bytes.length > RENDERING_UPLOAD_MAX_BYTES
+        || bytes.length !== input.sourceSizeBytes || createHash('sha256').update(bytes).digest('hex') !== input.sourceChecksum) return failed();
+      const target = input.publicLocation;
+      await cos.putObject({ Bucket: target.bucket, Region: target.region, Key: target.object_key, Body: bytes,
+        ContentLength: bytes.length, ContentType: 'image/webp', ACL: 'public-read',
+        CacheControl: 'public, max-age=31536000, immutable', 'x-cos-meta-source-sha256': input.sourceChecksum });
+      return { publicUrl };
+    } catch { return failed(); }
+  }
+
+  async hasPublicCopy(input: RenderingPublicCopyInput): Promise<boolean> {
+    const { config } = await this.verifiedPublicCopy(input);
+    try {
+      const target = input.publicLocation;
+      const { headers } = await this.cos(config).headObject({ Bucket: target.bucket, Region: target.region, Key: target.object_key });
+      return headers?.['content-length'] === String(input.sourceSizeBytes)
+        && headers?.['content-type'] === 'image/webp'
+        && headers?.['x-cos-meta-source-sha256'] === input.sourceChecksum;
+    } catch (error: unknown) {
+      if (typeof error === 'object' && error !== null) {
+        if ('statusCode' in error && error.statusCode === 404) return false;
+        if ((!('statusCode' in error) || error.statusCode === undefined) && 'code' in error
+          && (error.code === 'NoSuchKey' || error.code === 'NotFound')) return false;
+      }
+      return failed();
+    }
   }
 
   async preview(tenantId: string, id: string, location: RenderingStorageLocation): Promise<string> {

@@ -25,6 +25,8 @@ const ConfigSchema = z.strictObject({
   region: z.string().max(63).regex(/^[a-z]+(?:-[a-z0-9]+)+$/),
   secretId: z.string().trim().min(1),
   secretKey: z.string().trim().min(1),
+  // Shared config also serves public copies; smoke objects always remain private.
+  publicBaseUrl: z.string().optional(),
 });
 const RunIdSchema = z.uuid();
 const MAX_BYTES = 10 * 1024 * 1024;

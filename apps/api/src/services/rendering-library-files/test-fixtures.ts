@@ -79,6 +79,12 @@ export async function makeFilesFixture() {
       io.cos++;
       const cos = new COS(options);
       return {
+      async getObject(): Promise<never> {
+        throw Errors.business(500, '私有文件流程不得读取对象', 'UNEXPECTED_COS_READ');
+      },
+      async headObject(): Promise<never> {
+        throw Errors.business(500, '私有文件流程不得检查公开对象', 'UNEXPECTED_COS_HEAD');
+      },
       async putObject(params) {
         events.push('put');
         if (state.fail === 'put') throw Errors.badRequest('raw secret COS error');

@@ -25,6 +25,12 @@ function fixture() {
       const cos = new COS(options);
       return {
         async putObject() {},
+        async getObject(): Promise<never> {
+          throw Errors.business(500, '私有预览不得读取对象', 'UNEXPECTED_COS_READ');
+        },
+        async headObject(): Promise<never> {
+          throw Errors.business(500, '私有预览不得检查公开对象', 'UNEXPECTED_COS_HEAD');
+        },
         getObjectUrl(params) {
           calls.sign++;
           if (state.fail === 'sign') throw Errors.badRequest('secret signed URL');

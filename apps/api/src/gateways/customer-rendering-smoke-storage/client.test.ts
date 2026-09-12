@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { loadRenderingStorageConfig } from "@/gateways/rendering-library-storage/client";
 import {
   CustomerRenderingSmokeStorage,
   type CustomerRenderingSmokeCosPort,
@@ -21,7 +22,7 @@ function location(slot: "room" | "style" | "result") {
   };
 }
 
-function fixture() {
+function fixture(storageConfig = config) {
   const calls: Array<[string, unknown]> = [];
   let shouldFail = false;
   const cos: CustomerRenderingSmokeCosPort = {
@@ -47,13 +48,37 @@ function fixture() {
     },
   };
   const storage = new CustomerRenderingSmokeStorage({
-    loadConfig: async () => config,
+    loadConfig: async () => storageConfig,
     createCos: () => cos,
   });
   return { storage, calls, fail: () => { shouldFail = true; } };
 }
 
 describe("CustomerRenderingSmokeStorage", () => {
+  test("accepts shared storage config with a public base while smoke writes and signing remain private", async () => {
+    const values: Record<string, string> = {
+      PLATFORM_STORAGE_PROVIDER: "tencent_cos", PLATFORM_COS_BUCKET: config.bucket,
+      PLATFORM_COS_REGION: config.region, PLATFORM_COS_PUBLIC_BASE_URL: "https://cdn.example.test",
+    };
+    const loaded = await loadRenderingStorageConfig({
+      getString: async (key) => values[key] ?? "",
+      getSecretString: async (key) => key === "TENCENT_COS_SECRET_ID" ? config.secretId : config.secretKey,
+    });
+    expect(loaded.publicBaseUrl).toBe("https://cdn.example.test/");
+    const { storage, calls } = fixture(loaded);
+    const bytes = Buffer.alloc(12, 1);
+    const target = await storage.put(runId, "result", bytes, "image/webp");
+    expect(target).toEqual(location("result"));
+    expect(calls).toContainEqual(["put", {
+      Bucket: config.bucket, Region: config.region, Key: location("result").object_key,
+      Body: bytes, ContentLength: bytes.length, ContentType: "image/webp", ACL: "private", CacheControl: "private, no-store",
+    }]);
+    const signed = new URL(await storage.sign(runId, "result", target));
+    expect(signed.host).toBe(`${config.bucket}.cos.${config.region}.myqcloud.com`);
+    expect(signed.pathname).toBe(`/${target.object_key}`);
+    expect(signed.searchParams.get("q-signature")).toBe("dummy");
+  });
+
   test("writes only canonical private smoke objects and returns their locations", async () => {
     const { storage, calls } = fixture();
     const bytes = Buffer.alloc(12, 1);
