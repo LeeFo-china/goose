@@ -114,6 +114,65 @@ describe('tenant rendering library draft contract', () => {
     }).success).toBe(false);
   });
 
+  test('rejects a public page whose list exceeds pageSize', () => {
+    const style = {
+      id,
+      title: '奶油客厅',
+      space: 'living_room',
+      style: 'cream',
+      color_notes: '',
+      material_notes: '',
+      source_type: 'design',
+      image_url: 'https://cdn.example.com/rendering-style.webp',
+      published_at: '2026-09-11T10:00:00+08:00',
+    } as const;
+    expect(domain.RenderingPublishedStyleListSchema?.safeParse({
+      list: [style, style],
+      pagination: { page: 1, pageSize: 1, total: 2, totalPages: 2 },
+    }).success).toBe(false);
+  });
+
+  test('rejects more than 100 styles in a public page', () => {
+    const style = {
+      id,
+      title: '奶油客厅',
+      space: 'living_room',
+      style: 'cream',
+      color_notes: '',
+      material_notes: '',
+      source_type: 'design',
+      image_url: 'https://cdn.example.com/rendering-style.webp',
+      published_at: '2026-09-11T10:00:00+08:00',
+    } as const;
+    expect(domain.RenderingPublishedStyleListSchema?.safeParse({
+      list: Array.from({ length: 101 }, () => style),
+      pagination: { page: 1, pageSize: 100, total: 101, totalPages: 2 },
+    }).success).toBe(false);
+  });
+
+  test('rejects unknown keys nested in public pagination', () => {
+    const style = {
+      id,
+      title: '奶油客厅',
+      space: 'living_room',
+      style: 'cream',
+      color_notes: '',
+      material_notes: '',
+      source_type: 'design',
+      image_url: 'https://cdn.example.com/rendering-style.webp',
+      published_at: '2026-09-11T10:00:00+08:00',
+    } as const;
+    expect(domain.RenderingPublishedStyleListSchema?.safeParse({
+      list: [style],
+      pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1, cursor: 'unexpected' },
+    }).success).toBe(false);
+  });
+
+  test('accepts an empty public page when total and totalPages are zero', () => {
+    const emptyPage = { list: [], pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 } };
+    expect(domain.RenderingPublishedStyleListSchema?.parse(emptyPage)).toEqual(emptyPage);
+  });
+
   test('creates with explicit rights and file identity and defaults only on creation', () => {
     expect(domain.RenderingLibraryCreateSchema?.parse(create)).toEqual({
       ...create, title: '奶油客厅', color_notes: '', material_notes: '', sort_order: 0,
