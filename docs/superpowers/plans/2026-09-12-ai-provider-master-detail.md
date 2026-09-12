@@ -449,3 +449,12 @@ Expected: 无空白错误；状态只包含计划内文件；提交历史包含�
 ```
 
 Expected: 无 P0/P1 阻断问题；若修改代码，重新执行受影响测试和 Step 1 至 Step 4 的最终门禁。
+
+## 最终实现偏差/审查调整
+
+本计划前文保留实施前的示例与预期；最终代码及以下审查调整取代对应示例：
+
+- 详情中的动态供应商名称由 `CardTitle` 改为普通视觉标题，避免形成 `h3` 后再出现模型区 `h2` 的倒序标题层级。
+- 快速切换回归不再使用固定 1400ms 等待，改为 `started -> release -> completed` 的确定性测试屏障，明确跨过旧请求 handler 的完成点。
+- 第二供应商模型不再作为 `filtered.length === 0` 的 fallback；它在过滤前加入统一候选集并按模型 ID 去重，再统一参与 provider、关键词、模态、状态过滤和分页。
+- 1440px 正常切换用例在截图前自动断言 `document.documentElement.scrollWidth <= window.innerWidth`，与 400px 页面级横向溢出合同保持一致。

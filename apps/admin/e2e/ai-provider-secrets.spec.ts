@@ -88,6 +88,7 @@ test('供应商切换只替换右侧唯一详情和对应模型', async ({ page,
   await expect(secondModels.getByText('第二供应商模型', { exact: true })).toBeVisible();
   await expect(secondModels.getByText('second-model', { exact: true })).toBeVisible();
   await expect(providerTab.getByRole('table', { name: '方舟测试的模型', exact: true })).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: info.outputPath('provider-master-detail-desktop.png'), fullPage: true });
 });
 
