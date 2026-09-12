@@ -2,13 +2,16 @@ import { Errors } from "@/errors/error-factory";
 import { aiInferenceEndpoint } from "@/gateways/ark-rendering/requests";
 import { systemSettingsService } from "@/services/system-settings";
 import { SupabaseDB } from "@/utils/supabase";
+import { resolveAiImageConfig } from "./ai-gateway-image-config";
 import type { AiGatewayChatInput, AiGatewayChatResult, AiGatewayFetch,
   AiGatewayProviderType, AiGatewayMessage, AiGatewayResolvedChatConfig,
+  AiGatewayResolvedImageConfig,
   AiModelRow, AiProviderRow, AiSceneRouteRow,
   OpenAiCompatibleResponse } from "./ai-gateway-types";
 
 export type { AiGatewayChatInput, AiGatewayChatResult, AiGatewayProviderType,
-  AiGatewayMessage, AiGatewayResolvedChatConfig } from "./ai-gateway-types";
+  AiGatewayMessage, AiGatewayResolvedChatConfig,
+  AiGatewayResolvedImageConfig } from "./ai-gateway-types";
 
 type AiGatewaySettings = Pick<
   typeof systemSettingsService,
@@ -362,6 +365,18 @@ export class AiGateway {
       temperature: input.temperature ?? route?.temperature ?? 0.7,
       responseFormat: input.responseFormat ?? route?.response_format ?? null,
     };
+  }
+
+  async resolveImageConfig(input: {
+    sceneCode: string;
+    timeoutMs?: number;
+    useFallback?: boolean;
+  }): Promise<AiGatewayResolvedImageConfig> {
+    return resolveAiImageConfig({
+      ...input,
+      route: await this.findSceneRoute(input.sceneCode),
+      settings: this.settingsService,
+    });
   }
 
   async chat(input: AiGatewayChatInput): Promise<AiGatewayChatResult> {

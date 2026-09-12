@@ -40,6 +40,16 @@ export type AiGatewayResolvedChatConfig = {
   responseFormat: "json_object" | "text" | null;
 };
 
+export type AiGatewayResolvedImageConfig = {
+  providerCode: string;
+  providerType: "openai_compatible";
+  modelCode: string;
+  modelName: string;
+  baseUrl: string;
+  apiKey: string;
+  timeoutMs: number;
+};
+
 export type AiGatewayFetch = (
   input: string | URL | Request,
   init?: RequestInit,
