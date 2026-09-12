@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { StyleCard } from './style-card';
-import { getPublicationPreviewExpiryDelay } from './style-mutations';
+import { getPublicationPreviewExpiryDelay, isPublicationPreviewReady } from './style-mutations';
 import { StyleFields } from './style-fields';
 import { LibraryGrid } from './library-client';
 import { UploadItem } from './upload-item';
@@ -76,4 +76,16 @@ test('only a loaded, current and still-valid preview arms automatic expiry renew
   expect(getPublicationPreviewExpiryDelay(preview, style.file_id, '', now)).toBeNull();
   expect(getPublicationPreviewExpiryDelay(preview, 'other-file', preview.url, now)).toBeNull();
   expect(getPublicationPreviewExpiryDelay(preview, style.file_id, preview.url, now + 1001)).toBeNull();
+});
+
+test('publish preview guard checks file, image load, failure and expiry at the supplied instant', () => {
+  const preview = { file_id: style.file_id, url: 'https://preview.example.test/private', expires_at: '2026-09-13T10:00:01Z' };
+  const now = Date.parse('2026-09-13T10:00:00Z');
+  expect(isPublicationPreviewReady(preview, style.file_id, preview.url, '', false, '', now)).toBe(true);
+  expect(isPublicationPreviewReady(preview, 'other-file', preview.url, '', false, '', now)).toBe(false);
+  expect(isPublicationPreviewReady(preview, style.file_id, '', '', false, '', now)).toBe(false);
+  expect(isPublicationPreviewReady(preview, style.file_id, preview.url, preview.url, false, '', now)).toBe(false);
+  expect(isPublicationPreviewReady(preview, style.file_id, preview.url, '', true, '', now)).toBe(false);
+  expect(isPublicationPreviewReady(preview, style.file_id, preview.url, '', false, '预览失败', now)).toBe(false);
+  expect(isPublicationPreviewReady(preview, style.file_id, preview.url, '', false, '', now + 1000)).toBe(false);
 });

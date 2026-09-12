@@ -11,6 +11,8 @@ import { libraryRequests, LibraryRequestError } from './requests';
 import { getStyleWriteBlock } from './style-write-state';
 import { useFilePreview } from './use-file-preview';
 
+const IMAGE_LOAD_TIMEOUT_MS = 10000;
+
 function publicationReviewChanged(before: RenderingLibraryStyle, after: RenderingLibraryStyle): boolean {
   return before.version !== after.version || before.status !== after.status || before.file_id !== after.file_id
     || before.title !== after.title || before.space !== after.space || before.style !== after.style
@@ -25,6 +27,12 @@ export function getPublicationPreviewExpiryDelay(preview: RenderingLibraryFilePr
   return remaining > 0 ? remaining : null;
 }
 
+export function isPublicationPreviewReady(preview: RenderingLibraryFilePreviewResult | undefined,
+  fileId: string, loadedUrl: string, failedUrl: string, loading: boolean, error: string, now: number): boolean {
+  return Boolean(preview && preview.file_id === fileId && preview.url === loadedUrl && failedUrl !== preview.url
+    && !loading && !error && Date.parse(preview.expires_at) > now);
+}
+
 export function StyleMutation({ style, preview, command, onClose, onSuccess }: {
   style: RenderingLibraryStyle; preview?: RenderingLibraryFilePreviewResult;
   command: 'publish' | 'hide' | 'remove'; onClose: () => void; onSuccess: () => void;
@@ -37,14 +45,24 @@ export function StyleMutation({ style, preview, command, onClose, onSuccess }: {
   );
   const [loadedPreviewUrl, setLoadedPreviewUrl] = useState('');
   const [failedPreviewUrl, setFailedPreviewUrl] = useState('');
+  const [timedOutPreviewUrl, setTimedOutPreviewUrl] = useState('');
   const [responsibilityConfirmed, setResponsibilityConfirmed] = useState(false);
   const [publicationKey, setPublicationKey] = useState(() => crypto.randomUUID());
   const [writeBlock, setWriteBlock] = useState<ReturnType<typeof getStyleWriteBlock>>();
   const [reloaded, setReloaded] = useState(false);
   const previewMatches = filePreview?.file_id === current.file_id;
   const previewFresh = previewMatches && Date.parse(filePreview.expires_at) > Date.now();
-  const previewReady = command === 'publish' && previewFresh && !previewLoading && !previewError
-    && loadedPreviewUrl === filePreview.url && failedPreviewUrl !== filePreview.url;
+  const previewReady = command === 'publish' && isPublicationPreviewReady(filePreview, current.file_id,
+    loadedPreviewUrl, failedPreviewUrl, previewLoading, previewError, Date.now());
+  useEffect(() => {
+    if (command !== 'publish' || !previewFresh || previewLoading || previewError || !filePreview
+      || loadedPreviewUrl === filePreview.url || failedPreviewUrl === filePreview.url) return;
+    const timeout = window.setTimeout(() => {
+      setLoadedPreviewUrl(''); setFailedPreviewUrl(filePreview.url); setTimedOutPreviewUrl(filePreview.url);
+      setResponsibilityConfirmed(false);
+    }, IMAGE_LOAD_TIMEOUT_MS);
+    return () => window.clearTimeout(timeout);
+  }, [command, filePreview, previewFresh, previewLoading, previewError, loadedPreviewUrl, failedPreviewUrl]);
   useEffect(() => {
     if (command !== 'publish') return;
     const delay = getPublicationPreviewExpiryDelay(filePreview, current.file_id, loadedPreviewUrl, Date.now());
@@ -61,11 +79,16 @@ export function StyleMutation({ style, preview, command, onClose, onSuccess }: {
     return () => window.clearTimeout(timeout);
   }, [command, current.file_id, filePreview, loadedPreviewUrl, refreshPreview]);
   function retryPreview() {
-    setLoadedPreviewUrl(''); setFailedPreviewUrl(''); setResponsibilityConfirmed(false);
+    setLoadedPreviewUrl(''); setFailedPreviewUrl(''); setTimedOutPreviewUrl(''); setResponsibilityConfirmed(false);
     void refreshPreview();
   }
   async function submit() {
-    if (lock.current || writeBlock || (command === 'publish' && (!responsibilityConfirmed || !previewReady))) return;
+    if (lock.current || writeBlock) return;
+    if (command === 'publish' && (!responsibilityConfirmed || !isPublicationPreviewReady(filePreview, current.file_id,
+      loadedPreviewUrl, failedPreviewUrl, previewLoading, previewError, Date.now()))) {
+      setResponsibilityConfirmed(false);
+      return;
+    }
     lock.current = true; setBusy(true); setError('');
     try {
       if (command === 'publish') await libraryRequests.publish(current.id, { expected_version: current.version,
@@ -115,7 +138,7 @@ export function StyleMutation({ style, preview, command, onClose, onSuccess }: {
         {previewLoading ? <p className="text-xs text-muted-foreground">图片加载中，暂不能确认发布责任。</p> : null}
         {!previewLoading && (!previewFresh || previewError || failedPreviewUrl === filePreview?.url)
           ? <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <span>{previewError || '无法显示当前图片，请重新获取预览。'}</span>
+            <span>{previewError || (timedOutPreviewUrl === filePreview?.url ? '图片加载超时，请重试图片预览。' : '无法显示当前图片，请重新获取预览。')}</span>
             <Button type="button" variant="outline" size="sm" disabled={busy} onClick={retryPreview}>重试图片预览</Button>
           </div> : null}
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 border-b pb-3 text-xs">
@@ -129,7 +152,8 @@ export function StyleMutation({ style, preview, command, onClose, onSuccess }: {
         <p className="text-xs leading-5 text-muted-foreground">公开图片可能被客户保存或缓存；之后隐藏会停止 API 返回，但客户端或 CDN 已缓存的图片无法保证立即清除。</p>
         <Field orientation="horizontal" className="items-start gap-2">
           <Checkbox id="rendering-publish-responsibility" checked={responsibilityConfirmed} disabled={busy || !previewReady}
-            onCheckedChange={(checked) => setResponsibilityConfirmed(checked === true)} />
+            onCheckedChange={(checked) => setResponsibilityConfirmed(checked === true && isPublicationPreviewReady(filePreview,
+              current.file_id, loadedPreviewUrl, failedPreviewUrl, previewLoading, previewError, Date.now()))} />
           <FieldLabel htmlFor="rendering-publish-responsibility" className="cursor-pointer text-sm leading-5">
             该素材将由本公司自行公开发布，本公司承担内容及版权责任。
           </FieldLabel>

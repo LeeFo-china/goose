@@ -290,3 +290,61 @@ test('隐藏和删除确认不读取私有图片预览', async ({ page, request 
   await expect(page.getByRole('alertdialog', { name: '隐藏素材' })).toBeVisible();
   expect((await events(request)).filter((event) => /\/files\/[^/]+\/preview$/.test(event.path))).toHaveLength(0);
 });
+
+test('图片请求挂起超时后保留弹窗和手动重试，不重复自动读私有预览', async ({ page, request }, testInfo) => {
+  await page.setViewportSize({ width: 400, height: 860 });
+  await page.clock.install({ time: Date.now() });
+  await options(request, { preview_failure: true });
+  await page.goto('/rendering-library', { waitUntil: 'networkidle' });
+  const image = await readFile('public/partner-hero-renovation.png');
+  let releaseImage!: () => void;
+  const imageGate = new Promise<void>((resolve) => { releaseImage = resolve; });
+  let holdImage = true;
+  let imageRequestStarted = false;
+  await page.route('https://rendering-preview.example.test/**', async (route) => {
+    imageRequestStarted = true;
+    if (holdImage) await imageGate;
+    await route.fulfill({ contentType: 'image/png', body: image });
+  });
+  await page.getByRole('article').filter({ hasText: '测试素材 01' }).getByRole('button', { name: '发布', exact: true }).click();
+  const dialog = page.getByRole('alertdialog', { name: '发布素材' });
+  await expect.poll(async () => (await events(request)).filter((event) => /\/files\/[^/]+\/preview$/.test(event.path)).length).toBeGreaterThan(0);
+  await expect.poll(() => imageRequestStarted).toBe(true);
+  await page.clock.runFor(15000);
+  await expect(dialog.getByRole('button', { name: '重试图片预览' })).toBeVisible();
+  await expect(dialog.getByRole('checkbox', { name: /本公司承担内容及版权责任/ })).toBeDisabled();
+  await expect(dialog.getByRole('button', { name: '发布素材' })).toBeDisabled();
+  const readsAfterTimeout = (await events(request)).filter((event) => /\/files\/[^/]+\/preview$/.test(event.path)).length;
+  await page.clock.fastForward(30000);
+  expect((await events(request)).filter((event) => /\/files\/[^/]+\/preview$/.test(event.path))).toHaveLength(readsAfterTimeout);
+  expect(publications(await events(request))).toHaveLength(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('publish-image-timeout-mobile.png'), fullPage: true });
+  holdImage = false; releaseImage();
+  await dialog.getByRole('button', { name: '重试图片预览' }).click();
+  await expect(dialog.getByRole('checkbox', { name: /本公司承担内容及版权责任/ })).toBeEnabled();
+  await dialog.getByRole('checkbox', { name: /本公司承担内容及版权责任/ }).check();
+  await dialog.getByRole('button', { name: '发布素材' }).click();
+  await expect(dialog).toBeHidden();
+});
+
+test('定时器未运行时提交同步检查过期 URL，零发布 POST', async ({ page, request }, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const dialog = await openPublish(page);
+  await expect(dialog.getByRole('button', { name: '发布素材' })).toBeEnabled();
+  await page.evaluate(() => {
+    const expiredNow = Date.now() + 120500;
+    Date.now = () => expiredNow;
+    const dialogElement = document.querySelector('[role="alertdialog"]');
+    const publishButton = Array.from(dialogElement?.querySelectorAll('button') || [])
+      .find((button) => button.textContent?.trim() === '发布素材');
+    if (!publishButton || publishButton.disabled) throw new Error('测试前置条件：发布按钮应保持旧渲染的可点击状态');
+    publishButton.click();
+  });
+  await expect(dialog).toBeVisible();
+  expect(publications(await events(request))).toHaveLength(0);
+  await expect(dialog.getByRole('checkbox', { name: /本公司承担内容及版权责任/ })).not.toBeChecked();
+  await expect(dialog.getByRole('button', { name: '发布素材' })).toBeDisabled();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('publish-expired-submit-blocked-desktop.png'), fullPage: true });
+});
