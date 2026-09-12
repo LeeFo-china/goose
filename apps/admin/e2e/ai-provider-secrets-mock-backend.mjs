@@ -19,6 +19,11 @@ let reads = [];
 let savedRoute = null;
 let models = [];
 let customScenes = [];
+let firstProviderModelsDelayStarted = false;
+let firstProviderModelsDelayCompleted = false;
+let firstProviderModelsDelayRelease = null;
+let firstProviderModelsDelayPromise = null;
+let firstProviderModelsDelayGeneration = 0;
 const secondProviderId = '10000000-0000-4000-8000-000000000002';
 const routeId = '30000000-0000-4000-8000-000000000001';
 const modelId = '40000000-0000-4000-8000-000000000001';
@@ -40,6 +45,19 @@ const modelRecord = (input, recordId = createdModelId, version = 1) => ({
   input_modalities: input.input_modalities, status: input.status || 'active', sort_order: input.sort_order || 0,
   version, probe_status: 'unverified', created_at: '2026-09-12T00:00:00Z', updated_at: '2026-09-12T00:00:00Z',
 });
+const secondProviderModel = () => modelRecord({
+  provider_id: secondProviderId, name: '第二供应商模型', model_name: 'second-model',
+  modality: 'text', input_modalities: ['text'], status: 'active', sort_order: 0,
+}, secondModelId);
+const resetFirstProviderModelsDelay = () => {
+  const release = firstProviderModelsDelayRelease;
+  firstProviderModelsDelayGeneration += 1;
+  firstProviderModelsDelayStarted = false;
+  firstProviderModelsDelayCompleted = false;
+  firstProviderModelsDelayRelease = null;
+  firstProviderModelsDelayPromise = null;
+  release?.();
+};
 const routeModel = (name = 'DeepSeek Chat', status = 'active') => ({ id: modelId, provider_id: id, code: 'deepseek_chat', name, model_name: 'deepseek-chat', modality: 'text', status, sort_order: 0, created_at: '2026-09-11T00:00:00Z', updated_at: '2026-09-11T00:00:00Z',
   provider: { id: provider.id, code: provider.code, name: provider.name, provider_type: provider.provider_type, status: provider.status } });
 const routeRecord = () => savedRoute || (options.legacy_missing
@@ -71,7 +89,7 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://127.0.0.1:3989');
   const path = url.pathname;
   if (path === '/health') return send(res, 200, {});
-  if (path === '/__test/reset') { provider = initial(); options = {}; configured = false; writes = []; reads = []; savedRoute = null; models = []; customScenes = []; deleted = false; secondDeleted = false; routeOptionsRequests = 0; return send(res, 200, {}); }
+  if (path === '/__test/reset') { resetFirstProviderModelsDelay(); provider = initial(); options = {}; configured = false; writes = []; reads = []; savedRoute = null; models = []; customScenes = []; deleted = false; secondDeleted = false; routeOptionsRequests = 0; return send(res, 200, {}); }
   if (path === '/__test/options') {
     options = { ...options, ...await body(req) };
     if (options.inactive_provider) provider = { ...provider, status: 'inactive' };
@@ -93,6 +111,15 @@ const server = createServer(async (req, res) => {
       requires_streaming: false, min_reference_images: 0, source: 'custom', status: 'active', version: 1, allow_new_configuration: true,
     }));
     return send(res, 200, {});
+  }
+  if (path === '/__test/provider-model-delay' && req.method === 'GET') {
+    return send(res, 200, { started: firstProviderModelsDelayStarted, completed: firstProviderModelsDelayCompleted });
+  }
+  if (path === '/__test/provider-model-delay/release' && req.method === 'POST') {
+    const release = firstProviderModelsDelayRelease;
+    firstProviderModelsDelayRelease = null;
+    release?.();
+    return send(res, 200, { released: Boolean(release) });
   }
   if (path === '/__test/writes') return send(res, 200, writes);
   if (path === '/__test/reads') return send(res, 200, reads);
@@ -205,24 +232,30 @@ const server = createServer(async (req, res) => {
     const keyword = url.searchParams.get('keyword') || '';
     const modality = url.searchParams.get('modality');
     const status = url.searchParams.get('status');
+    let delayedFirstProviderModels = false;
+    const delayGeneration = firstProviderModelsDelayGeneration;
     if (options.delay_first_provider_models && providerId === id) {
-      // Keep the first provider response stale long enough to exercise the switch regression.
-      await new Promise((resolve) => setTimeout(resolve, 1200));
+      // Hold the first provider response behind a deterministic stale-response test barrier.
+      delayedFirstProviderModels = true;
+      if (!firstProviderModelsDelayPromise) {
+        firstProviderModelsDelayPromise = new Promise((resolve) => {
+          firstProviderModelsDelayRelease = resolve;
+          firstProviderModelsDelayStarted = true;
+        });
+      }
+      await firstProviderModelsDelayPromise;
     }
-    let filtered = models.filter((item) => (!providerId || item.provider_id === providerId)
+    const candidateModels = options.provider_models_by_supplier
+      ? [...models.filter((item) => item.id !== secondModelId), secondProviderModel()]
+      : models;
+    const filtered = candidateModels.filter((item) => (!providerId || item.provider_id === providerId)
       && (!keyword || item.name.includes(keyword) || item.model_name.includes(keyword))
       && (!modality || item.modality === modality) && (!status || item.status === status));
-    if (options.provider_models_by_supplier && providerId === secondProviderId && !filtered.length) {
-      const synthetic = modelRecord({
-        provider_id: secondProviderId, name: '第二供应商模型', model_name: 'second-model',
-        modality: 'text', input_modalities: ['text'], status: 'active', sort_order: 0,
-      }, secondModelId);
-      if ((!keyword || synthetic.name.includes(keyword) || synthetic.model_name.includes(keyword))
-        && (!modality || synthetic.modality === modality) && (!status || synthetic.status === status)) {
-        filtered = [synthetic];
-      }
+    const result = send(res, 200, { list: filtered.slice((current - 1) * size, current * size), pagination: { page: current, pageSize: size, total: filtered.length, totalPages: Math.ceil(filtered.length / size) } });
+    if (delayedFirstProviderModels && delayGeneration === firstProviderModelsDelayGeneration) {
+      firstProviderModelsDelayCompleted = true;
     }
-    return send(res, 200, { list: filtered.slice((current - 1) * size, current * size), pagination: { page: current, pageSize: size, total: filtered.length, totalPages: Math.ceil(filtered.length / size) } });
+    return result;
   }
   if (path === '/platform/ai-config/models' && req.method === 'POST') {
     const input = await body(req); writes.push({ path, input });

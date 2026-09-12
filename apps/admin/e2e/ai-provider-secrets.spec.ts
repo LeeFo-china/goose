@@ -107,6 +107,11 @@ test('快速切换时迟到的旧供应商模型不会覆盖当前详情', async
     await expect(providerTabTrigger).toHaveAttribute('aria-selected', 'true');
   }).toPass();
   await firstProviderModelsRequest;
+  await expect.poll(async () => {
+    const response = await request.get(`${backend}/__test/provider-model-delay`);
+    if (!response.ok()) return `status:${response.status()}`;
+    return String((await response.json()).data.started);
+  }).toBe('true');
   const providerTab = page.getByRole('tabpanel', { name: '供应商', exact: true });
   const detail = providerTab.getByRole('region', { name: '供应商详情', exact: true });
   await providerTab.getByRole('complementary', { name: '供应商列表' })
@@ -114,14 +119,52 @@ test('快速切换时迟到的旧供应商模型不会覆盖当前详情', async
   const secondModels = detail.getByRole('table', { name: '第二供应商的模型', exact: true });
   await expect(secondModels.getByText('第二供应商模型', { exact: true })).toBeVisible();
 
-  // Cross the mock's fixed 1.2s stale-response boundary before checking retained identity.
-  await page.waitForTimeout(1400);
+  const released = await request.post(`${backend}/__test/provider-model-delay/release`);
+  expect(released.ok()).toBe(true);
+  await expect.poll(async () => {
+    const response = await request.get(`${backend}/__test/provider-model-delay`);
+    if (!response.ok()) return `status:${response.status()}`;
+    return String((await response.json()).data.completed);
+  }).toBe('true');
   await expect(detail).toHaveCount(1);
   await expect(detail).toHaveAttribute('data-provider-detail-id', '10000000-0000-4000-8000-000000000002');
   await expect(detail.getByLabel('名称', { exact: true })).toHaveValue('第二供应商');
   await expect(secondModels.getByText('第二供应商模型', { exact: true })).toBeVisible();
   await expect(secondModels.getByText('second-model', { exact: true })).toBeVisible();
   await expect(providerTab.getByRole('table', { name: '方舟测试的模型', exact: true })).toHaveCount(0);
+});
+
+test('供应商模型候选视图统一参与过滤分页且reset不泄漏', async ({ request }) => {
+  await request.post(`${backend}/__test/options`, { data: {
+    image_model: true, second_provider: true, provider_models_by_supplier: true,
+  } });
+  const modelPage = async (query: string) => {
+    const response = await request.get(`${backend}/platform/ai-config/models?${query}`);
+    expect(response.ok()).toBe(true);
+    return (await response.json()).data;
+  };
+
+  const all = await modelPage('page=1&pageSize=20');
+  expect(all.list.map((model: { model_name: string }) => model.model_name)).toContain('second-model');
+  expect(all.pagination).toMatchObject({ page: 1, pageSize: 20, total: 2, totalPages: 1 });
+  const firstPage = await modelPage('page=1&pageSize=1');
+  const secondPage = await modelPage('page=2&pageSize=1');
+  expect(firstPage.pagination).toMatchObject({ page: 1, pageSize: 1, total: 2, totalPages: 2 });
+  expect(secondPage.pagination).toMatchObject({ page: 2, pageSize: 1, total: 2, totalPages: 2 });
+  expect(secondPage.list.map((model: { model_name: string }) => model.model_name)).toEqual(['second-model']);
+
+  const secondProvider = await modelPage('providerId=10000000-0000-4000-8000-000000000002&page=1&pageSize=20');
+  expect(secondProvider.list.map((model: { model_name: string }) => model.model_name)).toEqual(['second-model']);
+  for (const mismatch of ['keyword=missing', 'modality=image', 'status=inactive']) {
+    const filtered = await modelPage(`providerId=10000000-0000-4000-8000-000000000002&${mismatch}&page=1&pageSize=20`);
+    expect(filtered.list).toEqual([]);
+    expect(filtered.pagination).toMatchObject({ total: 0, totalPages: 0 });
+  }
+
+  await request.post(`${backend}/__test/reset`);
+  const reset = await modelPage('page=1&pageSize=20');
+  expect(reset.list).toEqual([]);
+  expect(reset.pagination).toMatchObject({ total: 0, totalPages: 0 });
 });
 
 test('只读、无权限和状态失败不会破坏供应商列表', async ({ page, request }) => {
