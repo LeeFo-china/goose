@@ -62,6 +62,7 @@ CREATE TABLE public.tenant_rendering_style_publish_commands (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   completed_at timestamptz,
+  CONSTRAINT tenant_rendering_publish_tenant_id_key UNIQUE (tenant_id, id),
   CONSTRAINT tenant_rendering_publish_tenant_key UNIQUE (tenant_id, idempotency_key),
   CONSTRAINT tenant_rendering_publish_style_version_key UNIQUE (tenant_id, style_id, expected_version),
   CONSTRAINT tenant_rendering_publish_style_fkey
@@ -77,6 +78,22 @@ CREATE TABLE public.tenant_rendering_style_publish_commands (
   )
 );
 
+-- 所有接纳过的幂等键永久绑定同一命令；丢失原键可用新键恢复，旧键不能被其他请求占用。
+CREATE TABLE public.tenant_rendering_style_publish_command_keys (
+  tenant_id uuid NOT NULL,
+  idempotency_key uuid NOT NULL,
+  command_id uuid NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (tenant_id, idempotency_key),
+  CONSTRAINT tenant_rendering_publish_command_keys_fkey
+    FOREIGN KEY (tenant_id, command_id) REFERENCES public.tenant_rendering_style_publish_commands (tenant_id, id) ON DELETE RESTRICT
+);
+CREATE INDEX tenant_rendering_publish_command_keys_command_idx
+  ON public.tenant_rendering_style_publish_command_keys (tenant_id, command_id);
+ALTER TABLE public.tenant_rendering_style_publish_command_keys ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.tenant_rendering_style_publish_command_keys FROM PUBLIC, anon, authenticated, service_role;
+GRANT SELECT ON TABLE public.tenant_rendering_style_publish_command_keys TO service_role;
+
 CREATE TRIGGER tr_tenant_rendering_publish_updated_at
   BEFORE UPDATE ON public.tenant_rendering_style_publish_commands
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
@@ -87,6 +104,7 @@ GRANT SELECT ON TABLE public.tenant_rendering_style_publish_commands TO service_
 COMMENT ON TABLE public.tenant_rendering_styles IS '租户自助发布装修效果素材；当前可编辑资料与线上发布快照分离。';
 COMMENT ON COLUMN public.tenant_rendering_styles.published_by_employee_id IS '发布时记录本租户员工；员工被删除后允许置空，不删除发布快照。';
 COMMENT ON TABLE public.tenant_rendering_style_publish_commands IS '租户自行发布的幂等命令及短租约；外部复制可重试，不删除历史公开文件。';
+COMMENT ON TABLE public.tenant_rendering_style_publish_command_keys IS '租户自行发布命令的幂等键别名；保留原键绑定并支持同版本请求恢复。';
 
 -- 所有修改入口按素材 -> 命令 -> 文件 UUID 升序锁定；complete 在此之前锁发布人。
 -- begin 额外先锁租户幂等键，
@@ -105,6 +123,7 @@ DECLARE
   v_command public.tenant_rendering_style_publish_commands%ROWTYPE;
   v_source public.platform_file_objects%ROWTYPE;
   v_public public.platform_file_objects%ROWTYPE;
+  v_key_known boolean;
 BEGIN
   IF p_tenant_id IS NULL OR p_style_id IS NULL OR p_idempotency_key IS NULL OR p_lease_token IS NULL
     OR p_expected_version IS NULL OR p_expected_version < 1 OR p_expected_version >= 2147483647
@@ -115,12 +134,23 @@ BEGIN
   SELECT * INTO v_style FROM public.tenant_rendering_styles
     WHERE tenant_id = p_tenant_id AND id = p_style_id FOR UPDATE;
   IF NOT FOUND THEN RETURN jsonb_build_object('decision', 'not_found'); END IF;
-  SELECT * INTO v_command FROM public.tenant_rendering_style_publish_commands
-    WHERE tenant_id = p_tenant_id AND idempotency_key = p_idempotency_key FOR UPDATE;
-  IF FOUND THEN
+  SELECT command.* INTO v_command FROM public.tenant_rendering_style_publish_commands AS command
+    JOIN public.tenant_rendering_style_publish_command_keys AS keys
+      ON keys.tenant_id = command.tenant_id AND keys.command_id = command.id
+    WHERE keys.tenant_id = p_tenant_id AND keys.idempotency_key = p_idempotency_key FOR UPDATE OF command;
+  v_key_known := FOUND;
+  IF NOT v_key_known THEN
+    SELECT * INTO v_command FROM public.tenant_rendering_style_publish_commands
+      WHERE tenant_id = p_tenant_id AND style_id = p_style_id AND expected_version = p_expected_version FOR UPDATE;
+  END IF;
+  IF v_command.id IS NOT NULL THEN
     IF v_command.request_hash::text IS DISTINCT FROM p_request_hash OR v_command.style_id <> p_style_id
       OR v_command.expected_version <> p_expected_version THEN
       RETURN jsonb_build_object('decision', 'idempotency_conflict');
+    END IF;
+    IF NOT v_key_known THEN
+      INSERT INTO public.tenant_rendering_style_publish_command_keys (tenant_id, idempotency_key, command_id)
+        VALUES (p_tenant_id, p_idempotency_key, v_command.id);
     END IF;
     IF v_command.status = 'succeeded' THEN
       RETURN jsonb_build_object('decision', 'succeeded', 'command_id', v_command.id, 'result_version', v_command.result_version);
@@ -133,10 +163,7 @@ BEGIN
     END IF;
   END IF;
   IF v_style.deleted_at IS NOT NULL THEN RETURN jsonb_build_object('decision', 'not_found'); END IF;
-  IF v_style.version <> p_expected_version OR (v_command.id IS NULL AND EXISTS (
-    SELECT 1 FROM public.tenant_rendering_style_publish_commands
-    WHERE tenant_id = p_tenant_id AND style_id = p_style_id AND expected_version = p_expected_version
-  )) THEN RETURN jsonb_build_object('decision', 'version_conflict'); END IF;
+  IF v_style.version <> p_expected_version THEN RETURN jsonb_build_object('decision', 'version_conflict'); END IF;
 
   PERFORM id FROM public.platform_file_objects
     WHERE tenant_id = p_tenant_id AND id IN (v_style.file_id, v_command.public_file_id) ORDER BY id FOR UPDATE;
@@ -169,6 +196,8 @@ BEGIN
       p_tenant_id, p_style_id, p_idempotency_key, p_request_hash, p_expected_version,
       v_public.id, p_lease_token, clock_timestamp() + interval '120 seconds'
     ) RETURNING * INTO v_command;
+    INSERT INTO public.tenant_rendering_style_publish_command_keys (tenant_id, idempotency_key, command_id)
+      VALUES (p_tenant_id, p_idempotency_key, v_command.id);
   ELSE
     SELECT * INTO v_public FROM public.platform_file_objects WHERE tenant_id = p_tenant_id AND id = v_command.public_file_id;
     IF (v_public.id IS NOT NULL AND v_public.status = 'migrating' AND v_public.deleted_at IS NULL
@@ -213,7 +242,8 @@ BEGIN
   SELECT style_id INTO v_style_id FROM public.tenant_rendering_style_publish_commands
     WHERE tenant_id = p_tenant_id AND id = p_command_id;
   IF NOT FOUND THEN RETURN jsonb_build_object('decision', 'not_found'); END IF;
-  -- 员工删除会通过 FK 更新素材；先锁员工可避免反向锁竞争，FOR SHARE 同时固定租户及状态。
+  -- 正常 API 停用员工；FOR SHARE 固定发布人租户及状态。
+  -- 物理删除/维护仍须对序列化失败或死锁重试；真实双连接并发验证留 Task 10。
   -- 已成功命令仍可重放，发布人有效性只对尚未完成的命令生效。
   PERFORM id FROM public.employees WHERE tenant_id = p_tenant_id AND id = p_employee_id AND status = 'active' FOR SHARE;
   v_employee_valid := FOUND;

@@ -85,10 +85,43 @@ describe('租户自助发布 migration 合同', () => {
     }
   });
 
-  test('先稳定发布人归属再锁素材，避免员工删除的反向 FK 锁竞争', () => {
+  test('稳定发布人归属并说明物理删除仍需隔离并发验证和重试', () => {
     const complete = normalized.split('create function public.complete_tenant_rendering_style_publish(')[1]
       ?.split('create function public.fail_tenant_rendering_style_publish(')[0] ?? '';
     expect(complete).toContain("id = p_employee_id and status = 'active' for share");
     expect(complete.indexOf('from public.employees')).toBeLessThan(complete.indexOf('from public.tenant_rendering_styles'));
+    expect(complete).toContain('正常 api 停用员工');
+    expect(complete).toContain('物理删除/维护仍须对序列化失败或死锁重试');
+  });
+
+  test('丢失原键后按同版本命令恢复，同时保留新旧键的请求绑定', () => {
+    const begin = normalized.split('create function public.begin_tenant_rendering_style_publish(')[1]
+      ?.split('create function public.complete_tenant_rendering_style_publish(')[0] ?? '';
+    for (const fragment of [
+      'join public.tenant_rendering_style_publish_command_keys as keys',
+      'keys.idempotency_key = p_idempotency_key for update of command',
+      'if not v_key_known then select * into v_command',
+      'where tenant_id = p_tenant_id and style_id = p_style_id and expected_version = p_expected_version for update',
+      'v_command.request_hash::text is distinct from p_request_hash',
+      'insert into public.tenant_rendering_style_publish_command_keys',
+    ]) expect(begin).toContain(fragment);
+    expect(begin).not.toContain('v_command.id is null and exists');
+    const table = 'public.tenant_rendering_style_publish_command_keys';
+    for (const fragment of [
+      `create table ${table}`, 'primary key (tenant_id, idempotency_key)',
+      'foreign key (tenant_id, command_id) references public.tenant_rendering_style_publish_commands (tenant_id, id)',
+      `alter table ${table} enable row level security`,
+      `revoke all on table ${table} from public, anon, authenticated, service_role`,
+      `grant select on table ${table} to service_role`,
+    ]) expect(normalized).toContain(fragment);
+  });
+
+  test('SQL 回归断言不会把 NULL 当成通过，并覆盖丢键后恢复', () => {
+    const sql = readFileSync(new URL('../../../../../supabase/tests/tenant_rendering_style_publication.sql', import.meta.url), 'utf8');
+    expect(sql).not.toContain('<>');
+    expect(sql).not.toMatch(/v_(?:result|claim)->>'[^']+'\s*=/);
+    for (const fragment of ['丢失原键后失败重领', '丢失原键后过期重领', '成功版本使用新键', '旧键重试仍返回同一命令']) {
+      expect(sql).toContain(fragment);
+    }
   });
 });
