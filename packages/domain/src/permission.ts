@@ -26,6 +26,8 @@ export type PermissionOverrideEffect =
 export const PERMISSION_CODE_VALUES = [
   'dashboard.read',
   'task_center.read',
+  'rendering_library.read',
+  'rendering_library.manage',
   'customer.read',
   'customer.create',
   'customer.update',
@@ -303,6 +305,12 @@ export const PermissionCodeConfig: Record<
 > = {
   'dashboard.read': { label: '查看工作台', module: 'dashboard' },
   'task_center.read': { label: '查看待办中心', module: 'task_center' },
+  'rendering_library.read': {
+    label: '查看装修效果素材', module: 'rendering_library', resource: 'rendering_library', action: 'read',
+  },
+  'rendering_library.manage': {
+    label: '管理装修效果素材', module: 'rendering_library', resource: 'rendering_library', action: 'manage',
+  },
   'customer.read': { label: '查看客户', module: 'customer' },
   'customer.create': { label: '新建客户', module: 'customer' },
   'customer_lead.read': {

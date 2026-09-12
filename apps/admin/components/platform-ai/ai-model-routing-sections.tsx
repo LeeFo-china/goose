@@ -5,6 +5,8 @@ import { Edit3, Plus, RotateCcw, Save } from "lucide-react";
 import { toast } from "sonner";
 import type { AiModelRecord, AiProviderRecord, PageData } from "@/components/platform-ai/ai-config-types";
 import { statusLabel } from "@/components/platform-ai/ai-config-types";
+import { AiProviderSecretEditor } from "./ai-provider-secret-editor";
+import { AiProviderDelete } from "./ai-provider-delete";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,7 +17,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import type { ModelFormState, ProviderFormState } from "@/components/platform-ai/ai-model-routing-shared";
 import {
   normalizeProviderFormForType,
-  OPENROUTER_API_KEY_SETTING_KEY,
   providerKeyDisplay,
 } from "@/components/platform-ai/ai-model-routing-shared";
 
@@ -70,16 +71,20 @@ export function TablePageFooter({
 
 export function RouteStatusSelect({
   value,
+  id,
+  disabled = false,
   onChange,
 }: {
   value: "active" | "inactive";
+  id?: string;
+  disabled?: boolean;
   onChange: (value: "active" | "inactive") => void;
 }) {
   return (
     <Field>
-      <FieldLabel>状态</FieldLabel>
-      <Select value={value} onValueChange={(next) => onChange(next as "active" | "inactive")}>
-        <SelectTrigger>
+      <FieldLabel htmlFor={id}>状态</FieldLabel>
+      <Select value={value} disabled={disabled} onValueChange={(next) => onChange(next as "active" | "inactive")}>
+        <SelectTrigger id={id}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -188,23 +193,10 @@ export function ProviderFormCard({
             <FieldLabel htmlFor="ai-provider-endpoint">Endpoint</FieldLabel>
             <Input id="ai-provider-endpoint" value={form.endpoint_url} onChange={(event) => onChange({ ...form, endpoint_url: event.target.value })} />
           </Field>
-          <Field>
-            <FieldLabel htmlFor="ai-provider-key">密钥配置 Key</FieldLabel>
-            <Input
-              id="ai-provider-key"
-              value={form.provider_type === "openrouter" && !form.api_key_setting_key
-                ? OPENROUTER_API_KEY_SETTING_KEY
-                : form.api_key_setting_key}
-              readOnly={form.provider_type === "openrouter"}
-              aria-readonly={form.provider_type === "openrouter" ? "true" : undefined}
-              onChange={(event) => onChange({ ...form, api_key_setting_key: event.target.value })}
-            />
-            <FieldDescription>
-              {form.provider_type === "openrouter"
-                ? "真实密钥请在系统配置中维护，这里固定引用 OPENROUTER_API_KEY。"
-                : "例如 AI_API_KEY、DEEPSEEK_API_KEY。不要填写真实密钥。"}
-            </FieldDescription>
-          </Field>
+          <AiProviderSecretEditor
+            key={`${form.id || "new"}:${form.provider_type}:${form.api_key_setting_key}:${form.initial_api_key_setting_key || ""}`}
+            form={form} onChange={onChange}
+          />
           <RouteStatusSelect value={form.status} onChange={(status) => onChange({ ...form, status })} />
           <Field>
             <FieldLabel htmlFor="ai-provider-sort">排序</FieldLabel>
@@ -257,10 +249,10 @@ export function ModelFormCard({
               </SelectContent>
             </Select>
           </Field>
-          <Field>
-            <FieldLabel htmlFor="ai-model-code">模型编码</FieldLabel>
-            <Input id="ai-model-code" value={form.code} onChange={(event) => onChange({ ...form, code: event.target.value })} />
-          </Field>
+          {form.id ? <Field>
+            <FieldLabel htmlFor="ai-model-code">系统编码</FieldLabel>
+            <Input id="ai-model-code" value={form.code || ""} readOnly aria-readonly="true" />
+          </Field> : null}
           <Field>
             <FieldLabel htmlFor="ai-model-name">显示名称</FieldLabel>
             <Input id="ai-model-name" value={form.name} onChange={(event) => onChange({ ...form, name: event.target.value })} />
@@ -356,11 +348,15 @@ export function ProviderTable({
   page,
   pending,
   onEdit,
+  onDelete,
+  deleteDisabled = false,
   onPageChange,
 }: {
   page: PageData<AiProviderRecord>;
   pending: boolean;
   onEdit: (item: AiProviderRecord) => void;
+  onDelete?: (item: AiProviderRecord) => Promise<void> | void;
+  deleteDisabled?: boolean;
   onPageChange: (page: number) => void;
 }) {
   return (
@@ -400,17 +396,20 @@ export function ProviderTable({
                   <div className="text-xs text-muted-foreground">{item.code}</div>
                 </TableCell>
                 <TableCell className="max-w-[280px] truncate">{item.endpoint_url || "-"}</TableCell>
-                <TableCell>{providerKeyDisplay(item.api_key_setting_key)}</TableCell>
+                <TableCell>{item.api_key_setting_invalid ? "配置引用异常" : providerKeyDisplay(item.api_key_setting_key)}</TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
                     <StatusBadge status={item.status} />
                   </div>
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button variant="outline" size="sm" onClick={() => onEdit(item)}>
-                    <Edit3 data-icon="inline-start" />
-                    编辑
-                  </Button>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" size="sm" onClick={() => onEdit(item)}>
+                      <Edit3 data-icon="inline-start" />
+                      编辑
+                    </Button>
+                    {onDelete ? <AiProviderDelete provider={item} onDeleted={onDelete} disabled={deleteDisabled} /> : null}
+                  </div>
                 </TableCell>
               </TableRow>
             ))}

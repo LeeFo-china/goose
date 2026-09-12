@@ -13,15 +13,25 @@ import {
   AiRouteModelOptionResolvePayloadSchema,
   AiSceneRouteListQuerySchema,
   AiSceneRoutePayloadSchema,
+  AiSceneCodeParamsSchema,
+  AiSceneListQuerySchema,
+  UpdateAiCustomScenePayloadSchema,
+  DeleteAiCustomScenePayloadSchema,
+  DeleteAiProviderPayloadSchema,
+  DeleteAiProviderQuerySchema,
   OpenRouterCatalogApplyPayloadSchema,
   OpenRouterCatalogPreviewPayloadSchema,
   OpenRouterProviderQuerySchema,
+  SystemAiSceneListQuerySchema,
   UpdateAiModelPayloadSchema,
   UpdateAiProviderPayloadSchema,
   UpdateAiSceneRoutePayloadSchema,
 } from "@/schema/ai-config";
 import { aiConfigService } from "@/services/ai-config";
-import { Get, Patch, Post } from "@/utils/decorators/route";
+import { aiSecretSettingsService } from "@/services/ai-config/secret-settings";
+import { redactAiProviderReferences } from "@/services/ai-config/provider-reference";
+import { AiSecretSettingParamsSchema, ReplaceAiSecretSettingSchema } from "@/schema/ai-secret-settings";
+import { Delete, Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
@@ -30,11 +40,30 @@ class AiConfigController extends PlatformBaseController {
     super("ai_config");
   }
 
+  @Get("/platform/ai-config/secret-settings")
+  async listSecretSettings(request: FastifyRequest, reply: FastifyReply) {
+    reply.header("Cache-Control", "private, no-store");
+    const authContext = await this.getAiConfigReadContext(request);
+    aiSecretSettingsService.assertPermission(authContext, "read");
+    return ResponseHandler.success(await aiSecretSettingsService.list(authContext));
+  }
+
+  @Patch("/platform/ai-config/secret-settings/:key")
+  async replaceSecretSetting(request: FastifyRequest, reply: FastifyReply) {
+    reply.header("Cache-Control", "private, no-store");
+    const authContext = await this.getAiConfigManageContext(request);
+    aiSecretSettingsService.assertPermission(authContext, "manage");
+    const paramsResult = AiSecretSettingParamsSchema.safeParse(request.params);
+    const bodyResult = ReplaceAiSecretSettingSchema.safeParse(request.body);
+    if (!paramsResult.success || !bodyResult.success) throw Errors.badRequest("AI 密钥配置参数无效");
+    return ResponseHandler.success(await aiSecretSettingsService.replace(authContext, paramsResult.data.key, bodyResult.data));
+  }
+
   @Get("/platform/ai-config")
   async getConfig(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getAiConfigReadContext(request);
     const data = await aiConfigService.getConfig(authContext);
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(redactAiProviderReferences(data));
   }
 
   @Get("/platform/ai-config/providers")
@@ -43,7 +72,7 @@ class AiConfigController extends PlatformBaseController {
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
     const authContext = await this.getAiConfigReadContext(request);
     const data = await aiConfigService.listProviders(authContext, queryResult.data);
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(redactAiProviderReferences(data));
   }
 
   @Get("/platform/ai-config/models")
@@ -52,7 +81,7 @@ class AiConfigController extends PlatformBaseController {
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
     const authContext = await this.getAiConfigReadContext(request);
     const data = await aiConfigService.listModels(authContext, queryResult.data);
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(redactAiProviderReferences(data));
   }
 
   @Get("/platform/ai-config/routes")
@@ -61,7 +90,50 @@ class AiConfigController extends PlatformBaseController {
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
     const authContext = await this.getAiConfigReadContext(request);
     const data = await aiConfigService.listSceneRoutes(authContext, queryResult.data);
+    return ResponseHandler.success(redactAiProviderReferences(data));
+  }
+
+  @Get("/platform/ai-config/system-scenes")
+  async listSystemScenes(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getAiConfigReadContext(request);
+    const queryResult = SystemAiSceneListQuerySchema.safeParse(request.query || {});
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+    const data = await aiConfigService.listSystemScenes(authContext, queryResult.data);
     return ResponseHandler.success(data);
+  }
+
+  @Get("/platform/ai-config/scenes")
+  async listScenes(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getAiConfigReadContext(request);
+    const query = AiSceneListQuerySchema.safeParse(request.query ?? {});
+    if (!query.success) throw Errors.fromZod(query.error);
+    return ResponseHandler.success(await aiConfigService.listScenes(authContext, query.data));
+  }
+
+  @Patch("/platform/ai-config/scenes/:code")
+  async updateCustomScene(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getAiConfigManageContext(request);
+    const params = AiSceneCodeParamsSchema.safeParse(request.params);
+    const body = UpdateAiCustomScenePayloadSchema.safeParse(request.body);
+    if (!params.success || !body.success) throw Errors.badRequest("更新自定义 AI 场景参数无效");
+    return ResponseHandler.success(await aiConfigService.updateCustomScene(authContext, params.data.code, body.data));
+  }
+
+  @Delete("/platform/ai-config/scenes/:code")
+  async deleteCustomScene(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getAiConfigManageContext(request);
+    const params = AiSceneCodeParamsSchema.safeParse(request.params);
+    const body = DeleteAiCustomScenePayloadSchema.safeParse(request.body);
+    if (!params.success || !body.success) throw Errors.badRequest("删除自定义 AI 场景参数无效");
+    return ResponseHandler.success(await aiConfigService.deleteCustomScene(authContext, params.data.code, body.data));
+  }
+
+  @Post("/platform/ai-config/providers/:id/validate")
+  async validateProvider(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getAiConfigManageContext(request);
+    const params = AiConfigIdParamsSchema.safeParse(request.params);
+    if (!params.success) throw Errors.fromZod(params.error);
+    return ResponseHandler.success(await aiConfigService.validateProvider(authContext, params.data.id));
   }
 
   @Get("/platform/ai-config/providers/:id/route-model-options")
@@ -76,7 +148,7 @@ class AiConfigController extends PlatformBaseController {
       paramsResult.data.id,
       queryResult.data,
     );
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(redactAiProviderReferences(data));
   }
 
   @Post("/platform/ai-config/providers/:id/route-model-options:resolve")
@@ -91,7 +163,7 @@ class AiConfigController extends PlatformBaseController {
       paramsResult.data.id,
       bodyResult.data,
     );
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(redactAiProviderReferences(data));
   }
 
   @Get("/platform/ai-config/catalog-runs")
@@ -100,7 +172,7 @@ class AiConfigController extends PlatformBaseController {
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
     const authContext = await this.getAiConfigReadContext(request);
     const data = await aiConfigService.listCatalogRuns(authContext, queryResult.data);
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(redactAiProviderReferences(data));
   }
 
   @Get("/platform/ai-config/catalog-runs/:id/entries")
@@ -115,7 +187,7 @@ class AiConfigController extends PlatformBaseController {
       paramsResult.data.id,
       queryResult.data,
     );
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(redactAiProviderReferences(data));
   }
 
   @Post("/platform/ai-config/providers")
@@ -125,7 +197,7 @@ class AiConfigController extends PlatformBaseController {
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
 
     const data = await aiConfigService.createProvider(authContext, bodyResult.data);
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(redactAiProviderReferences(data));
   }
 
   @Patch("/platform/ai-config/providers/:id")
@@ -141,6 +213,19 @@ class AiConfigController extends PlatformBaseController {
       paramsResult.data.id,
       bodyResult.data,
     );
+    return ResponseHandler.success(redactAiProviderReferences(data));
+  }
+
+  @Delete("/platform/ai-config/providers/:id")
+  async deleteProvider(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getAiConfigManageContext(request);
+    const paramsResult = AiConfigIdParamsSchema.safeParse(request.params);
+    const queryResult = DeleteAiProviderQuerySchema.safeParse(request.query ?? {});
+    const bodyResult = DeleteAiProviderPayloadSchema.safeParse(request.body);
+    if (!paramsResult.success || !queryResult.success || !bodyResult.success) {
+      throw Errors.badRequest("删除 AI 供应商参数无效");
+    }
+    const data = await aiConfigService.deleteProvider(authContext, paramsResult.data.id, bodyResult.data);
     return ResponseHandler.success(data);
   }
 
@@ -151,7 +236,7 @@ class AiConfigController extends PlatformBaseController {
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
 
     const data = await aiConfigService.createModel(authContext, bodyResult.data);
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(redactAiProviderReferences(data));
   }
 
   @Patch("/platform/ai-config/models/:id")
@@ -167,7 +252,7 @@ class AiConfigController extends PlatformBaseController {
       paramsResult.data.id,
       bodyResult.data,
     );
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(redactAiProviderReferences(data));
   }
 
   @Patch("/platform/ai-config/models/:id/capability")
@@ -182,7 +267,7 @@ class AiConfigController extends PlatformBaseController {
       paramsResult.data.id,
       bodyResult.data,
     );
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(redactAiProviderReferences(data));
   }
 
   @Post("/platform/ai-config/routes")
@@ -192,7 +277,7 @@ class AiConfigController extends PlatformBaseController {
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
 
     const data = await aiConfigService.createSceneRoute(authContext, bodyResult.data);
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(redactAiProviderReferences(data));
   }
 
   @Patch("/platform/ai-config/routes/:id")
@@ -208,7 +293,7 @@ class AiConfigController extends PlatformBaseController {
       paramsResult.data.id,
       bodyResult.data,
     );
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(redactAiProviderReferences(data));
   }
 
   @Post("/platform/ai-config/openrouter/models/sync-preview")
@@ -217,7 +302,7 @@ class AiConfigController extends PlatformBaseController {
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
     const authContext = await this.getAiConfigManageContext(request);
     const data = await aiConfigService.createOpenRouterPreview(authContext, bodyResult.data);
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(redactAiProviderReferences(data));
   }
 
   @Post("/platform/ai-config/openrouter/models/apply")
@@ -226,7 +311,7 @@ class AiConfigController extends PlatformBaseController {
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
     const authContext = await this.getAiConfigManageContext(request);
     const data = await aiConfigService.applyOpenRouterCatalog(authContext, bodyResult.data);
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(redactAiProviderReferences(data));
   }
 
   @Get("/platform/ai-config/openrouter/credits")
@@ -235,14 +320,14 @@ class AiConfigController extends PlatformBaseController {
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
     const authContext = await this.getAiConfigReadContext(request);
     const data = await aiConfigService.getOpenRouterCredits(authContext, queryResult.data);
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(redactAiProviderReferences(data));
   }
 
   @Get("/platform/ai-config/usage-summary")
   async getUsageSummary(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getAiConfigReadContext(request);
     const data = await aiConfigService.getUsageSummary(authContext);
-    return ResponseHandler.success(data);
+    return ResponseHandler.success(redactAiProviderReferences(data));
   }
 
   private getAiConfigReadContext(request: FastifyRequest) {

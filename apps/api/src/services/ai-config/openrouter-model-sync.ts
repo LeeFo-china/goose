@@ -101,7 +101,7 @@ function buildPreviewEntry(entry: CatalogEntryProjection): Record<string, unknow
   };
 }
 
-function catalogEndpointUrl(provider: AiProviderRecord, path: string): string {
+function catalogEndpointUrl(provider: Pick<AiProviderRecord, "endpoint_url">, path: string): string {
   try {
     return new URL(catalogEndpointRelativePath(path), catalogEndpointBaseUrl(provider)).toString();
   } catch {
@@ -109,7 +109,7 @@ function catalogEndpointUrl(provider: AiProviderRecord, path: string): string {
   }
 }
 
-function catalogEndpointBaseUrl(provider: AiProviderRecord): string {
+function catalogEndpointBaseUrl(provider: Pick<AiProviderRecord, "endpoint_url">): string {
   const configuredUrl = provider.endpoint_url?.trim();
   if (!configuredUrl) return ensureTrailingSlash(OPENROUTER_DEFAULT_BASE_URL);
   try {
@@ -242,6 +242,28 @@ export class OpenRouterModelSyncService {
     });
   }
 
+  async checkCatalogConnectivity(authContext: AuthContext, provider: Pick<AiProviderRecord,
+    "provider_type" | "status" | "endpoint_url" | "api_key_setting_key">): Promise<void> {
+    assertPlatformPermission(authContext, MANAGE_PERMISSION);
+    if (provider.provider_type !== "openrouter" || provider.status !== "active") {
+      throw Errors.business(400, "请选择 OpenRouter 供应商", "AI_OPENROUTER_PROVIDER_INVALID");
+    }
+    const apiKey = await this.getProviderApiKey(provider);
+    // Official Models API pagination: offset >= 0, limit 1..1000; never follow links.next.
+    // https://openrouter.ai/docs/api/api-reference/models/list-all-models-and-their-properties
+    const url = new URL(catalogEndpointUrl(provider, "/api/v1/models"));
+    url.searchParams.set("offset", "0");
+    url.searchParams.set("limit", "1");
+    const response = await this.fetchImpl(url.toString(), { method: "GET", signal: AbortSignal.timeout(10_000),
+      headers: { authorization: `Bearer ${apiKey}`, ...await this.openRouterHeaders() },
+    }).catch(() => { throw catalogFetchError(); });
+    if (!response.ok) throw catalogFetchError();
+    const parsed = OpenRouterModelListSchema.safeParse(await response.json().catch(() => null));
+    if (!parsed.success || parsed.data.data.length > 1) {
+      throw Errors.business(502, "OpenRouter 模型目录格式无效", "AI_OPENROUTER_CATALOG_INVALID");
+    }
+  }
+
   async applyCatalog(authContext: AuthContext, input: OpenRouterCatalogApplyPayload) {
     assertPlatformPermission(authContext, MANAGE_PERMISSION);
     if (input.entry_ids.length > 100) {
@@ -328,7 +350,7 @@ export class OpenRouterModelSyncService {
     };
   }
 
-  private async getProviderApiKey(provider: AiProviderRecord) {
+  private async getProviderApiKey(provider: Pick<AiProviderRecord, "api_key_setting_key">) {
     const keyName = provider.api_key_setting_key || "OPENROUTER_API_KEY";
     const apiKey = await this.settings.getSecretString(keyName);
     if (!apiKey) {

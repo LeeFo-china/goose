@@ -1,5 +1,6 @@
 export * from './ai';
 export * from './ai-generation';
+export * from './ai-scenes';
 export * from './admin-service-access';
 export * from './auth';
 export * from './branding-virtual-payment';
@@ -52,3 +53,5 @@ export * from './workflow';
 export * from './wechat-pay-applyment-readiness';
 export * from './wechat-pay-settlement-rule';
 export * from './warehouse-adjustment';
+export * from './customer-rendering';
+export * from './rendering-library';

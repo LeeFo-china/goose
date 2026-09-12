@@ -1,3 +1,4 @@
+import type { AiGatewayProviderType } from '@/services/ai-gateway-types';
 import {
   Errors,
   systemSettingsService,
@@ -118,9 +119,9 @@ export async function getStreamingSystemPrompt() {
 }
 
 export async function getOpenRouterHeaders(
-  endpoint: string,
+  providerType: AiGatewayProviderType,
 ): Promise<Record<string, string>> {
-  if (!endpoint.includes("openrouter.ai")) {
+  if (providerType !== "openrouter") {
     return {};
   }
 
@@ -313,12 +314,12 @@ export function parseQaResult(rawContent: string): DecorationQaResult {
 
 export async function buildHeaders(
   apiKey: string,
-  endpoint: string,
+  providerType: AiGatewayProviderType,
 ): Promise<Record<string, string>> {
   return {
     "Content-Type": "application/json",
     Authorization: `Bearer ${apiKey}`,
-    ...await getOpenRouterHeaders(endpoint),
+    ...await getOpenRouterHeaders(providerType),
   };
 }
 

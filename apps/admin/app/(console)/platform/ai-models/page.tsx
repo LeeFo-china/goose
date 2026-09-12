@@ -1,14 +1,13 @@
 import { redirect } from "next/navigation";
-import { Cpu, GitBranch, ServerCog } from "lucide-react";
 import { AiModelRoutingPanel } from "@/components/platform-ai/ai-model-routing-panel";
 import type {
   AiConfigData,
   AiProviderRecord,
   AiSceneRouteRecord,
+  AiSystemSceneRecord,
   PageData,
 } from "@/components/platform-ai/ai-config-types";
 import { StatusAlert } from "@/components/admin/status-alert";
-import { Card, CardContent } from "@/components/ui/card";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
@@ -43,16 +42,26 @@ async function getAiConfig() {
       providerPage: emptyPage<AiProviderRecord>(),
       routePage: emptyPage<AiSceneRouteRecord>(),
       providerOptions: [],
+      systemScenePage: emptyPage<AiSystemSceneRecord>(),
+      systemSceneError: "缺少登录凭证",
       error: "缺少登录凭证",
     };
   }
 
   try {
-    const [summary, providers, routes, providerOptions] = await Promise.all([
+    const scenesPromise = fetchBackendData<PageData<AiSystemSceneRecord>>(
+      token,
+      "/platform/ai-config/system-scenes?page=1&pageSize=20",
+    ).then((page) => ({ page, error: null })).catch((error) => ({
+      page: emptyPage<AiSystemSceneRecord>(),
+      error: error instanceof Error ? error.message : "业务场景注册表加载失败",
+    }));
+    const [summary, providers, routes, providerOptions, scenes] = await Promise.all([
       fetchBackendData<AiConfigData>(token, "/platform/ai-config"),
       fetchBackendData<PageData<AiProviderRecord>>(token, "/platform/ai-config/providers?page=1&pageSize=20"),
       fetchBackendData<PageData<AiSceneRouteRecord>>(token, "/platform/ai-config/routes?page=1&pageSize=20"),
       fetchBackendData<PageData<AiProviderRecord>>(token, "/platform/ai-config/providers?page=1&pageSize=100"),
+      scenesPromise,
     ]);
     return {
       data: {
@@ -64,6 +73,8 @@ async function getAiConfig() {
       providerPage: providers || emptyPage<AiProviderRecord>(),
       routePage: routes || emptyPage<AiSceneRouteRecord>(),
       providerOptions: providerOptions?.list || providers?.list || [],
+      systemScenePage: scenes.page || emptyPage<AiSystemSceneRecord>(),
+      systemSceneError: scenes.error,
       error: null,
     };
   } catch (error) {
@@ -72,6 +83,8 @@ async function getAiConfig() {
       providerPage: emptyPage<AiProviderRecord>(),
       routePage: emptyPage<AiSceneRouteRecord>(),
       providerOptions: [],
+      systemScenePage: emptyPage<AiSystemSceneRecord>(),
+      systemSceneError: error instanceof Error ? error.message : "业务场景注册表加载失败",
       error: error instanceof Error ? error.message : "AI 模型路由配置加载失败",
     };
   }
@@ -91,6 +104,8 @@ export default async function PlatformAiModelsPage() {
       providerPage: emptyPage<AiProviderRecord>(),
       routePage: emptyPage<AiSceneRouteRecord>(),
       providerOptions: [],
+      systemScenePage: emptyPage<AiSystemSceneRecord>(),
+      systemSceneError: "当前账号不是平台超管，无法维护 AI 模型路由",
       error: "当前账号不是平台超管，无法维护 AI 模型路由",
     };
 
@@ -101,46 +116,14 @@ export default async function PlatformAiModelsPage() {
   return (
     <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
       <div className="shrink-0">
-        <h1 className="text-2xl font-semibold tracking-normal">AI 模型路由</h1>
+        <h1 className="text-xl font-semibold tracking-normal">AI 模型路由</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          统一维护平台 AI 供应商、模型和业务场景路由。场景配置生效后，后端按主模型调用，失败时可切换备用模型。
+          管理场景路由、供应商连接与模型。保存配置不代表模型调用已验证。
         </p>
       </div>
 
-      <div className="grid shrink-0 gap-3 md:grid-cols-3">
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <GitBranch className="size-5" />
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">场景路由</div>
-              <div className="text-xl font-semibold">{totalRoutes}</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <Cpu className="size-5" />
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">模型总数</div>
-              <div className="text-xl font-semibold">{totalModels}</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <ServerCog className="size-5" />
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">供应商总数</div>
-              <div className="text-xl font-semibold">{totalProviders}</div>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="flex shrink-0 flex-wrap gap-x-5 gap-y-1 text-sm tabular-nums text-muted-foreground" aria-label="配置概览">
+        <span>场景路由 {totalRoutes}</span><span>模型 {totalModels}</span><span>供应商 {totalProviders}</span>
       </div>
 
       {result.error ? (
@@ -151,9 +134,13 @@ export default async function PlatformAiModelsPage() {
 
       {hasPlatformAccess ? (
         <AiModelRoutingPanel
+          canManageProviders={session.tenant === null && session.permissions.some((item) => item.code === "platform.ai_config.manage")}
+          canManageRoutes={session.tenant === null && session.permissions.some((item) => item.code === "platform.ai_config.manage")}
           providerPage={result.providerPage}
           routePage={result.routePage}
           providerOptions={result.providerOptions}
+          systemScenePage={result.systemScenePage}
+          systemSceneError={result.systemSceneError}
         />
       ) : null}
     </div>

@@ -1,65 +1,23 @@
 import { Errors } from "@/errors/error-factory";
+import { aiInferenceEndpoint } from "@/gateways/ark-rendering/requests";
 import { systemSettingsService } from "@/services/system-settings";
 import { SupabaseDB } from "@/utils/supabase";
-import type {
-  AiGatewayChatInput,
-  AiGatewayChatResult,
-  AiGatewayMessage,
-  AiGatewayResolvedChatConfig,
-} from "./ai-gateway-types";
+import type { AiGatewayChatInput, AiGatewayChatResult, AiGatewayFetch,
+  AiGatewayProviderType, AiGatewayMessage, AiGatewayResolvedChatConfig,
+  AiModelRow, AiProviderRow, AiSceneRouteRow,
+  OpenAiCompatibleResponse } from "./ai-gateway-types";
 
-export type {
-  AiGatewayChatInput,
-  AiGatewayChatResult,
-  AiGatewayMessage,
-  AiGatewayResolvedChatConfig,
-} from "./ai-gateway-types";
+export type { AiGatewayChatInput, AiGatewayChatResult, AiGatewayProviderType,
+  AiGatewayMessage, AiGatewayResolvedChatConfig } from "./ai-gateway-types";
 
-type AiSceneRouteRow = {
-  scene_code: string;
-  temperature: number | null;
-  response_format: "json_object" | "text" | null;
-  timeout_ms: number | null;
-  primary_model?: AiModelRow | AiModelRow[] | null;
-  fallback_model?: AiModelRow | AiModelRow[] | null;
-};
-
-type AiModelRow = {
-  code: string;
-  model_name: string;
-  status?: "active" | "inactive" | null;
-  provider?: AiProviderRow | AiProviderRow[] | null;
-};
-
-type AiProviderRow = {
-  code: string;
-  endpoint_url: string | null;
-  api_key_setting_key: string | null;
-  status?: "active" | "inactive" | null;
-};
-
-type OpenAiCompatibleResponse = {
-  id?: string;
-  choices?: Array<{
-    message?: {
-      content?: string | Array<{ type?: string; text?: string }>;
-    };
-  }>;
-  usage?: {
-    prompt_tokens?: number;
-    completion_tokens?: number;
-    total_tokens?: number;
-    prompt_tokens_details?: {
-      cached_tokens?: number;
-    };
-    completion_tokens_details?: {
-      reasoning_tokens?: number;
-    };
-  };
-  error?: {
-    code?: string;
-    message?: string;
-  };
+type AiGatewaySettings = Pick<
+  typeof systemSettingsService,
+  "getSecretString" | "getString" | "getNumber"
+>;
+export type AiGatewayDependencies = {
+  client?: ReturnType<typeof SupabaseDB.getAdminClient>;
+  fetchImpl?: AiGatewayFetch;
+  settingsService?: AiGatewaySettings;
 };
 
 function firstRelation<T>(value: T | T[] | null | undefined) {
@@ -106,23 +64,45 @@ function normalizeTimeout(value: number | null | undefined, fallback: number) {
   return Math.max(1000, Math.min(Math.floor(value!), 300000));
 }
 
-class AiGateway {
-  private client = SupabaseDB.getAdminClient();
+function chatInferenceEndpoint(baseUrl: string, modality: AiModelRow["modality"]) {
+  try {
+    const endpoint = aiInferenceEndpoint(baseUrl, modality);
+    if (modality === "text") return endpoint;
+    throw Errors.business(400, "该模型模态尚未接入运行时", "AI_MODALITY_RUNTIME_UNSUPPORTED");
+  } catch (error) {
+    if (!(error instanceof TypeError)) throw error;
+    throw Errors.business(500, "AI 供应商基础地址配置无效", "AI_PROVIDER_ENDPOINT_INVALID");
+  }
+}
+
+export class AiGateway {
+  private readonly client;
+  private readonly fetchImpl;
+  private readonly settingsService;
+
+  constructor(dependencies: AiGatewayDependencies = {}) {
+    this.client = dependencies.client ?? SupabaseDB.getAdminClient();
+    this.fetchImpl = dependencies.fetchImpl ?? fetch;
+    this.settingsService = dependencies.settingsService ?? systemSettingsService;
+  }
 
   private async findSceneRoute(sceneCode: string) {
     const { data, error } = await this.client
       .from("ai_scene_routes")
       .select(`
         scene_code,
+        modality,
         temperature,
         response_format,
         timeout_ms,
         primary_model:ai_models!ai_scene_routes_primary_model_id_fkey(
           code,
           model_name,
+          modality,
           status,
           provider:ai_providers!ai_models_provider_id_fkey(
             code,
+            provider_type,
             status,
             endpoint_url,
             api_key_setting_key
@@ -131,9 +111,11 @@ class AiGateway {
         fallback_model:ai_models!ai_scene_routes_fallback_model_id_fkey(
           code,
           model_name,
+          modality,
           status,
           provider:ai_providers!ai_models_provider_id_fkey(
             code,
+            provider_type,
             status,
             endpoint_url,
             api_key_setting_key
@@ -153,9 +135,9 @@ class AiGateway {
 
   private async resolveLegacyModel(sceneCode: string) {
     const hasDeepSeekApiKey = Boolean(
-      await systemSettingsService.getSecretString("DEEPSEEK_API_KEY"),
+      await this.settingsService.getSecretString("DEEPSEEK_API_KEY"),
     );
-    const endpoint = (await systemSettingsService.getString("AI_CHAT_COMPLETIONS_URL"))
+    const endpoint = (await this.settingsService.getString("AI_CHAT_COMPLETIONS_URL"))
       || (hasDeepSeekApiKey
         ? "https://api.deepseek.com/chat/completions"
         : "https://api.openai.com/v1/chat/completions");
@@ -169,13 +151,13 @@ class AiGateway {
       : ["AI_API_KEY", "DEEPSEEK_API_KEY"];
     let apiKey = "";
     for (const key of apiKeySettingNames) {
-      apiKey = await systemSettingsService.getSecretString(key);
+      apiKey = await this.settingsService.getSecretString(key);
       if (apiKey) break;
     }
     if (!apiKey) {
       apiKey = firstNonEmptyEnv(apiKeySettingNames);
     }
-    const model = await systemSettingsService.getString("AI_MODEL")
+    const model = await this.settingsService.getString("AI_MODEL")
       || (providerCode === "deepseek" ? "deepseek-chat" : firstNonEmptyEnv(["DEEPSEEK_MODEL"]));
 
     if (!endpoint || !apiKey || !model) {
@@ -186,14 +168,17 @@ class AiGateway {
         { sceneCode },
       );
     }
+    const canonicalEndpoint = chatInferenceEndpoint(endpoint, "text");
 
     return {
       providerCode,
+      providerType: new URL(canonicalEndpoint).hostname === "openrouter.ai"
+        ? "openrouter" as const : "openai_compatible" as const,
       modelCode: model,
       modelName: model,
-      endpoint,
+      endpoint: canonicalEndpoint,
       apiKey,
-      timeoutMs: await systemSettingsService.getNumber("AI_REQUEST_TIMEOUT_MS", 60000),
+      timeoutMs: await this.settingsService.getNumber("AI_REQUEST_TIMEOUT_MS", 60000),
     };
   }
 
@@ -205,6 +190,8 @@ class AiGateway {
     const model = firstRelation(input.useFallback
       ? input.route?.fallback_model
       : input.route?.primary_model);
+    const modality = model?.modality ?? input.route?.modality ?? "text";
+    if (modality !== "text") throw Errors.business(400, "该模型模态尚未接入运行时", "AI_MODALITY_RUNTIME_UNSUPPORTED");
     const provider = firstRelation(model?.provider);
     if (!model || !provider?.endpoint_url || !provider.api_key_setting_key) {
       return this.resolveLegacyModel(input.sceneCode);
@@ -215,36 +202,33 @@ class AiGateway {
     if (provider.status !== "active") {
       throw Errors.business(409, "AI 供应商已停用，请调整场景路由", "AI_PROVIDER_INACTIVE");
     }
-
-    const apiKey = await systemSettingsService.getSecretString(provider.api_key_setting_key);
+    const apiKey = await this.settingsService.getSecretString(provider.api_key_setting_key);
     if (!apiKey) {
       return this.resolveLegacyModel(input.sceneCode);
     }
-
     return {
       providerCode: provider.code,
+      providerType: provider.provider_type,
       modelCode: model.code,
       modelName: model.model_name,
-      endpoint: provider.endpoint_url,
+      endpoint: chatInferenceEndpoint(provider.endpoint_url, model.modality),
       apiKey,
-      timeoutMs: input.route?.timeout_ms || await systemSettingsService.getNumber(
+      timeoutMs: input.route?.timeout_ms || await this.settingsService.getNumber(
         "AI_REQUEST_TIMEOUT_MS",
         60000,
       ),
     };
   }
 
-  private async getOpenRouterHeaders(endpoint: string): Promise<Record<string, string>> {
-    if (!endpoint.includes("openrouter.ai")) {
-      return {};
-    }
+  private async getOpenRouterHeaders(providerType: AiProviderRow["provider_type"]): Promise<Record<string, string>> {
+    if (providerType !== "openrouter") return {};
 
     return {
-      "HTTP-Referer": await systemSettingsService.getString(
+      "HTTP-Referer": await this.settingsService.getString(
         "OPENROUTER_HTTP_REFERER",
         "https://gooes.local",
       ),
-      "X-Title": await systemSettingsService.getString(
+      "X-Title": await this.settingsService.getString(
         "OPENROUTER_APP_NAME",
         "gooes-ai-gateway",
       ),
@@ -253,6 +237,7 @@ class AiGateway {
 
   private async requestChat(input: {
     endpoint: string;
+    providerType: AiProviderRow["provider_type"];
     apiKey: string;
     model: string;
     messages: AiGatewayMessage[];
@@ -263,12 +248,12 @@ class AiGateway {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), input.timeoutMs);
     try {
-      const response = await fetch(input.endpoint, {
+      const response = await this.fetchImpl(input.endpoint, {
         method: "POST",
         headers: {
           "content-type": "application/json",
           authorization: `Bearer ${input.apiKey}`,
-          ...await this.getOpenRouterHeaders(input.endpoint),
+          ...await this.getOpenRouterHeaders(input.providerType),
         },
         body: JSON.stringify({
           model: input.model,
@@ -368,6 +353,7 @@ class AiGateway {
 
     return {
       providerCode: model.providerCode,
+      providerType: model.providerType,
       modelCode: model.modelCode,
       modelName: model.modelName,
       endpoint: model.endpoint,
@@ -394,6 +380,7 @@ class AiGateway {
       const startedAt = Date.now();
       const raw = await this.requestChat({
         endpoint: model.endpoint,
+        providerType: model.providerType,
         apiKey: model.apiKey,
         model: model.modelName,
         messages: input.messages,

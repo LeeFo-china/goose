@@ -37,6 +37,7 @@ import type {
   SystemSettingRepository,
 } from '@/repositories/system-settings';
 import { resolvePaymentSecretWrite } from './payment-secret-write';
+import { isAiSecretSettingKey } from '@/schema/ai-secret-settings';
 
 export async function getPlatformSecretStrings(
   repository: Pick<SystemSettingRepository, "findPlatformByKeys">,
@@ -283,7 +284,7 @@ async function persistSetting(
     key: string,
     value: string | null,
   ) {
-    const tenantId = authContext.isPlatformAdmin
+    const tenantId = authContext.isPlatformAdmin || (authContext.isPlatformStaff && authContext.tenantId === null)
       ? null
       : accessPolicyService.assertTenantId(authContext);
     if (tenantId && !this.isTenantOverridable(key)) {
@@ -306,6 +307,11 @@ async function persistSetting(
       : platformRecord;
     if (!record) {
       throw Errors.notFound("系统配置不存在");
+    }
+    if (isAiSecretSettingKey(key) && (
+      !record.is_secret || record.group_code !== "ai" || record.status !== "active" || record.value_type !== "string"
+    )) {
+      throw Errors.business(409, "AI 密钥配置引用异常", "AI_SECRET_SETTING_INVALID");
     }
     const normalizedValue = normalizeStoredValue(value);
     const validatedValue = validateSettingValue(record, normalizedValue);

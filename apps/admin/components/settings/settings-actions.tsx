@@ -7,6 +7,7 @@ import { StatusAlert } from "@/components/admin/status-alert";
 import { TencentOcrEncryptionPublicKeyEditor } from "@/components/platform-ocr/platform-ocr-encryption-public-key-editor";
 import { FileAccessPolicyEditor } from "@/components/settings/settings-file-access-policy-editor";
 import type { SystemSetting } from "@/components/settings/settings-types";
+import { isAiSecretSettingKey, shouldPreserveEmptyAiSecret } from "./ai-secret-input";
 import {
   sourceBadge,
   updateSetting,
@@ -164,16 +165,19 @@ function GenericSettingEditor({ setting }: { setting: SystemSetting }) {
   const [saved, setSaved] = useState(false);
   const [pending, startTransition] = useTransition();
   const initialValue = setting.is_secret ? "" : setting.stored_value || "";
-  const dirty = setting.is_secret && setting.source === "database"
+  const isAiSecret = setting.is_secret && isAiSecretSettingKey(setting.key);
+  const dirty = shouldPreserveEmptyAiSecret(setting, value) ? false : setting.is_secret && setting.source === "database"
     ? true
     : value !== initialValue;
 
   function submit() {
+    if (shouldPreserveEmptyAiSecret(setting, value)) return;
     setError("");
     setSaved(false);
     startTransition(async () => {
       try {
         await updateSetting(setting.key, value.trim() ? value : null);
+        if (isAiSecret) setValue("");
         setSaved(true);
         router.refresh();
       } catch (err) {
@@ -235,7 +239,7 @@ function GenericSettingEditor({ setting }: { setting: SystemSetting }) {
             type="password"
             value={value}
             onChange={(event) => setValue(event.target.value)}
-            placeholder={setting.effective_scope === "tenant" ? "输入新密钥，留空保存可清空租户值" : "输入新密钥"}
+            placeholder={isAiSecret ? "输入新密钥以更换，留空不修改" : setting.effective_scope === "tenant" ? "输入新密钥，留空保存可清空租户值" : "输入新密钥"}
             autoComplete="new-password"
           />
         ) : setting.value_type === "boolean" ? (
@@ -269,7 +273,7 @@ function GenericSettingEditor({ setting }: { setting: SystemSetting }) {
           />
         )}
         <FieldDescription>
-          {setting.effective_scope === "tenant" ? "租户覆盖值，留空保存可清空。" : "平台配置值，留空保存将回退环境变量或默认值。"}
+          {isAiSecret ? "留空不修改已有密钥；更换会影响所有引用此配置的供应商。" : setting.effective_scope === "tenant" ? "租户覆盖值，留空保存可清空。" : "平台配置值，留空保存将回退环境变量或默认值。"}
         </FieldDescription>
         {error ? <StatusAlert>{error}</StatusAlert> : null}
         {saved ? <StatusAlert tone="success">已保存</StatusAlert> : null}

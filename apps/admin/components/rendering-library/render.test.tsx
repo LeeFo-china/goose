@@ -1,0 +1,45 @@
+import { expect, test } from 'bun:test';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { StyleCard } from './style-card';
+import { StyleFields } from './style-fields';
+import { LibraryGrid } from './library-client';
+import { UploadItem } from './upload-item';
+import { UploadRights } from './upload-rights';
+import { toStyleFields } from './contracts';
+import { style } from './test-fixtures';
+
+test('cards render real metadata, fixed cover and read-only detail access without write or publish actions', () => {
+  const html = renderToStaticMarkup(<StyleCard style={style} preview={{ file_id: style.file_id, url: 'https://preview.example.com/image', expires_at: '2099-09-11T00:00:00Z' }} canManage={false} onView={() => {}} onEdit={() => {}} onCommand={() => {}} />);
+  expect(html).toContain('<article');
+  for (const text of ['客厅原图', '实景案例', '客厅', '奶油风', '草稿', '查看详情', 'referrerPolicy="no-referrer"']) expect(html).toContain(text);
+  for (const text of ['>编辑<', '>删除<', '>发布<']) expect(html).not.toContain(text);
+});
+
+test('upload validation errors are associated with the specific title and rights controls', () => {
+  const html = renderToStaticMarkup(<UploadItem item={{ key: 'one', file: new File(['x'], 'a.png'), title: '', previewUrl: '', status: 'ready' }} titleError="请填写素材标题" disabled={false} onTitle={() => {}} onRemove={() => {}} onRetry={() => {}} onEdit={() => {}} />);
+  expect(html).toContain('请填写素材标题');
+  expect(html).toContain('aria-invalid="true"');
+  expect(html).toContain('aria-describedby="upload-error-one"');
+  const rights = renderToStaticMarkup(<UploadRights checked={false} disabled={false} error="请确认已取得图片使用授权" onChange={() => {}} />);
+  expect(rights).toContain('aria-invalid="true"');
+  expect(rights).toContain('aria-describedby="rendering-upload-rights-error"');
+  expect(rights).toContain('请确认已取得图片使用授权');
+});
+test('form fields have concrete labels, constraints and associated errors', () => {
+  const html = renderToStaticMarkup(<StyleFields value={toStyleFields(style)} onChange={() => {}} errors={{ title: '请输入标题' }} />);
+  for (const text of ['标题', '空间', '风格', '来源', '颜色说明', '材质说明', '排序', '请输入标题', 'aria-invalid="true"', 'maxLength="80"']) expect(html).toContain(text);
+});
+test('gallery has loading, empty, no-results and recoverable error states', () => {
+  const props = { list: [], previews: {}, canManage: false, onView: () => {}, onEdit: () => {}, onCommand: () => {}, onRetry: () => {} };
+  expect(renderToStaticMarkup(<LibraryGrid {...props} loading />)).toContain('正在读取素材');
+  expect(renderToStaticMarkup(<LibraryGrid {...props} />)).toContain('还没有素材');
+  expect(renderToStaticMarkup(<LibraryGrid {...props} filtered />)).toContain('没有符合筛选条件的素材');
+  expect(renderToStaticMarkup(<LibraryGrid {...props} error="读取素材列表失败" />)).toContain('重新加载');
+});
+test('failed metadata save exposes the original error and a save-only retry', () => {
+  const html = renderToStaticMarkup(<UploadItem item={{ key: 'one', file: new File(['x'], '客厅.png'), title: '客厅', previewUrl: '',
+    status: 'failed', failureStage: 'save', fileId: style.file_id, error: '保存素材资料失败' }} disabled={false} onTitle={() => {}} onRemove={() => {}} onRetry={() => {}} onEdit={() => {}} />);
+  expect(html).toContain('保存素材资料失败');
+  expect(html).toContain('重试保存资料');
+  expect(html).not.toContain('重新上传');
+});

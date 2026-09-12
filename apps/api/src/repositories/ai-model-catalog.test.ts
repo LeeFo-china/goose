@@ -28,6 +28,26 @@ function tableResponse(data: unknown, count = 1) {
 }
 
 describe("AiModelCatalogRepository", () => {
+  test("includes bounded public provider metadata with both route bindings without secret fields", async () => {
+    const { AiModelCatalogRepository } = await import("./ai-model-catalog");
+    const builder = tableResponse([]);
+    const tables: string[] = [];
+    const repository = new AiModelCatalogRepository({
+      from: (table: string) => { tables.push(table); return builder; },
+      rpc: async () => ({ data: null, error: null }),
+    } as never);
+    await repository.listSceneRoutes({ page: 2, pageSize: 20 });
+    const projection = builder.calls.find((call) => call.method === "select")?.args[0];
+    for (const target of ["primary", "fallback"]) {
+      expect(projection).toContain(`${target}_model:ai_models!ai_scene_routes_${target}_model_id_fkey(id,provider_id,code,name,model_name,modality,status,provider:ai_providers!ai_models_provider_id_fkey(id,code,name,provider_type,status))`);
+    }
+    expect(projection).not.toContain("api_key");
+    expect(projection).not.toContain("endpoint_url");
+    expect(projection).not.toContain("*");
+    expect(builder.calls).toContainEqual({ method: "range", args: [20, 39] });
+    expect(tables).toEqual(["ai_scene_routes"]);
+  });
+
   test("lists models with exact pagination, bounded range and necessary fields", async () => {
     const { AiModelCatalogRepository } = await import("./ai-model-catalog");
     const builders: Record<string, ReturnType<typeof tableResponse>> = {};

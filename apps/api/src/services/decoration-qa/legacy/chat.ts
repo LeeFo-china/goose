@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { AiGatewayFetch, AiGatewayProviderType } from '@/services/ai-gateway-types';
 import {
   Errors,
   aiGateway,
@@ -16,6 +17,7 @@ import {
   buildMessages,
   extractDeltaContent,
   getAiRequestTimeoutMs,
+  getAiProviderCode,
   getStreamingSystemPrompt,
   getSystemPrompt,
   normalizeTotalTokens,
@@ -60,7 +62,7 @@ export async function requestQaResult(
   try {
     const response = await fetch(endpoint, {
       method: "POST",
-      headers: await buildHeaders(apiKey, endpoint),
+      headers: await buildHeaders(apiKey, getAiProviderCode(endpoint) === "openrouter" ? "openrouter" : "openai_compatible"),
       body: JSON.stringify(requestBody),
       signal: controller.signal,
     });
@@ -104,7 +106,12 @@ export async function requestQaStream(
   apiKey: string,
   requestBody: OpenAiRequestBody,
   timeoutMs: number,
-  signal?: AbortSignal,
+  signal: AbortSignal | undefined,
+  providerType: AiGatewayProviderType,
+  dependencies: {
+    fetchImpl?: AiGatewayFetch;
+    buildHeaders?: typeof buildHeaders;
+  } = {},
 ) {
   const controller = new AbortController();
   if (signal) {
@@ -117,15 +124,13 @@ export async function requestQaStream(
     }
   }
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
   try {
-    const response = await fetch(endpoint, {
+    const response = await (dependencies.fetchImpl ?? fetch)(endpoint, {
       method: "POST",
-      headers: await buildHeaders(apiKey, endpoint),
+      headers: await (dependencies.buildHeaders ?? buildHeaders)(apiKey, providerType),
       body: JSON.stringify(requestBody),
       signal: controller.signal,
     });
-
     if (!response.ok) {
       const result = await response.json() as OpenAiChatResponse;
       throw Errors.dbError(result.error?.message || "大模型流式调用失败");
@@ -293,6 +298,7 @@ export async function streamDecorationQa(
       ),
       routeConfig.timeoutMs,
       options?.signal,
+      routeConfig.providerType,
     );
     reader = streamRequest.body.getReader();
 
