@@ -167,10 +167,10 @@ export class CustomerRenderingQuotaRepository {
     failureMessage: string,
   ): Promise<T> {
     const { data, error } = await this.client.rpc(name, params);
-    if (error) throw Errors.dbError(failureMessage, error);
+    if (error) throw Errors.dbError(failureMessage);
     const parsed = schema.safeParse(data);
     if (!parsed.success) {
-      throw Errors.dbError(`${failureMessage}：返回格式异常`, parsed.error.issues);
+      throw Errors.dbError(`${failureMessage}：返回格式异常`);
     }
     return parsed.data;
   }

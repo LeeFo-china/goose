@@ -163,8 +163,13 @@ describe("customer rendering quota repository", () => {
     })).decision).toBe("idempotency_conflict");
 
     const malformed = createHarness({ data: { ...snapshot("ok"), leaked_phone: "13800000000" }, error: null });
-    expect(malformed.repository.read({ ...identity, phoneKeyVersion: null, phoneDigest: null }))
-      .rejects.toBeInstanceOf(AppError);
+    try {
+      await malformed.repository.read({ ...identity, phoneKeyVersion: null, phoneDigest: null });
+      throw new Error("expected malformed payload to reject");
+    } catch (error) {
+      expect(error).toBeInstanceOf(AppError);
+      expect((error as AppError).details).toBeUndefined();
+    }
   });
 
   test("wraps RPC failures with the shared database error", async () => {
@@ -176,6 +181,7 @@ describe("customer rendering quota repository", () => {
       expect(error).toBeInstanceOf(AppError);
       expect((error as AppError).statusCode).toBe(500);
       expect((error as AppError).message).toBe("读取客户生图额度失败");
+      expect((error as AppError).details).toBeUndefined();
     }
   });
 });
