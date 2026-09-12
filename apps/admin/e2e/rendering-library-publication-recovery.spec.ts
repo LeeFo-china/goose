@@ -206,3 +206,87 @@ test('版本冲突换图后旧图不可确认，等待新私有图并重新勾�
   expect(writes.map((event) => event.input?.expected_version)).toEqual([1, 2]);
   expect(writes[0]?.input?.idempotency_key).not.toBe(writes[1]?.input?.idempotency_key);
 });
+
+test('弹窗打开后预览到期自动换取私有 URL，换图前禁用并重新确认', async ({ page, request }, testInfo) => {
+  await page.setViewportSize({ width: 400, height: 860 });
+  const clockStart = Date.now();
+  await page.clock.install({ time: clockStart });
+  const dialog = await openPublish(page);
+  await expect(dialog.getByRole('button', { name: '发布素材' })).toBeEnabled();
+  let releasePreview!: () => void;
+  const previewGate = new Promise<void>((resolve) => { releasePreview = resolve; });
+  let previewRequests = 0;
+  await page.route('**/api/backend/tenant/rendering-library/files/*/preview', async (route) => {
+    previewRequests += 1;
+    await previewGate;
+    const file = new URL(route.request().url()).pathname.split('/').at(-2);
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ success: true, data: {
+      file_id: file, url: `https://rendering-preview.example.test/${file}.webp?v=renewed`,
+      expires_at: new Date(clockStart + 240000).toISOString(),
+    } }) });
+  });
+  try {
+    await page.clock.fastForward(120500);
+    await expect.poll(() => previewRequests).toBe(1);
+    await expect(dialog.getByRole('checkbox', { name: /本公司承担内容及版权责任/ })).toBeDisabled();
+    await expect(dialog.getByRole('checkbox', { name: /本公司承担内容及版权责任/ })).not.toBeChecked();
+    await expect(dialog.getByRole('button', { name: '发布素材' })).toBeDisabled();
+    expect(publications(await events(request))).toHaveLength(0);
+  } finally { releasePreview(); }
+  await expect(dialog.getByRole('img', { name: '测试素材 01' })).toBeVisible();
+  const responsibility = dialog.getByRole('checkbox', { name: /本公司承担内容及版权责任/ });
+  await expect(responsibility).toBeEnabled();
+  await expect(responsibility).not.toBeChecked();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('publish-preview-auto-renew-mobile.png'), fullPage: true });
+  await responsibility.check();
+  await dialog.getByRole('button', { name: '发布素材' }).click();
+  await expect(dialog).toBeHidden();
+});
+
+test('服务端持续返回过期 URL 时自动请求有界，手动重试仍可用', async ({ page, request }, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const clockStart = Date.now();
+  await page.clock.install({ time: clockStart });
+  const dialog = await openPublish(page);
+  let previewRequests = 0;
+  await page.route('**/api/backend/tenant/rendering-library/files/*/preview', async (route) => {
+    previewRequests += 1;
+    const file = new URL(route.request().url()).pathname.split('/').at(-2);
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ success: true, data: {
+      file_id: file, url: `https://rendering-preview.example.test/${file}.webp?v=expired-${previewRequests}`,
+      expires_at: new Date(clockStart - 1000).toISOString(),
+    } }) });
+  });
+  await page.clock.fastForward(120500);
+  await expect.poll(() => previewRequests).toBe(1);
+  await page.clock.fastForward(10000);
+  expect(previewRequests).toBe(1);
+  await expect(dialog.getByRole('checkbox', { name: /本公司承担内容及版权责任/ })).toBeDisabled();
+  await expect(dialog.getByRole('button', { name: '发布素材' })).toBeDisabled();
+  await expect(dialog.getByRole('button', { name: '重试图片预览' })).toBeVisible();
+  expect(publications(await events(request))).toHaveLength(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('publish-preview-expired-desktop.png'), fullPage: true });
+});
+
+test('隐藏和删除确认不读取私有图片预览', async ({ page, request }) => {
+  await options(request, { preview_failure: true });
+  await page.goto('/rendering-library', { waitUntil: 'networkidle' });
+  const card = page.getByRole('article').filter({ hasText: '测试素材 01' });
+  await card.getByRole('button', { name: '删除', exact: true }).click();
+  await expect(page.getByRole('alertdialog', { name: '删除素材' })).toBeVisible();
+  await page.getByRole('alertdialog', { name: '删除素材' }).getByRole('button', { name: '取消' }).click();
+  await options(request, { preview_failure: false });
+  await page.reload({ waitUntil: 'networkidle' });
+  await card.getByRole('button', { name: '发布', exact: true }).click();
+  const publish = page.getByRole('alertdialog', { name: '发布素材' });
+  await publish.getByRole('checkbox', { name: /本公司承担内容及版权责任/ }).check();
+  await publish.getByRole('button', { name: '发布素材' }).click();
+  await expect(publish).toBeHidden();
+  await options(request, { preview_failure: true });
+  await page.reload({ waitUntil: 'networkidle' });
+  await card.getByRole('button', { name: '隐藏', exact: true }).click();
+  await expect(page.getByRole('alertdialog', { name: '隐藏素材' })).toBeVisible();
+  expect((await events(request)).filter((event) => /\/files\/[^/]+\/preview$/.test(event.path))).toHaveLength(0);
+});

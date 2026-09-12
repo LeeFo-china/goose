@@ -18,6 +18,13 @@ function publicationReviewChanged(before: RenderingLibraryStyle, after: Renderin
     || before.color_notes !== after.color_notes || before.material_notes !== after.material_notes;
 }
 
+export function getPublicationPreviewExpiryDelay(preview: RenderingLibraryFilePreviewResult | undefined,
+  fileId: string, loadedUrl: string, now: number): number | null {
+  if (!preview || preview.file_id !== fileId || !loadedUrl || preview.url !== loadedUrl) return null;
+  const remaining = Date.parse(preview.expires_at) - now;
+  return remaining > 0 ? remaining : null;
+}
+
 export function StyleMutation({ style, preview, command, onClose, onSuccess }: {
   style: RenderingLibraryStyle; preview?: RenderingLibraryFilePreviewResult;
   command: 'publish' | 'hide' | 'remove'; onClose: () => void; onSuccess: () => void;
@@ -25,7 +32,8 @@ export function StyleMutation({ style, preview, command, onClose, onSuccess }: {
   const [busy, setBusy] = useState(false); const [error, setError] = useState(''); const lock = useRef(false);
   const [current, setCurrent] = useState(style);
   const { preview: filePreview, loading: previewLoading, error: previewError, refresh: refreshPreview } = useFilePreview(
-    current.file_id, preview?.file_id === current.file_id ? preview : undefined,
+    command === 'publish' ? current.file_id : undefined,
+    command === 'publish' && preview?.file_id === current.file_id ? preview : undefined,
   );
   const [loadedPreviewUrl, setLoadedPreviewUrl] = useState('');
   const [failedPreviewUrl, setFailedPreviewUrl] = useState('');
@@ -38,12 +46,20 @@ export function StyleMutation({ style, preview, command, onClose, onSuccess }: {
   const previewReady = command === 'publish' && previewFresh && !previewLoading && !previewError
     && loadedPreviewUrl === filePreview.url && failedPreviewUrl !== filePreview.url;
   useEffect(() => {
-    if (!filePreview || filePreview.file_id !== current.file_id) return;
-    const remaining = Date.parse(filePreview.expires_at) - Date.now();
-    if (remaining <= 0) { setLoadedPreviewUrl(''); return; }
-    const timeout = window.setTimeout(() => setLoadedPreviewUrl(''), Math.min(remaining, 2_147_483_647));
+    if (command !== 'publish') return;
+    const delay = getPublicationPreviewExpiryDelay(filePreview, current.file_id, loadedPreviewUrl, Date.now());
+    if (delay === null) {
+      if (filePreview?.file_id === current.file_id && Date.parse(filePreview.expires_at) <= Date.now()) {
+        setLoadedPreviewUrl(''); setResponsibilityConfirmed(false);
+      }
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      setLoadedPreviewUrl(''); setResponsibilityConfirmed(false);
+      void refreshPreview();
+    }, Math.min(delay, 2_147_483_647));
     return () => window.clearTimeout(timeout);
-  }, [current.file_id, filePreview]);
+  }, [command, current.file_id, filePreview, loadedPreviewUrl, refreshPreview]);
   function retryPreview() {
     setLoadedPreviewUrl(''); setFailedPreviewUrl(''); setResponsibilityConfirmed(false);
     void refreshPreview();

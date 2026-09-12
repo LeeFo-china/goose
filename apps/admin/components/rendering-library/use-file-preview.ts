@@ -3,13 +3,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RenderingLibraryFilePreviewResult } from '@gooes/domain';
 import { libraryRequests } from './requests';
 
-export function useFilePreview(fileId: string, initial?: RenderingLibraryFilePreviewResult) {
+export function useFilePreview(fileId: string | undefined, initial?: RenderingLibraryFilePreviewResult) {
   const [preview, setPreview] = useState(initial);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const request = useRef<AbortController | undefined>(undefined);
   const generation = useRef(0);
   const refresh = useCallback(async () => {
+    if (!fileId) return;
     request.current?.abort(); const controller = new AbortController(); request.current = controller;
     const current = ++generation.current; setLoading(true); setError('');
     try {
@@ -21,8 +22,8 @@ export function useFilePreview(fileId: string, initial?: RenderingLibraryFilePre
   }, [fileId]);
   useEffect(() => {
     setPreview(initial);
-    if (!initial || Date.parse(initial.expires_at) <= Date.now()) void refresh();
+    if (fileId && (!initial || Date.parse(initial.expires_at) <= Date.now())) void refresh();
     return () => { request.current?.abort(); ++generation.current; };
-  }, [initial, refresh]);
+  }, [fileId, initial, refresh]);
   return { preview, loading, error, refresh };
 }

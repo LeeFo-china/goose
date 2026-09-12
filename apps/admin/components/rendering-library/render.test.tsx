@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { StyleCard } from './style-card';
+import { getPublicationPreviewExpiryDelay } from './style-mutations';
 import { StyleFields } from './style-fields';
 import { LibraryGrid } from './library-client';
 import { UploadItem } from './upload-item';
@@ -66,4 +67,13 @@ test('card distinguishes draft, published, unpublished edits and read-only opera
 test('publication confirmation statically includes the public-cache limitation', () => {
   const source = readFileSync(new URL('./style-mutations.tsx', import.meta.url), 'utf8');
   expect(source).toContain('客户端或 CDN 已缓存的图片无法保证立即清除');
+});
+
+test('only a loaded, current and still-valid preview arms automatic expiry renewal', () => {
+  const preview = { file_id: style.file_id, url: 'https://preview.example.test/private', expires_at: '2026-09-13T10:00:01Z' };
+  const now = Date.parse('2026-09-13T10:00:00Z');
+  expect(getPublicationPreviewExpiryDelay(preview, style.file_id, preview.url, now)).toBe(1000);
+  expect(getPublicationPreviewExpiryDelay(preview, style.file_id, '', now)).toBeNull();
+  expect(getPublicationPreviewExpiryDelay(preview, 'other-file', preview.url, now)).toBeNull();
+  expect(getPublicationPreviewExpiryDelay(preview, style.file_id, preview.url, now + 1001)).toBeNull();
 });
