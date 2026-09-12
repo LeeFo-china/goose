@@ -27,18 +27,91 @@ test('private file DTOs are strict, bounded and expose only upload metadata or H
 });
 
 describe('tenant rendering library draft contract', () => {
-  test('exports the private source scene and draft-only states from both entry points', () => {
+  test('exports the private source scene and publication states from both entry points', () => {
     expect(domain.RENDERING_LIBRARY_SOURCE_SCENE).toBe('rendering_style_source');
-    expect(domain.RENDERING_LIBRARY_STATUS_VALUES).toEqual(['draft', 'hidden']);
+    expect(domain.RENDERING_LIBRARY_PUBLIC_SCENE).toBe('rendering_style_public');
+    expect(domain.RENDERING_LIBRARY_STATUS_VALUES).toEqual(['draft', 'published', 'hidden']);
+    expect(shared.RENDERING_LIBRARY_PUBLIC_SCENE).toBe(domain.RENDERING_LIBRARY_PUBLIC_SCENE);
+    expect(shared.RENDERING_LIBRARY_STATUS_VALUES).toBe(domain.RENDERING_LIBRARY_STATUS_VALUES);
     expect(shared.RenderingLibraryCreateSchema).toBe(domain.RenderingLibraryCreateSchema);
   });
 
   test('defaults paging to 1/20 and bounds strict list filters', () => {
     expect(domain.RenderingLibraryListSchema?.parse({})).toEqual({ page: 1, pageSize: 20 });
     expect(domain.RenderingLibraryListSchema?.safeParse({ page: '2', pageSize: '100', status: 'hidden' }).success).toBe(true);
-    for (const input of [{ pageSize: 101 }, { page: 0 }, { status: 'published' }, { tenant_id: id }]) {
+    for (const input of [{ pageSize: 101 }, { page: 0 }, { tenant_id: id }]) {
       expect(domain.RenderingLibraryListSchema?.safeParse(input).success).toBe(false);
     }
+  });
+
+  test('strictly validates publication commands and rejects unconfirmed or unknown input', () => {
+    const input = { expected_version: 2, idempotency_key: id, responsibility_confirmed: true } as const;
+    expect(domain.RenderingLibraryPublishSchema?.parse(input)).toEqual(input);
+    expect(shared.RenderingLibraryPublishSchema).toBe(domain.RenderingLibraryPublishSchema);
+    for (const patch of [
+      { responsibility_confirmed: false },
+      { unknown: true },
+      { idempotency_key: 'not-a-uuid' },
+      { expected_version: 0 },
+    ]) {
+      expect(domain.RenderingLibraryPublishSchema?.safeParse({ ...input, ...patch }).success).toBe(false);
+    }
+  });
+
+  test('strictly validates the public published-style DTO without internal file identity', () => {
+    const published = {
+      id,
+      title: '奶油客厅',
+      space: 'living_room',
+      style: 'cream',
+      color_notes: '',
+      material_notes: '',
+      source_type: 'design',
+      image_url: 'https://cdn.example.com/rendering-style.webp',
+      published_at: '2026-09-11T10:00:00+08:00',
+    } as const;
+    expect(domain.RenderingPublishedStyleSchema?.parse(published)).toEqual(published);
+    expect(shared.RenderingPublishedStyleSchema).toBe(domain.RenderingPublishedStyleSchema);
+    for (const patch of [
+      { image_url: 'http://cdn.example.com/rendering-style.webp' },
+      { file_id: id },
+      { tenant_id: id },
+      { status: 'published' },
+      { published_by_employee_id: id },
+      { unknown: true },
+      { published_at: '2026-09-11T10:00:00' },
+    ]) {
+      expect(domain.RenderingPublishedStyleSchema?.safeParse({ ...published, ...patch }).success).toBe(false);
+    }
+  });
+
+  test('strictly validates published-style pagination and complete publication summaries', () => {
+    const style = {
+      id,
+      title: '奶油客厅',
+      space: 'living_room',
+      style: 'cream',
+      color_notes: '',
+      material_notes: '',
+      source_type: 'design',
+      image_url: 'https://cdn.example.com/rendering-style.webp',
+      published_at: '2026-09-11T10:00:00+08:00',
+    } as const;
+    const page = { list: [style], pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 } };
+    expect(domain.RenderingPublishedStyleListSchema?.parse(page)).toEqual(page);
+    expect(shared.RenderingPublishedStyleListSchema).toBe(domain.RenderingPublishedStyleListSchema);
+    expect(domain.RenderingPublishedStyleListSchema?.safeParse({
+      ...page, pagination: { ...page.pagination, pageSize: 101 },
+    }).success).toBe(false);
+    expect(domain.RenderingPublishedStyleListSchema?.safeParse({
+      ...page, list: [{ ...style, published_at: undefined }],
+    }).success).toBe(false);
+    expect(domain.RenderingPublishedStyleListSchema?.safeParse({
+      ...page, pagination: { ...page.pagination, total: 21, totalPages: 1 },
+    }).success).toBe(false);
+    expect(domain.RenderingPublishedStyleListSchema?.safeParse({
+      ...page, pagination: { ...page.pagination, pageSize: 0 },
+    }).success).toBe(false);
   });
 
   test('creates with explicit rights and file identity and defaults only on creation', () => {
@@ -87,13 +160,17 @@ describe('tenant rendering library draft contract', () => {
     expect(domain.RenderingLibraryVersionSchema?.safeParse({ expected_version: 1, status: 'draft' }).success).toBe(false);
   });
 
-  test('validates returned tenant rows, versions and timestamp offsets without publishing states', () => {
+  test('validates returned tenant rows, publication summaries, versions and timestamps', () => {
     const row = { ...create, id, tenant_id: id, status: 'draft', version: 2147483647,
-      created_by_employee_id: null, created_at: '2026-09-11T10:00:00+08:00', updated_at: '2026-09-11T02:00:00Z' };
+      created_by_employee_id: null, published_version: null, published_at: null,
+      published_by_employee_id: null, created_at: '2026-09-11T10:00:00+08:00', updated_at: '2026-09-11T02:00:00Z' };
     expect(domain.RenderingLibraryStyleSchema?.safeParse(row).success).toBe(true);
-    expect(domain.RenderingLibraryStyleSchema?.safeParse({ ...row, status: 'hidden', created_by_employee_id: id }).success).toBe(true);
-    for (const patch of [{ status: 'published' }, { version: 0 }, { version: 2147483648 },
+    expect(domain.RenderingLibraryStyleSchema?.safeParse({ ...row, status: 'published', created_by_employee_id: id,
+      published_version: 2, published_at: '2026-09-11T10:00:00+08:00', published_by_employee_id: id }).success).toBe(true);
+    for (const patch of [{ status: 'unknown' }, { version: 0 }, { version: 2147483648 },
       { id: 'bad' }, { tenant_id: 'bad' }, { created_by_employee_id: 'bad' },
+      { published_version: 0 }, { published_version: 2147483648 }, { published_at: '2026-09-11' },
+      { published_by_employee_id: 'bad' }, { published_file_id: id },
       { created_at: '2026-09-11' }, { updated_at: '2026-09-11T02:00:00' }]) {
       expect(domain.RenderingLibraryStyleSchema?.safeParse({ ...row, ...patch }).success).toBe(false);
     }

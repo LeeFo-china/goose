@@ -2,7 +2,8 @@ import { z } from 'zod';
 import { RenderingListQuerySchema, RenderingStyleInputSchema, RENDERING_UPLOAD_MAX_BYTES } from './customer-rendering';
 
 export const RENDERING_LIBRARY_SOURCE_SCENE = 'rendering_style_source';
-export const RENDERING_LIBRARY_STATUS_VALUES = ['draft', 'hidden'] as const;
+export const RENDERING_LIBRARY_PUBLIC_SCENE = 'rendering_style_public';
+export const RENDERING_LIBRARY_STATUS_VALUES = ['draft', 'published', 'hidden'] as const;
 export const RENDERING_LIBRARY_PREVIEW_BATCH_MAX = 100;
 
 export const RenderingLibraryFileUploadResultSchema = z.strictObject({
@@ -56,12 +57,45 @@ export const RenderingLibraryVersionSchema = z.strictObject({
   expected_version: ExpectedVersionSchema,
 });
 
+export const RenderingLibraryPublishSchema = z.strictObject({
+  expected_version: ExpectedVersionSchema,
+  idempotency_key: z.uuid(),
+  responsibility_confirmed: z.literal(true),
+});
+
+export const RenderingPublishedStyleSchema = z.strictObject({
+  id: z.uuid(),
+  title: styleFields.title,
+  space: styleFields.space,
+  style: styleFields.style,
+  color_notes: styleFields.color_notes.removeDefault(),
+  material_notes: styleFields.material_notes.removeDefault(),
+  source_type: styleFields.source_type,
+  image_url: z.url({ protocol: /^https$/ }),
+  published_at: z.string().datetime({ offset: true }),
+});
+
+export const RenderingPublishedStyleListSchema = z.strictObject({
+  list: z.array(RenderingPublishedStyleSchema).max(100),
+  pagination: z.strictObject({
+    page: z.number().int().positive(),
+    pageSize: z.number().int().min(1).max(100),
+    total: z.number().int().nonnegative(),
+    totalPages: z.number().int().nonnegative(),
+  }),
+}).refine(({ list, pagination }) =>
+  list.length <= pagination.pageSize
+  && pagination.totalPages === Math.ceil(pagination.total / pagination.pageSize));
+
 export const RenderingLibraryStyleSchema = RenderingStyleInputSchema.extend({
   id: z.uuid(),
   tenant_id: z.uuid(),
   status: StatusSchema,
   version: z.number().int().min(1).max(2147483647),
   created_by_employee_id: z.uuid().nullable(),
+  published_version: z.number().int().min(1).max(2147483647).nullable(),
+  published_at: z.string().datetime({ offset: true }).nullable(),
+  published_by_employee_id: z.uuid().nullable(),
   created_at: z.string().datetime({ offset: true }),
   updated_at: z.string().datetime({ offset: true }),
 });
@@ -70,4 +104,7 @@ export type RenderingLibraryList = z.infer<typeof RenderingLibraryListSchema>;
 export type RenderingLibraryCreate = z.infer<typeof RenderingLibraryCreateSchema>;
 export type RenderingLibraryUpdate = z.infer<typeof RenderingLibraryUpdateSchema>;
 export type RenderingLibraryVersion = z.infer<typeof RenderingLibraryVersionSchema>;
+export type RenderingLibraryPublish = z.infer<typeof RenderingLibraryPublishSchema>;
+export type RenderingPublishedStyle = z.infer<typeof RenderingPublishedStyleSchema>;
+export type RenderingPublishedStyleList = z.infer<typeof RenderingPublishedStyleListSchema>;
 export type RenderingLibraryStyle = z.infer<typeof RenderingLibraryStyleSchema>;
