@@ -39,6 +39,16 @@ describe("authPlugin WeChat virtual-payment reachability", () => {
         reached: true,
         visitorId: request.user?.visitor_id,
       }));
+      scope.get("/visitor/renderings/styles", async (request) => ({
+        reached: true,
+        visitorId: request.user?.visitor_id,
+      }));
+      scope.head("/visitor/renderings/styles", async () => undefined);
+      scope.get("/visitor/renderings/styles/:id", async (request) => ({
+        reached: true,
+        visitorId: request.user?.visitor_id,
+      }));
+      scope.head("/visitor/renderings/styles/:id", async () => undefined);
     });
 
     for (const method of ["GET", "POST"] as const) {
@@ -100,6 +110,23 @@ describe("authPlugin WeChat virtual-payment reachability", () => {
       douyin_app_id: "tt-app",
       subject_hash: "a".repeat(64),
     });
+    for (const url of [
+      "/visitor/renderings/styles",
+      "/visitor/renderings/styles/11111111-1111-4111-8111-111111111111",
+    ]) {
+      const catalog = await app.inject({
+        method: "GET", url, headers: { authorization: visitorAuthorization },
+      });
+      expect(catalog.statusCode).toBe(200);
+      expect(catalog.json()).toMatchObject({ visitorId: "visitor-auth-hook-smoke" });
+      expect((await app.inject({
+        method: "HEAD", url, headers: { authorization: visitorAuthorization },
+      })).statusCode).toBe(200);
+      expect((await app.inject({ method: "GET", url })).statusCode).toBe(401);
+      expect((await app.inject({
+        method: "GET", url, headers: { authorization: `Bearer ${douyinToken}` },
+      })).statusCode).toBe(401);
+    }
     expect((await app.inject({
       method: "GET",
       url: "/visitor/renderings/quota",

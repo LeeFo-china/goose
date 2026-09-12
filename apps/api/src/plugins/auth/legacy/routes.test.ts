@@ -20,6 +20,20 @@ describe("Douyin miniapp route isolation", () => {
 });
 
 describe("isVisitorSessionRoute", () => {
+  test("allows only exact rendering catalog reads for visitor sessions", () => {
+    const detail = "/visitor/renderings/styles/11111111-1111-4111-8111-111111111111";
+    for (const method of ["GET", "HEAD"]) {
+      expect(isVisitorSessionRoute(method, "/visitor/renderings/styles")).toBe(true);
+      expect(isVisitorSessionRoute(method, detail)).toBe(true);
+      expect(isPublicRoute(method, detail)).toBe(false);
+      expect(isVisitorSessionRoute(method, `${detail}/extra`)).toBe(false);
+      expect(isVisitorSessionRoute(method, "/visitor/renderings/styles/invalid")).toBe(true);
+    }
+    expect(isVisitorSessionRoute("POST", detail)).toBe(false);
+    expect(isVisitorSessionRoute("GET", "/visitor/renderings/styles-extra")).toBe(false);
+    expect(isVisitorSessionRoute("GET", "/visitor/renderings/styles/")).toBe(false);
+  });
+
   test("allows applicant routes only with visitor sessions", () => {
     const routes = [
       ["POST", "/tenant-onboarding/applications/send-code"],

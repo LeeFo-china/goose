@@ -30,6 +30,9 @@ async function createApp() {
   app.get("/douyin-mini/material-notes", async (request) => ({ user: request.user }));
   app.get("/douyin-mini/material-notes/:id", async (request) => ({ user: request.user }));
   app.get("/douyin-mini/renderings/quota", async (request) => ({ user: request.user }));
+  app.get("/douyin-mini/renderings/styles", async (request) => ({ user: request.user }));
+  app.get("/douyin-mini/renderings/styles/:id", async (request) => ({ user: request.user }));
+  app.post("/douyin-mini/renderings/styles/:id", async (request) => ({ user: request.user }));
   app.post("/douyin-mini/material-notes/:id/claim", async (request) => ({ user: request.user }));
   app.get("/douyin-mini/my-material-notes", async (request) => ({ user: request.user }));
   app.get("/douyin-mini/my-material-notes/:claimId", async (request) => ({ user: request.user }));
@@ -83,6 +86,15 @@ describe("auth plugin Douyin miniapp isolation", () => {
     expect((await app.inject({ method: "GET", url: "/douyin-mini/renderings/quota",
       headers: { authorization: `Bearer ${douyinToken}` },
     })).statusCode).toBe(200);
+    for (const url of [
+      "/douyin-mini/renderings/styles",
+      "/douyin-mini/renderings/styles/11111111-1111-4111-8111-111111111111",
+    ]) {
+      expect((await app.inject({ method: "GET", url,
+        headers: { authorization: `Bearer ${douyinToken}` },
+      })).statusCode).toBe(200);
+      expect((await app.inject({ method: "GET", url })).statusCode).toBe(401);
+    }
 
     expect((await app.inject({ method: "GET", url: "/douyin-mini/bootstrap",
       headers: { authorization: `Bearer ${regularToken}` } })).statusCode).toBe(401);
@@ -239,6 +251,29 @@ describe("auth plugin Douyin miniapp isolation", () => {
       headers: { authorization: `Bearer ${token}` },
     });
     expect(renderingQuota.statusCode).toBe(200);
+    for (const url of [
+      "/douyin-mini/renderings/styles",
+      "/douyin-mini/renderings/styles/11111111-1111-4111-8111-111111111111",
+    ]) {
+      const catalog = await app.inject({
+        method: "GET", url, headers: { authorization: `Bearer ${token}` },
+      });
+      expect(catalog.statusCode).toBe(200);
+      expect(catalog.json().user).toMatchObject({ login_channel: "douyin" });
+      expect((await app.inject({
+        method: "HEAD", url, headers: { authorization: `Bearer ${token}` },
+      })).statusCode).toBe(200);
+    }
+    expect((await app.inject({
+      method: "POST",
+      url: "/douyin-mini/renderings/styles/11111111-1111-4111-8111-111111111111",
+      headers: { authorization: `Bearer ${token}` },
+    })).statusCode).toBe(401);
+    expect((await app.inject({
+      method: "GET",
+      url: "/douyin-mini/renderings/styles/11111111-1111-4111-8111-111111111111/extra",
+      headers: { authorization: `Bearer ${token}` },
+    })).statusCode).toBe(401);
     expect((await app.inject({
       method: "GET",
       url: "/douyin-mini/bootstrap",

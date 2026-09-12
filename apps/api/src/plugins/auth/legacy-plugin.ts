@@ -23,6 +23,7 @@ import {
   isVisitorSessionRoute,
   shouldBypassAuth,
 } from "./legacy/routes";
+import { isRenderingStylesReadRoute } from "./legacy/rendering-routes";
 import { logAuthStage } from "./legacy/timing";
 import {
   assertWechatIdentityBinding,
@@ -246,5 +247,6 @@ function isCustomerSelfServiceRoute(url: string) {
 function isDouyinRenderingRoute(method: string, url: string) {
   return ((method === "GET" || method === "HEAD")
     && url === "/douyin-mini/renderings/quota")
-    || (method === "POST" && url === "/douyin-mini/renderings/phone:bind");
+    || (method === "POST" && url === "/douyin-mini/renderings/phone:bind")
+    || isRenderingStylesReadRoute(method, url, "douyin-mini");
 }

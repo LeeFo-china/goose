@@ -49,6 +49,15 @@ describe("tenant service capability map", () => {
     expect(resolveTenantServiceRouteCapability(
       route("POST", "/douyin-mini/renderings/phone:bind", "session"),
     )).toEqual({ kind: "excluded", reason: "route_access" });
+    for (const routePath of [
+      "/visitor/renderings/styles",
+      "/visitor/renderings/styles/:id",
+      "/douyin-mini/renderings/styles",
+      "/douyin-mini/renderings/styles/:id",
+    ]) {
+      expect(resolveTenantServiceRouteCapability(route("GET", routePath, "session")))
+        .toEqual({ kind: "excluded", reason: "route_access" });
+    }
   });
 
   test("explicitly excludes platform, config, payment, and independent add-ons", async () => {
