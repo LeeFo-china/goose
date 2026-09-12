@@ -1,10 +1,18 @@
 # 客户效果库：分阶段实施记录
 
-日期：2026-09-11。设计依据：`2026-09-11-customer-rendering-library-design.md`。
+日期：2026-09-11；最新补记：2026-09-13。设计依据：
+`2026-09-11-customer-rendering-library-design.md`，以及
+`2026-09-13-rendering-library-self-publish-design.md`。
 
 ## 当前结论
 
-已完成离线可验证的基础合同、方舟 HTTP 适配、秘密配置槽、租户私有素材草稿管理，以及专用图片上传和短时预览后端。**完整效果库未完成，未上线，阶段 A 的真实模型能力验证也未完成。**
+截至 2026-09-13，租户素材**自助发布、公开副本、微信 visitor 与抖音客户浏览
+接口、Admin 发布交互**已在隔离分支完成离线实现和 mock 回归；开发环境
+migration/COS smoke/部署、小程序页面、客户上传与生图仍未完成。**不能据此称完整
+效果库上线**。阶段 A 的真实模型能力验证也未完成。
+
+以下 B1–B4、配置阻点和旧测试数字保留为 2026-09-11 的历史实施记录；最新
+自助发布证据见文末“2026-09-13 自助发布阶段”小节。
 
 工作区：`.worktrees/customer-rendering-library`；分支：`feature/customer-rendering-library`；起点：`b1d468a1d`。A1/B1 已于本轮提交为 `193ee4b3d`（`feat(rendering): 增加方舟适配与租户效果素材草稿管理`）；未推送或部署，未修改 orange。
 
@@ -187,7 +195,71 @@ git diff --cached --check
 
 本阶段仍未部署、执行migration、访问真实数据库/COS/Ark或改动orange；这些mock与离线测试不等于真实后端、存储策略或模型联调通过。
 
-## 尚未交付
+## 2026-09-13 自助发布阶段：Task 1–8 状态
+
+批准设计：`2026-09-13-rendering-library-self-publish-design.md`；执行计划：
+`../plans/2026-09-13-rendering-library-self-publish.md`。交接合同：
+`../../operations/customer-rendering-style-catalog-api.md`。
+
+| 任务 | 本地状态 | 交付边界 |
+| --- | --- | --- |
+| 1 共享合同 | 已实现 | `draft/published/hidden`、严格发布请求、公开 DTO/分页 schema；domain 回归覆盖边界 |
+| 2 数据迁移与原子命令 | migration 和 SQL 断言已入库，**未应用** | 发布快照、公开文件关联、幂等事实/遗失键别名、租约及 begin/complete/fail RPC；只有静态合同测试，尚无真实 PostgreSQL 并发证明 |
+| 3 COS 公开副本网关 | 已实现、仅离线测 | 私有 WebP 受限读取、校验 SHA256/大小、独立公开对象及 HEAD 恢复；未验证真实 bucket policy/CDN |
+| 4 发布 repository/service | 已实现、仅模拟外部边界 | 双权限、资料/源文件校验、原子命令编排、未知写入保留 preparing、同键重放、并发后读；未真实提交 DB/COS |
+| 5 租户发布 HTTP | 已实现 | `POST /tenant/rendering-library/styles/:id/publish`；严格 body 与现有身份边界 |
+| 6 客户公开目录 | 已实现 | 一次带关系查询、显式字段、同租户发布快照过滤、数据库分页与最小 DTO |
+| 7 微信/抖音浏览路由 | 已实现 | 各有列表和详情两个 session-only GET；404、参数和渠道身份回归 |
+| 8 Admin 发布交互 | 已实现、mock 浏览器验证 | 责任确认、未发布修改、重新发布、隐藏缓存提示、重复提交/冲突恢复、400px 窄屏 |
+
+本阶段采用**租户自行发布**，不含平台或第三方人工审核。审核、真实客户生图
+质量与费用不应由上述通过项推断。管理员确认的是本公司自行公开及版权责任；
+AI 概念图保留 `source_type=ai_concept`。普通编辑只改当前草稿字段和版本，公开
+目录读取发布快照；隐藏保留快照和旧公开对象，但立即从 API 查询结果排除，
+外部缓存无法保证即时失效。新公开文件与私有源文件物理分离。
+
+### Task 9 离线总回归（2026-09-13）
+
+在 `.worktrees/feat-customer-rendering-quota` 执行批准计划 Task 9 命令：
+
+| 范围 | 结果 |
+| --- | --- |
+| domain 全量 Bun | 218 pass / 0 fail / 1221 `expect()`；40 文件 |
+| domain 类型检查 | `bunx tsc --noEmit` 退出 0 |
+| API 相关 Bun | 167 pass / 0 fail / 1549 `expect()`；19 文件 |
+| API 类型检查 | `bun run typecheck` 退出 0 |
+| Admin 相关 Bun | 40 pass / 0 fail / 150 `expect()`；8 文件 |
+| Admin 类型检查 | `bunx tsc -p tsconfig.typecheck.json --noEmit --incremental false` 退出 0 |
+| Admin Chromium | 28 pass / 0 fail，Playwright 报告总用时 1.4 分钟；CLI 不汇总断言数 |
+| 文件大小 | Admin 1601 个 TS/TSX 文件 ≤500 行；API 检查通过，生成的 database types 为既有排除项 |
+| 差异检查 | `git diff --check` 退出 0（文档提交前再次核验） |
+
+API 单测使用虚构 Supabase 初始化值，实际数据库/COS 网络边界被模拟；
+Playwright 使用真实 Next 页面、代理与 Chromium，但后端是 loopback mock。
+这些结果**不证明** migration 已应用、真实 PostgreSQL 并发、COS 私有策略、
+公开 URL 可匿名读取、CDN 隐藏效果或两端小程序已接入。浏览器运行出现
+`NO_COLOR`/`FORCE_COLOR` 同时设置的非失败警告。
+
+静态核对：controller 只解析 HTTP 并调用 service；发布 service 只通过
+repository RPC 与 storage gateway 访问外部状态；公开目录使用显式字段、
+一次关系查询、`tenant_id`/`status=published`/未删除过滤及 `.range()`，没有
+每条素材再查文件的 N+1。公开 DTO 不含租户/文件/对象路径/员工/版本；错误
+走 `Errors`。发布在存储准备后才由事务写快照；复制失败/未知响应不伪造成功，
+租约和同键恢复有离线测试。真实安全性质仍以 Task 10 数据库/COS smoke 为准。
+本阶段未修改 orange。
+
+### 当前仍未交付及后续检查点
+
+- Task 10：先列出并核对待执行 migration；获明确开发发布确认后按 migration
+  流程应用并核对 Local/Remote，再用授权的非客户图做真实 COS/数据库 smoke、
+  部署与回滚演练。未取得这些证据前接口不是开发环境已发布合同。
+- 微信小程序 `orange` 与抖音客户端的目录页面、会话接入和真机验收由各自团队
+  实施；gooes 只提供交接文档与后端接口。本阶段没有改 orange。
+- 客户房型/房间照片上传、一次免费/手机号后最多五次的**服务端准入**、生成任务
+  Worker、Ark 实图/视觉建议、计费及审核，均属于后续独立阶段，不能把共享
+  quota schema 或此目录当作已上线能力。
+
+## 2026-09-11 时点的历史待办（以下不代表最新状态）
 
 ### 扩展回归发现的既有失败
 
