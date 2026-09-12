@@ -3,15 +3,19 @@ import type { z } from 'zod';
 import { TenantBaseController } from '@/controllers/TenantBaseController';
 import { Errors } from '@/errors/error-factory';
 import { RenderingLibraryListSchema, RenderingLibraryCreateSchema, RenderingLibraryUpdateSchema,
-  RenderingLibraryVersionSchema, RenderingLibraryParamsSchema, RenderingLibraryEmptyQuerySchema } from '@/schema/tenant-rendering-library';
+  RenderingLibraryVersionSchema, RenderingLibraryPublishSchema, RenderingLibraryParamsSchema,
+  RenderingLibraryEmptyQuerySchema } from '@/schema/tenant-rendering-library';
 import { tenantRenderingLibraryService, type TenantRenderingLibraryService } from '@/services/tenant-rendering-library';
+import { tenantRenderingPublicationService, type TenantRenderingPublicationService } from '@/services/tenant-rendering-publication';
 import { Get, Post, Patch, Delete } from '@/utils/decorators/route';
 import { ResponseHandler } from '@/utils/response';
 
 type ServicePort = Pick<TenantRenderingLibraryService, 'list' | 'get' | 'create' | 'update' | 'hide' | 'remove'>;
+type PublicationPort = Pick<TenantRenderingPublicationService, 'publish'>;
 
 export class TenantRenderingLibraryController extends TenantBaseController {
-  constructor(private readonly service: ServicePort = tenantRenderingLibraryService) {
+  constructor(private readonly service: ServicePort = tenantRenderingLibraryService,
+    private readonly publication: PublicationPort = tenantRenderingPublicationService) {
     super('tenant_rendering_styles');
   }
 
@@ -60,6 +64,15 @@ export class TenantRenderingLibraryController extends TenantBaseController {
     this.parse(RenderingLibraryEmptyQuerySchema, request.query ?? {});
     const body = this.parse(RenderingLibraryVersionSchema, request.body);
     return ResponseHandler.success(await this.service.hide(auth, id, body));
+  }
+
+  @Post('/tenant/rendering-library/styles/:id/publish')
+  async publishStyle(request: FastifyRequest) {
+    const auth = await this.getRequiredTenantContext(request);
+    const { id } = this.parse(RenderingLibraryParamsSchema, request.params);
+    this.parse(RenderingLibraryEmptyQuerySchema, request.query ?? {});
+    const body = this.parse(RenderingLibraryPublishSchema, request.body);
+    return ResponseHandler.success(await this.publication.publish(auth, id, body));
   }
 
   @Delete('/tenant/rendering-library/styles/:id')
