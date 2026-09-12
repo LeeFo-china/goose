@@ -51,7 +51,6 @@ export function AiModelRouteTab(props: Props) {
   const mutationLocked = isPending || isRouteSaving || !canManageRoutes;
   const canCreate = !routeForm.id && selectedScene?.source === "system"
     && selectedScene.allow_new_configuration && !sceneLoadError && !isNotConnected;
-  const bindingDisabled = mutationLocked || isNotConnected;
   const sceneOptions = selectedScene && !scenes.list.some((item) => item.code === selectedScene.code)
     ? [selectedScene, ...scenes.list] : scenes.list;
 
@@ -115,14 +114,14 @@ export function AiModelRouteTab(props: Props) {
             <AiRouteModelSelector
               title="主模型" target="primary" providers={providers}
               providerId={routeForm.primary_provider_id} keyword={routeForm.primary_keyword}
-              value={routeForm.primary_option_value} state={primaryOptions} disabled={bindingDisabled}
+              value={routeForm.primary_option_value} state={primaryOptions} disabled={mutationLocked} inspect={isNotConnected} sceneModality={routeForm.modality}
               onProviderChange={onProviderChange} onKeywordChange={onKeywordChange}
               onSearch={onModelSearch} onSelect={onModelSelect}
             />
             <AiRouteModelSelector
               title="备用模型" target="fallback" providers={providers}
               providerId={routeForm.fallback_provider_id} keyword={routeForm.fallback_keyword}
-              value={routeForm.fallback_option_value} state={fallbackOptions} allowNone disabled={bindingDisabled}
+              value={routeForm.fallback_option_value} state={fallbackOptions} allowNone disabled={mutationLocked} inspect={isNotConnected} sceneModality={routeForm.modality}
               onProviderChange={onProviderChange} onKeywordChange={onKeywordChange}
               onSearch={onModelSearch} onSelect={onModelSelect}
             />

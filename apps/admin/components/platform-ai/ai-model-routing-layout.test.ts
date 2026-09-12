@@ -40,7 +40,8 @@ describe("AI model routing page layout", () => {
     expect(panel).toContain("providers={providerOptions}");
     expect(routeOptions).toContain("route-model-options");
     expect(routeOptions).toContain('pageSize: "20"');
-    expect(routeOptions).toContain('status: "active"');
+    expect(routeOptions).toContain('params.set("status", "active")');
+    expect(routeOptions).toContain('params.set("view", "inspect")');
     expect(routeOptions).toContain('page: String(page)');
     expect(panel).toContain("await reloadProviderState()");
     expect(routeEditor).toContain("await onSaved()");

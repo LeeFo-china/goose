@@ -31,11 +31,11 @@ export function useAiRouteModelOptions(formRef: RefObject<RouteFormState>) {
     setState((current) => ({ ...current, [target]: updater(current[target]) }));
   }
 
-  function invalidate(target?: RouteModelTarget) {
+  function invalidate(target?: RouteModelTarget, preserveSelection = false) {
     for (const item of target ? [target] : targets) {
       generation.current[item] += 1;
-      selectedRef.current[item] = null;
-      update(item, emptyOptions);
+      if (!preserveSelection) selectedRef.current[item] = null;
+      update(item, () => ({ ...emptyOptions(), selected: selectedRef.current[item] }));
     }
   }
 
@@ -49,7 +49,7 @@ export function useAiRouteModelOptions(formRef: RefObject<RouteFormState>) {
     select("fallback", boundOption(route.fallback_model, route.fallback_model_id, route.modality || "text"));
   }
 
-  async function load(target: RouteModelTarget, page = 1) {
+  async function load(target: RouteModelTarget, page = 1, inspect = false) {
     const form = formRef.current;
     const providerId = target === "primary" ? form.primary_provider_id : form.fallback_provider_id;
     const keyword = target === "primary" ? form.primary_keyword : form.fallback_keyword;
@@ -57,7 +57,9 @@ export function useAiRouteModelOptions(formRef: RefObject<RouteFormState>) {
     const request = ++generation.current[target];
     update(target, (current) => ({ ...current, loading: true, error: null,
       data: { ...current.data, pagination: { ...current.data.pagination, page } } }));
-    const params = new URLSearchParams({ page: String(page), pageSize: "20", modality: form.modality, status: "active" });
+    const params = new URLSearchParams({ page: String(page), pageSize: "20" });
+    if (inspect) params.set("view", "inspect");
+    else { params.set("modality", form.modality); params.set("status", "active"); }
     if (keyword.trim()) params.set("keyword", keyword.trim());
     try {
       const response = await requestBackend<PageData<AiRouteModelOptionRecord>>(`/platform/ai-config/providers/${providerId}/route-model-options?${params}`);
@@ -65,7 +67,7 @@ export function useAiRouteModelOptions(formRef: RefObject<RouteFormState>) {
       update(target, (current) => ({ ...current, data: response, loading: false, error: null }));
     } catch (error) {
       if (request !== generation.current[target]) return;
-      update(target, (current) => ({ ...current, loading: false, error: error instanceof Error ? error.message : "模型候选加载失败" }));
+      update(target, (current) => ({ ...current, data: { ...current.data, list: [] }, loading: false, error: error instanceof Error ? error.message : "模型候选加载失败" }));
     }
   }
 

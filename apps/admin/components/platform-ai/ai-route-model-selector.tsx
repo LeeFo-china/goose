@@ -8,6 +8,7 @@ import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { NONE_VALUE } from "@/components/platform-ai/ai-model-routing-shared";
+import { AiRouteModelInspection } from "./ai-route-model-inspection";
 
 export type RouteModelTarget = "primary" | "fallback";
 
@@ -28,6 +29,8 @@ type Props = {
   state: RouteModelOptionsState;
   allowNone?: boolean;
   disabled?: boolean;
+  inspect?: boolean;
+  sceneModality?: AiRouteModelOptionRecord["modality"];
   onProviderChange: (target: RouteModelTarget, providerId: string) => void;
   onKeywordChange: (target: RouteModelTarget, keyword: string) => void;
   onSearch: (target: RouteModelTarget, page?: number) => void;
@@ -39,7 +42,7 @@ function optionText(option: AiRouteModelOptionRecord): string {
 }
 
 export function AiRouteModelSelector({
-  title, target, providers, providerId, keyword, value, state, allowNone = false, disabled = false,
+  title, target, providers, providerId, keyword, value, state, allowNone = false, disabled = false, inspect = false, sceneModality = "image",
   onProviderChange, onKeywordChange, onSearch, onSelect,
 }: Props) {
   const selected = state.selected;
@@ -80,7 +83,7 @@ export function AiRouteModelSelector({
             </Button>
           </div>
         </Field>
-        <Field>
+        {inspect ? <AiRouteModelInspection title={title} state={state} providers={providers} providerId={providerId} sceneModality={sceneModality} /> : <Field>
           <FieldLabel htmlFor={`ai-route-${target}-model`}>选择{title}</FieldLabel>
           <Select value={value} disabled={!providerId || modelDisabled || state.loading} onValueChange={(next) => {
             if (next === NONE_VALUE) return onSelect(target, null);
@@ -96,6 +99,8 @@ export function AiRouteModelSelector({
               ))}
             </SelectGroup></SelectContent>
           </Select>
+        </Field>}
+        <div>
           {state.loading ? <FieldDescription role="status" aria-live="polite">候选模型加载中</FieldDescription> : null}
           {state.error ? (
             <div className="flex flex-wrap items-center gap-2 text-sm text-destructive" role="alert">
@@ -103,14 +108,14 @@ export function AiRouteModelSelector({
               <Button type="button" variant="outline" size="sm" disabled={modelDisabled} onClick={() => onSearch(target, state.data.pagination.page)}>重试加载模型</Button>
             </div>
           ) : null}
-          {!disabled && !state.loading && !state.error && providerId && state.data.list.length === 0 ? <FieldDescription role="status" aria-live="polite">暂无符合场景模态的可用模型。</FieldDescription> : null}
-          {state.selected?.status && state.selected.status !== "active" ? (
+          {!inspect && !disabled && !state.loading && !state.error && providerId && state.data.list.length === 0 ? <FieldDescription role="status" aria-live="polite">暂无符合场景模态的可用模型。</FieldDescription> : null}
+          {!inspect && state.selected?.status && state.selected.status !== "active" ? (
             <>
               <Badge variant="outline">当前绑定模型不可用</Badge>
               <FieldDescription>原绑定已保留；保存前需恢复模型，或在场景允许时替换、清空不可用绑定。</FieldDescription>
             </>
           ) : null}
-        </Field>
+        </div>
         {state.data.pagination.totalPages > 1 ? (
           <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
             <span>第 {state.data.pagination.page} / {totalPages} 页</span>

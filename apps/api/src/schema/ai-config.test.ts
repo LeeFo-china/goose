@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import {
   AiCatalogEntryListQuerySchema,
   AiModelCapabilityPayloadSchema,
@@ -8,6 +9,12 @@ import {
   AiRouteModelOptionResolvePayloadSchema,
   UpdateAiProviderPayloadSchema,
 } from "./ai-config";
+
+test("route model inspection view is optional, validated and bounded", () => {
+  expect(AiRouteModelOptionListQuerySchema.parse({ view: "inspect" })).toMatchObject({ view: "inspect", page: 1, pageSize: 20 });
+  expect(AiRouteModelOptionListQuerySchema.safeParse({ view: "catalog" }).success).toBe(false);
+  expect(AiRouteModelOptionListQuerySchema.safeParse({ view: "inspect", pageSize: 101 }).success).toBe(false);
+});
 
 describe("AI config schemas", () => {
   test("limits provider references to registered AI secret keys", () => {

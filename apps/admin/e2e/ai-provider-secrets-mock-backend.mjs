@@ -10,6 +10,7 @@ let options = {};
 let configured = false;
 let writes = [];
 let deleted = false;
+let secondDeleted = false;
 let routeOptionsRequests = 0;
 let reads = [];
 let savedRoute = null;
@@ -24,12 +25,14 @@ const routeModel = (name = 'DeepSeek Chat', status = 'active') => ({ id: modelId
   provider: { id: provider.id, code: provider.code, name: provider.name, provider_type: provider.provider_type, status: provider.status } });
 const routeRecord = () => savedRoute || (options.legacy_missing
   ? { id: routeId, scene_code: 'legacy_custom', name: '旧业务名称', primary_model_id: modelId, fallback_model_id: '40000000-0000-4000-8000-000000000099', quality_tier: null, modality: 'text', temperature: null, response_format: null, timeout_ms: null, status: 'inactive', version: 7, primary_model: null, fallback_model: null }
+  : options.raw_unbound
+  ? { id: routeId, scene_code: 'decoration_raw_drawing', name: '装修生图', primary_model_id: null, fallback_model_id: null, modality: 'image', temperature: null, timeout_ms: null, status: 'inactive', version: 1, primary_model: null, fallback_model: null }
   : options.raw_route
-  ? { id: routeId, scene_code: 'decoration_raw_drawing', name: '装修生图', primary_model_id: modelId, fallback_model_id: null, quality_tier: 'balanced', modality: 'image', temperature: null, response_format: null, timeout_ms: null, status: 'inactive', version: 1, created_at: '2026-09-11T00:00:00Z', updated_at: '2026-09-11T00:00:00Z', primary_model: { ...routeModel('旧生图模型', options.raw_model_active ? 'active' : 'inactive'), modality: 'image' }, fallback_model: null }
+  ? { id: routeId, scene_code: 'decoration_raw_drawing', name: '装修生图', primary_model_id: modelId, fallback_model_id: options.raw_fallback ? '40000000-0000-4000-8000-000000000099' : null, quality_tier: 'balanced', modality: 'image', temperature: null, response_format: null, timeout_ms: null, status: 'inactive', version: 1, created_at: '2026-09-11T00:00:00Z', updated_at: '2026-09-11T00:00:00Z', primary_model: { ...routeModel('旧生图模型', options.raw_model_active ? 'active' : 'inactive'), modality: 'image' }, fallback_model: options.raw_fallback ? { ...routeModel('旧备用生图模型'), id: '40000000-0000-4000-8000-000000000099', modality: 'image' } : null }
   : { id: routeId, scene_code: 'decoration_qa', name: '装修问答', primary_model_id: modelId, fallback_model_id: null, quality_tier: 'balanced', modality: 'text', temperature: 0.7, response_format: 'json_object', timeout_ms: 60000, status: 'active', version: 1, created_at: '2026-09-11T00:00:00Z', updated_at: '2026-09-11T00:00:00Z', primary_model: routeModel(), fallback_model: null });
 const providerList = () => options.paginated || options.bound_provider_off_page
   ? [...Array.from({ length: options.bound_provider_off_page ? 100 : 20 }, (_, index) => ({ ...initial(), id: `20000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`, name: `保留供应商 ${index + 1}`, code: `retained_${index + 1}` })), ...(deleted ? [] : [provider])]
-  : deleted ? [] : [provider, ...(options.second_provider ? [{ ...initial(), id: secondProviderId, name: '第二供应商', code: 'second' }] : [])];
+  : deleted ? [] : [provider, ...(options.second_provider && !secondDeleted ? [{ ...initial(), id: secondProviderId, name: '第二供应商', code: 'second' }] : [])];
 const page = (list) => ({ list, pagination: { page: 1, pageSize: 20, total: list.length, totalPages: list.length ? 1 : 0 } });
 const send = (res, status, data) => {
   res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'private, no-store' });
@@ -48,7 +51,7 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://127.0.0.1:3989');
   const path = url.pathname;
   if (path === '/health') return send(res, 200, {});
-  if (path === '/__test/reset') { provider = initial(); options = {}; configured = false; writes = []; reads = []; savedRoute = null; deleted = false; routeOptionsRequests = 0; return send(res, 200, {}); }
+  if (path === '/__test/reset') { provider = initial(); options = {}; configured = false; writes = []; reads = []; savedRoute = null; deleted = false; secondDeleted = false; routeOptionsRequests = 0; return send(res, 200, {}); }
   if (path === '/__test/options') {
     options = { ...options, ...await body(req) };
     if (options.inactive_provider) provider = { ...provider, status: 'inactive' };
@@ -102,6 +105,10 @@ const server = createServer(async (req, res) => {
     const size = Number(url.searchParams.get('pageSize') || 20);
     return send(res, 200, { list: list.slice((current - 1) * size, current * size), pagination: { page: current, pageSize: size, total: list.length, totalPages: Math.ceil(list.length / size) } });
   }
+  if (path === `/platform/ai-config/providers/${secondProviderId}` && req.method === 'DELETE') {
+    const input = await body(req); writes.push({ path, input }); secondDeleted = true;
+    return send(res, 200, { id: secondProviderId, deleted: true });
+  }
   if (path === `/platform/ai-config/providers/${id}`) {
     const input = await body(req); writes.push({ path, input });
     if (req.method === 'DELETE') {
@@ -123,6 +130,21 @@ const server = createServer(async (req, res) => {
     const keyword = url.searchParams.get('keyword') || '';
     const current = Number(url.searchParams.get('page') || 1);
     const selectedProviderId = path.split('/')[4];
+    if (url.searchParams.get('view') === 'inspect') {
+      if (options.inspect_error) return send(res, 503, null);
+      if (options.delay_first_provider && selectedProviderId === id) await new Promise((resolve) => setTimeout(resolve, 1200));
+      // Match inspect's provider-scoped, bounded registered-model query: no manual/catalog candidates.
+      const registered = Array.from({ length: options.inspect_paginated ? 21 : 1 }, (_, index) => ({
+        ...routeModel(), id: `${selectedProviderId}-registered-${index}`, source: 'internal',
+        value: `${selectedProviderId}-registered-${index}`, model_id: `${selectedProviderId}-registered-${index}`,
+        provider_id: selectedProviderId, label: selectedProviderId === id ? `已登记文本模型 ${index + 1}` : `第二供应商登记模型 ${index + 1}`,
+        name: selectedProviderId === id ? `已登记文本模型 ${index + 1}` : `第二供应商登记模型 ${index + 1}`,
+        model_name: `ep-synthetic-registered-long-call-name-for-wrapping-${index + 1}`, description: null,
+        input_modalities: ['text'], probe_status: index === 20 ? 'stale' : 'unverified', status: index === 20 ? 'inactive' : 'active',
+      })).filter((model) => !keyword || model.name.includes(keyword) || model.model_name.includes(keyword));
+      return send(res, 200, { list: registered.slice((current - 1) * 20, current * 20),
+        pagination: { page: current, pageSize: 20, total: registered.length, totalPages: Math.ceil(registered.length / 20) } });
+    }
     if ((options.delayed_route_options || (options.delay_first_provider && selectedProviderId === id)) && keyword === '') await new Promise((resolve) => setTimeout(resolve, 1200));
     const list = keyword === 'empty' ? [] : selectedProviderId === secondProviderId
       ? [{ source: 'internal', value: '40000000-0000-4000-8000-000000000002', model_id: '40000000-0000-4000-8000-000000000002', provider_id: secondProviderId, label: 'Second model', description: null, modality: 'text', status: 'active' }]

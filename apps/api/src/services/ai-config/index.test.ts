@@ -146,6 +146,46 @@ describe("AiConfigService restricted provider delete", () => {
 });
 
 describe("AiConfigService route model options", () => {
+  test("inspection requires platform read permission before accessing provider or models", async () => {
+    const { AiConfigService } = await import("./index");
+    const calls: string[] = [];
+    const page = { list: [], pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 } };
+    const service = new AiConfigService({ configRepository: {
+      getProviderById: async () => { calls.push("provider"); return provider(); },
+      listRouteModels: async () => { calls.push("models"); return page; },
+    } });
+    const reader = { ...authContext(), isPlatformAdmin: false, isPlatformSuperAdmin: false,
+      permissions: [{ code: "platform.ai_config.read", scope: "all" as const }] };
+    const query = { page: 1, pageSize: 20, view: "inspect" as const };
+    for (const auth of [
+      { ...reader, tenantId: "tenant" },
+      { ...reader, isPlatformStaff: false },
+      { ...reader, permissions: [] },
+    ]) {
+      await expect(service.listRouteModelOptions(auth, PROVIDER_ID, query)).rejects.toMatchObject({ statusCode: 403 });
+    }
+    expect(calls).toEqual([]);
+    expect(await service.listRouteModelOptions(reader, PROVIDER_ID, query)).toEqual(page);
+    expect(calls).toEqual(["provider", "models"]);
+  });
+
+  test("inspection returns registered models without active filtering, synthetic candidates or catalog reads", async () => {
+    const { AiConfigService } = await import("./index");
+    for (const providerType of ["openai_compatible", "openrouter"]) {
+      const calls: unknown[] = [];
+      const registered = { list: [{ ...model({ status: "inactive" }), source: "internal" as const,
+        value: MODEL_ID, model_id: MODEL_ID, label: "Registered text", description: null }],
+        pagination: { page: 2, pageSize: 20, total: 21, totalPages: 2 } };
+      const service = new AiConfigService({ configRepository: {
+        getProviderById: async () => provider({ provider_type: providerType }),
+        listRouteModels: async (_id, query) => { calls.push(query); return registered; },
+      } });
+      const query = { page: 2, pageSize: 20, keyword: "registered", view: "inspect" as const };
+      expect(await service.listRouteModelOptions(authContext(), PROVIDER_ID, query)).toEqual(registered);
+      expect(calls).toEqual([query]);
+    }
+  });
+
   test("counts the manual candidate once and keeps every page within its requested size", async () => {
     const { AiConfigService } = await import("./index");
     for (const [total, pageSize] of [[0, 20], [19, 20], [20, 20], [21, 20], [100, 100]] as const) {
@@ -183,10 +223,14 @@ describe("AiConfigService route model options", () => {
   test("requires an active provider before listing route model options", async () => {
     const { AiConfigService } = await import("./index");
     let catalogCalled = false;
+    let modelsCalled = false;
     const service = new AiConfigService({
       configRepository: {
         getProviderById: async () => provider({ status: "inactive" }),
-        listRouteModels: async () => ({ list: [], pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 } }),
+        listRouteModels: async () => {
+          modelsCalled = true;
+          return { list: [], pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 } };
+        },
       },
       catalogRepository: {
         listLatestEligibleCatalogRouteOptions: async () => {
@@ -204,6 +248,11 @@ describe("AiConfigService route model options", () => {
       statusCode: 409,
       code: "AI_PROVIDER_INACTIVE",
     });
+    expect(catalogCalled).toBe(false);
+    await expect(service.listRouteModelOptions(authContext(), PROVIDER_ID, {
+      page: 1, pageSize: 20, view: "inspect",
+    })).rejects.toMatchObject({ statusCode: 409, code: "AI_PROVIDER_INACTIVE" });
+    expect(modelsCalled).toBe(false);
     expect(catalogCalled).toBe(false);
   });
 

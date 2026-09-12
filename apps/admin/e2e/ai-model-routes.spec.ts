@@ -84,8 +84,8 @@ test('切换至未接通场景后迟到的文本候选被丢弃，再切回文�
   await page.getByLabel('业务场景').click();
   await page.getByRole('option', { name: /装修生图/ }).click();
   await oldResponse;
-  await expect(page.getByLabel('选择主模型')).toBeDisabled();
-  await expect(page.getByLabel('选择主模型')).not.toContainText('DeepSeek Chat');
+  await expect(page.getByLabel('选择主模型')).toHaveCount(0);
+  await expect(page.getByLabel('主模型已登记模型', { exact: true })).not.toContainText('DeepSeek Chat');
   await page.getByLabel('业务场景').click();
   await page.getByRole('option', { name: /装修问答/ }).click();
   await expect(page.getByRole('status').filter({ hasText: '候选模型加载中' }).first()).toBeVisible();
@@ -190,8 +190,8 @@ test('未接通生图场景阻止新绑定，旧路由保留只读身份和已�
 
   await expect(page.getByText('尚未接通', { exact: true })).toBeVisible();
   await expect(page.getByLabel('场景编码')).toHaveValue('decoration_raw_drawing');
-  await expect(page.getByLabel('选择主模型')).toBeDisabled();
-  await expect(page.getByLabel('选择主模型')).toContainText('旧生图模型');
+  await expect(page.getByLabel('选择主模型')).toHaveCount(0);
+  await expect(page.getByLabel('当前主模型绑定', { exact: true })).toContainText('旧生图模型');
   await expect(page.getByText('当前绑定模型不可用')).toBeVisible();
   await expect(page.getByRole('button', { name: '新增', exact: true })).toHaveCount(0);
   await expect.poll(async () => (await page.getByRole('heading', { name: 'AI 模型路由', exact: true }).boundingBox())?.x).toBeLessThan(30);
@@ -200,7 +200,7 @@ test('未接通生图场景阻止新绑定，旧路由保留只读身份和已�
   await page.screenshot({ path: info.outputPath('route-raw-drawing-mobile.png'), fullPage: true });
   await page.getByRole('button', { name: '保存修改', exact: true }).click();
   await expect(page.getByText('AI 模型已停用', { exact: true })).toBeVisible();
-  await expect(page.getByLabel('选择主模型')).toContainText('旧生图模型');
+  await expect(page.getByLabel('当前主模型绑定', { exact: true })).toContainText('旧生图模型');
   const writes = (await (await request.get(`${backend}/__test/writes`)).json()).data;
   expect(writes).toHaveLength(1);
   expect(writes[0].input).toEqual({ name: '装修生图', expected_version: 1, primary_model_id: '40000000-0000-4000-8000-000000000001', fallback_model_id: null, temperature: null, timeout_ms: null, status: 'inactive', quality_tier: 'balanced' });
@@ -218,7 +218,7 @@ test('未接通生图场景允许保留有效旧绑定保存，不宣称生图�
   await page.goto('/platform/ai-models', { waitUntil: 'networkidle' });
   await page.getByRole('button', { name: '编辑', exact: true }).click();
   await expect(page.getByText('尚未接通', { exact: true })).toBeVisible();
-  await expect(page.getByLabel('选择主模型')).toBeDisabled();
+  await expect(page.getByLabel('选择主模型')).toHaveCount(0);
   await page.getByRole('button', { name: '保存修改', exact: true }).click();
   await expect(page.getByText('场景路由已更新', { exact: true })).toBeVisible();
   const writes = (await (await request.get(`${backend}/__test/writes`)).json()).data;

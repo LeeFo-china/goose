@@ -43,8 +43,8 @@ export function useAiRouteEditor({ providers, scenes: initialScenes, sceneError,
   }
 
   function loadCandidates(target: RouteModelTarget, page = 1) {
-    if (!sceneRef.current || sceneRef.current.runtime_status !== "connected") return;
-    void candidates.load(target, page);
+    if (!canManage || savingRef.current || !sceneRef.current) return;
+    void candidates.load(target, page, sceneRef.current.runtime_status === "not_connected");
   }
 
   function reset() {
@@ -66,10 +66,18 @@ export function useAiRouteEditor({ providers, scenes: initialScenes, sceneError,
   }
 
   function changeProvider(target: RouteModelTarget, providerId: string) {
-    if (!canManage || savingRef.current || sceneRef.current?.runtime_status !== "connected") return;
+    if (!canManage || savingRef.current || !sceneRef.current) return;
     if (!providers.some((provider) => provider.id === providerId && provider.status === "active")) return;
-    candidates.invalidate(target);
+    const inspect = sceneRef.current.runtime_status === "not_connected";
+    candidates.invalidate(target, inspect);
     const current = formRef.current;
+    if (inspect) {
+      updateForm(target === "primary"
+        ? { ...current, primary_provider_id: providerId, primary_keyword: "" }
+        : { ...current, fallback_provider_id: providerId, fallback_keyword: "" });
+      loadCandidates(target);
+      return;
+    }
     updateForm(target === "primary"
       ? { ...current, primary_provider_id: providerId, primary_keyword: "", primary_option_value: "", primary_model_id: "" }
       : { ...current, fallback_provider_id: providerId, fallback_keyword: "", fallback_option_value: NONE_VALUE, fallback_model_id: NONE_VALUE });
@@ -116,7 +124,9 @@ export function useAiRouteEditor({ providers, scenes: initialScenes, sceneError,
     savingRef.current = true;
     setSaving(true);
     try {
-      const [primaryModelId, fallbackModelId] = await candidates.resolve(snapshot);
+      const [primaryModelId, fallbackModelId] = selectedScene?.runtime_status === "not_connected"
+        ? [snapshot.primary_model_id || null, snapshot.fallback_model_id === NONE_VALUE ? null : snapshot.fallback_model_id || null]
+        : await candidates.resolve(snapshot);
       const mutable = {
         name: snapshot.name || undefined,
         primary_model_id: primaryModelId,
@@ -150,6 +160,15 @@ export function useAiRouteEditor({ providers, scenes: initialScenes, sceneError,
     const current = formRef.current;
     const primaryDeleted = current.primary_provider_id === providerId;
     const fallbackDeleted = current.fallback_provider_id === providerId;
+    if (sceneRef.current?.runtime_status === "not_connected") {
+      if (primaryDeleted) candidates.invalidate("primary", true);
+      if (fallbackDeleted) candidates.invalidate("fallback", true);
+      updateForm({ ...current,
+        ...(primaryDeleted ? { primary_provider_id: "", primary_keyword: "" } : {}),
+        ...(fallbackDeleted ? { fallback_provider_id: "", fallback_keyword: "" } : {}),
+      });
+      return;
+    }
     if (primaryDeleted) candidates.invalidate("primary");
     if (fallbackDeleted) candidates.invalidate("fallback");
     if (!primaryDeleted && !fallbackDeleted) return;

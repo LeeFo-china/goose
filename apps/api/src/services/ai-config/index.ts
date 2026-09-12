@@ -230,6 +230,9 @@ export class AiConfigService {
   ) {
     this.assertPlatformPermission(authContext, READ_PERMISSION);
     const provider = await this.requireActiveProvider(providerId);
+    if (query.view === "inspect") {
+      return this.requireConfigRepository("listRouteModels").call(this.configRepository, provider.id, query);
+    }
     const internalOptions = await this.requireConfigRepository("listRouteModels")
       .call(this.configRepository, provider.id, { ...query, status: query.status ?? "active" });
 

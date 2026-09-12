@@ -32,6 +32,10 @@ export type AiModelRecord = {
 };
 
 export type AiRouteModelOptionRecord = {
+  name?: string;
+  model_name?: string;
+  input_modalities?: string[] | null;
+  probe_status?: AiModelRecord["probe_status"];
   source: "internal" | "catalog" | "manual";
   value: string;
   model_id?: string | null;

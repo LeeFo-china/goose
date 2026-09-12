@@ -111,6 +111,7 @@ export const AiModelListQuerySchema = PaginationQuerySchema.extend({
   keyword: optionalText(120),
 });
 export const AiRouteModelOptionListQuerySchema = PaginationQuerySchema.extend({
+  view: z.enum(["inspect"], { message: "无效的模型查看方式" }).optional(),
   keyword: optionalText(120),
   modality: ModalitySchema.optional(),
   status: StatusSchema.optional(),
