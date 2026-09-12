@@ -43,7 +43,7 @@ async function fixture() {
   const calls: unknown[][] = [];
   const state = { current, source, missing: false, sourceMissing: false, begin: structuredClone(claimed) as BeginDecision,
     complete: { ...succeeded } as CompleteDecision, failed: { decision: 'failed' } as FailDecision,
-    errorAt: '', publicExists: false, commandStatus: 'preparing', lease: leaseToken,
+    errorAt: '', sourceError: null as unknown, publicExists: false, commandStatus: 'preparing', lease: leaseToken,
     latestPatch: {} as Partial<RenderingLibraryStyle>, latestMissing: false, findCount: 0, configReads: 0, failConfigAt: 0 };
   const repository: Pick<TenantRenderingLibraryRepository, 'find' | 'findSourceFile'> = {
     async find(tenant, id) {
@@ -52,6 +52,7 @@ async function fixture() {
     },
     async findSourceFile(tenant, id) {
       calls.push(['source', tenant, id]); events.push('source');
+      if (state.sourceError) throw state.sourceError;
       return state.sourceMissing ? null : { ...source };
     },
   };
@@ -157,7 +158,7 @@ test('current source eligibility and publication-only checksum validation preced
     { owner_type: 'employee' }, { owner_id: null }, { width: 0 }, { height: null }, { size_bytes: 10485761 },
     { size_bytes: 0 }, { mime_type: 'image/jpeg' }, { public_url: publicUrl }, { legacy_url: publicUrl }]) {
     const { service, source, events } = await fixture(); Object.assign(source, patch);
-    await expect(service.publish(makeAuth(), styleId, body)).rejects.toMatchObject({ code: 'RENDERING_STYLE_FILE_NOT_FOUND' });
+    await expect(service.publish(makeAuth(), styleId, body)).rejects.toMatchObject({ statusCode: 422, code: 'RENDERING_STYLE_NOT_PUBLISHABLE', details: undefined });
     expect(events).toEqual(['find', 'source']);
   }
   for (const checksum of [null, '', 'A'.repeat(64), 'a'.repeat(63)]) {
@@ -166,7 +167,31 @@ test('current source eligibility and publication-only checksum validation preced
     expect(f.events).toEqual(['find', 'source']);
   }
   const f = await fixture(); f.state.sourceMissing = true;
-  await expect(f.service.publish(makeAuth(), styleId, body)).rejects.toMatchObject({ code: 'RENDERING_STYLE_FILE_NOT_FOUND' });
+  await expect(f.service.publish(makeAuth(), styleId, body)).rejects.toMatchObject({ statusCode: 422, code: 'RENDERING_STYLE_NOT_PUBLISHABLE', details: undefined });
+});
+
+for (const scenario of ['missing', 'inactive', 'foreign tenant'] as const) {
+  test(`publication rejects ${scenario} source with 422 before begin or COS`, async () => {
+    const f = await fixture();
+    if (scenario === 'missing') f.state.sourceMissing = true;
+    if (scenario === 'inactive') f.source.status = 'migrating';
+    if (scenario === 'foreign tenant') f.source.tenant_id = otherTenantId;
+    await expect(f.service.publish(makeAuth(), styleId, body)).rejects.toMatchObject({
+      statusCode: 422, code: 'RENDERING_STYLE_NOT_PUBLISHABLE', message: '装修效果素材不满足发布条件', details: undefined,
+    });
+    expect(f.events).toEqual(['find', 'source']);
+    expect(f.calls).toEqual([['find', tenantId, styleId], ['source', tenantId, fileId]]);
+  });
+}
+
+test('source lookup DB and transport errors retain their original semantics without begin or COS', async () => {
+  for (const error of [Errors.dbError('读取装修效果素材文件失败'), Errors.dbError('装修效果素材文件数据格式异常'),
+    Errors.business(503, '读取服务暂不可用', 'SOURCE_TRANSPORT_UNAVAILABLE'),
+    Errors.business(404, '其他依赖不存在', 'OTHER_DEPENDENCY_NOT_FOUND'), { code: 'ECONNRESET' }]) {
+    const f = await fixture(); f.state.sourceError = error;
+    await expect(f.service.publish(makeAuth(), styleId, body)).rejects.toBe(error);
+    expect(f.events).toEqual(['find', 'source']);
+  }
 });
 
 test('claimed publication HEADs, copies once, completes trusted fields and returns strict latest summary', async () => {

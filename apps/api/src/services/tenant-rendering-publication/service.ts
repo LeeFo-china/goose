@@ -55,7 +55,15 @@ export class TenantRenderingPublicationService {
 
   private async source(tenantId: string, fileId: string): Promise<EligibleSource> {
     const file = await this.dependencies.repository.findSourceFile(tenantId, fileId);
-    assertRenderingSourceFile(tenantId, fileId, file);
+    try {
+      assertRenderingSourceFile(tenantId, fileId, file);
+    } catch (error: unknown) {
+      // Publication has a 422 precondition contract; private file APIs retain their existing 404.
+      if (error instanceof AppError && error.statusCode === 404 && error.code === 'RENDERING_STYLE_FILE_NOT_FOUND') {
+        return rejectDecision('not_publishable');
+      }
+      throw error;
+    }
     const checksum = ChecksumSchema.safeParse(file.checksum);
     if (!checksum.success) return rejectDecision('not_publishable');
     return { ...file, checksum: checksum.data };
