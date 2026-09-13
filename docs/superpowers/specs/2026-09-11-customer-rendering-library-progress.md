@@ -259,7 +259,7 @@ repository RPC 与 storage gateway 访问外部状态；公开目录使用显式
 ### 当前仍未交付及后续检查点
 
 - Task 10：开发 migration、完整 Local/Remote 核对、隔离 SQL、合成图 COS 原站
-  smoke 与 API/Admin 部署已完成；同租户微信/抖音已认证会话、最终 CDN、真实
+  smoke、保存的最终公开 URL 核验与 API/Admin 部署已完成；同租户微信/抖音已认证会话、真实
   双连接并发及回滚演练尚未验收。具体边界见开发发布证据，不能把局部 smoke
   说成完整双端交付。
 - 微信小程序 `orange` 与抖音客户端的目录页面、会话接入和真机验收由各自团队
