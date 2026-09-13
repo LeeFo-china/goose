@@ -14,14 +14,14 @@
 
 设计依据：[客户装修 AI 生图首期设计](../specs/2026-09-13-customer-rendering-ai-mvp-design.md)。本计划只产出可独立调用和验收的私有上传能力；`pending_review` 文件不能用于生成。后续依次另写并验收：任务/额度与租户预算预占 → Worker/方舟/审核/建议/私有结果 → 抖音 UI 与微信交接 → 开发灰度。微信代码由 `orange` 团队维护，本计划只写 gooes。
 
-开始执行前，用 `using-git-worktrees` 建立隔离工作区，保留当前 main 上无关改动；重新核对 `git status`、最新 migration 版本、已安装 COS SDK 的 `GetObjectParams`/`PutObjectParams`/`GetObjectUrlParams` 和仓库现有用法。若 `20260913120000` 已被占用，先为本计划 migration 分配新的唯一递增时间戳，并同步修改本计划指向，不覆盖既有文件。数据库变更只通过 migration，先 plan、后 apply、再 `supabase migration list`；不得手工远端 DDL/DML。费用或云端图片操作不属于本计划的默认验证。
+开始执行前，用 `using-git-worktrees` 建立隔离工作区，保留当前 main 上无关改动；重新核对 `git status`、最新 migration 版本、已安装 COS SDK 的 `GetObjectParams`/`PutObjectParams`/`GetObjectUrlParams` 和仓库现有用法。通过 `supabase migration new create_customer_rendering_private_inputs` 生成唯一 migration（本次生成 `20260913035110`），并同步修改本计划指向，不覆盖既有文件。数据库变更只通过 migration，先 plan、后 apply、再 `supabase migration list`；不得手工远端 DDL/DML。费用或云端图片操作不属于本计划的默认验证。
 
 ## 文件职责
 
 | 文件 | 责任 |
 | --- | --- |
 | `packages/domain/src/customer-rendering.ts`、对应 `.test.ts` | 严格的 intent/complete DTO，所有客户端共用 |
-| `supabase/migrations/20260913120000_create_customer_rendering_private_inputs.sql` | 主体绑定、对象位置、状态、RLS/ACL 和查询索引 |
+| `supabase/migrations/20260913035110_create_customer_rendering_private_inputs.sql` | 主体绑定、对象位置、状态、RLS/ACL 和查询索引 |
 | `apps/api/src/repositories/customer-rendering-inputs.ts`、`.test.ts` | 只按租户和主体摘要读写私有文件行，条件状态转换 |
 | `apps/api/src/gateways/customer-rendering-input-storage/client.ts`、`.test.ts` | 限定路径签 PUT、限量读原图、私有写规范图、HEAD 和清理 |
 | `apps/api/src/services/customer-rendering/inputs.ts`、`.test.ts` | 可信身份、上传意图/确认编排及规范化；不直接访问数据库或 COS SDK |
@@ -80,7 +80,7 @@ export const RenderingUploadCompleteResponseSchema = z.strictObject({
 
 ## Task 2: 私有输入账本 migration
 
-**Files:** Create `supabase/migrations/20260913120000_create_customer_rendering_private_inputs.sql`; Create `apps/api/src/services/customer-rendering/inputs-migration-contract.test.ts`.
+**Files:** Create `supabase/migrations/20260913035110_create_customer_rendering_private_inputs.sql`; Create `apps/api/src/services/customer-rendering/inputs-migration-contract.test.ts`.
 
 - [ ] **Step 1: 写 migration 合同红灯。** `bun:test` 读取上述 SQL，断言表名、租户复合唯一键、主体摘要/版本、私有对象键唯一约束、状态 CHECK、RLS、仅 service-role 授权、过期清理索引和 `BEGIN/COMMIT`。`cd apps/api && bun test src/services/customer-rendering/inputs-migration-contract.test.ts` 预期因文件不存在失败。
 - [ ] **Step 2: 新建 migration。** 使用以下明确的列和约束；任何额外列须有具体消费方，不能记录原始 openid、手机号、签名 URL 或 COS 密钥。
@@ -101,6 +101,9 @@ CREATE TABLE public.customer_rendering_inputs (
   purpose text NOT NULL CHECK (purpose IN ('room', 'floor_plan')),
   declared_mime_type text NOT NULL CHECK (declared_mime_type IN ('image/jpeg', 'image/png', 'image/webp')),
   declared_size_bytes integer NOT NULL CHECK (declared_size_bytes BETWEEN 1 AND 10485760),
+  -- 原图和归一化对象共用签发时的位置，后续操作不得依赖变化后的默认配置。
+  bucket text NOT NULL CHECK (btrim(bucket) <> ''),
+  region text NOT NULL CHECK (btrim(region) <> ''),
   raw_object_key text NOT NULL UNIQUE,
   normalized_object_key text UNIQUE,
   normalized_size_bytes integer CHECK (normalized_size_bytes BETWEEN 1 AND 10485760),
