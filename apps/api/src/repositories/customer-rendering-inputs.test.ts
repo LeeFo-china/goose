@@ -94,6 +94,27 @@ describe('CustomerRenderingInputsRepository', () => {
     expect(db.requests[0]?.url.searchParams.get('select')).not.toContain('*');
   });
 
+  test('conditional updates use primary-key bounds without PATCH limit while reads stay bounded', async () => {
+    const db = database([]);
+    await db.repository.findOwned(owner, ID);
+    await db.repository.claimProcessing(owner, ID, LEASE, NOW);
+    await db.repository.markNormalized(owner, ID, normalized, LEASE, NOW);
+    await db.repository.markFailed(owner, ID, null, NOW);
+    await db.repository.markFailed(owner, ID, LEASE, NOW);
+    await db.repository.claimRawCleanup({
+      tenantId: ID, id: ID, previousDue: PAST, nextDue: LEASE, status: 'issued', now: NOW,
+    });
+    await db.repository.markRawDeleted(ID, ID, LEASE, NOW);
+    const updates = db.requests.filter((request) => request.method === 'PATCH');
+    expect(updates).toHaveLength(7);
+    for (const request of updates) {
+      expect(request.url.searchParams.get('id')).toBe(`eq.${ID}`);
+      expect(request.url.searchParams.has('limit')).toBe(false);
+    }
+    expect(db.requests[0]?.method).toBe('GET');
+    expect(db.requests[0]?.url.searchParams.get('limit')).toBe('1');
+  });
+
   const otherOwners: CustomerInputOwner[] = [
     { ...owner, tenantId: '22222222-2222-4222-8222-222222222222' },
     { ...owner, channel: 'douyin', applicationId: 'app', installationId: ID },

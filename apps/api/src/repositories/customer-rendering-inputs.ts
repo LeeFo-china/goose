@@ -188,7 +188,8 @@ function parse<T>(schema: z.ZodType<T>, data: unknown): T {
 }
 
 async function changed(query: Query): Promise<boolean> {
-  const { data } = await execute(query.select('id').limit(1).maybeSingle());
+  // Every update matches the primary-key id; PATCH limit adds no bound and requires ordering on older PostgREST.
+  const { data } = await execute(query.select('id').maybeSingle());
   return parse(changedSchema, data) !== null;
 }
 
