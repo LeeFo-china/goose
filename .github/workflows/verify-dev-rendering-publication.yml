@@ -1,0 +1,86 @@
+name: Verify Development Rendering Publication
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_dev_project_ref:
+        description: "Type the development Supabase project ref"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-dev-rendering-publication
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: [self-hosted, Linux, X64, gooes-dev-deploy]
+    environment: development
+    timeout-minutes: 20
+    env:
+      DEV_DB_ENV_FILE: /opt/gooes-dev/docker/.env.dev.db
+      DEV_PROJECT_REF: fclnkyatvfvmzgzdqlba
+      DEV_DB_HOST: api-dev.goodcms.cn
+      BLOCKED_PROJECT_REFS: unqhypivjkpwldhufpjc
+      BLOCKED_DB_HOSTS: api.goodcms.cn 1.13.20.39
+      MIGRATION_VERSION: "20260913001512"
+      CONFIRM_DEV_PROJECT_REF: ${{ inputs.confirm_dev_project_ref }}
+    steps:
+      - name: Guard development runner and request
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME}" = "gooes-dev-vm-0-11"
+          test "${CONFIRM_DEV_PROJECT_REF}" = "${DEV_PROJECT_REF}"
+          test -r "${DEV_DB_ENV_FILE}"
+
+      - name: Checkout requested revision
+        uses: actions/checkout@v6
+        with:
+          clean: true
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          package-manager-cache: false
+
+      - name: Verify repository and development database target
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          test -f "supabase/migrations/${MIGRATION_VERSION}_publish_tenant_rendering_styles.sql"
+          test -f supabase/tests/tenant_rendering_style_publication.sql
+
+          set -a
+          . "${DEV_DB_ENV_FILE}"
+          set +a
+          test -n "${SUPABASE_DB_URL:-}"
+          test -n "${SUPABASE_DB_DIRECT_URL:-}"
+          export SUPABASE_PROJECT_REF="${SUPABASE_PROJECT_REF:-${DEV_PROJECT_REF}}"
+          actual_project_ref="$(node scripts/validate-dev-database-target.mjs --resolve-project-ref)"
+          test "${actual_project_ref}" = "${DEV_PROJECT_REF}"
+          node scripts/validate-dev-database-target.mjs \
+            "${SUPABASE_DB_URL}" "${actual_project_ref}" \
+            "${DEV_DB_HOST}" "${DEV_PROJECT_REF}" \
+            "${BLOCKED_DB_HOSTS}" "${BLOCKED_PROJECT_REFS}"
+          node scripts/validate-dev-database-target.mjs --direct-migration-history \
+            "${SUPABASE_DB_DIRECT_URL}" "${actual_project_ref}" \
+            "${DEV_DB_HOST}" "${DEV_PROJECT_REF}" \
+            "${BLOCKED_DB_HOSTS}" "${BLOCKED_PROJECT_REFS}"
+
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+          pnpm dlx supabase@2.99.0 migration list \
+            --db-url "${SUPABASE_DB_DIRECT_URL}" > migration-history.txt
+          node scripts/verify-migration-history.mjs \
+            migration-history.txt supabase/migrations "${MIGRATION_VERSION}"
+
+          # The SQL fixture begins a transaction and ends with ROLLBACK. With
+          # ON_ERROR_STOP, any earlier failure closes the session and rolls back.
+          psql "${SUPABASE_DB_URL}" -v ON_ERROR_STOP=1 \
+            -f supabase/tests/tenant_rendering_style_publication.sql \
+            > publication-sql-output.txt
+          test "$(tail -n 1 publication-sql-output.txt)" = "ROLLBACK"
+          echo "publication_sql_transaction_rolled_back=true"
