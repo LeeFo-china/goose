@@ -116,23 +116,31 @@ export class CustomerRenderingInputStorage implements CustomerInputStoragePort {
   }
   private async read(cos: CustomerInputCosPort, location: RenderingStorageLocation, expectedBytes: number): Promise<Buffer> {
     const bytes = Buffer.alloc(expectedBytes); let received = 0;
-    const invalidBody = rejected();
+    // Internal stream sentinel only. COS mutates stream errors with upstream HTTP fields.
+    const invalidBody = new RangeError('bounded input stream rejected');
+    let invalidLength = false;
     const output = new Writable({ highWaterMark: Math.min(expectedBytes, 64 * 1024),
       write(chunk: Buffer, _encoding, callback) {
-        if (!Buffer.isBuffer(chunk) || chunk.length > bytes.length - received) return callback(invalidBody);
+        if (!Buffer.isBuffer(chunk) || chunk.length > bytes.length - received) {
+          invalidLength = true; return callback(invalidBody);
+        }
         chunk.copy(bytes, received); received += chunk.length; callback();
-      }, final(callback) { callback(received === bytes.length ? undefined : invalidBody); },
+      }, final(callback) {
+        // Clean EOF needs no abort. Let SDK report HTTP status before classifying short content.
+        if (received !== bytes.length) invalidLength = true;
+        callback();
+      },
     });
-    try {
-      // SDK aborts the HTTP request on Output error; finished keeps an error listener during cleanup.
-      await Promise.all([finished(output), Promise.resolve().then(() => cos.getObject({ ...params(location), Output: output }))]);
-      return bytes;
-    } catch (error: unknown) {
-      output.destroy();
-      // Only this stream's own length/shape check proves invalid content; network errors stay 502.
-      if (error === invalidBody) throw invalidBody;
-      throw failure();
-    }
+    // Wait for SDK settlement before classifying: error-response bodies also flow into Output.
+    // Destroy on transport rejection so a stream that never received data cannot remain pending.
+    const [stream, request] = await Promise.allSettled([finished(output), Promise.resolve()
+      .then(() => cos.getObject({ ...params(location), Output: output }))
+      .catch((error: unknown) => { output.destroy(); throw error; })]);
+    const outcome: unknown = request.status === 'fulfilled' ? request.value : request.reason;
+    const status = typeof outcome === 'object' && outcome !== null && 'statusCode' in outcome ? outcome.statusCode : undefined;
+    if (invalidLength && status === 200) throw rejected();
+    if (request.status === 'rejected' || stream.status === 'rejected' || status !== 200 || received !== expectedBytes) throw failure();
+    return bytes;
   }
   async putNormalized(tenantId: string, id: string, location: RenderingStorageLocation, bytes: Buffer): Promise<void> {
     this.assertLocation(location, this.normalizedObjectKey(tenantId, id));

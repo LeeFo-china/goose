@@ -2,6 +2,8 @@ import { expect, test } from 'bun:test';
 import COS from 'cos-nodejs-sdk-v5';
 import { Writable } from 'node:stream';
 import { createHash } from 'node:crypto';
+import { createServer } from 'node:http';
+import { once } from 'node:events';
 import { CustomerRenderingInputStorage } from './client';
 
 // Offline SDK capability gate: no requests, credentials or signed URLs leave this process.
@@ -170,4 +172,38 @@ test('missing raw is rejected deterministically while HEAD transport failures re
   await expect(networkStorage.readRaw(tenant, id, raw, 3, 'image/png')).rejects.toMatchObject({ statusCode: 502, code: 'RENDERING_INPUT_STORAGE_FAILED' });
   state.headError = false; state.getError = true;
   await expect(storage.readRaw(tenant, id, raw, 3, 'image/png')).rejects.toMatchObject({ statusCode: 502, code: 'RENDERING_INPUT_STORAGE_FAILED' });
+});
+
+test('installed SDK mutation cannot change gateway status or misclassify HTTP error bodies', async () => {
+  for (const scenario of ['overflow', 'short', 'truncated', '403', '404', '503']) {
+    const status = /^\d+$/.test(scenario) ? Number(scenario) : 200;
+    const server = createServer((request, response) => {
+      if (request.method === 'HEAD') {
+        response.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': 3 }); response.end();
+      } else {
+        response.writeHead(status, { 'Content-Type': status === 200 ? 'image/png' : 'application/xml',
+          ...(scenario === 'truncated' ? { 'Content-Length': 3 } : {}) });
+        if (scenario === 'truncated') {
+          response.write('x'); setTimeout(() => request.socket.destroy(), 5);
+        } else {
+          response.end(status === 200 ? (scenario === 'short' ? 'x' : 'overflow')
+            : '<Error><Code>UpstreamError</Code><Message>sensitive upstream body</Message></Error>');
+        }
+      }
+    });
+    server.listen(0, '127.0.0.1'); await once(server, 'listening');
+    const address = server.address();
+    if (!address || typeof address === 'string') throw new TypeError('loopback listener missing');
+    const storage = new CustomerRenderingInputStorage({ loadConfig: async () => config,
+      createCos: (options) => new COS({ ...options, Timeout: 500, Protocol: 'http:', Domain: `127.0.0.1:${address.port}` }) });
+    try {
+      await expect(storage.readRaw(tenant, id, raw, 3, 'image/png')).rejects.toMatchObject({
+        statusCode: status === 200 && scenario !== 'truncated' ? 422 : 502,
+        code: status === 200 && scenario !== 'truncated' ? 'RENDERING_IMAGE_REJECTED' : 'RENDERING_INPUT_STORAGE_FAILED',
+        details: undefined,
+      });
+    } finally {
+      server.closeAllConnections(); await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  }
 });
