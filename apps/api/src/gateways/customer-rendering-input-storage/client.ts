@@ -42,6 +42,7 @@ const Size = z.number().int().positive().max(RENDERING_UPLOAD_MAX_BYTES);
 const TTL_SECONDS = 600;
 function unavailable(): never { throw Errors.business(503, '私有输入存储暂不可用', 'RENDERING_INPUT_STORAGE_UNAVAILABLE'); }
 function failure() { return Errors.business(502, '私有输入存储操作失败', 'RENDERING_INPUT_STORAGE_FAILED'); }
+function rejected() { return Errors.business(422, '上传图片内容与声明不符或已不存在', 'RENDERING_IMAGE_REJECTED'); }
 function unknownWrite(): never { throw Errors.business(502, '私有输入规范图写入结果未知', 'RENDERING_INPUT_STORAGE_NORMALIZED_UNKNOWN'); }
 function params(location: RenderingStorageLocation) { return { Bucket: location.bucket, Region: location.region, Key: location.object_key }; }
 function checksum(bytes: Buffer): string { return createHash('sha256').update(bytes).digest('hex'); }
@@ -102,24 +103,36 @@ export class CustomerRenderingInputStorage implements CustomerInputStoragePort {
     this.assertLocation(location, this.rawObjectKey(tenantId, id));
     if (!Size.safeParse(expectedBytes).success || !RenderingUploadMimeSchema.safeParse(expectedMime).success) return unavailable();
     const cos = this.cos(await this.config());
+    let head: COS.HeadObjectResult;
     try {
-      if (!metadata(await cos.headObject(params(location)), expectedBytes, expectedMime)) throw failure();
-      return await this.read(cos, location, expectedBytes);
-    } catch { throw failure(); }
+      head = await cos.headObject(params(location));
+    } catch (error: unknown) {
+      if (typeof error === 'object' && error !== null && 'statusCode' in error && error.statusCode === 404) throw rejected();
+      throw failure();
+    }
+    // A successful metadata response proves a bad upload; transport errors above remain retryable.
+    if (!metadata(head, expectedBytes, expectedMime)) throw rejected();
+    return this.read(cos, location, expectedBytes);
   }
   private async read(cos: CustomerInputCosPort, location: RenderingStorageLocation, expectedBytes: number): Promise<Buffer> {
     const bytes = Buffer.alloc(expectedBytes); let received = 0;
+    const invalidBody = rejected();
     const output = new Writable({ highWaterMark: Math.min(expectedBytes, 64 * 1024),
       write(chunk: Buffer, _encoding, callback) {
-        if (!Buffer.isBuffer(chunk) || chunk.length > bytes.length - received) return callback(failure());
+        if (!Buffer.isBuffer(chunk) || chunk.length > bytes.length - received) return callback(invalidBody);
         chunk.copy(bytes, received); received += chunk.length; callback();
-      }, final(callback) { callback(received === bytes.length ? undefined : failure()); },
+      }, final(callback) { callback(received === bytes.length ? undefined : invalidBody); },
     });
     try {
       // SDK aborts the HTTP request on Output error; finished keeps an error listener during cleanup.
       await Promise.all([finished(output), Promise.resolve().then(() => cos.getObject({ ...params(location), Output: output }))]);
       return bytes;
-    } catch { output.destroy(); throw failure(); }
+    } catch (error: unknown) {
+      output.destroy();
+      // Only this stream's own length/shape check proves invalid content; network errors stay 502.
+      if (error === invalidBody) throw invalidBody;
+      throw failure();
+    }
   }
   async putNormalized(tenantId: string, id: string, location: RenderingStorageLocation, bytes: Buffer): Promise<void> {
     this.assertLocation(location, this.normalizedObjectKey(tenantId, id));

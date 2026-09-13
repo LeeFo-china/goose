@@ -33,7 +33,7 @@ const raw = { bucket: config.bucket, region: config.region, object_key: `private
 function fixture() {
   const calls: { operation: string; params: unknown }[] = [];
   const state = { config: { ...config }, body: Buffer.from('raw'), mime: 'image/png', length: '3', putError: false, headError: false,
-    mutateAuth: (auth: string) => auth };
+    getError: false, mutateAuth: (auth: string) => auth };
   const storage = new CustomerRenderingInputStorage({ loadConfig: async () => state.config, createCos: (options) => ({
     getAuth: (params) => state.mutateAuth(new COS(options).getAuth(params)),
     async headObject(params) {
@@ -44,6 +44,7 @@ function fixture() {
     },
     async getObject(params) {
       calls.push({ operation: 'get', params });
+      if (state.getError) throw { code: 'ECONNRESET' };
       if (params.Output instanceof Writable) params.Output.end(state.body);
       return { ETag: 'etag', statusCode: 200, Body: state.body };
     },
@@ -79,12 +80,12 @@ test('HEAD then bounded GET uses persisted location after default changes', asyn
 test('metadata mismatch refuses GET and streaming rejects overflow or short body', async () => {
   for (const change of [{ mime: 'text/html' }, { length: '4' }, { length: '10485761' }]) {
     const { storage, state, calls } = fixture(); Object.assign(state, change);
-    await expect(storage.readRaw(tenant, id, raw, 3, 'image/png')).rejects.toMatchObject({ code: 'RENDERING_INPUT_STORAGE_FAILED' });
+    await expect(storage.readRaw(tenant, id, raw, 3, 'image/png')).rejects.toMatchObject({ statusCode: 422, code: 'RENDERING_IMAGE_REJECTED' });
     expect(calls.map((call) => call.operation)).toEqual(['head']);
   }
   for (const body of [Buffer.alloc(4), Buffer.alloc(2), Buffer.alloc(10 * 1024 * 1024 + 1)]) {
     const { storage, state } = fixture(); state.body = body;
-    await expect(storage.readRaw(tenant, id, raw, 3, 'image/png')).rejects.toMatchObject({ code: 'RENDERING_INPUT_STORAGE_FAILED' });
+    await expect(storage.readRaw(tenant, id, raw, 3, 'image/png')).rejects.toMatchObject({ statusCode: 422, code: 'RENDERING_IMAGE_REJECTED' });
   }
 });
 
@@ -153,4 +154,20 @@ test('normalized metadata mismatch is unknown and recovery requires exact bytes 
   await expect(storage.putNormalized(tenant, id, normalized, state.body)).rejects.toMatchObject({ code: 'RENDERING_INPUT_STORAGE_NORMALIZED_UNKNOWN' });
   state.mime = 'image/webp';
   expect(await storage.hasNormalized(tenant, id, normalized, Buffer.from('bad'))).toBe(false);
+});
+
+test('missing raw is rejected deterministically while HEAD transport failures remain retryable', async () => {
+  const { storage, state } = fixture(); state.headError = true;
+  await expect(storage.readRaw(tenant, id, raw, 3, 'image/png')).rejects.toMatchObject({ statusCode: 422, code: 'RENDERING_IMAGE_REJECTED' });
+  const networkStorage = new CustomerRenderingInputStorage({ loadConfig: async () => config,
+    createCos: (options) => {
+      const cos = new COS(options);
+      return { getAuth: (params) => cos.getAuth(params), headObject: async () => { throw { code: 'ETIMEDOUT' }; },
+        getObject: (params) => cos.getObject(params), putObject: (params) => cos.putObject(params),
+        deleteObject: (params) => cos.deleteObject(params) };
+    },
+  });
+  await expect(networkStorage.readRaw(tenant, id, raw, 3, 'image/png')).rejects.toMatchObject({ statusCode: 502, code: 'RENDERING_INPUT_STORAGE_FAILED' });
+  state.headError = false; state.getError = true;
+  await expect(storage.readRaw(tenant, id, raw, 3, 'image/png')).rejects.toMatchObject({ statusCode: 502, code: 'RENDERING_INPUT_STORAGE_FAILED' });
 });
