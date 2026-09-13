@@ -79,6 +79,16 @@ test("home opens customer login before customer session is authenticated", async
   expect(navigated).toEqual(["pages/customer-login/index"]);
 });
 
+test("home opens the published rendering style list", async () => {
+  const navigated: string[] = [];
+  const page = makePage(mock(async () => response([])), {
+    navigateToPage: async (path: string) => { navigated.push(path); },
+  });
+  (page as { onViewRenderingStyles(): void }).onViewRenderingStyles();
+  await flush();
+  expect(navigated).toEqual(["pages/rendering-styles/index"]);
+});
+
 function makePage(
   fetchMaterials: ReturnType<typeof mock>,
   options: {

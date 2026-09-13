@@ -369,3 +369,18 @@ test("privacy explains anonymous claim history without overstating removal as de
   expect(policy).toContain("公开电话");
   expect(policy).not.toMatch(/邮箱|微信客服|在线客服/);
 });
+
+test("rendering catalog has a home entry and separate list and detail pages", async () => {
+  const app = await Bun.file(`${__dirname}/app.json`).json();
+  const [home, list, detail] = await Promise.all([
+    readSource("pages/home/index.ttml"),
+    readSource("pages/rendering-styles/index.ttml"),
+    readSource("pages/rendering-style-detail/index.ttml"),
+  ]);
+  expect(app.pages).toContain("pages/rendering-styles/index");
+  expect(app.pages).toContain("pages/rendering-style-detail/index");
+  expect(home).toContain('bindtap="onViewRenderingStyles"');
+  expect(list).toContain("AI 概念图");
+  expect(detail).toContain("sourceLabel");
+  expect(list + detail).not.toMatch(/上传房间|立即生成|开始生图/);
+});

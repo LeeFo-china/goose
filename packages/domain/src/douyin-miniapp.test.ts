@@ -112,6 +112,8 @@ describe('Douyin miniapp domain contracts', () => {
       'pages/customer-login/index',
       'pages/customer-projects/index',
       'pages/customer-project-detail/index',
+      'pages/rendering-styles/index',
+      'pages/rendering-style-detail/index',
     ]);
     expect(DouyinEntryPathSchema.safeParse('pages/budget/index').success).toBe(true);
     expect(DouyinEntryPathSchema.safeParse('pages/materials/index').success).toBe(true);
@@ -120,6 +122,8 @@ describe('Douyin miniapp domain contracts', () => {
     expect(DouyinEntryPathSchema.safeParse('pages/customer-login/index').success).toBe(true);
     expect(DouyinEntryPathSchema.safeParse('pages/customer-projects/index').success).toBe(true);
     expect(DouyinEntryPathSchema.safeParse('pages/customer-project-detail/index').success).toBe(true);
+    expect(DouyinEntryPathSchema.safeParse('pages/rendering-styles/index').success).toBe(true);
+    expect(DouyinEntryPathSchema.safeParse('pages/rendering-style-detail/index').success).toBe(true);
     expect(DouyinEntryPathSchema.safeParse('pages/admin/index').success).toBe(false);
   });
 

@@ -6,6 +6,10 @@ import * as models from "../models";
 import { captureLaunchContext } from "./launch-context";
 
 describe("launch context entry-path compatibility", () => {
+  test("accepts both rendering catalog pages for cold-start attribution", () => {
+    expect(CANONICAL_ENTRY_PATHS).toContain("pages/rendering-styles/index");
+    expect(CANONICAL_ENTRY_PATHS).toContain("pages/rendering-style-detail/index");
+  });
   test("keeps the complete mini runtime enum exactly equal to the canonical domain source", async () => {
     const domain = await import(
       "../../../../packages/domain/src/douyin-miniapp"

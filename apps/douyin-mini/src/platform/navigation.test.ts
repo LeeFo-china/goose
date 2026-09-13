@@ -12,9 +12,11 @@ import {
   buildPageRoute,
   buildTabRoute,
   buildCustomerProjectDetailRoute,
+  buildRenderingStyleDetailRoute,
   navigateToMaterialDetail,
   navigateToOwnedMaterialDetail,
   navigateToPage,
+  replacePage,
 } from "./navigation";
 
 const ENTITY_ID = "11111111-1111-4111-8111-111111111111";
@@ -57,6 +59,34 @@ describe("Douyin native navigation and visual view models", () => {
     );
     expect(() => buildCustomerProjectDetailRoute(`${ENTITY_ID}&tenant_id=forged`))
       .toThrow("INVALID_NAVIGATION_TARGET");
+  });
+
+  test("builds separate rendering catalog and detail routes", () => {
+    expect(buildPageRoute("pages/rendering-styles/index"))
+      .toBe("/pages/rendering-styles/index");
+    expect(buildRenderingStyleDetailRoute(ENTITY_ID))
+      .toBe(`/pages/rendering-style-detail/index?id=${ENTITY_ID}`);
+    expect(() => buildRenderingStyleDetailRoute(`${ENTITY_ID}&tenant_id=forged`))
+      .toThrow("INVALID_NAVIGATION_TARGET");
+  });
+
+  test("replaces a withdrawn rendering detail with the fresh catalog", async () => {
+    const originalPlatform = Reflect.get(globalThis, "tt");
+    const urls: string[] = [];
+    Reflect.set(globalThis, "tt", {
+      ...(originalPlatform ?? {}),
+      redirectTo: ({ url, success }: { url: string; success?: () => void }) => {
+        urls.push(url);
+        success?.();
+      },
+    });
+    try {
+      await replacePage("pages/rendering-styles/index");
+      expect(urls).toEqual(["/pages/rendering-styles/index"]);
+    } finally {
+      if (originalPlatform === undefined) Reflect.deleteProperty(globalThis, "tt");
+      else Reflect.set(globalThis, "tt", originalPlatform);
+    }
   });
 
   test("detail routes contain only one encoded entity id query", () => {

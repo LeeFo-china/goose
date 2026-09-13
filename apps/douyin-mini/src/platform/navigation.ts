@@ -17,6 +17,8 @@ const PAGE_PATHS = new Set([
   "pages/customer-login/index",
   "pages/customer-projects/index",
   "pages/customer-project-detail/index",
+  "pages/rendering-styles/index",
+  "pages/rendering-style-detail/index",
 ]);
 const TAB_PATHS = {
   home: "pages/home/index",
@@ -58,8 +60,17 @@ export function buildCustomerProjectDetailRoute(projectId: string): string {
   return `${buildPageRoute("pages/customer-project-detail/index")}?id=${encodeURIComponent(normalized)}`;
 }
 
+export function buildRenderingStyleDetailRoute(id: string): string {
+  const normalized = normalizeUuid(id);
+  return `${buildPageRoute("pages/rendering-style-detail/index")}?id=${encodeURIComponent(normalized)}`;
+}
+
 export function navigateToPage(path: string): Promise<void> {
   return navigate("navigateTo", buildPageRoute(path));
+}
+
+export function replacePage(path: string): Promise<void> {
+  return navigate("redirectTo", buildPageRoute(path));
 }
 
 export function switchToTab(tab: TabName): Promise<void> {
@@ -82,6 +93,10 @@ export function navigateToCustomerProjectDetail(projectId: string): Promise<void
   return navigate("navigateTo", buildCustomerProjectDetailRoute(projectId));
 }
 
+export function navigateToRenderingStyleDetail(id: string): Promise<void> {
+  return navigate("navigateTo", buildRenderingStyleDetailRoute(id));
+}
+
 export function navigateToServiceUnavailable(code: ServiceUnavailableCode): Promise<void> {
   return new Promise((resolve, reject) => {
     tt.reLaunch({
@@ -96,7 +111,7 @@ export function navigateToServiceUnavailable(code: ServiceUnavailableCode): Prom
   });
 }
 
-function navigate(method: "navigateTo" | "switchTab", url: string): Promise<void> {
+function navigate(method: "navigateTo" | "switchTab" | "redirectTo", url: string): Promise<void> {
   return new Promise((resolve, reject) => {
     tt[method]({
       url,

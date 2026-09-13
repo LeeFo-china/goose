@@ -108,6 +108,9 @@ export function createHomePageDefinition(dependencies: HomePageDependencies) {
     onViewCompany() { this.navigateWithFeedback(dependencies.navigateToPage("pages/company/index")); },
     onViewPrivacy() { this.navigateWithFeedback(dependencies.navigateToPage("pages/privacy/index")); },
     onViewMaterials() { this.navigateWithFeedback(dependencies.navigateToPage("pages/materials/index")); },
+    onViewRenderingStyles() {
+      this.navigateWithFeedback(dependencies.navigateToPage("pages/rendering-styles/index"));
+    },
     onViewMyMaterials() { this.navigateWithFeedback(dependencies.navigateToPage("pages/my-materials/index")); },
     onMyProjects() {
       const path = dependencies.getApp().customerSession.isAuthenticated()

@@ -96,7 +96,7 @@ migration、COS 原站与 API/Admin 已有[发布证据](evidence/2026-09-13-ren
 这些 GET 没有写操作或幂等键；双击防护是避免重复分页、乱序和重复卡片，不是
 服务端扣次逻辑。不能把已发布素材 `id` 当成已可创建生成任务的证明。
 
-### 只读检查得到的 orange 接入位置
+### 两端接入位置
 
 - 微信公共 API 封装：`src/utils/api.ts`、`src/utils/https.ts`；新增**独立**目录
   service，并由小程序团队决定是否经 `src/services/index.ts` 导出。
@@ -109,8 +109,21 @@ migration、COS 原站与 API/Admin 已有[发布证据](evidence/2026-09-13-ren
   可参考分页、空态、图片预览和导航，但新目录应有独立状态与类型。
 - 新页面/入口需要小程序团队维护 `src/app.config.ts` 的 `packageVisitor` 页面注册
   和相应首页入口。现有目录未发现 `/renderings/styles` 调用或客户效果库页面。
-  `orange` 是以微信 Taro 为主的仓库；抖音客户端如不在该仓库，应由其所属团队在
-  对应 service、页面和路由配置实现同一合同，不假定 orange 可直接构建抖音包。
+  `orange` 是微信 Taro 仓库，不能用它构建抖音包；上述文件仅作只读参考。
+- 抖音小程序实际位于本仓库 `apps/douyin-mini`。本分支已新增独立的
+  `src/api/rendering-styles.ts`，通过 `getApp<DouyinAppContext>().api` 发起
+  `/douyin-mini/renderings/styles` 请求。该 `ApiClient` 已接入 `SessionManager`，
+  负责 `tt.login` 会话交换、Bearer token 和一次 401 恢复；公开目录无需强制
+  `customerApi` 手机号登录，也不能匿名回退。公开 DTO 以本分支
+  `packages/domain/src/rendering-library.ts` 的 `RenderingPublishedStyle` /
+  `RenderingPublishedStyleList` 为准；小程序生产代码沿用本地模型和轻量校验，
+  不直接引入 `@gooes/domain` 运行时依赖。
+- 本分支已新增抖音独立列表/详情于 `src/pages/`，注册到 `src/app.json`、
+  `src/models/index.ts` 的入口路径、`packages/domain/src/douyin-miniapp.ts` 的
+  服务端入口路径枚举和 `src/platform/navigation.ts` 的页面白名单；
+  首页入口由 `src/pages/home/` 接入。列表可复用 `src/utils/pagination.ts` 的
+  序号、去重和失败页重试机制，将接口的 `list` 映射为分页工具的 `items`。
+  现有 `src/pages/cases/` 与 `/douyin-mini/cases` 是项目实景，不能替换为素材目录。
 
 旧“装修灵感图库”使用 `/visitor/picture-library/categories` 与
 `/visitor/picture-library/assets`，DTO 有 `image/images/categories`、点赞收藏等；
@@ -140,7 +153,7 @@ token、真实租户 ID、私有路径或真实 COS URL 写回文档/工单。�
 migration、公开 COS 策略与 API 发布已完成开发验收；仍需测同租户列表/详情、跨租户不可见、隐藏后
 404、暂停租户、抖音安装停用、非法分页、无 token、分页乱序和窄屏图片加载。
 
-责任边界：gooes 提供合同、后端/Admin 代码及部署检查；微信/抖音小程序团队
-分别实现会话接入、页面/路由、空态/失败态/分页防重和真机验收。`orange` 保持
-原状；本阶段不含客户房型/房间照片上传、AI 生图任务、Worker、Ark 调用、生成
-装修建议或小程序生成 UI。
+责任边界：gooes 提供合同、后端/Admin 与本仓库抖音小程序代码及部署检查；
+抖音页面仍需正常渠道会话与真机验收，微信小程序团队负责 `orange` 中的页面接入和
+真机验收。`orange` 保持原状；本阶段不含客户房型/房间照片上传、AI 生图任务、
+Worker、Ark 调用、生成装修建议或小程序生成 UI。

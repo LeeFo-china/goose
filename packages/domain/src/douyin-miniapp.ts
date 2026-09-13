@@ -18,6 +18,8 @@ export const DOUYIN_ENTRY_PATH_VALUES = [
   'pages/customer-login/index',
   'pages/customer-projects/index',
   'pages/customer-project-detail/index',
+  'pages/rendering-styles/index',
+  'pages/rendering-style-detail/index',
 ] as const;
 
 export const DouyinEntryPathSchema = z.enum(DOUYIN_ENTRY_PATH_VALUES);

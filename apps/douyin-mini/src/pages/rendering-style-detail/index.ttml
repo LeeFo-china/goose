@@ -1,0 +1,15 @@
+<page-skeleton tt:if="{{status === 'loading'}}" />
+<error-state tt:elif="{{status === 'error'}}" title="{{errorTitle}}" description="请检查网络或登录状态后重试。" bindretry="onRetry" />
+<view tt:elif="{{status === 'blocked'}}" class="page-content detail-page"><view class="ui-error-surface detail-state" role="alert">装修公司服务已暂停，请稍后再来。</view></view>
+<view tt:elif="{{status === 'not-found'}}" class="page-content detail-page"><view class="detail-state" role="alert"><view class="ui-section-title">效果图已下架或不存在</view><view class="ui-page-description">返回列表可查看当前已发布的素材。</view><button class="detail-back ui-pressable" hover-class="ui-pressable--pressed" bindtap="onBackToList">返回效果图列表</button></view></view>
+<view tt:else class="page-content detail-page">
+  <view tt:if="{{status === 'stale-error'}}" class="ui-error-surface detail-stale" role="alert">暂时无法确认这张效果图是否仍已发布。<button class="detail-inline-action ui-pressable" hover-class="ui-pressable--pressed" bindtap="onRetry">重试</button></view>
+  <image tt:if="{{!imageFailed}}" class="detail-image" src="{{style.image_url}}" mode="aspectFit" binderror="onImageError" />
+  <view tt:else class="detail-image detail-image--empty">图片暂不可用</view>
+  <view class="detail-title">{{style.title}}</view>
+  <view class="detail-meta"><text>{{spaceLabel}}</text><text>{{styleLabel}}</text><text>{{sourceLabel}}</text></view>
+  <view tt:if="{{style.source_type === 'ai_concept'}}" class="detail-concept-note">AI 概念图仅供风格参考，并非已落地实景。</view>
+  <view class="detail-section"><view class="detail-section-title">配色说明</view><view class="detail-section-copy">{{style.color_notes || '暂无补充说明'}}</view></view>
+  <view class="detail-section"><view class="detail-section-title">材质说明</view><view class="detail-section-copy">{{style.material_notes || '暂无补充说明'}}</view></view>
+  <view class="detail-published">发布于 {{publishedDate}}</view>
+</view>

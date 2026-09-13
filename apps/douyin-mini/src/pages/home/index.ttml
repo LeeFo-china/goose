@@ -6,6 +6,10 @@
     <hero-banner title="{{bannerTitle}}" subtitle="{{bannerSubtitle}}" image-url="{{bannerImageUrl}}" action-label="开始预算初算" primary-color="{{primaryColor}}" bindaction="onBudget" />
   </view>
   <view class="home-tools" aria-label="常用工具">
+    <button class="home-tool-link ui-pressable" hover-class="ui-pressable--pressed" bindtap="onViewRenderingStyles">
+      <view class="home-tool-copy"><view class="home-tool-title">装修效果图</view><view class="home-tool-description">按空间与风格浏览已发布方案</view></view>
+      <view class="home-tool-arrow" style="color: {{primaryColor}}" aria-hidden="true">›</view>
+    </button>
     <button class="home-tool-link ui-pressable" hover-class="ui-pressable--pressed" bindtap="onMyProjects">
       <view class="home-tool-copy"><view class="home-tool-title">我的项目</view><view class="home-tool-description">查看施工进度与施工日志</view></view>
       <view class="home-tool-arrow" style="color: {{primaryColor}}" aria-hidden="true">›</view>

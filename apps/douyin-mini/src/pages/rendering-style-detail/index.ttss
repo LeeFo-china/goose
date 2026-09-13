@@ -1,0 +1,17 @@
+@import "../../styles/tokens.ttss";
+
+.detail-page { padding-bottom: 56rpx; }
+.detail-image { display: block; width: 100%; height: 520rpx; margin-top: 12rpx; border-radius: 16rpx; background: #eceae6; }
+.detail-image--empty { display: flex; align-items: center; justify-content: center; color: #625f5b; font-size: 24rpx; }
+.detail-title { margin-top: 28rpx; color: #191817; font-size: 40rpx; font-weight: 650; line-height: 1.35; }
+.detail-meta { display: flex; flex-wrap: wrap; gap: 12rpx; margin-top: 18rpx; }
+.detail-meta text { padding: 6rpx 16rpx; border-radius: 999rpx; background: #eceae6; color: #403d39; font-size: 22rpx; line-height: 1.5; }
+.detail-concept-note { margin-top: 22rpx; padding: 18rpx 20rpx; border-radius: 12rpx; background: #f5f3ee; color: #403d39; font-size: 24rpx; line-height: 1.5; }
+.detail-section { margin-top: 36rpx; }
+.detail-section-title { color: #191817; font-size: 28rpx; font-weight: 650; line-height: 1.4; }
+.detail-section-copy { margin-top: 12rpx; color: #403d39; font-size: 26rpx; line-height: 1.65; word-break: break-word; }
+.detail-published { margin-top: 42rpx; color: #625f5b; font-size: 22rpx; }
+.detail-state { margin-top: 64rpx; padding: 28rpx; border-radius: 12rpx; background: #eceae6; }
+.detail-back { min-height: 76rpx; margin: 28rpx 0 0; padding: 0 24rpx; border-radius: 12rpx; background: #191817; color: #fff; font-size: 26rpx; line-height: 76rpx; }
+.detail-stale { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; margin: 12rpx 0 20rpx; padding: 18rpx 20rpx; font-size: 23rpx; line-height: 1.5; }
+.detail-inline-action { flex: none; min-height: 60rpx; margin: 0; padding: 0 18rpx; border: 1rpx solid currentColor; border-radius: 10rpx; background: transparent; color: inherit; font-size: 23rpx; line-height: 60rpx; }

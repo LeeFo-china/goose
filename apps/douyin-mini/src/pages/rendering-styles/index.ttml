@@ -1,0 +1,29 @@
+<view tt:if="{{blocked}}" class="page-content rendering-page">
+  <view class="ui-error-surface rendering-blocked" role="alert">{{blockedMessage}}</view>
+</view>
+<page-skeleton tt:elif="{{firstLoading}}" />
+<error-state tt:elif="{{firstError}}" title="{{errorTitle}}" description="请检查网络或登录状态后重试。" bindretry="onRetry" />
+<view tt:else class="page-content rendering-page">
+  <view class="page-header">
+    <view class="ui-page-title">装修效果图</view>
+    <view class="ui-page-description">按空间与风格浏览装修公司已发布的效果素材。</view>
+  </view>
+  <view class="filter-heading">空间</view>
+  <scroll-view scroll-x class="filter-scroll"><view class="filter-options"><button tt:for="{{spaceFilters}}" tt:key="value" class="filter-chip ui-pressable" hover-class="ui-pressable--pressed" style="{{selectedSpace === item.value ? activeFilterStyle : ''}}" data-value="{{item.value}}" bindtap="onSelectSpace">{{item.label}}</button></view></scroll-view>
+  <view class="filter-heading">风格</view>
+  <scroll-view scroll-x class="filter-scroll"><view class="filter-options"><button tt:for="{{styleFilters}}" tt:key="value" class="filter-chip ui-pressable" hover-class="ui-pressable--pressed" style="{{selectedStyle === item.value ? activeFilterStyle : ''}}" data-value="{{item.value}}" bindtap="onSelectStyle">{{item.label}}</button></view></scroll-view>
+  <view class="rendering-hint">AI 概念图仅供风格参考，不代表已落地实景。</view>
+  <view tt:if="{{items.length}}" class="rendering-list">
+    <button tt:for="{{items}}" tt:key="id" class="rendering-card ui-card ui-pressable" hover-class="ui-pressable--pressed" data-id="{{item.id}}" bindtap="onSelect" aria-label="查看{{item.title}}">
+      <image tt:if="{{!item.imageFailed}}" class="rendering-image" src="{{item.image_url}}" mode="aspectFill" lazy-load="true" data-id="{{item.id}}" binderror="onImageError" />
+      <view tt:else class="rendering-image rendering-image--empty">图片暂不可用</view>
+      <view class="rendering-card-body">
+        <view class="rendering-card-title">{{item.title}}</view>
+        <view class="rendering-card-meta"><text>{{item.spaceLabel}} · {{item.styleLabel}}</text><text class="rendering-source">{{item.sourceLabel}}</text></view>
+      </view>
+    </button>
+  </view>
+  <empty-state tt:elif="{{empty}}" title="暂无已发布效果图" description="装修公司发布后会在这里展示，试试其他空间或风格。" />
+  <view tt:else class="rendering-loading-copy">正在加载效果图…</view>
+  <pagination-loader tt:if="{{items.length}}" status="{{paginationStatus}}" bindloadmore="onLoadMore" bindretry="onRetry" />
+</view>

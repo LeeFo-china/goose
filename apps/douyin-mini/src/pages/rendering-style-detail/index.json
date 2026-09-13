@@ -1,0 +1,7 @@
+{
+  "navigationBarTitleText": "效果图详情",
+  "usingComponents": {
+    "page-skeleton": "/components/page-skeleton/index",
+    "error-state": "/components/error-state/index"
+  }
+}
