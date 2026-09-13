@@ -151,9 +151,9 @@ COMMIT;
 
 **Files:** Create `apps/api/src/repositories/customer-rendering-inputs.ts`; Test `apps/api/src/repositories/customer-rendering-inputs.test.ts`.
 
-- [ ] **Step 1: 写失败测试。** 用注入的 Supabase client 测：`createIssued` 只保存白名单字段；`findOwned` 必须同时过滤 tenant、channel、subject 版本/摘要、app/installation scope、ID 且 `.limit(1)`；`countRecent` 用带索引的主体过滤及 `head:true,count:'exact'` 分别统计 10 分钟/本地日窗口；`claimProcessing` 只允许 `issued → processing` 且设置租约；`markNormalized` 只允许 `processing → pending_review`；重放 `pending_review` 读取原记录，不重复写。无权与不存在都返回 null。
-- [ ] **Step 2: 运行红灯。** `cd apps/api && bun test src/repositories/customer-rendering-inputs.test.ts`；预期新增模块缺失失败。
-- [ ] **Step 3: 实现仓储。** 导出 `CustomerRenderingInputsRepository`，依赖可注入 `from(table)` 客户端，默认用 `SupabaseDB.getAdminClient()`。查询字段固定为 `id,tenant_id,channel,subject_key_version,subject_digest,application_id,installation_id,purpose,declared_mime_type,declared_size_bytes,raw_object_key,normalized_object_key,normalized_size_bytes,width,height,checksum,status,expires_at,processing_lease_expires_at,raw_cleanup_after,raw_deleted_at`；单条查询 `.limit(1).maybeSingle()`，条件更新同时匹配 `tenant_id/id/status`，以返回行数区分抢占成功和竞争失败。数据库错误走 `Errors.dbError`，响应通过 Zod strict schema 解析。不要通过读取全表后在内存检查所有权。
+- [x] **Step 1: 写失败测试。** 用注入的 Supabase client 测：`createIssued` 只保存白名单字段（含签发时 bucket/region）；所有客户读写必须过滤 tenant、channel、subject 版本/摘要、app/installation scope，微信空 scope 使用 `.is(..., null)`；`findOwned` 另匹配 ID 且 `.limit(1)`；`countRecent` 用带索引的主体过滤及 `head:true,count:'exact'` 分别统计 10 分钟/本地日窗口；`claimProcessing` 允许 `issued → processing` 及过期 processing 租约的原子抢占，保护有效租约；`markNormalized/markFailed` 必须匹配仍有效的当前租约，防止旧进程覆盖结果；重放 `pending_review` 读取原记录，不重复写。无权与不存在都返回 null。
+- [x] **Step 2: 运行红灯。** `cd apps/api && bun test src/repositories/customer-rendering-inputs.test.ts`；已确认新增模块缺失失败（0 pass / 1 fail）。
+- [x] **Step 3: 实现仓储。** 导出 `CustomerRenderingInputsRepository`，依赖可注入 `from(table)` 客户端，默认用 `SupabaseDB.getAdminClient()`。查询字段固定为 `id,tenant_id,channel,subject_key_version,subject_digest,application_id,installation_id,purpose,declared_mime_type,declared_size_bytes,bucket,region,raw_object_key,normalized_object_key,normalized_size_bytes,width,height,checksum,status,expires_at,processing_lease_expires_at,raw_cleanup_after,raw_deleted_at`；单条查询 `.limit(1).maybeSingle()`，客户条件更新同时匹配完整 owner、ID、状态及租约，只返回 ID 区分成功/竞争失败。数据库错误及非法数据库响应走 `Errors.dbError`，响应通过 Zod strict schema 解析。不要通过读取全表后在内存检查所有权。
 
 ```ts
 export type CustomerInputOwner = {
@@ -169,7 +169,7 @@ export type CustomerInputRow = {
   subject_key_version: number; subject_digest: string;
   application_id: string | null; installation_id: string | null;
   purpose: 'room' | 'floor_plan'; declared_mime_type: string;
-  declared_size_bytes: number; raw_object_key: string;
+  declared_size_bytes: number; bucket: string; region: string; raw_object_key: string;
   normalized_object_key: string | null; normalized_size_bytes: number | null;
   width: number | null; height: number | null; checksum: string | null;
   status: 'issued' | 'processing' | 'pending_review' | 'approved' | 'rejected' | 'failed' | 'deleted';
@@ -179,21 +179,26 @@ export type CustomerInputRow = {
 export interface CustomerRenderingInputsRepositoryPort {
   createIssued(owner: CustomerInputOwner, input: {
     id: string; purpose: 'room' | 'floor_plan'; mimeType: string;
-    sizeBytes: number; rawObjectKey: string; expiresAt: string;
+    sizeBytes: number; bucket: string; region: string; rawObjectKey: string; expiresAt: string;
   }): Promise<void>;
   findOwned(owner: CustomerInputOwner, id: string): Promise<CustomerInputRow | null>;
   countRecent(owner: CustomerInputOwner, since: string): Promise<number>;
-  claimProcessing(owner: CustomerInputOwner, id: string, leaseUntil: string): Promise<boolean>;
+  claimProcessing(owner: CustomerInputOwner, id: string, leaseUntil: string, now: string): Promise<boolean>;
   markNormalized(owner: CustomerInputOwner, id: string, result: {
     objectKey: string; sizeBytes: number; width: number; height: number; checksum: string;
-  }): Promise<boolean>;
-  markFailed(owner: CustomerInputOwner, id: string): Promise<boolean>;
+  }, leaseUntil: string, now: string): Promise<boolean>;
+  markFailed(owner: CustomerInputOwner, id: string, leaseUntil: string | null, now: string): Promise<boolean>;
   listRawCleanupDue(now: string, limit: number): Promise<CustomerInputRow[]>;
-  claimRawCleanup(tenantId: string, id: string, previousDue: string, nextDue: string): Promise<boolean>;
-  markRawDeleted(tenantId: string, id: string): Promise<boolean>;
+  claimRawCleanup(input: {
+    tenantId: string; id: string; previousDue: string; nextDue: string;
+    status: CustomerInputRow['status']; now: string;
+  }): Promise<boolean>;
+  markRawDeleted(tenantId: string, id: string, claimedDue: string, now: string): Promise<boolean>;
 }
 ```
-- [ ] **Step 4: 运行测试、类型检查并提交。** 在 `apps/api` 运行 `bun test src/repositories/customer-rendering-inputs.test.ts`，回仓库根目录运行 `bun run api:typecheck`；预期 0 fail、exit 0。提交：`feat(rendering): persist owner-bound private inputs`。
+
+**Task 5/6 消费约束：** service 使用本次领取的 `leaseUntil` 调用 `markNormalized/markFailed`，每次完成写入传入最新 `now`；签名失败仅可用 `markFailed(..., null, now)` 更新仍为 issued 的行。租约领取必须晚于 now；上传过期或 raw 已删除不可领取。bucket/region 从账本传给后续存储操作，不能重新读取默认位置。清理 worker 传入扫描到的状态与原 due；仓储在同一 UPDATE 中只将过期 issued 或租约过期 processing 标为 deleted 并推进 due，阻止后续 complete 抢占；pending_review/approved 保留状态及成品。删除后必须以本次 `nextDue` 调用 `markRawDeleted`，租约过期/被抢占时返回 false。清理批次强制最多 100。测试使用已安装 Supabase 的真实查询构造器加本地 HTTP 数据库替身，不连接远端；并发行为仍需部署前数据库集成验证。
+- [x] **Step 4: 运行测试、类型检查并提交。** 在 `apps/api` 运行 `bun test src/repositories/customer-rendering-inputs.test.ts`：13 pass / 0 fail / 112 assertions；仓库根目录 `bun run api:typecheck` exit 0；`git diff --cached --check` 通过。提交：`feat(rendering): 实现私有输入归属与租约仓储`。
 
 ## Task 4: COS 私有隔离与规范化网关
 
