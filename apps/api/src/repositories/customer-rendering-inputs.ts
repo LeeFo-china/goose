@@ -111,9 +111,9 @@ export class CustomerRenderingInputsRepository implements CustomerRenderingInput
     assertFuture(leaseUntil, now);
     const claim = (status: 'issued' | 'processing') => this.owned(this.table().update({
       status: 'processing', processing_lease_expires_at: leaseUntil,
-    }), owner).eq('id', id).eq('status', status).gt('expires_at', now).is('raw_deleted_at', null);
-    if (await changed(claim('issued'))) return true;
-    // A single conditional UPDATE reclaims only expired leases; no read/write gap.
+    }), owner).eq('id', id).eq('status', status).is('raw_deleted_at', null);
+    if (await changed(claim('issued').gt('expires_at', now))) return true;
+    // Recover started work after intent expiry too; only an expired lease may be reclaimed.
     return changed(claim('processing').lte('processing_lease_expires_at', now));
   }
 

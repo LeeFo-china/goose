@@ -167,11 +167,22 @@ describe('CustomerRenderingInputsRepository', () => {
     }
   });
 
-  test('active leases, expired intents, and deleted raw cannot be claimed', async () => {
+  test('active leases, expired issued intents, and deleted raw cannot be claimed', async () => {
     for (const value of [
       row({ status: 'processing', processing_lease_expires_at: LEASE }),
       row({ expires_at: NOW }), row({ raw_deleted_at: PAST }), row({ status: 'pending_review' }),
     ]) expect(await database([value]).repository.claimProcessing(owner, ID, LEASE, NOW)).toBe(false);
+  });
+
+  test('recovers expired processing after intent expiry but rejects expired first-time issued claims', async () => {
+    const db = database([row({ expires_at: PAST, status: 'processing', processing_lease_expires_at: PAST })]);
+    expect(await db.repository.claimProcessing(owner, ID, LEASE, NOW)).toBe(true);
+    expect(db.rows[0]?.processing_lease_expires_at).toBe(LEASE);
+    expect(await database([row({ expires_at: PAST })]).repository.claimProcessing(owner, ID, LEASE, NOW)).toBe(false);
+    expect(await database([row({ expires_at: PAST, status: 'processing', processing_lease_expires_at: LEASE })])
+      .repository.claimProcessing(owner, ID, FUTURE, NOW)).toBe(false);
+    expect(await database([row({ expires_at: PAST, status: 'processing', processing_lease_expires_at: PAST, raw_deleted_at: PAST })])
+      .repository.claimProcessing(owner, ID, LEASE, NOW)).toBe(false);
   });
 
   test('only current active lease can normalize and replay is read-only', async () => {

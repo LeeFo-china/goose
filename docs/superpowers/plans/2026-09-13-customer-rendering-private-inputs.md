@@ -197,7 +197,7 @@ export interface CustomerRenderingInputsRepositoryPort {
 }
 ```
 
-**Task 5/6 消费约束：** service 使用本次领取的 `leaseUntil` 调用 `markNormalized/markFailed`，每次完成写入传入最新 `now`；签名失败仅可用 `markFailed(..., null, now)` 更新仍为 issued 的行。租约领取必须晚于 now；上传过期或 raw 已删除不可领取。bucket/region 从账本传给后续存储操作，不能重新读取默认位置。清理 worker 传入扫描到的状态与原 due；仓储在同一 UPDATE 中只将过期 issued 或租约过期 processing 标为 deleted 并推进 due，阻止后续 complete 抢占；pending_review/approved 保留状态及成品。删除后必须以本次 `nextDue` 调用 `markRawDeleted`，租约过期/被抢占时返回 false。清理批次强制最多 100。测试使用已安装 Supabase 的真实查询构造器加本地 HTTP 数据库替身，不连接远端；并发行为仍需部署前数据库集成验证。
+**Task 5/6 消费约束：** service 使用本次领取的 `leaseUntil` 调用 `markNormalized/markFailed`，每次完成写入传入最新 `now`；签名失败仅可用 `markFailed(..., null, now)` 更新仍为 issued 的行。租约领取必须晚于 now；首次 issued 领取要求上传意图未过期，过期返回 409；processing 恢复仅要求旧处理租约过期及 raw 未删除，不再检查上传意图 expires_at，避免规范图 PUT 结果未知时无法恢复。complete 不得统一拒绝已过期的 processing 记录，有效处理租约仍返回处理中；raw 已删除始终不可领取。bucket/region 从账本传给后续存储操作，不能重新读取默认位置。清理 worker 传入扫描到的状态与原 due；仓储在同一 UPDATE 中只将过期 issued 或租约过期 processing 标为 deleted 并推进 due，阻止后续 complete 抢占；pending_review/approved 保留状态及成品。删除后必须以本次 `nextDue` 调用 `markRawDeleted`，租约过期/被抢占时返回 false。清理批次强制最多 100。测试使用已安装 Supabase 的真实查询构造器加本地 HTTP 数据库替身，不连接远端；并发行为仍需部署前数据库集成验证。
 - [x] **Step 4: 运行测试、类型检查并提交。** 在 `apps/api` 运行 `bun test src/repositories/customer-rendering-inputs.test.ts`：13 pass / 0 fail / 112 assertions；仓库根目录 `bun run api:typecheck` exit 0；`git diff --cached --check` 通过。提交：`feat(rendering): 实现私有输入归属与租约仓储`。
 
 ## Task 4: COS 私有隔离与规范化网关
