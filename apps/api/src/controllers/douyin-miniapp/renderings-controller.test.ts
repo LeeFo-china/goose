@@ -12,6 +12,51 @@ beforeAll(async () => {
   ({ DouyinRenderingsController: Controller } = await import("./renderings-controller"));
 });
 
+test("private upload HTTP validates session, DTO and UUID and wraps success", async () => {
+  const { default: authPlugin } = await import("@/plugins/auth/legacy-plugin");
+  const { default: errorHandler } = await import("@/plugins/error-handler");
+  const { signVisitorSessionToken, signDouyinMiniappToken } = await import("@/utils/jwt");
+  const { Errors } = await import("@/errors/error-factory");
+  const id = "11111111-1111-4111-8111-111111111111";
+  const result = { file_id: id, status: "pending_review", mime_type: "image/webp", width: 16, height: 12, size_bytes: 100 } as const;
+  const createIntent = mock(async () => ({ intent_id: id, method: "PUT" as const,
+    upload_url: "https://example.com/signed", headers: {}, expires_at: "2026-09-13T12:00:00.000Z" }));
+  const complete = mock(async () => result);
+  await expect(new Controller(undefined, undefined, { createIntent, complete })
+    .completeInput({ params: { id }, body: null } as never)).rejects.toMatchObject({ statusCode: 400 });
+  const app = Fastify({ logger: false }); errorHandler(app); authPlugin(app);
+  new Controller(undefined, undefined, { createIntent, complete }).registerExtraRoutes(app);
+  await app.ready();
+  const token = signDouyinMiniappToken({ tenant_id: id, douyin_installation_id: id, douyin_app_id: "tt-app", subject_hash: "a".repeat(64) });
+  const headers = { authorization: `Bearer ${token}` };
+  const intentUrl = "/douyin-mini/renderings/uploads:intent";
+  const completeUrl = `/douyin-mini/renderings/uploads/${id}/complete`;
+  const payload = { purpose: "room", mime_type: "image/png", size_bytes: 100 };
+  try {
+    for (const url of [intentUrl, completeUrl]) {
+      expect((await app.inject({ method: "POST", url, payload: url === intentUrl ? payload : {} })).statusCode).toBe(401);
+      expect((await app.inject({ method: "POST", url, headers: { authorization: "Bearer invalid" }, payload: {} })).statusCode).toBe(401);
+    }
+    expect(createIntent).not.toHaveBeenCalled(); expect(complete).not.toHaveBeenCalled();
+    for (const [url, body] of [[intentUrl, { ...payload, tenant_id: id }], [completeUrl, { object_key: "forged" }],
+      ["/douyin-mini/renderings/uploads/invalid/complete", {}], [completeUrl + "?subject=forged", {}]] as const) {
+      expect((await app.inject({ method: "POST", url, headers, payload: body })).statusCode).toBe(400);
+    }
+    expect(createIntent).not.toHaveBeenCalled(); expect(complete).not.toHaveBeenCalled();
+    const intent = await app.inject({ method: "POST", url: intentUrl, headers, payload });
+    expect(intent.statusCode).toBe(200); expect(intent.json()).toMatchObject({ data: { intent_id: id }, message: "success" });
+    expect(createIntent).toHaveBeenCalledWith(expect.objectContaining({ token_type: "douyin_miniapp" }), "douyin", payload);
+    const response = await app.inject({ method: "POST", url: completeUrl, headers, payload: {} });
+    expect(response.statusCode).toBe(200);
+    const responseBody: unknown = response.json();
+    expect(responseBody).toEqual({ data: result, message: "success" });
+    expect(complete).toHaveBeenCalledWith(expect.anything(), "douyin", id);
+    createIntent.mockRejectedValue(Errors.business(409, "请先选择装修公司", "RENDERING_TENANT_CONTEXT_REQUIRED"));
+    const unselected = await app.inject({ method: "POST", url: intentUrl, headers, payload });
+    expect(unselected.statusCode).toBe(409); expect(unselected.json()).toMatchObject({ code: "RENDERING_TENANT_CONTEXT_REQUIRED" });
+  } finally { await app.close(); }
+});
+
 describe("DouyinRenderingsController", () => {
   test("registers exact session-only rendering routes", () => {
     const controller = new Controller({ getQuota: mock(), bindPhone: mock() } as never);
@@ -26,6 +71,8 @@ describe("DouyinRenderingsController", () => {
       { method: "POST", path: "/douyin-mini/renderings/phone:bind", access: "session" },
       { method: "GET", path: "/douyin-mini/renderings/styles", access: "session" },
       { method: "GET", path: "/douyin-mini/renderings/styles/:id", access: "session" },
+      { method: "POST", path: "/douyin-mini/renderings/uploads:intent", access: "session" },
+      { method: "POST", path: "/douyin-mini/renderings/uploads/:id/complete", access: "session" },
     ]);
   });
 

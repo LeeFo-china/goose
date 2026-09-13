@@ -33,6 +33,9 @@ async function createApp() {
   app.get("/douyin-mini/renderings/styles", async (request) => ({ user: request.user }));
   app.get("/douyin-mini/renderings/styles/:id", async (request) => ({ user: request.user }));
   app.post("/douyin-mini/renderings/styles/:id", async (request) => ({ user: request.user }));
+  app.post("/douyin-mini/renderings/uploads:intent", async (request) => ({ user: request.user }));
+  app.post("/douyin-mini/renderings/uploads/:id/complete", async (request) => ({ user: request.user }));
+  app.post("/upload", async (request) => ({ user: request.user }));
   app.post("/douyin-mini/material-notes/:id/claim", async (request) => ({ user: request.user }));
   app.get("/douyin-mini/my-material-notes", async (request) => ({ user: request.user }));
   app.get("/douyin-mini/my-material-notes/:claimId", async (request) => ({ user: request.user }));
@@ -251,6 +254,17 @@ describe("auth plugin Douyin miniapp isolation", () => {
       headers: { authorization: `Bearer ${token}` },
     });
     expect(renderingQuota.statusCode).toBe(200);
+    for (const url of ["/douyin-mini/renderings/uploads:intent",
+      "/douyin-mini/renderings/uploads/11111111-1111-4111-8111-111111111111/complete"]) {
+      const response = await app.inject({ method: "POST", url, headers: { authorization: `Bearer ${token}` } });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().user).toMatchObject({ login_channel: "douyin" });
+      for (const method of ["GET", "HEAD", "PUT", "DELETE"] as const) {
+        expect((await app.inject({ method, url, headers: { authorization: `Bearer ${token}` } })).statusCode).toBe(401);
+      }
+    }
+    expect((await app.inject({ method: "POST", url: "/upload",
+      headers: { authorization: `Bearer ${signDouyinMiniappToken(douyinPayload)}` } })).statusCode).toBe(401);
     for (const url of [
       "/douyin-mini/renderings/styles",
       "/douyin-mini/renderings/styles/11111111-1111-4111-8111-111111111111",

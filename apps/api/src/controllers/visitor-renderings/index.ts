@@ -1,11 +1,13 @@
 import type { FastifyRequest } from "fastify";
 import { z } from "zod";
-import { RenderingListQuerySchema } from "@gooes/domain";
+import { RenderingListQuerySchema, RenderingUploadIntentRequestSchema, RenderingUploadCompleteRequestSchema } from "@gooes/domain";
 import { BaseController } from "@/controllers/BaseController";
 import { Errors } from "@/errors/error-factory";
 import { RenderingPhoneBindSchema } from "@/schema/customer-renderings";
 import {
   customerRenderingCatalogService,
+  createCustomerRenderingInputsService,
+  type CustomerRenderingInputsPort,
   createCustomerRenderingQuotaService,
   type CustomerRenderingCatalogService,
   type CustomerRenderingQuotaService,
@@ -22,6 +24,7 @@ export class VisitorRenderingsController extends BaseController {
   constructor(
     private readonly configuredService?: QuotaService,
     private readonly configuredCatalog?: CatalogService,
+    private readonly configuredInputs?: CustomerRenderingInputsPort,
   ) {
     super("customer_rendering_quota_accounts");
   }
@@ -62,8 +65,33 @@ export class VisitorRenderingsController extends BaseController {
     );
   }
 
+
+  @Post("/visitor/renderings/uploads:intent", { tenantServiceAccess: "session" })
+  async createInputIntent(request: FastifyRequest) {
+    const parsed = RenderingUploadIntentRequestSchema.safeParse(request.body ?? {});
+    if (!parsed.success) throw Errors.fromZod(parsed.error);
+    const query = EmptyQuerySchema.safeParse(request.query ?? {});
+    if (!query.success) throw Errors.fromZod(query.error);
+    return ResponseHandler.success(await this.inputs.createIntent(request.user, "wechat", parsed.data));
+  }
+
+  @Post("/visitor/renderings/uploads/:id/complete", { tenantServiceAccess: "session" })
+  async completeInput(request: FastifyRequest) {
+    const params = StyleParamsSchema.safeParse(request.params);
+    if (!params.success) throw Errors.fromZod(params.error);
+    const body = RenderingUploadCompleteRequestSchema.safeParse(request.body === undefined ? {} : request.body);
+    if (!body.success) throw Errors.fromZod(body.error);
+    const query = EmptyQuerySchema.safeParse(request.query ?? {});
+    if (!query.success) throw Errors.fromZod(query.error);
+    return ResponseHandler.success(await this.inputs.complete(request.user, "wechat", params.data.id));
+  }
+
   private get service(): QuotaService {
     return this.configuredService ?? createCustomerRenderingQuotaService();
+  }
+
+  private get inputs(): CustomerRenderingInputsPort {
+    return this.configuredInputs ?? createCustomerRenderingInputsService();
   }
 
   private get catalog(): CatalogService {

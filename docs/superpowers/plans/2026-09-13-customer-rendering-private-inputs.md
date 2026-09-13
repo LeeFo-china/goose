@@ -228,6 +228,10 @@ export interface CustomerInputStoragePort {
 
 ## Task 5: 共享 service 与双端 HTTP
 
+**实现记录（2026-09-13）：** 已实现共享上传 service、两端 session 路由与精确 POST 鉴权白名单。service 红灯为新模块缺失（0 pass / 1 fail）；controller 红灯为路由缺失（6 pass / 4 fail），补路由后微信仍 401，根因为 visitor 白名单未接新入口；增加精确 uploads matcher 后通过。补充无效签名期限和 null complete body 的红灯后分别修复为包装的 502 与严格 400。最终相关 service/controller/auth、仓储、网关与真实图片规范化回归为 116 pass / 0 fail / 897 assertions。
+
+**频控上线门槛：** 当前 10 分钟 3 个、上海本地自然日 10 个为 countRecent → createIssued 预检查，非原子限额，并发请求可能超出阈值；不能宣称严格最大值。公开或付费上线前必须通过独立 migration/RPC 实现原子预占并验证并发。Task 5 不新增或应用 migration，不进行真实 COS/AI 调用；原图清理由账本 raw_cleanup_after 保留待办，Task 6 尚未执行。
+
 **Task 4 消费约束：** 使用上述持久位置签发流程。Content-Type 不受 SDK 签名保护，因此 HEAD/实际解码都不可省略；任一不匹配不得进入 pending_review。构建 normalized 位置时沿用账本 bucket/region，只用网关生成的规范键。恢复 processing 先重读 raw 并确定性规范化，用 `hasNormalized` 核对字节摘要后提交账本；`NORMALIZED_UNKNOWN` 不调用 markFailed、不删除对象、不盲目覆盖，保留有效恢复路径。未知对象即使 HEAD 404 也只能用 forbid-overwrite 写入；冲突或未知结果继续保留处理状态。
 
 **Files:** Create `apps/api/src/services/customer-rendering/inputs.ts` and `.test.ts`; Modify `apps/api/src/services/customer-rendering/index.ts`, `apps/api/src/errors/error-codes.ts`, both rendering controllers and their tests; Modify `apps/api/src/schema/customer-renderings.ts` only if API-local path/query parsing needs it.
