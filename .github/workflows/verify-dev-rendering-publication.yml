@@ -1,6 +1,11 @@
 name: Verify Development Rendering Publication
 
 on:
+  workflow_call:
+    inputs:
+      confirm_dev_project_ref:
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       confirm_dev_project_ref:

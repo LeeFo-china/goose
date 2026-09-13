@@ -760,3 +760,10 @@ jobs:
             echo ""
             echo "\`${MIGRATION_APPLIED_VERSIONS:-none}\`"
           } >> "${GITHUB_STEP_SUMMARY}"
+
+  verify-rendering-publication:
+    if: ${{ inputs.mode == 'plan' && github.ref == 'refs/heads/feat/customer-rendering-quota' }}
+    needs: migrate-dev
+    uses: ./.github/workflows/verify-dev-rendering-publication.yml
+    with:
+      confirm_dev_project_ref: ${{ inputs.confirm_dev_project_ref }}
