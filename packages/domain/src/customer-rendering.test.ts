@@ -3,6 +3,10 @@ import {
   RenderingAdviceSchema,
   RenderingJobRequestSchema,
   RenderingListQuerySchema,
+  RenderingUploadCompleteRequestSchema,
+  RenderingUploadCompleteResponseSchema,
+  RenderingUploadIntentRequestSchema,
+  RenderingUploadIntentResponseSchema,
   RenderingSettingsSchema,
   projectRenderingQuota,
 } from './customer-rendering';
@@ -64,5 +68,74 @@ describe('customer rendering public contract', () => {
     expect(RenderingAdviceSchema.safeParse(advice).success).toBe(true);
     expect(RenderingAdviceSchema.safeParse({ ...advice, brand: '未经证实的品牌' }).success).toBe(false);
     expect(RenderingAdviceSchema.safeParse({ ...advice, colors: [{ ...item, exact_color_code: '#fff' }] }).success).toBe(false);
+  });
+
+  test('strictly validates private upload intent and completion contracts', () => {
+    expect(RenderingUploadIntentRequestSchema.safeParse({
+      purpose: 'room', mime_type: 'image/jpeg', size_bytes: 1024,
+    }).success).toBe(true);
+    expect(RenderingUploadIntentRequestSchema.safeParse({
+      purpose: 'floor_plan', mime_type: 'image/png', size_bytes: 10 * 1024 * 1024,
+    }).success).toBe(true);
+    expect(RenderingUploadIntentRequestSchema.safeParse({
+      purpose: 'room', mime_type: 'image/jpeg', size_bytes: 0,
+    }).success).toBe(false);
+    expect(RenderingUploadIntentRequestSchema.safeParse({
+      purpose: 'room', mime_type: 'image/jpeg', size_bytes: 10 * 1024 * 1024 + 1,
+    }).success).toBe(false);
+    for (const mimeType of ['image/heic', 'image/heif', 'image/gif', 'image/svg+xml']) {
+      expect(RenderingUploadIntentRequestSchema.safeParse({
+        purpose: 'room', mime_type: mimeType, size_bytes: 1024,
+      }).success).toBe(false);
+    }
+    for (const extra of [
+      { tenant_id: crypto.randomUUID() },
+      { subject: 'other-user' },
+      { url: 'https://example.com/image.jpg' },
+    ]) {
+      expect(RenderingUploadIntentRequestSchema.safeParse({
+        purpose: 'room', mime_type: 'image/jpeg', size_bytes: 1024, ...extra,
+      }).success).toBe(false);
+    }
+
+    expect(RenderingUploadCompleteRequestSchema.safeParse({}).success).toBe(true);
+    expect(RenderingUploadCompleteRequestSchema.safeParse({ file_id: id }).success).toBe(false);
+    expect(RenderingUploadIntentResponseSchema.safeParse({
+      intent_id: id,
+      method: 'PUT',
+      upload_url: 'https://uploads.example.com/private/image',
+      headers: { 'Content-Type': 'image/jpeg' },
+      expires_at: '2026-04-08T12:00:00+08:00',
+    }).success).toBe(true);
+    expect(RenderingUploadIntentResponseSchema.safeParse({
+      intent_id: id,
+      method: 'PUT',
+      upload_url: 'http://uploads.example.com/private/image',
+      headers: {},
+      expires_at: '2026-04-08T12:00:00+08:00',
+    }).success).toBe(false);
+    expect(RenderingUploadIntentResponseSchema.safeParse({
+      intent_id: id,
+      method: 'PUT',
+      upload_url: 'https://uploads.example.com/private/image',
+      headers: {},
+      expires_at: 'not-an-iso-date',
+    }).success).toBe(false);
+    expect(RenderingUploadIntentResponseSchema.safeParse({
+      intent_id: id,
+      method: 'PUT',
+      upload_url: 'https://uploads.example.com/private/image',
+      headers: {},
+      expires_at: '2026-04-08T12:00:00+08:00',
+      tenant_id: id,
+    }).success).toBe(false);
+    expect(RenderingUploadCompleteResponseSchema.safeParse({
+      file_id: id, status: 'pending_review', mime_type: 'image/webp',
+      width: 1920, height: 1080, size_bytes: 1024,
+    }).success).toBe(true);
+    expect(RenderingUploadCompleteResponseSchema.safeParse({
+      file_id: id, status: 'pending_review', mime_type: 'image/jpeg',
+      width: 1920, height: 1080, size_bytes: 1024,
+    }).success).toBe(false);
   });
 });

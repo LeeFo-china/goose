@@ -11,6 +11,30 @@ export const RENDERING_STYLE_VALUES = [
   'natural_wood', 'american', 'french', 'wabi_sabi',
 ] as const;
 
+export const RenderingUploadPurposeSchema = z.enum(['room', 'floor_plan']);
+export const RenderingUploadMimeSchema = z.enum(['image/jpeg', 'image/png', 'image/webp']);
+export const RenderingUploadIntentRequestSchema = z.strictObject({
+  purpose: RenderingUploadPurposeSchema,
+  mime_type: RenderingUploadMimeSchema,
+  size_bytes: z.number().int().min(1).max(RENDERING_UPLOAD_MAX_BYTES),
+});
+export const RenderingUploadCompleteRequestSchema = z.strictObject({});
+export const RenderingUploadIntentResponseSchema = z.strictObject({
+  intent_id: z.uuid(),
+  method: z.literal('PUT'),
+  upload_url: z.url({ protocol: /^https$/ }),
+  headers: z.record(z.string(), z.string()),
+  expires_at: z.iso.datetime({ offset: true }),
+});
+export const RenderingUploadCompleteResponseSchema = z.strictObject({
+  file_id: z.uuid(),
+  status: z.literal('pending_review'),
+  mime_type: z.literal('image/webp'),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+  size_bytes: z.number().int().positive(),
+});
+
 const CountSchema = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
 const TextSchema = z.string().trim().min(1).max(300);
 const SpaceSchema = z.enum(RENDERING_SPACE_VALUES);
@@ -84,6 +108,10 @@ const QuotaProjectionInputSchema = z.strictObject({
 
 export type RenderingQuota = z.infer<typeof RenderingQuotaSchema>;
 export type RenderingJobRequest = z.infer<typeof RenderingJobRequestSchema>;
+export type RenderingUploadIntentRequest = z.infer<typeof RenderingUploadIntentRequestSchema>;
+export type RenderingUploadCompleteRequest = z.infer<typeof RenderingUploadCompleteRequestSchema>;
+export type RenderingUploadIntentResponse = z.infer<typeof RenderingUploadIntentResponseSchema>;
+export type RenderingUploadCompleteResponse = z.infer<typeof RenderingUploadCompleteResponseSchema>;
 export type RenderingStyleInput = z.infer<typeof RenderingStyleInputSchema>;
 export type RenderingSettings = z.infer<typeof RenderingSettingsSchema>;
 export type RenderingAdvice = z.infer<typeof RenderingAdviceSchema>;
