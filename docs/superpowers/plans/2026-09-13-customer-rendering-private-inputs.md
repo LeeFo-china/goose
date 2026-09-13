@@ -270,6 +270,10 @@ async createInputIntent(request: FastifyRequest) {
 
 ## Task 6: 清理、交接与发布前门禁
 
+**实现记录（2026-09-13）：** Step 1–4 已完成。先评估既有 `gooes-cos-reconcile-worker`：复用 API 镜像及现有入口，在原 tick 的 finally 中 await 独立清理子任务，旧 reconcile 失败不跳过清理；保持不重叠和既有默认 10 分钟周期，不新增 compose service/Redis/队列。新 `CUSTOMER_RENDERING_INPUT_CLEANUP_ENABLED` 默认 false，原 apply=false 时仅 bounded scan，不领取、不删除；原 worker enabled=false 仍关闭所有子任务。每轮最多 100 条，5 分钟 claim fencing；查询采用仓储现有 `<= now` 到期边界。compose 仅补充 opt-in 配置说明，未部署。
+
+Worker 首次红灯为模块缺失（0 pass / 1 fail）；worker + repository 22 pass / 0 fail / 370 assertions，覆盖并发、有效处理保护、失败重试、过期清理租约和单次 bounded scan。变更范围回归（含 Fastify controllers、service/context/quota、仓储、网关与图片规范化）113 pass / 0 fail / 785 assertions；`bun run api:typecheck` 与 `bun run api:build` exit 0。交接文档 `docs/integration/customer-rendering-private-inputs-api.md` 明列代码尚未发布、migration 尚未应用、SDK Content-Type 不签名、双端真机/COS policy/CORS 待验、best-effort 3/10 频控、原子预占与 normalized 孤儿对账/保留策略等公开上线门槛。orange 仅只读参考，两个客户端 UI 未修改；没有 Task 7 或云端操作。
+
 **Files:** Create `apps/api/src/workers/customer-rendering-input-cleanup-worker.ts` and `.test.ts`; Create `docs/integration/customer-rendering-private-inputs-api.md`.
 
 - [ ] **Step 1: 写清理红灯测试。** 只扫描 `raw_deleted_at IS NULL AND raw_cleanup_after < now()` 的行，分页或有界批次领取（每批最多 100）。每条先用 `claimRawCleanup` 条件匹配原 `raw_cleanup_after` 并推进 5 分钟作为租约，只有领取成功者删除；对 `issued` 过期行标记 `deleted`；`processing` 仅在 `processing_lease_expires_at < now()` 时处理；`pending_review/approved` 只清理 raw，不碰 normalized 成品。某对象删除失败保留行供下次重试。不要全表扫描。

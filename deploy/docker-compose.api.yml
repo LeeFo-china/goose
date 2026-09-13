@@ -77,6 +77,8 @@ services:
       - ${GOOES_API_ENV_FILE:-./.env.api}
     environment:
       SERVICE_NAME: gooes-cos-reconcile-worker
+      # Opt in through env_file only after private-input migration and COS readiness.
+      # CUSTOMER_RENDERING_INPUT_CLEANUP_ENABLED defaults to false in the worker.
       NODE_ENV: production
       GOOES_DEPLOY_ENV: production
     command: ["bun", "src/workers/project-log-comment-cos-reconcile-worker.ts"]

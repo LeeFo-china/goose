@@ -1,4 +1,5 @@
 import { setTimeout as sleep } from "node:timers/promises";
+import { runCustomerRenderingInputCleanupTick } from "./customer-rendering-input-cleanup-worker";
 import {
   reconcileProjectLogCosObjects,
   summarizeProjectLogCosReconcile,
@@ -58,6 +59,7 @@ function getWorkerConfig() {
   return {
     enabled: parseBooleanEnv("PROJECT_LOG_COMMENT_COS_RECONCILE_WORKER_ENABLED", true),
     apply: parseBooleanEnv("PROJECT_LOG_COMMENT_COS_RECONCILE_APPLY", true),
+    privateInputCleanupEnabled: parseBooleanEnv("CUSTOMER_RENDERING_INPUT_CLEANUP_ENABLED", false),
     intervalMs: parseNumberEnv(
       "PROJECT_LOG_COMMENT_COS_RECONCILE_INTERVAL_MS",
       10 * 60 * 1000,
@@ -152,6 +154,12 @@ async function tick() {
       error: error instanceof Error ? error.message : String(error),
     });
   } finally {
+    // Await the independent child even if legacy reconciliation failed; never overlap ticks.
+    const privateInputs = await runCustomerRenderingInputCleanupTick({
+      enabled: config.privateInputCleanupEnabled,
+      apply: config.apply,
+    });
+    if (privateInputs) log(privateInputs.failed ? "warn" : "info", "private input cleanup completed", { private_inputs: privateInputs });
     running = false;
   }
 }
