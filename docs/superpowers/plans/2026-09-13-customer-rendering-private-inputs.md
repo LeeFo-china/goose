@@ -8,6 +8,8 @@
 
 **Tech Stack:** Bun、TypeScript、Fastify、Zod、Supabase/PostgreSQL migration、Tencent COS SDK `cos-nodejs-sdk-v5`、Sharp。
 
+**执行状态（2026-09-13）：** Tasks 1–6 的代码、测试与交接文档已在独立分支完成；以下复选框保留原始实施步骤，具体结果见各 Task 的实现记录。migration runner 的目标库 plan/apply、真实 COS/数据库联调和发布均未执行。
+
 ---
 
 ## 范围与依赖
@@ -230,7 +232,7 @@ export interface CustomerInputStoragePort {
 
 **实现记录（2026-09-13）：** 已实现共享上传 service、两端 session 路由与精确 POST 鉴权白名单。service 红灯为新模块缺失（0 pass / 1 fail）；controller 红灯为路由缺失（6 pass / 4 fail），补路由后微信仍 401，根因为 visitor 白名单未接新入口；增加精确 uploads matcher 后通过。补充无效签名期限和 null complete body 的红灯后分别修复为包装的 502 与严格 400。最终相关 service/controller/auth、仓储、网关与真实图片规范化回归为 116 pass / 0 fail / 897 assertions。
 
-**频控上线门槛：** 当前 10 分钟 3 个、上海本地自然日 10 个为 countRecent → createIssued 预检查，非原子限额，并发请求可能超出阈值；不能宣称严格最大值。公开或付费上线前必须通过独立 migration/RPC 实现原子预占并验证并发。Task 5 不新增或应用 migration，不进行真实 COS/AI 调用；原图清理由账本 raw_cleanup_after 保留待办，Task 6 尚未执行。
+**频控上线门槛：** 当前 10 分钟 3 个、上海本地自然日 10 个为 countRecent → createIssued 预检查，非原子限额，并发请求可能超出阈值；不能宣称严格最大值。公开或付费上线前必须通过独立 migration/RPC 实现原子预占并验证并发。Task 5 未新增或应用 migration，也未进行真实 COS/AI 调用；Task 6 已实现默认关闭的原图清理，启用仍须按发布门禁另行操作。
 
 **Task 4 消费约束：** 使用上述持久位置签发流程。Content-Type 不受 SDK 签名保护，因此 HEAD/实际解码都不可省略；任一不匹配不得进入 pending_review。构建 normalized 位置时沿用账本 bucket/region，只用网关生成的规范键。恢复 processing 先重读 raw 并确定性规范化，用 `hasNormalized` 核对字节摘要后提交账本；`NORMALIZED_UNKNOWN` 不调用 markFailed、不删除对象、不盲目覆盖，保留有效恢复路径。未知对象即使 HEAD 404 也只能用 forbid-overwrite 写入；冲突或未知结果继续保留处理状态。
 
@@ -285,4 +287,4 @@ Worker 首次红灯为模块缺失（0 pass / 1 fail）；worker + repository 22
 
 本计划完成后，客户端可以私有上传一张房间照或户型图并取得 owner-bound `file_id`，但页面必须保持生图按钮关闭，因为文件只到 `pending_review`。后续任务准入计划必须验证内容审核通过、同租户/本人归属、素材仍发布、额度 RPC 原子预占和租户预算；Worker 计划再处理方舟生成、私有结果和建议。两个小程序共享相同业务字段与状态，微信仓库由微信团队独立修改、测试和发布。
 
-发布前必须先明确唯一待执行 migration；使用仓库批准的 migration workflow `plan → apply`，随后 `supabase migration list` 验证 Local/Remote 对齐。破坏性回滚不用 DROP；关闭新上传入口，保留现有私有对象与账本，必要修正走 forward migration。正式内容审核未连通前，不把 `pending_review` 当成可生成文件。
+发布前必须先核对目标库的**全部**待执行 migration、顺序及依赖，不假定只有本功能的一条；使用仓库批准的 migration workflow `plan → apply`，随后 `supabase migration list` 验证 Local/Remote 对齐。破坏性回滚不用 DROP；关闭新上传入口，保留现有私有对象与账本，必要修正走 forward migration。正式内容审核未连通前，不把 `pending_review` 当成可生成文件。

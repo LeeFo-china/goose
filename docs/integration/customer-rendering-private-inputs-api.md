@@ -73,7 +73,7 @@ raw_cleanup_after 默认创建后 24 小时。清理复用 `gooes-cos-reconcile-
 
 启用顺序（尚未执行）：
 
-1. 明确唯一待应用 migration `20260913035110`，走批准的 migration `plan → apply`，随后 `supabase migration list` 核对 Local/Remote；本任务不 apply。
+1. 对目标库运行 migration plan，列出并审查**全部**待应用版本，确认 `20260913035110` 的顺序、依赖和目标环境；按批准流程 apply 后用 `supabase migration list` 核对 Local/Remote。本任务不 apply，不能假定目标库只有这一条待执行版本。
 2. 完成真实 COS 私有 bucket policy、CORS/平台必传头、禁止覆盖与旧位置访问 smoke；按既有镜像发布流程发布 API 和复用镜像的 COS worker。
 3. 在对应 compose env_file 配置 `PROJECT_LOG_COMMENT_COS_RECONCILE_WORKER_ENABLED=true`、`CUSTOMER_RENDERING_INPUT_CLEANUP_ENABLED=true`、`PROJECT_LOG_COMMENT_COS_RECONCILE_APPLY=false`，先观察 bounded scanned 计数。apply=false 只读，既不领取也不删除；这也令原有 reconcile 为 dry-run，变更前需协调运营窗口。
 4. 具备上线授权后恢复 `PROJECT_LOG_COMMENT_COS_RECONCILE_APPLY=true`；观察 `private_inputs` 的 scanned/claimed/deleted/failed/lost。部署 healthcheck 仅判断进程存活，不保证清理进度，需对持续 failed/lost 和积压告警。
