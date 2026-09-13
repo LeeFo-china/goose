@@ -204,25 +204,31 @@ export interface CustomerRenderingInputsRepositoryPort {
 
 **Files:** Create `apps/api/src/gateways/customer-rendering-input-storage/client.ts`; Test `apps/api/src/gateways/customer-rendering-input-storage/client.test.ts`.
 
-- [ ] **Step 1: 先写网关红灯测试。** 注入 COS mock 和现有 `loadRenderingStorageConfig`：对象键只能是 `private/customer-rendering-inputs/<tenant>/<id>/raw` 与 `/normalized.webp`；PUT 签名只允许该 raw key，绑定 `Content-Length`、`Content-Type`、`x-cos-forbid-overwrite`，最长 10 分钟；HEAD 与流式 GET 发现大小/MIME 不匹配或超过 10 MiB 即拒绝；最终 PUT 必须 `ACL=private`、`ContentType=image/webp`；签名 URL 不入日志/数据库；跨租户 key 直接拒绝。
-- [ ] **Step 2: 运行红灯。** `cd apps/api && bun test src/gateways/customer-rendering-input-storage/client.test.ts`；预期模块缺失失败。
-- [ ] **Step 3: 实现窄接口。** `CustomerRenderingInputStorage` 公开 `rawObjectKey(tenantId,id)`、`normalizedObjectKey(tenantId,id)`、`signPut(tenantId,id,mime,bytes)`、`readRaw(tenantId,id,expectedBytes,expectedMime)`、`putNormalized(tenantId,id,webpBytes)`、`removeRaw(tenantId,id)`；在网关内部按 tenant/id 生成键、校验 COS bucket/region 配置，采用本仓库 `RenderingLibraryStorage` 已使用的 COS SDK 调用形态。service 先用 `rawObjectKey` 创建账本行，再调用 `signPut`，不接受客户端路径。`readRaw` 使用固定上限的流式接收，不根据未经验证的 `Content-Length` 分配无限 Buffer；拒绝重定向或外部 URL，客户端不能传 object key。`putNormalized` 写后 HEAD 核对长度；超时未知须保留对象/账本供恢复，不盲目重复签发同一路径。
+- [x] **Step 1: 先写网关红灯测试。** 注入 COS port；本地真实 SDK 验证签名。对象键只能是 `private/customer-rendering-inputs/<tenant>/<id>/raw` 与 `/normalized.webp`。签名绑定 `Content-Length`、Host、`x-cos-acl=private`、`x-cos-forbid-overwrite=true`，最长 10 分钟。HEAD 验证精确大小/MIME，流式 GET 拒绝超长及短读；规范图私有写入、校验长度/MIME/SHA-256 元数据。
+- [x] **Step 2: 运行红灯。** `cd apps/api && bun test src/gateways/customer-rendering-input-storage/client.test.ts`：先观察真实 SDK 缺少 Content-Type 签名的断言失败，再观察新网关模块缺失（0 pass / 1 fail）。
+- [x] **Step 3: 实现窄接口。** 采用已安装 COS SDK 2.15.4 的 `getAuth({ Headers })`。`getObjectUrl` 类型没有 Headers；`getAuth` 虽接收 Headers，但签名白名单排除 Content-Type。已明确调整合同：Content-Type 是客户端必传请求头，**不是加密绑定的签名头**；HEAD 必须验证声明 MIME/大小，Task 5 的实际解码必须再次验证静态 JPEG/PNG/WebP。不能把签名元数据视为 MIME 绑定。无自定义加密签名或新依赖。
+
+签发流程固定为 `location → createIssued(bucket/region/key) → signPut(..., persistedLocation)`；签名返回相同 location，service 核对后只返回 DTO，绝不持久化签名 URL。后续读、写、HEAD、清理均传数据库记录的位置，只校验位置语法和 tenant/id 规范键，不要求与当前默认 bucket/region 相同。当前凭据仍须可访问旧位置，否则安全失败。`putNormalized` 使用 forbid-overwrite，写后 HEAD 校验 SHA-256 元数据；任何 PUT/验证失败返回 `RENDERING_INPUT_STORAGE_NORMALIZED_UNKNOWN`，保留 processing/对象供租约重领恢复。`hasNormalized` 使用本次确定性规范化字节的摘要校验旧对象；不匹配时不可覆盖或标记完成。
 
 ```ts
 export interface CustomerInputStoragePort {
   rawObjectKey(tenantId: string, id: string): string;
   normalizedObjectKey(tenantId: string, id: string): string;
-  signPut(tenantId: string, id: string, mimeType: string, sizeBytes: number): Promise<{
-    uploadUrl: string; headers: Record<string, string>; expiresAt: string;
+  location(tenantId: string, id: string): Promise<RenderingStorageLocation>;
+  signPut(tenantId: string, id: string, mimeType: string, sizeBytes: number, location?: RenderingStorageLocation): Promise<{
+    location: RenderingStorageLocation; uploadUrl: string; headers: Record<string, string>; expiresAt: string;
   }>;
-  readRaw(tenantId: string, id: string, expectedBytes: number, expectedMime: string): Promise<Buffer>;
-  putNormalized(tenantId: string, id: string, bytes: Buffer): Promise<void>;
-  removeRaw(tenantId: string, id: string): Promise<void>;
+  readRaw(tenantId: string, id: string, location: RenderingStorageLocation, expectedBytes: number, expectedMime: string): Promise<Buffer>;
+  putNormalized(tenantId: string, id: string, location: RenderingStorageLocation, bytes: Buffer): Promise<void>;
+  hasNormalized(tenantId: string, id: string, location: RenderingStorageLocation, bytes: Buffer): Promise<boolean>;
+  removeRaw(tenantId: string, id: string, location: RenderingStorageLocation): Promise<void>;
 }
 ```
-- [ ] **Step 4: 运行测试、类型检查并提交。** 在 `apps/api` 运行 `bun test src/gateways/customer-rendering-input-storage/client.test.ts`，回仓库根目录运行 `bun run api:typecheck`；预期 0 fail、exit 0。提交：`feat(rendering): isolate customer input objects`。
+- [x] **Step 4: 运行测试、类型检查并提交。** 在 `apps/api` 运行 `bun test src/gateways/customer-rendering-input-storage/client.test.ts`：10 pass / 0 fail / 57 assertions；根目录 `bun run api:typecheck` 与 `git diff --check` 验证。提交：`feat(rendering): 隔离客户私有输入存储`。未调用真实云服务；上线前仍需验证私有 bucket policy、客户端 CORS/必传头及真实 COS forbid-overwrite 行为。
 
 ## Task 5: 共享 service 与双端 HTTP
+
+**Task 4 消费约束：** 使用上述持久位置签发流程。Content-Type 不受 SDK 签名保护，因此 HEAD/实际解码都不可省略；任一不匹配不得进入 pending_review。构建 normalized 位置时沿用账本 bucket/region，只用网关生成的规范键。恢复 processing 先重读 raw 并确定性规范化，用 `hasNormalized` 核对字节摘要后提交账本；`NORMALIZED_UNKNOWN` 不调用 markFailed、不删除对象、不盲目覆盖，保留有效恢复路径。未知对象即使 HEAD 404 也只能用 forbid-overwrite 写入；冲突或未知结果继续保留处理状态。
 
 **Files:** Create `apps/api/src/services/customer-rendering/inputs.ts` and `.test.ts`; Modify `apps/api/src/services/customer-rendering/index.ts`, `apps/api/src/errors/error-codes.ts`, both rendering controllers and their tests; Modify `apps/api/src/schema/customer-renderings.ts` only if API-local path/query parsing needs it.
 
