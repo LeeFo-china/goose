@@ -84,10 +84,12 @@ raw_cleanup_after 默认创建后 24 小时。清理复用 `gooes-cos-reconcile-
 
 ## Fastify inject 与客户端 smoke
 
-本地、不联网的回归命令（仓库根目录）：
+本地、不联网的回归命令（从仓库根目录开始，测试需在 apps/api 解析 `@/` 别名）：
 
 ```sh
-bun test apps/api/src/controllers/visitor-renderings/index.test.ts apps/api/src/controllers/douyin-miniapp/renderings-controller.test.ts apps/api/src/services/customer-rendering/inputs.test.ts apps/api/src/repositories/customer-rendering-inputs.test.ts apps/api/src/gateways/customer-rendering-input-storage/client.test.ts apps/api/src/workers/customer-rendering-input-cleanup-worker.test.ts
+cd apps/api
+bun test src/controllers/visitor-renderings/index.test.ts src/controllers/douyin-miniapp/renderings-controller.test.ts src/services/customer-rendering/inputs.test.ts src/repositories/customer-rendering-inputs.test.ts src/gateways/customer-rendering-input-storage/client.test.ts src/workers/customer-rendering-input-cleanup-worker.test.ts
+cd ../..
 bun run api:typecheck
 bun run api:build
 ```
