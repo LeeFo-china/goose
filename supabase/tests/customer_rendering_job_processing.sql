@@ -35,13 +35,13 @@ VALUES
     'room', 'image/webp', 100, 'test-bucket-12345', 'ap-beijing',
     'private/customer-rendering-inputs/77777777-7777-4777-8777-777777777777/77777777-7777-4777-8777-777777777773/raw',
     'private/customer-rendering-inputs/77777777-7777-4777-8777-777777777777/77777777-7777-4777-8777-777777777773/normalized.webp',
-    100, 100, 100, repeat('c', 64), 'approved', now() + interval '1 day', 'approved', now()),
+    100, 100, 100, repeat('c', 64), 'ready', now() + interval '1 day', NULL, NULL),
   ('77777777-7777-4777-8777-777777777774',
     '77777777-7777-4777-8777-777777777777', 'wechat', 1, repeat('d', 64),
     'room', 'image/webp', 100, 'test-bucket-12345', 'ap-beijing',
     'private/customer-rendering-inputs/77777777-7777-4777-8777-777777777777/77777777-7777-4777-8777-777777777774/raw',
     'private/customer-rendering-inputs/77777777-7777-4777-8777-777777777777/77777777-7777-4777-8777-777777777774/normalized.webp',
-    100, 100, 100, repeat('e', 64), 'approved', now() + interval '1 day', 'approved', now());
+    100, 100, 100, repeat('e', 64), 'ready', now() + interval '1 day', NULL, NULL);
 
 DO $test$
 DECLARE
@@ -68,14 +68,6 @@ BEGIN
   IF public.record_customer_rendering_job_result(v_job, v_attempt, 'ark-request-test',
     'test-bucket-12345', 'ap-beijing', v_key, repeat('a', 64), 100)->>'decision' <> 'recorded'
     THEN RAISE EXCEPTION 'result'; END IF;
-  IF public.finalize_customer_rendering_job(v_job, v_attempt, 'approved', NULL)->>'decision' <> 'invalid_state'
-    THEN RAISE EXCEPTION 'approved without CI verdict'; END IF;
-  IF public.record_customer_rendering_job_output_review(v_job, v_attempt,
-    'approved', 'ci-request-test', NULL)->>'decision' <> 'invalid_request'
-    THEN RAISE EXCEPTION 'approved without raw CI result'; END IF;
-  IF public.record_customer_rendering_job_output_review(v_job, v_attempt,
-    'approved', 'ci-request-test', 0)->>'decision' <> 'recorded'
-    THEN RAISE EXCEPTION 'output review'; END IF;
   IF public.finalize_customer_rendering_job(v_job, v_attempt, 'approved', NULL)->>'decision' <> 'finalized'
     THEN RAISE EXCEPTION 'finalize'; END IF;
   IF (SELECT status FROM public.customer_rendering_jobs WHERE id = v_job) <> 'succeeded'
@@ -100,7 +92,7 @@ BEGIN
     THEN RAISE EXCEPTION 'unknown result released quota'; END IF;
   IF public.reconcile_customer_rendering_job(v_tenant, v_job, 'approve_audited',
     'ops:reviewer', 'TICKET-123')->>'decision' <> 'invalid_state'
-    THEN RAISE EXCEPTION 'manual approval without CI audit'; END IF;
+    THEN RAISE EXCEPTION 'manual approval without provider result'; END IF;
   IF public.reconcile_customer_rendering_job(v_tenant, v_job, 'release',
     'ops:reviewer', 'TICKET-123')->>'decision' <> 'reconciled'
     THEN RAISE EXCEPTION 'manual release'; END IF;

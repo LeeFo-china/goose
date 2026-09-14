@@ -51,6 +51,9 @@ export class CustomerRenderingJobStatusService implements CustomerRenderingJobSt
     const response = RenderingJobStatusResponseSchema.safeParse({
       job_id: row.id, status: row.status, created_at: row.created_at, updated_at: row.updated_at,
       finished_at: row.finished_at, result,
+      failure_reason: row.status !== 'failed' ? null
+        : row.failure_code === 'ARK_CONTENT_REJECTED' ? 'content_rejected'
+          : row.failure_code === 'ARK_UPSTREAM_REJECTED' ? 'provider_rejected' : null,
     });
     if (!response.success) throw Errors.dbError('客户生图任务响应无效');
     return response.data;

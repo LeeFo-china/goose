@@ -13,7 +13,8 @@ const owner: CustomerInputOwner = { tenantId: '11111111-1111-4111-8111-111111111
 const id = '33333333-3333-4333-8333-333333333333';
 const row = { id, status: 'queued' as const, created_at: '2026-09-14T00:00:00Z',
   updated_at: '2026-09-14T00:00:00Z', finished_at: null, attempt_id: null,
-  output_review_decision: null, result_bucket: null, result_region: null,
+  failure_code: null,
+  result_bucket: null, result_region: null,
   result_object_key: null, result_sha256: null, result_size_bytes: null };
 
 function fixture(data: unknown) {

@@ -28,8 +28,8 @@ function resolveManual(mode: "build" | "deploy", service: string) {
 }
 
 describe("H5 development build plan", () => {
-  test("resolves customer rendering workers only when explicitly selected", () => {
-    for (const service of ["customer-rendering-input-review-worker", "customer-rendering-job-worker"]) {
+  test("resolves customer rendering job worker only when explicitly selected", () => {
+    for (const service of ["customer-rendering-job-worker"]) {
       const build = resolveManual("build", service);
       const deploy = resolveManual("deploy", service);
       expect(build.exitCode).toBe(0);
@@ -43,7 +43,6 @@ describe("H5 development build plan", () => {
       })).toEqual(plan);
     }
     const all = resolveManual("deploy", "all").stdout.toString();
-    expect(all).not.toContain("customer-rendering-input-review-worker");
     expect(all).not.toContain("customer-rendering-job-worker");
   });
 
@@ -174,7 +173,7 @@ describe("H5 development hostname cutover", () => {
     );
 
     expect(workflow).toContain(
-      "options: [api, admin, h5, web, social-video-worker, cos-reconcile-worker, billing-reconcile-worker, customer-rendering-input-review-worker, customer-rendering-job-worker]",
+      "options: [api, admin, h5, web, social-video-worker, cos-reconcile-worker, billing-reconcile-worker, customer-rendering-job-worker]",
     );
     expect(workflow).toContain(
       "h5) DEPLOY_SERVICES=h5; MANIFEST_SERVICE=h5 ;;",

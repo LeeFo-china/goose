@@ -111,6 +111,19 @@ test('explicit Ark 4xx rejection releases quota, while unknown submission never 
   expect(ambiguous.repository.finalize).not.toHaveBeenCalled();
 });
 
+test('explicit Ark content-policy refusal releases the reservation with a distinct failure code', async () => {
+  for (const status of [400, undefined]) {
+    const f = fixture();
+    f.generate.mockRejectedValue(arkGatewayError('rejected', status,
+      { upstreamCode: 'ContentPolicyViolation' }));
+    await runTick(f.dependencies, true);
+    expect(f.repository.finalize).toHaveBeenCalledWith(jobId, attemptId,
+      'provider_rejected', 'ARK_CONTENT_REJECTED');
+    expect(f.repository.markReviewRequired).not.toHaveBeenCalled();
+    expect(f.generate).toHaveBeenCalledTimes(1);
+  }
+});
+
 test('preflight and lost submission intent never call the paid provider', async () => {
   const failed = fixture(); failed.prepare.mockRejectedValue(Error('input signature unavailable'));
   await runTick(failed.dependencies, true);

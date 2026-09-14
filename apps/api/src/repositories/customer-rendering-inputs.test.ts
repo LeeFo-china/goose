@@ -227,22 +227,6 @@ describe('CustomerRenderingInputsRepository', () => {
     for (const limit of [0, -1, NaN, 1.5]) await expect(db.repository.listRawCleanupDue(NOW, limit)).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
 
-  test('review queue is bounded and each decision requires the claimed due token', async () => {
-    const db = database([row({ status: 'pending_review', review_due_at: PAST,
-      normalized_object_key: normalized.objectKey, normalized_size_bytes: 100,
-      width: 20, height: 10, checksum: normalized.checksum })]);
-    expect(await db.repository.listReviewDue(NOW, 100)).toHaveLength(1);
-    expect(db.requests[0]?.url.searchParams.get('limit')).toBe('25');
-    expect(db.requests[0]?.url.searchParams.get('select')).toBe(
-      'id,tenant_id,bucket,region,normalized_object_key,review_due_at,review_attempts');
-    expect(await db.repository.claimReview(ID, ID, PAST, LEASE, 0, NOW)).toBe(true);
-    expect(await db.repository.claimReview(ID, ID, PAST, LEASE, 0, NOW)).toBe(false);
-    expect(await db.repository.markReviewed(ID, ID, PAST, 'approved')).toBe(false);
-    expect(await db.repository.markReviewed(ID, ID, LEASE, 'approved')).toBe(true);
-    expect(db.rows[0]?.status).toBe('approved');
-    expect(await db.repository.listReviewDue(FUTURE, 25)).toHaveLength(0);
-  });
-
   test('cleanup claims compare due and status and fence expired uploads before deletion', async () => {
     for (const status of ['issued', 'processing', 'pending_review', 'approved'] as const) {
       const db = database([row({ status, raw_cleanup_after: PAST, expires_at: PAST, processing_lease_expires_at: PAST })]);

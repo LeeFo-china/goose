@@ -4,7 +4,6 @@ const REQUESTED_ORDER = [
   "social-video-worker",
   "cos-reconcile-worker",
   "billing-reconcile-worker",
-  "customer-rendering-input-review-worker",
   "customer-rendering-job-worker",
 ];
 // Rendering workers exit while disabled and must be selected explicitly after their env gates are ready.
@@ -46,7 +45,6 @@ const resolvedServices = mode === "requested"
       ? requestedServices.has("api")
         || requestedServices.has("cos-reconcile-worker")
         || requestedServices.has("billing-reconcile-worker")
-        || requestedServices.has("customer-rendering-input-review-worker")
         || requestedServices.has("customer-rendering-job-worker")
       : requestedServices.has(service)
   );

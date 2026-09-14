@@ -438,7 +438,7 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
         const progress = await dependencies.fetchRenderingJobStatus(dependencies.getApp().api, id);
         if (!this.visible || epoch !== this.jobEpoch || this.recovery.jobId !== id) return;
         this.setData({ jobStatus: progress.status, resultUrl: progress.result?.url ?? "",
-          resultImageFailed: false, jobMessage: jobProgressMessage(progress.status) });
+          resultImageFailed: false, jobMessage: jobProgressMessage(progress.status, progress.failureReason) });
         this.stopJobPolling();
         if ((progress.status === "queued" || progress.status === "processing") && this.jobPolls < 24) {
           this.jobPolls++;
@@ -597,11 +597,13 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
 type UploadStatus = "idle" | "selecting" | "signing" | "uploading" | "confirming"
   | "checking" | "ready" | "retry_complete" | "error";
 
-function jobProgressMessage(status: RenderingJobStatus): string {
+function jobProgressMessage(status: RenderingJobStatus, failureReason?: 'content_rejected' | 'provider_rejected' | null): string {
   if (status === "queued") return "任务排队中，页面会自动更新进度";
   if (status === "processing") return "AI 参考效果图生成中，页面会自动更新进度";
   if (status === "succeeded") return "AI 参考效果图已完成";
   if (status === "review_required") return "任务结果需人工核对，请稍后刷新进度";
+  if (failureReason === 'content_rejected') return "模型未接受当前图片或描述，请更换后重试";
+  if (failureReason === 'provider_rejected') return "模型服务未接受本次请求，请稍后重试";
   return "生成失败，请稍后重试";
 }
 

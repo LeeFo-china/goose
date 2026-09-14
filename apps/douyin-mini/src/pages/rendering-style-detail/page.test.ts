@@ -540,6 +540,30 @@ test("completed upload immediately allows Ark generation and displays the privat
   expect(view.data.resultUrl).toContain("result.webp");
 });
 
+test("Ark content refusal gives a retryable explanation without exposing provider details", async () => {
+  const definition = createRenderingStyleDetailPageDefinition({
+    getApp: () => ({ api: {}, startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
+      recordAnalytics: () => undefined }) as never,
+    fetchPublishedStyleDetail: async () => STYLE,
+    navigateToList: async () => undefined, showToast: () => undefined,
+    choosePrivateImage: async () => { throw new Error("unused"); },
+    createRenderingUploadIntent: async () => { throw new Error("unused"); },
+    putRenderingBytes: async () => undefined,
+    completeRenderingUploadWithRetry: async () => { throw new Error("unused"); },
+    resolveRecoveryIdentity: async () => OWNER,
+    readRenderingRecovery: () => ({ styleId: STYLE.id, roomIntentId: null, floorIntentId: null,
+      roomFileId: STYLE.id, floorFileId: null, jobRequest: null, jobId: STYLE.id, savedAt: Date.now() }),
+    fetchRenderingUploadStatus: async () => ({ fileId: STYLE.id, status: "ready", reviewState: null }),
+    fetchRenderingJobStatus: async () => ({ jobId: STYLE.id, status: "failed", result: null,
+      failureReason: "content_rejected" }),
+  });
+  const view = Object.assign(definition, { setData(patch: Record<string, unknown>) { Object.assign(definition.data, patch); } });
+  view.onLoad({ id: STYLE.id });
+  await flush();
+  expect(view.data.jobMessage).toContain("模型未接受当前图片或描述");
+  expect(view.data.resultUrl).toBe("");
+});
+
 test("unknown job submission keeps the persisted request and retries with its original idempotency key", async () => {
   const saved = new Map<string, unknown>();
   const storage = { read: (key: string) => saved.get(key),

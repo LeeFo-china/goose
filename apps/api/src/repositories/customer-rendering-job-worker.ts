@@ -39,7 +39,7 @@ export interface CustomerRenderingJobWorkerRepositoryPort {
   markSubmitted(jobId: string, attemptId: string, modelCode: string): Promise<z.infer<typeof Submitted>['decision']>;
   recordResult(jobId: string, attemptId: string, result: CustomerRenderingJobResultFact): Promise<z.infer<typeof Recorded>['decision']>;
   markReviewRequired(jobId: string, attemptId: string, failureCode: string): Promise<z.infer<typeof ReviewRequired>['decision']>;
-  finalize(jobId: string, attemptId: string, outcome: 'approved' | 'rejected' | 'failed' | 'provider_rejected', failureCode: string | null): Promise<z.infer<typeof Finalized>>;
+  finalize(jobId: string, attemptId: string, outcome: 'approved' | 'failed' | 'provider_rejected', failureCode: string | null): Promise<z.infer<typeof Finalized>>;
   reconcileExpired(): Promise<number>;
 }
 type RpcClient = { rpc(name: string, params: Record<string, unknown>): PromiseLike<{ data: unknown; error: unknown }> };
@@ -80,7 +80,7 @@ export class CustomerRenderingJobWorkerRepository implements CustomerRenderingJo
       { p_job_id: jobId, p_attempt_id: attemptId, p_failure_code: failureCode }, ReviewRequired);
     return result.decision;
   }
-  finalize(jobId: string, attemptId: string, outcome: 'approved' | 'rejected' | 'failed' | 'provider_rejected', failureCode: string | null): Promise<z.infer<typeof Finalized>> {
+  finalize(jobId: string, attemptId: string, outcome: 'approved' | 'failed' | 'provider_rejected', failureCode: string | null): Promise<z.infer<typeof Finalized>> {
     return this.call('finalize_customer_rendering_job',
       { p_job_id: jobId, p_attempt_id: attemptId, p_outcome: outcome, p_failure_code: failureCode }, Finalized);
   }

@@ -16,8 +16,11 @@ test('ready means normalized input, not a forged CI approval', () => {
 test('job success and operator reconciliation require a durable Ark result without COS review', () => {
   expect(sql).toContain('CREATE OR REPLACE FUNCTION public.finalize_customer_rendering_job(');
   expect(sql).toContain('CREATE OR REPLACE FUNCTION public.reconcile_customer_rendering_job(');
+  expect(sql).toContain('DROP FUNCTION public.record_customer_rendering_job_output_review(uuid, uuid, text, text, integer)');
+  expect(sql).toContain("WHERE status = 'processing' LIMIT 1");
   expect(sql).toContain("v_job.provider_state <> 'response_received'");
   expect(sql).toContain('v_job.result_sha256 IS NULL');
   expect(sql).not.toContain("v_job.output_review_decision IS DISTINCT FROM 'approved'");
+  expect(sql).not.toContain("p_outcome = 'rejected'");
   expect(sql).toMatch(/^BEGIN;.*COMMIT;$/);
 });

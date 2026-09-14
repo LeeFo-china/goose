@@ -5,6 +5,16 @@ BEGIN;
 SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '60s';
 
+-- The old worker can still call the CI RPC after Ark returns. Drain it before
+-- replacing that RPC so no paid in-flight attempt loses its settlement path.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM public.customer_rendering_jobs WHERE status = 'processing' LIMIT 1) THEN
+    RAISE EXCEPTION 'drain processing customer rendering jobs before Ark safety migration';
+  END IF;
+END;
+$$;
+
 ALTER TABLE public.customer_rendering_inputs
   DROP CONSTRAINT customer_rendering_inputs_status_check,
   ADD CONSTRAINT customer_rendering_inputs_status_check CHECK
@@ -199,7 +209,7 @@ DECLARE
   v_settlement text;
 BEGIN
   IF p_job_id IS NULL OR p_attempt_id IS NULL OR p_outcome IS NULL OR p_outcome NOT IN
-    ('approved', 'rejected', 'failed', 'provider_rejected')
+    ('approved', 'failed', 'provider_rejected')
     OR char_length(coalesce(p_failure_code, '')) > 120 THEN
     RETURN jsonb_build_object('decision', 'invalid_request');
   END IF;
@@ -212,10 +222,6 @@ BEGIN
     OR v_job.result_bucket IS NULL OR v_job.result_region IS NULL
     OR v_job.result_object_key IS NULL OR v_job.result_sha256 IS NULL
     OR v_job.result_size_bytes IS NULL) THEN
-    RETURN jsonb_build_object('decision', 'invalid_state');
-  END IF;
-  IF p_outcome = 'rejected' AND (v_job.provider_state <> 'response_received'
-    OR v_job.output_review_decision IS DISTINCT FROM 'rejected') THEN
     RETURN jsonb_build_object('decision', 'invalid_state');
   END IF;
   IF p_outcome = 'failed' AND v_job.provider_state <> 'not_started' THEN
@@ -312,6 +318,7 @@ $$;
 
 -- CREATE OR REPLACE retains existing owner and EXECUTE grants; assert the expected
 -- service-only privileges explicitly for this deployment.
+DROP FUNCTION public.record_customer_rendering_job_output_review(uuid, uuid, text, text, integer);
 REVOKE ALL ON FUNCTION public.create_customer_rendering_job(uuid, text, smallint, text,
   text, uuid, smallint, text, uuid, uuid, uuid, text, text, text, uuid, text)
   FROM PUBLIC, anon, authenticated;

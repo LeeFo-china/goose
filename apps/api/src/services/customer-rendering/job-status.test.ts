@@ -13,7 +13,8 @@ const attemptId = '33333333-3333-4333-8333-333333333333';
 const user = { token_type: 'visitor_session', visitor_id: 'visitor', openid: 'openid' } as JwtPayload;
 const base = { id: jobId, status: 'processing' as const, created_at: '2026-09-14T00:00:00Z',
   updated_at: '2026-09-14T00:01:00Z', finished_at: null, attempt_id: attemptId,
-  output_review_decision: null, result_bucket: null, result_region: null,
+  failure_code: null,
+  result_bucket: null, result_region: null,
   result_object_key: null, result_sha256: null, result_size_bytes: null };
 const contextService = { resolveWechat: async () => ({ tenantId, channel: 'wechat' as const,
   subject: 'openid', applicationId: null, installationId: null, verifiedPhone: null }),
@@ -26,9 +27,17 @@ test('processing status exposes no private URL or provider details', async () =>
     repository: { findOwned: async () => base }, storage: { signResultRead } });
   expect(await service.get(user, 'wechat', jobId)).toEqual({
     job_id: jobId, status: 'processing', created_at: base.created_at,
-    updated_at: base.updated_at, finished_at: null, result: null,
+    updated_at: base.updated_at, finished_at: null, result: null, failure_reason: null,
   });
   expect(signResultRead).not.toHaveBeenCalled();
+});
+
+test('failed Ark content refusal exposes only a safe reason, not raw provider details', async () => {
+  const service = new Service({ contextService, digestService,
+    repository: { findOwned: async () => ({ ...base, status: 'failed', failure_code: 'ARK_CONTENT_REJECTED' }) } });
+  expect(await service.get(user, 'wechat', jobId)).toMatchObject({
+    status: 'failed', result: null, failure_reason: 'content_rejected',
+  });
 });
 
 test('stored Ark success receives a short-lived private result link without a CI verdict', async () => {
@@ -39,7 +48,7 @@ test('stored Ark success receives a short-lived private result link without a CI
     expiresAt: '2026-09-14T00:10:00Z' }));
   const service = new Service({ contextService, digestService,
     repository: { findOwned: async () => ({ ...base, status: 'succeeded' as const, finished_at: '2026-09-14T00:02:00Z',
-      output_review_decision: null, result_bucket: location.bucket,
+      result_bucket: location.bucket,
       result_region: location.region, result_object_key: location.object_key,
       result_sha256: 'a'.repeat(64), result_size_bytes: 100 }) },
     storage: { signResultRead } });

@@ -1084,8 +1084,6 @@ describe("admin release service resolver", () => {
     ["build", "cos-reconcile-worker", "api"],
     ["requested", "billing-reconcile-worker", "billing-reconcile-worker"],
     ["build", "billing-reconcile-worker", "api"],
-    ["requested", "customer-rendering-input-review-worker", "customer-rendering-input-review-worker"],
-    ["build", "customer-rendering-input-review-worker", "api"],
     ["requested", "customer-rendering-job-worker", "customer-rendering-job-worker"],
     ["build", "customer-rendering-job-worker", "api"],
     ["requested", "admin,api,admin", "api,admin"],
@@ -1112,9 +1110,9 @@ describe("admin release service resolver", () => {
     expect(preflight).toContain("20260914014930");
     expect(preflight).toContain("20260914022533");
     expect(preflight).toContain("20260914034000");
-    expect(preflight).toContain('test "${migration_count}" = 3');
+    expect(preflight).toContain("20260914191000");
+    expect(preflight).toContain('test "${migration_count}" = 4');
     for (const [service, composeName, envName] of [
-      ["customer-rendering-input-review-worker", "gooes-customer-rendering-input-review-worker", "CUSTOMER_RENDERING_INPUT_REVIEW_ENABLED"],
       ["customer-rendering-job-worker", "gooes-customer-rendering-job-worker", "CUSTOMER_RENDERING_JOB_WORKER_ENABLED"],
     ]) {
       expect(apiCompose).toContain(`  ${composeName}:\n    image: \${GOOES_API_IMAGE:?set GOOES_API_IMAGE}`);
@@ -1161,11 +1159,10 @@ describe("admin release service resolver", () => {
       });
     };
     try {
-      expect(run("customer-rendering-job-worker", "3", "CUSTOMER_RENDERING_JOB_WORKER_ENABLED=true\n").exitCode).toBe(0);
-      expect(run("customer-rendering-job-worker", "2", "CUSTOMER_RENDERING_JOB_WORKER_ENABLED=true\n").exitCode).not.toBe(0);
-      expect(run("customer-rendering-job-worker", "3", "CUSTOMER_RENDERING_JOB_WORKER_ENABLED=false\n").exitCode).not.toBe(0);
-      expect(run("customer-rendering-job-worker", "3", "CUSTOMER_RENDERING_JOB_WORKER_ENABLED=true\nCUSTOMER_RENDERING_JOB_WORKER_ENABLED=false\n").exitCode).not.toBe(0);
-      expect(run("customer-rendering-input-review-worker", "3", "CUSTOMER_RENDERING_INPUT_REVIEW_ENABLED=true\n").exitCode).toBe(0);
+      expect(run("customer-rendering-job-worker", "4", "CUSTOMER_RENDERING_JOB_WORKER_ENABLED=true\n").exitCode).toBe(0);
+      expect(run("customer-rendering-job-worker", "3", "CUSTOMER_RENDERING_JOB_WORKER_ENABLED=true\n").exitCode).not.toBe(0);
+      expect(run("customer-rendering-job-worker", "4", "CUSTOMER_RENDERING_JOB_WORKER_ENABLED=false\n").exitCode).not.toBe(0);
+      expect(run("customer-rendering-job-worker", "4", "CUSTOMER_RENDERING_JOB_WORKER_ENABLED=true\nCUSTOMER_RENDERING_JOB_WORKER_ENABLED=false\n").exitCode).not.toBe(0);
       expect(run("api", "0", "").exitCode).toBe(0);
       writeFileSync(join(root, ".env"), "GOOES_API_ENV_FILE=./alternate.env\n");
       const implicitOverride = Bun.spawnSync(["bash", "-c", `${dockerStub}\n${script}`], {

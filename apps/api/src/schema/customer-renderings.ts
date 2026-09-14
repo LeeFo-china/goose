@@ -24,6 +24,7 @@ export const RenderingJobStatusResponseSchema = z.strictObject({
   created_at: z.iso.datetime({ offset: true }),
   updated_at: z.iso.datetime({ offset: true }),
   finished_at: z.iso.datetime({ offset: true }).nullable(),
+  failure_reason: z.enum(['content_rejected', 'provider_rejected']).nullable(),
   result: z.strictObject({
     mime_type: z.literal('image/webp'), size_bytes: z.number().int().positive(),
     download_url: z.url().refine((url) => url.startsWith('https://')),

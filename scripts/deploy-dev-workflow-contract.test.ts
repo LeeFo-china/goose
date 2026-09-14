@@ -59,7 +59,6 @@ const requiredImmutableDeploymentFragments = [
   'social-video-worker) compose_service=gooes-social-video-worker-dev; export GOOES_SOCIAL_VIDEO_WORKER_IMAGE="${DEPLOY_IMAGE_REF}" ;;',
   'cos-reconcile-worker) compose_service=gooes-cos-reconcile-worker-dev; export GOOES_API_IMAGE="${DEPLOY_IMAGE_REF}" ;;',
   'billing-reconcile-worker) compose_service=gooes-billing-reconcile-worker-dev; export GOOES_API_IMAGE="${DEPLOY_IMAGE_REF}" ;;',
-  'customer-rendering-input-review-worker) compose_service=gooes-customer-rendering-input-review-worker-dev; export GOOES_API_IMAGE="${DEPLOY_IMAGE_REF}" ;;',
   'customer-rendering-job-worker) compose_service=gooes-customer-rendering-job-worker-dev; export GOOES_API_IMAGE="${DEPLOY_IMAGE_REF}" ;;',
   'export GOOES_WEB_IMAGE="${DEPLOY_IMAGE_REF}"',
   'configured_image="$(docker inspect -f \'{{.Config.Image}}\' "${container}" 2>/dev/null || true)"',
@@ -72,14 +71,11 @@ const requiredNonWebHealthAssertions = [
   'test "${health}" = healthy',
 ];
 
-test("customer rendering workers require the migration-gated release and enabled switch", () => {
+test("customer rendering job worker requires the migration-gated release and enabled switch", () => {
   expect(workflow).toContain('test "${EVIDENCE_MODE}" = same_run');
   expect(workflow).toContain('test "${EXPECTED_BUILD_WORKFLOW_PATH}" = .github/workflows/release-dev.yml');
-  expect(deployStep).toContain("grep -Eq '^CUSTOMER_RENDERING_INPUT_REVIEW_ENABLED=true$' .env.dev.api");
   expect(deployStep).toContain("grep -Eq '^CUSTOMER_RENDERING_JOB_WORKER_ENABLED=true$' .env.dev.api");
-  expect(deployStep).toContain("grep -Ec '^CUSTOMER_RENDERING_INPUT_REVIEW_ENABLED=' .env.dev.api");
   expect(deployStep).toContain("grep -Ec '^CUSTOMER_RENDERING_JOB_WORKER_ENABLED=' .env.dev.api");
-  expect(devCompose).toContain("gooes-customer-rendering-input-review-worker-dev:");
   expect(devCompose).toContain("gooes-customer-rendering-job-worker-dev:");
 });
 const requiredProjectHealthSmokeFragments = [
@@ -148,7 +144,7 @@ sleep() { :; }
 
 describe("deploy-dev workflow", () => {
   test("keeps the test-login bypass limited to development containers", () => {
-    expect(devCompose.match(/GOOES_DEPLOY_ENV: development/g)).toHaveLength(6);
+    expect(devCompose.match(/GOOES_DEPLOY_ENV: development/g)).toHaveLength(5);
     expect(devCompose).not.toContain("GOOES_DEPLOY_ENV: production");
     expect(productionApiCompose.match(/GOOES_DEPLOY_ENV: production/g)?.length).toBeGreaterThanOrEqual(4);
     expect(productionApiCompose).not.toContain("GOOES_DEPLOY_ENV: development");
@@ -237,9 +233,6 @@ describe("deploy-dev workflow", () => {
     );
     expect(deployStep).toContain(
       'billing-reconcile-worker) compose_service=gooes-billing-reconcile-worker-dev; export GOOES_API_IMAGE="${DEPLOY_IMAGE_REF}" ;;',
-    );
-    expect(deployStep).toContain(
-      'customer-rendering-input-review-worker) compose_service=gooes-customer-rendering-input-review-worker-dev; export GOOES_API_IMAGE="${DEPLOY_IMAGE_REF}" ;;',
     );
     expect(deployStep).toContain(
       'customer-rendering-job-worker) compose_service=gooes-customer-rendering-job-worker-dev; export GOOES_API_IMAGE="${DEPLOY_IMAGE_REF}" ;;',

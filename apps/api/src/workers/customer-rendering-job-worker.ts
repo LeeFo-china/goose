@@ -32,9 +32,9 @@ export interface CustomerRenderingJobWorkerDependencies {
   normalize: typeof normalizeRenderingSource;
   storage: Pick<CustomerRenderingResultStoragePort, 'location' | 'put'>;
 }
-type JobOutcome = 'approved' | 'rejected' | 'failed' | 'providerRejected' | 'reviewRequired' | 'lost';
+type JobOutcome = 'approved' | 'failed' | 'providerRejected' | 'reviewRequired' | 'lost';
 interface TickSummary {
-  reconciled: number; claimed: number; approved: number; rejected: number; failed: number;
+  reconciled: number; claimed: number; approved: number; failed: number;
   providerRejected: number; reviewRequired: number; lost: number;
 }
 
@@ -73,11 +73,10 @@ async function requireReview(dependencies: CustomerRenderingJobWorkerDependencie
 }
 
 async function finalize(dependencies: CustomerRenderingJobWorkerDependencies, claim: ClaimedCustomerRenderingJob,
-  outcome: 'approved' | 'rejected' | 'failed' | 'provider_rejected', failureCode: string | null): Promise<JobOutcome> {
+  outcome: 'approved' | 'failed' | 'provider_rejected', failureCode: string | null): Promise<JobOutcome> {
   const result = await dependencies.repository.finalize(claim.job_id, claim.attempt_id, outcome, failureCode);
   if (result.decision === 'finalized') {
-    return outcome === 'approved' ? 'approved' : outcome === 'rejected' ? 'rejected'
-      : outcome === 'failed' ? 'failed' : 'providerRejected';
+    return outcome === 'approved' ? 'approved' : outcome === 'failed' ? 'failed' : 'providerRejected';
   }
   if (result.decision === 'stale') return 'lost';
   return requireReview(dependencies, claim, 'WORKER_SETTLEMENT_INVALID');
@@ -86,8 +85,16 @@ async function finalize(dependencies: CustomerRenderingJobWorkerDependencies, cl
 function explicitProviderRejection(error: unknown): boolean {
   if (getArkGatewayOutcome(error) !== 'rejected' || !(error instanceof AppError)
     || !error.details || typeof error.details !== 'object') return false;
+  if (contentPolicyRefusal(error)) return true;
   const status = 'upstreamStatus' in error.details ? error.details.upstreamStatus : undefined;
   return typeof status === 'number' && EXPLICIT_REJECTION_STATUSES.has(status);
+}
+
+function contentPolicyRefusal(error: AppError): boolean {
+  const details = error.details;
+  const code = details && typeof details === 'object' && 'upstreamCode' in details
+    ? details.upstreamCode : undefined;
+  return typeof code === 'string' && /^ContentPolicyViolation(?:\.|$)/.test(code);
 }
 
 async function processClaim(dependencies: CustomerRenderingJobWorkerDependencies,
@@ -124,7 +131,8 @@ async function processClaim(dependencies: CustomerRenderingJobWorkerDependencies
   try { provider = await dependencies.generate(prepared.config, prepared.input); }
   catch (error) {
     if (explicitProviderRejection(error)) {
-      try { return await finalize(dependencies, claim, 'provider_rejected', 'ARK_UPSTREAM_REJECTED'); }
+      try { return await finalize(dependencies, claim, 'provider_rejected',
+        error instanceof AppError && contentPolicyRefusal(error) ? 'ARK_CONTENT_REJECTED' : 'ARK_UPSTREAM_REJECTED'); }
       catch { return requireReview(dependencies, claim, 'WORKER_SETTLEMENT_UNAVAILABLE'); }
     }
     return requireReview(dependencies, claim, 'ARK_SUBMISSION_UNKNOWN');
@@ -159,7 +167,7 @@ export async function runCustomerRenderingJobTick(dependencies: CustomerRenderin
   enabled: boolean): Promise<TickSummary | { disabled: true }> {
   if (!enabled) return { disabled: true };
   const summary: TickSummary = { reconciled: await dependencies.repository.reconcileExpired(),
-    claimed: 0, approved: 0, rejected: 0, failed: 0, providerRejected: 0, reviewRequired: 0, lost: 0 };
+    claimed: 0, approved: 0, failed: 0, providerRejected: 0, reviewRequired: 0, lost: 0 };
   const claim = await dependencies.repository.claim();
   if (claim.decision === 'empty') return summary;
   if (claim.decision !== 'claimed') throw Errors.dbError('客户生图任务领取响应无效');

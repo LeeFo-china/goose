@@ -270,7 +270,6 @@ jobs:
           if [[ ",${requested_services}," == *,api,* \
             || ",${requested_services}," == *,cos-reconcile-worker,* \
             || ",${requested_services}," == *,billing-reconcile-worker,* \
-            || ",${requested_services}," == *,customer-rendering-input-review-worker,* \
             || ",${requested_services}," == *,customer-rendering-job-worker,* ]]; then
             api_image="$(jq -er '.image | select(type == "string" and length > 0)' "${evidence_dir}/image-manifest-api.json")"
             api_repository="${api_image%:*}"
@@ -414,15 +413,14 @@ jobs:
       - name: Verify rendering worker prerequisites
         run: |
           set -euo pipefail
-          if [[ " ${DEPLOY_SERVICES} " != *" customer-rendering-input-review-worker "* \
-            && " ${DEPLOY_SERVICES} " != *" customer-rendering-job-worker "* ]]; then
+          if [[ " ${DEPLOY_SERVICES} " != *" customer-rendering-job-worker "* ]]; then
             exit 0
           fi
           test "${ADMIN_CANDIDATE:-false}" = true
           docker inspect supabase-db >/dev/null
           migration_count="$(docker exec -i supabase-db sh -ceu \
-            'export PGPASSWORD="${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}"; exec psql -U supabase_admin -d postgres -At -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version IN ('"'"'20260914014930'"'"', '"'"'20260914022533'"'"', '"'"'20260914034000'"'"');"')"
-          test "${migration_count}" = 3
+            'export PGPASSWORD="${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}"; exec psql -U supabase_admin -d postgres -At -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version IN ('"'"'20260914014930'"'"', '"'"'20260914022533'"'"', '"'"'20260914034000'"'"', '"'"'20260914191000'"'"');"')"
+          test "${migration_count}" = 4
           cd "${DEPLOY_DIR}"
           # Compose reads .env for interpolation; reject an implicit override that this guard cannot see.
           if [ -z "${GOOES_API_ENV_FILE:-}" ] && [ -f .env ] \
@@ -440,9 +438,6 @@ jobs:
               exit 1
             fi
           }
-          if [[ " ${DEPLOY_SERVICES} " == *" customer-rendering-input-review-worker "* ]]; then
-            require_worker_enabled CUSTOMER_RENDERING_INPUT_REVIEW_ENABLED
-          fi
           if [[ " ${DEPLOY_SERVICES} " == *" customer-rendering-job-worker "* ]]; then
             require_worker_enabled CUSTOMER_RENDERING_JOB_WORKER_ENABLED
           fi
@@ -517,7 +512,6 @@ jobs:
               social-video-worker) compose_services+=("gooes-social-video-worker") ;;
               cos-reconcile-worker) compose_services+=("gooes-cos-reconcile-worker") ;;
               billing-reconcile-worker) compose_services+=("gooes-billing-reconcile-worker") ;;
-              customer-rendering-input-review-worker) compose_services+=("gooes-customer-rendering-input-review-worker") ;;
               customer-rendering-job-worker) compose_services+=("gooes-customer-rendering-job-worker") ;;
             esac
           done
@@ -574,9 +568,6 @@ jobs:
           fi
           if service_selected billing-reconcile-worker; then
             docker compose ${COMPOSE_ENV_FILE:+--env-file ${COMPOSE_ENV_FILE}} ${COMPOSE_FILES} --profile workers up -d --no-deps --force-recreate gooes-billing-reconcile-worker
-          fi
-          if service_selected customer-rendering-input-review-worker; then
-            docker compose ${COMPOSE_ENV_FILE:+--env-file ${COMPOSE_ENV_FILE}} ${COMPOSE_FILES} --profile workers up -d --no-deps --force-recreate gooes-customer-rendering-input-review-worker
           fi
           if service_selected customer-rendering-job-worker; then
             docker compose ${COMPOSE_ENV_FILE:+--env-file ${COMPOSE_ENV_FILE}} ${COMPOSE_FILES} --profile workers up -d --no-deps --force-recreate gooes-customer-rendering-job-worker
@@ -635,7 +626,6 @@ jobs:
           if service_selected social-video-worker; then check_container gooes-social-video-worker; fi
           if service_selected cos-reconcile-worker; then check_container gooes-cos-reconcile-worker; fi
           if service_selected billing-reconcile-worker; then check_container gooes-billing-reconcile-worker; fi
-          if service_selected customer-rendering-input-review-worker; then check_container gooes-customer-rendering-input-review-worker; fi
           if service_selected customer-rendering-job-worker; then check_container gooes-customer-rendering-job-worker; fi
           if service_selected admin; then check_container gooes-admin; fi
           if service_selected web; then check_container gooes-web; fi
@@ -658,10 +648,6 @@ jobs:
           if service_selected billing-reconcile-worker; then
             test "${ADMIN_CANDIDATE:-false}" = true
             check_runtime_evidence billing-reconcile-worker gooes-billing-reconcile-worker "${GOOES_API_IMAGE}" api
-          fi
-          if service_selected customer-rendering-input-review-worker; then
-            test "${ADMIN_CANDIDATE:-false}" = true
-            check_runtime_evidence customer-rendering-input-review-worker gooes-customer-rendering-input-review-worker "${GOOES_API_IMAGE}" api
           fi
           if service_selected customer-rendering-job-worker; then
             test "${ADMIN_CANDIDATE:-false}" = true

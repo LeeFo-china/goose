@@ -19,12 +19,24 @@ test('job creation sends the exact validated idempotent request', async () => {
 test('job status accepts only a private signed result for the requested job', async () => {
   const request = mock(async () => ({ job_id: ID, status: 'succeeded',
     created_at: '2026-09-14T00:00:00Z', updated_at: '2026-09-14T00:03:00Z', finished_at: '2026-09-14T00:03:00Z',
+    failure_reason: null,
     result: { mime_type: 'image/webp', size_bytes: 100, download_url: RESULT_URL, expires_at: '2099-01-01T00:00:00Z' } }));
   expect(await fetchRenderingJobStatus({ request } as never, ID)).toEqual({ jobId: ID, status: 'succeeded',
+    failureReason: null,
     result: { url: RESULT_URL, expiresAt: '2099-01-01T00:00:00Z', sizeBytes: 100 } });
   expect(request).toHaveBeenCalledWith({ method: 'GET', path: `/douyin-mini/renderings/jobs/${ID}` });
   request.mockImplementation(async () => ({ job_id: ID, status: 'succeeded',
     created_at: '2026-09-14T00:00:00Z', updated_at: '2026-09-14T00:03:00Z', finished_at: '2026-09-14T00:03:00Z',
+    failure_reason: null,
     result: { mime_type: 'image/webp', size_bytes: 100, download_url: 'https://evil.example/result.webp', expires_at: '2099-01-01T00:00:00Z' } }));
   await expect(fetchRenderingJobStatus({ request } as never, ID)).rejects.toMatchObject({ code: 'INVALID_API_RESPONSE' });
+});
+
+test('failed job exposes a bounded content refusal reason and no result URL', async () => {
+  const request = mock(async () => ({ job_id: ID, status: 'failed',
+    created_at: '2026-09-14T00:00:00Z', updated_at: '2026-09-14T00:03:00Z',
+    finished_at: '2026-09-14T00:03:00Z', result: null, failure_reason: 'content_rejected' }));
+  expect(await fetchRenderingJobStatus({ request } as never, ID)).toEqual({
+    jobId: ID, status: 'failed', result: null, failureReason: 'content_rejected',
+  });
 });
