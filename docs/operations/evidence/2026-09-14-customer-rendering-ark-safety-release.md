@@ -11,7 +11,7 @@
 - [生产只读计划 run 34838504943](https://github.com/LeeFo-china/goose/actions/runs/34838504943) 在同一提交上成功：生产库已有 625 版，最新 `20260914173000`，**唯一待执行**为 `20260914191000`；前后版本数均为 625，`applied_count=0`。这只是迁移计划，不是 SQL 执行验证。
 - [含安全停机步骤的生产只读计划 run 34839594635](https://github.com/LeeFo-china/goose/actions/runs/34839594635) 在 `e65b38af3ed5cb6947be7dc0ed4fbfbbbfeb03e8` 上再次成功，仍只有 `20260914191000` 待执行、625 版无写入。正式 apply 会先核对运行中 API 准入开关为关闭，优雅停止旧生图／输入审查 Worker，并要求处理中任务为 0；计划模式不会停容器。
 - [开发迁移 apply run 34839184834](https://github.com/LeeFo-china/goose/actions/runs/34839184834) 在 `72c9f324c270b65bc4ead1a0ba1a9bf5b96260e3` 上成功：按先前计划应用三版，开发库从 623 增至 626，最新为本次 `20260914191000`。[开发 API 发布 run 34839263638](https://github.com/LeeFo-china/goose/actions/runs/34839263638) 完成不可变镜像构建、`supabase migration list` 全量历史校验与 API 健康检查。[后续 API 发布 run 34839570073](https://github.com/LeeFo-china/goose/actions/runs/34839570073) 应用旧审查容器退役步骤，日志确认旧容器已停并删除。开发环境尚未执行真实付费方舟生图及抖音真机验收。
-- 独立代码审查指出两个切换边界：旧 API 可在迁移与部署间晚写 `pending_review`；方舟 HTTP 200 错误体的明确非内容拒绝原先会保留预留额度。`1c7f15088` 已补同 ID 状态／complete 的有界幂等转 `ready`，并让明确的结构化拒绝走释放结算；对应回归测试和 API 类型检查通过。该修复提交尚未发布到开发或生产。
+- 独立代码审查指出两个切换边界：旧 API 可在迁移与部署间晚写 `pending_review`；方舟 HTTP 200 错误体的明确非内容拒绝原先会保留预留额度。`1c7f15088` 已补同 ID 状态／complete 的有界幂等转 `ready`，并让明确的结构化拒绝走释放结算。审查复核确认两项均已修复；定向 100 个测试、API 类型检查和构建通过。[最终开发 API 发布 run 34840378857](https://github.com/LeeFo-china/goose/actions/runs/34840378857) 在 `99a5c433d9552febad36e444d28fbc9c12ff1bdb` 上完成镜像构建、迁移历史核对、API 部署和健康检查。生产尚未发布。
 
 ## 切换顺序与剩余证据
 
