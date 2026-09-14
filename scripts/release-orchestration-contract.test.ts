@@ -48,6 +48,10 @@ const migrateProductionWorkflow = readFileSync(
   new URL("../.github/workflows/migrate-production-database.yml", import.meta.url),
   "utf8",
 );
+const freezeRenderingAdmissionWorkflow = readFileSync(
+  new URL("../.github/workflows/freeze-customer-rendering-admission.yml", import.meta.url),
+  "utf8",
+);
 const migrateDevWorkflow = readFileSync(
   new URL("../.github/workflows/migrate-dev-database.yml", import.meta.url),
   "utf8",
@@ -1261,6 +1265,25 @@ describe("production migration precheck workflow", () => {
     expect(guard).toBeGreaterThan(stop);
     expect(ddl).toBeGreaterThan(guard);
     expect(script).toContain('docker rm gooes-customer-rendering-input-review-worker');
+  });
+
+  test("production admission freeze changes the env file before recreating and verifying API", () => {
+    const script = extractWorkflowRunScript(
+      sliceWorkflowStep(freezeRenderingAdmissionWorkflow, "Freeze running API admission"),
+    );
+    const confirm = script.indexOf('test "${CONFIRM_TEXT}" = "确认关闭生产生图准入"');
+    const backup = script.indexOf('sudo cp -p "${env_file}" "${backup_file}"');
+    const close = script.indexOf('sudo sed -i "s/^${key}=true$/${key}=false/" "${env_file}"');
+    const recreate = script.indexOf('--profile workers up -d --no-deps --force-recreate gooes-api');
+    const verify = script.lastIndexOf('test "${admission_enabled}" = false');
+    expect(freezeRenderingAdmissionWorkflow).toContain('group: deploy-docker-services-main');
+    expect(freezeRenderingAdmissionWorkflow).toContain('environment: production');
+    expect(confirm).toBeGreaterThanOrEqual(0);
+    expect(backup).toBeGreaterThan(confirm);
+    expect(close).toBeGreaterThan(backup);
+    expect(recreate).toBeGreaterThan(close);
+    expect(verify).toBeGreaterThan(recreate);
+    expect(script).toContain('test "${health}" = healthy');
   });
 
   const fixtureIndexMarker =
