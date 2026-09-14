@@ -221,11 +221,16 @@ export function buildWorkflowSnapshot(input: {
   publishedAt: string;
   subjectType?: WorkflowSubjectType;
 }): JsonObject {
+  const subjectType = input.definition.workflow_key ===
+      "supplier_purchase_batch_approval"
+    ? "supplier_purchase_batch"
+    : input.subjectType;
+
   return {
     definition_id: input.definition.id,
     workflow_key: input.definition.workflow_key,
     category: input.definition.category,
-    ...(input.subjectType ? { subject_type: input.subjectType } : {}),
+    ...(subjectType ? { subject_type: subjectType } : {}),
     published_at: input.publishedAt,
     nodes: input.nodes,
     edges: input.edges,
