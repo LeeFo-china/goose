@@ -385,7 +385,7 @@ test("rendering catalog has a home entry and separate list and detail pages", as
   expect(list + detail).not.toMatch(/立即生成|开始生图/);
 });
 
-test("rendering detail exposes reviewed uploads and a clearly labelled AI reference action", async () => {
+test("rendering detail exposes ready uploads and a clearly labelled AI reference action", async () => {
   const template = await readSource("pages/rendering-style-detail/index.ttml");
   expect(template).toContain('bindtap="onChooseRoom"');
   expect(template).toContain('bindtap="onChooseFloorPlan"');
@@ -394,8 +394,8 @@ test("rendering detail exposes reviewed uploads and a clearly labelled AI refere
   expect(template).toContain("房间照（必传）");
   expect(template).toContain("户型图（可选）");
   expect(template).not.toContain("!roomFileId || floorUploadStatus");
-  expect(template).toContain("pending_review");
+  expect(template).toContain("roomUploadStatus === 'ready'");
   expect(template).toContain('bindtap="onGenerate"');
-  expect(template).toContain('bindtap="onCheckUploadReview"');
+  expect(template).toContain('bindtap="onCheckUploadStatus"');
   expect(template).toContain("AI 参考效果图");
 });

@@ -15,16 +15,16 @@ test("intent and complete use the existing authenticated API client and validate
   const request = mock(async (input: { method: string; path: string; data?: Record<string, unknown> }) =>
     input.path.endsWith("uploads:intent")
       ? { intent_id: ID, method: "PUT", upload_url: URL, headers: HEADERS, expires_at: "2026-09-13T10:10:00Z" }
-      : { file_id: ID, status: "pending_review", mime_type: "image/webp", width: 8, height: 8, size_bytes: 42 });
+      : { file_id: ID, status: "ready", mime_type: "image/webp", width: 8, height: 8, size_bytes: 42 });
   const client = { request } as never;
   const intent = await createRenderingUploadIntent(client, { purpose: "room", mimeType: "image/jpeg", sizeBytes: 4 });
   expect(intent.intentId).toBe(ID);
   expect(request.mock.calls[0]?.[0]).toEqual({ method: "POST", path: "/douyin-mini/renderings/uploads:intent",
     data: { purpose: "room", mime_type: "image/jpeg", size_bytes: 4 } });
-  expect(await completeRenderingUpload(client, intent.intentId)).toEqual({ fileId: ID, status: "pending_review" });
+  expect(await completeRenderingUpload(client, intent.intentId)).toEqual({ fileId: ID, status: "ready" });
   expect(request.mock.calls[1]?.[0]).toEqual({ method: "POST",
     path: `/douyin-mini/renderings/uploads/${ID}/complete`, data: {} });
-  expect(await completeRenderingUpload(client, intent.intentId)).toEqual({ fileId: ID, status: "pending_review" });
+  expect(await completeRenderingUpload(client, intent.intentId)).toEqual({ fileId: ID, status: "ready" });
 });
 
 test("raw COS PUT sends exact returned headers and ArrayBuffer without business authorization", async () => {
@@ -64,7 +64,7 @@ test("processing completion retries the same intent ID without issuing another i
   const request = mock(async (input: { path: string }) => {
     attempts++;
     if (attempts === 1) throw new ApiRequestError(409, "RENDERING_UPLOAD_PROCESSING", "处理中");
-    return { file_id: ID, status: "pending_review", mime_type: "image/webp", width: 8, height: 8, size_bytes: 42 };
+    return { file_id: ID, status: "ready", mime_type: "image/webp", width: 8, height: 8, size_bytes: 42 };
   });
   const result = await completeRenderingUploadWithRetry({ request } as never, ID, async () => undefined);
   expect(result.fileId).toBe(ID);
@@ -74,11 +74,11 @@ test("processing completion retries the same intent ID without issuing another i
   ]);
 });
 
-test("upload status reads owner-scoped review progress without creating another intent", async () => {
-  const request = mock(async () => ({ file_id: ID, status: "approved", mime_type: "image/webp",
+test("upload status reads owner-scoped readiness without creating another intent", async () => {
+  const request = mock(async () => ({ file_id: ID, status: "ready", mime_type: "image/webp",
     width: 8, height: 8, size_bytes: 42, review_state: null }));
   const result = await fetchRenderingUploadStatus({ request } as never, ID);
-  expect(result).toEqual({ fileId: ID, status: "approved", reviewState: null });
+  expect(result).toEqual({ fileId: ID, status: "ready", reviewState: null });
   expect(request).toHaveBeenCalledWith({ method: "GET", path: `/douyin-mini/renderings/uploads/${ID}` });
 });
 

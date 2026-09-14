@@ -148,11 +148,11 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
       this.pendingIntent = this.recovery.ids;
       if (this.recovery.files.room) {
         this.setData({ roomFileId: this.recovery.files.room });
-        this.setUploadState("room", "pending_review", "已上传，待审核；当前不能用于 AI 生成");
+        this.setUploadState("room", "checking", "正在确认图片状态…");
       }
       if (this.recovery.files.floor_plan) {
         this.setData({ floorFileId: this.recovery.files.floor_plan });
-        this.setUploadState("floor_plan", "pending_review", "已上传，待审核；当前不能用于 AI 生成");
+        this.setUploadState("floor_plan", "checking", "正在确认图片状态…");
       }
       if (this.pendingIntent.room) this.setUploadState("room", "retry_complete", "可继续确认当前房间照");
       if (this.pendingIntent.floor_plan) this.setUploadState("floor_plan", "retry_complete", "可继续确认当前户型图");
@@ -197,9 +197,9 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
       if (this.selectingImage) { this.maskPrivateDisplay(); return; }
       this.uploadEpoch++; this.uploading = false;
       if (this.pendingIntent.room) this.setUploadState("room", "retry_complete", "可继续确认当前房间照");
-      else if (this.data.roomUploadStatus !== "pending_review") this.setUploadState("room", "idle", "房间照为必传，最多 10 MiB");
+      else if (this.data.roomUploadStatus !== "checking") this.setUploadState("room", "idle", "房间照为必传，最多 10 MiB");
       if (this.pendingIntent.floor_plan) this.setUploadState("floor_plan", "retry_complete", "可继续确认当前户型图");
-      else if (this.data.floorUploadStatus !== "pending_review") this.setUploadState("floor_plan", "idle", "户型图可选，最多 10 MiB");
+      else if (this.data.floorUploadStatus !== "checking") this.setUploadState("floor_plan", "idle", "户型图可选，最多 10 MiB");
       this.maskPrivateDisplay();
     },
     onUnload() {
@@ -274,7 +274,7 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
     onChooseFloorPlan() { void this.upload("floor_plan"); },
     onRetryRoomComplete() { void this.retryComplete("room"); },
     onRetryFloorComplete() { void this.retryComplete("floor_plan"); },
-    onCheckUploadReview() { void this.refreshUploads(); },
+    onCheckUploadStatus() { void this.refreshUploads(); },
     onRefreshJob() { void this.refreshJob(true); },
     onResultImageError() { this.setData({ resultImageFailed: true }); },
     onStartAgain() {
@@ -324,8 +324,8 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
     updateCanGenerate() {
       this.setData({
         canGenerate: this.scopeReady && !this.recovery.jobId && !this.submittingJob
-          && (Boolean(this.recovery.jobRequest) || this.data.roomUploadStatus === "approved"
-            && (!this.data.floorFileId || this.data.floorUploadStatus === "approved")),
+          && (Boolean(this.recovery.jobRequest) || this.data.roomUploadStatus === "ready"
+            && (!this.data.floorFileId || this.data.floorUploadStatus === "ready")),
         showGeneration: Boolean(this.data.roomFileId || this.recovery.jobRequest || this.recovery.jobId),
         generateButtonLabel: this.submittingJob ? "正在提交…"
           : this.recovery.jobRequest ? "继续确认生成任务" : "生成 AI 参考效果图",
@@ -341,19 +341,18 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
         try {
           const progress = await dependencies.fetchRenderingUploadStatus(app.api, fileId);
           if (!this.visible || epoch !== this.requestEpoch || this.recovery.files[purpose] !== fileId) return;
-          if (progress.status === "approved") {
-            this.setUploadState(purpose, "approved", "已审核通过，可用于 AI 生成");
+          if (progress.status === "ready" || progress.status === "approved") {
+            this.setUploadState(purpose, "ready", "图片已就绪，可用于 AI 生成");
           } else if (progress.status === "pending_review") {
-            this.setUploadState(purpose, "pending_review", progress.reviewState === "manual"
-              ? "需人工审核，暂不可生成；请稍后检查审核状态" : "审核中，暂不可生成；请稍后检查审核状态");
+            this.setUploadState(purpose, "checking", "图片状态正在同步，请稍后检查");
           } else if (progress.status === "rejected" || progress.status === "failed" || progress.status === "deleted") {
             this.recovery.files[purpose] = undefined;
             if (purpose === "room") this.setData({ roomFileId: "" });
             else this.setData({ floorFileId: "" });
             this.persistRecovery();
-            this.setUploadState(purpose, "error", "图片未通过审核，请重新选择");
+            this.setUploadState(purpose, "error", "图片不可用，请重新选择");
           } else {
-            this.setUploadState(purpose, "pending_review", "图片仍在处理，请稍后检查审核状态");
+            this.setUploadState(purpose, "checking", "图片仍在处理，请稍后检查状态");
           }
         } catch (error) {
           if (!this.visible || epoch !== this.requestEpoch) return;
@@ -363,7 +362,7 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
             else this.setData({ floorFileId: "" });
             this.persistRecovery();
             this.setUploadState(purpose, "error", "图片不可访问，请重新选择");
-          } else this.setUploadState(purpose, "pending_review", "暂无法查询审核状态，请稍后手动检查");
+          } else this.setUploadState(purpose, "checking", "暂无法查询图片状态，请稍后手动检查");
         }
       }
       this.updateCanGenerate();
@@ -564,9 +563,8 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
       this.recovery.files[purpose] = result.fileId;
       if (purpose === "room") this.setData({ roomFileId: result.fileId });
       else this.setData({ floorFileId: result.fileId });
-      this.setUploadState(purpose, "pending_review", "已上传，待审核；当前不能用于 AI 生成");
+      this.setUploadState(purpose, "ready", "图片已就绪，可用于 AI 生成");
       this.persistRecovery();
-      void this.refreshUploads();
     },
     setUploadState(purpose: RenderingUploadPurpose, status: UploadStatus, message: string) {
       if (purpose === "room") this.setData({ roomUploadStatus: status, roomUploadMessage: message });
@@ -597,20 +595,20 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
 }
 
 type UploadStatus = "idle" | "selecting" | "signing" | "uploading" | "confirming"
-  | "pending_review" | "approved" | "retry_complete" | "error";
+  | "checking" | "ready" | "retry_complete" | "error";
 
 function jobProgressMessage(status: RenderingJobStatus): string {
   if (status === "queued") return "任务排队中，页面会自动更新进度";
   if (status === "processing") return "AI 参考效果图生成中，页面会自动更新进度";
   if (status === "succeeded") return "AI 参考效果图已完成";
-  if (status === "review_required") return "结果需人工审核，请稍后刷新进度";
+  if (status === "review_required") return "任务结果需人工核对，请稍后刷新进度";
   return "生成失败，请稍后重试";
 }
 
 function jobErrorMessage(error: unknown): string {
   if (!(error instanceof ApiRequestError)) return "任务提交结果未确认，请继续提交同一任务";
   if (error.statusCode === 401) return "登录状态已失效，请重新进入后继续提交";
-  if (error.code === "RENDERING_INPUT_UNAVAILABLE") return "上传图片尚未通过审核，请检查审核状态";
+  if (error.code === "RENDERING_INPUT_UNAVAILABLE") return "上传图片尚未就绪，请检查图片状态";
   if (error.code === "RENDERING_QUOTA_EXHAUSTED") return "当前生成次数已用完";
   if (error.code === "RENDERING_JOB_DISABLED") return "AI 生成服务暂不可用";
   return "任务提交结果未确认，请继续提交同一任务";

@@ -13,26 +13,26 @@
   <view class="detail-section"><view class="detail-section-title">材质说明</view><view class="detail-section-copy">{{style.material_notes || '暂无补充说明'}}</view></view>
   <view tt:if="{{status === 'ready'}}" class="detail-section private-inputs">
     <view class="detail-section-title">上传我的空间</view>
-    <view class="private-inputs-note">房间照必传，户型图可选。每张最多 10 MiB，仅支持静态 JPEG、PNG、WebP；审核通过后可发起 AI 生成。</view>
+    <view class="private-inputs-note">房间照必传，户型图可选。每张最多 10 MiB，仅支持静态 JPEG、PNG、WebP；上传完成即可发起 AI 生成，生成时由模型校验内容。</view>
     <view class="private-input-row">
       <view class="private-input-copy"><view class="private-input-title">房间照（必传）</view><view class="private-input-message" role="status">{{roomUploadMessage}}</view></view>
       <button tt:if="{{roomUploadStatus === 'retry_complete'}}" class="private-input-button ui-pressable" hover-class="ui-pressable--pressed" bindtap="onRetryRoomComplete">继续确认</button>
-      <view tt:elif="{{roomUploadStatus === 'pending_review'}}" class="private-input-pending">待审核</view>
-      <view tt:elif="{{roomUploadStatus === 'approved'}}" class="private-input-pending">已通过</view>
+      <view tt:elif="{{roomUploadStatus === 'checking'}}" class="private-input-pending">确认中</view>
+      <view tt:elif="{{roomUploadStatus === 'ready'}}" class="private-input-pending">已就绪</view>
       <button tt:else class="private-input-button ui-pressable" hover-class="ui-pressable--pressed" disabled="{{roomUploadStatus === 'selecting' || roomUploadStatus === 'signing' || roomUploadStatus === 'uploading' || roomUploadStatus === 'confirming'}}" bindtap="onChooseRoom">选择照片</button>
     </view>
     <view class="private-input-row">
       <view class="private-input-copy"><view class="private-input-title">户型图（可选）</view><view class="private-input-message" role="status">{{floorUploadMessage}}</view></view>
       <button tt:if="{{floorUploadStatus === 'retry_complete'}}" class="private-input-button ui-pressable" hover-class="ui-pressable--pressed" bindtap="onRetryFloorComplete">继续确认</button>
-      <view tt:elif="{{floorUploadStatus === 'pending_review'}}" class="private-input-pending">待审核</view>
-      <view tt:elif="{{floorUploadStatus === 'approved'}}" class="private-input-pending">已通过</view>
+      <view tt:elif="{{floorUploadStatus === 'checking'}}" class="private-input-pending">确认中</view>
+      <view tt:elif="{{floorUploadStatus === 'ready'}}" class="private-input-pending">已就绪</view>
       <button tt:else class="private-input-button ui-pressable" hover-class="ui-pressable--pressed" disabled="{{floorUploadStatus === 'selecting' || floorUploadStatus === 'signing' || floorUploadStatus === 'uploading' || floorUploadStatus === 'confirming'}}" bindtap="onChooseFloorPlan">选择图片</button>
     </view>
-    <button tt:if="{{roomFileId || floorFileId}}" class="detail-check-button ui-pressable" hover-class="ui-pressable--pressed" bindtap="onCheckUploadReview">检查审核状态</button>
+    <button tt:if="{{roomFileId || floorFileId}}" class="detail-check-button ui-pressable" hover-class="ui-pressable--pressed" bindtap="onCheckUploadStatus">检查图片状态</button>
   </view>
   <view tt:if="{{status === 'ready' && showGeneration}}" class="detail-section generation-section">
     <view class="detail-section-title">生成我的空间参考图</view>
-    <view class="private-inputs-note">使用已审核图片生成 AI 参考效果图。生成结果仅供装修参考。</view>
+    <view class="private-inputs-note">使用已就绪图片生成 AI 参考效果图。生成结果仅供装修参考。</view>
     <view class="generation-mode-row">
       <button class="generation-mode {{mode === 'soft_furnishing' ? 'generation-mode--active' : ''}}" data-value="soft_furnishing" disabled="{{jobDraftLocked || jobSubmitting}}" bindtap="onSelectMode">软装搭配</button>
       <button class="generation-mode {{mode === 'renovation' ? 'generation-mode--active' : ''}}" data-value="renovation" disabled="{{jobDraftLocked || jobSubmitting}}" bindtap="onSelectMode">装修改造</button>

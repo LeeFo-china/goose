@@ -53,7 +53,7 @@ test("rendering detail retains the current image through a network failure", asy
   expect(page.data.style?.id).toBe(STYLE.id);
 });
 
-test("detail requires a room photo, then accepts an optional floor plan as private pending review", async () => {
+test("detail requires a room photo, then accepts an optional ready floor plan", async () => {
   const purposes: string[] = [];
   const toasts: string[] = [];
   const image: PrivateImage = { bytes: new Uint8Array([0xff, 0xd8, 0xff, 0xd9]).buffer,
@@ -71,7 +71,7 @@ test("detail requires a room photo, then accepts an optional floor plan as priva
       return { intentId: STYLE.id, uploadUrl: "https://example.invalid/signed", headers: {}, expiresAt: "2099-01-01T00:00:00Z" };
     },
     putRenderingBytes: async () => undefined,
-    completeRenderingUploadWithRetry: async () => ({ fileId: STYLE.id, status: "pending_review" }),
+    completeRenderingUploadWithRetry: async () => ({ fileId: STYLE.id, status: "ready" }),
   });
   const view = Object.assign(page, { setData(patch: Record<string, unknown>) { Object.assign(page.data, patch); } });
   view.onLoad({ id: STYLE.id });
@@ -81,13 +81,13 @@ test("detail requires a room photo, then accepts an optional floor plan as priva
   expect(toasts[0]).toContain("房间照");
   expect(view.data.floorUploadMessage).toContain("先上传房间照");
   await view.upload("room");
-  expect(view.data.roomUploadStatus).toBe("pending_review");
+  expect(view.data.roomUploadStatus).toBe("ready");
   expect(view.data.roomFileId).toBe(STYLE.id);
   await view.upload("floor_plan");
   expect(purposes).toEqual(["room", "floor_plan"]);
-  expect(view.data.floorUploadStatus).toBe("pending_review");
+  expect(view.data.floorUploadStatus).toBe("ready");
   expect(view.data.floorFileId).toBe(STYLE.id);
-  expect(view.data.canGenerate).toBe(false);
+  expect(view.data.canGenerate).toBe(true);
 });
 
 test("detail keeps the same intent for an uncertain PUT and retryable completion", async () => {
@@ -109,7 +109,7 @@ test("detail keeps the same intent for an uncertain PUT and retryable completion
     completeRenderingUploadWithRetry: async () => {
       completeCalls++;
       if (completeCalls === 1) throw new ApiRequestError(409, "RENDERING_UPLOAD_PROCESSING", "处理中");
-      return { fileId: STYLE.id, status: "pending_review" };
+      return { fileId: STYLE.id, status: "ready" };
     },
   });
   const view = Object.assign(page, { setData(patch: Record<string, unknown>) { Object.assign(page.data, patch); } });
@@ -118,7 +118,7 @@ test("detail keeps the same intent for an uncertain PUT and retryable completion
   await view.upload("room");
   expect(view.data.roomUploadStatus).toBe("retry_complete");
   await view.retryComplete("room");
-  expect(view.data.roomUploadStatus).toBe("pending_review");
+  expect(view.data.roomUploadStatus).toBe("ready");
   expect(intentCalls).toBe(1);
   expect(completeCalls).toBe(2);
 });
@@ -141,7 +141,7 @@ test("upload maps 401 and missing-company 409 without attempting a COS PUT", asy
     choosePrivateImage: async () => image,
     createRenderingUploadIntent: async () => { throw errors.shift(); },
     putRenderingBytes: async () => { putCalls++; },
-    completeRenderingUploadWithRetry: async () => ({ fileId: STYLE.id, status: "pending_review" }),
+    completeRenderingUploadWithRetry: async () => ({ fileId: STYLE.id, status: "ready" }),
   });
   const view = Object.assign(page, { setData(patch: Record<string, unknown>) { Object.assign(page.data, patch); } });
   view.onLoad({ id: STYLE.id });
@@ -167,7 +167,7 @@ test("undeclared album scope is shown as a configuration issue before intent", a
     },
     createRenderingUploadIntent: async () => { intents++; throw new Error("unexpected intent"); },
     putRenderingBytes: async () => undefined,
-    completeRenderingUploadWithRetry: async () => ({ fileId: STYLE.id, status: "pending_review" }),
+    completeRenderingUploadWithRetry: async () => ({ fileId: STYLE.id, status: "ready" }),
   });
   const view = Object.assign(definition, { setData(patch: Record<string, unknown>) { Object.assign(definition.data, patch); } });
   view.onLoad({ id: STYLE.id });
@@ -197,7 +197,7 @@ test("422 clears rejected intent so selecting a replacement issues a new ID", as
     completeRenderingUploadWithRetry: async () => {
       completes++;
       if (completes === 1) throw new ApiRequestError(422, "RENDERING_IMAGE_REJECTED", "bad");
-      return { fileId: STYLE.id, status: "pending_review" };
+      return { fileId: STYLE.id, status: "ready" };
     },
   });
   const view = Object.assign(page, { setData(patch: Record<string, unknown>) { Object.assign(page.data, patch); } });
@@ -208,7 +208,7 @@ test("422 clears rejected intent so selecting a replacement issues a new ID", as
   expect(view.data.roomUploadMessage).toContain("图片不合格");
   await view.upload("room");
   expect(intentCalls).toBe(2);
-  expect(view.data.roomUploadStatus).toBe("pending_review");
+  expect(view.data.roomUploadStatus).toBe("ready");
 });
 
 test("leaving detail before image selection resolves prevents a stale intent request", async () => {
@@ -224,7 +224,7 @@ test("leaving detail before image selection resolves prevents a stale intent req
     choosePrivateImage: () => new Promise((resolve) => { resolveImage = resolve; }),
     createRenderingUploadIntent: async () => { intents++; throw new Error("stale request"); },
     putRenderingBytes: async () => undefined,
-    completeRenderingUploadWithRetry: async () => ({ fileId: STYLE.id, status: "pending_review" }),
+    completeRenderingUploadWithRetry: async () => ({ fileId: STYLE.id, status: "ready" }),
   });
   const view = Object.assign(page, { setData(patch: Record<string, unknown>) { Object.assign(page.data, patch); } });
   view.onLoad({ id: STYLE.id });
@@ -253,7 +253,7 @@ test("selection resumes after the native picker hides and shows the detail page"
     createRenderingUploadIntent: async () => { intents++; return { intentId: STYLE.id,
       uploadUrl: "https://example.invalid/signed", headers: {}, expiresAt: "2099-01-01T00:00:00Z" }; },
     putRenderingBytes: async () => undefined,
-    completeRenderingUploadWithRetry: async () => ({ fileId: STYLE.id, status: "pending_review" }),
+    completeRenderingUploadWithRetry: async () => ({ fileId: STYLE.id, status: "ready" }),
   });
   const view = Object.assign(definition, { setData(patch: Record<string, unknown>) { Object.assign(definition.data, patch); } });
   view.onLoad({ id: STYLE.id });
@@ -267,7 +267,7 @@ test("selection resumes after the native picker hides and shows the detail page"
     mimeType: "image/jpeg", sizeBytes: 4 });
   await upload;
   expect(intents).toBe(1);
-  expect(view.data.roomUploadStatus).toBe("pending_review");
+  expect(view.data.roomUploadStatus).toBe("ready");
 });
 
 test("selection waits for the detail page to show before starting a private upload", async () => {
@@ -284,7 +284,7 @@ test("selection waits for the detail page to show before starting a private uplo
     createRenderingUploadIntent: async () => { intents++; return { intentId: STYLE.id,
       uploadUrl: "https://example.invalid/signed", headers: {}, expiresAt: "2099-01-01T00:00:00Z" }; },
     putRenderingBytes: async () => undefined,
-    completeRenderingUploadWithRetry: async () => ({ fileId: STYLE.id, status: "pending_review" }),
+    completeRenderingUploadWithRetry: async () => ({ fileId: STYLE.id, status: "ready" }),
   });
   const view = Object.assign(definition, { setData(patch: Record<string, unknown>) { Object.assign(definition.data, patch); } });
   view.onLoad({ id: STYLE.id });
@@ -299,7 +299,7 @@ test("selection waits for the detail page to show before starting a private uplo
   view.onShow();
   await upload;
   expect(intents).toBe(1);
-  expect(view.data.roomUploadStatus).toBe("pending_review");
+  expect(view.data.roomUploadStatus).toBe("ready");
 });
 
 test("picker failure after a native hide becomes visible when detail shows again", async () => {
@@ -314,7 +314,7 @@ test("picker failure after a native hide becomes visible when detail shows again
     choosePrivateImage: () => new Promise((_resolve, reject) => { rejectImage = reject; }),
     createRenderingUploadIntent: async () => { throw new Error("unexpected intent"); },
     putRenderingBytes: async () => undefined,
-    completeRenderingUploadWithRetry: async () => ({ fileId: STYLE.id, status: "pending_review" }),
+    completeRenderingUploadWithRetry: async () => ({ fileId: STYLE.id, status: "ready" }),
   });
   const view = Object.assign(definition, { setData(patch: Record<string, unknown>) { Object.assign(definition.data, patch); } });
   view.onLoad({ id: STYLE.id });
@@ -376,7 +376,7 @@ test("returning while PUT is in flight waits for that PUT before confirming the 
       uploadUrl: "https://example.invalid/signed", headers: {}, expiresAt: "2099-01-01T00:00:00Z" }; },
     putRenderingBytes: () => new Promise<void>((resolve) => { finishPut = resolve; }),
     completeRenderingUploadWithRetry: async () => { completeCalls++;
-      return { fileId: STYLE.id, status: "pending_review" as const }; },
+      return { fileId: STYLE.id, status: "ready" as const }; },
   };
   const definition = createRenderingStyleDetailPageDefinition(dependencies);
   const view = Object.assign(definition, { setData(patch: Record<string, unknown>) { Object.assign(definition.data, patch); } });
@@ -414,7 +414,7 @@ test("unloading and reopening keeps an in-flight intent ID scoped to the app ses
     putRenderingBytes: async () => undefined,
     completeRenderingUploadWithRetry: async () => { completeCalls++;
       if (completeCalls === 1) throw new ApiRequestError(409, "RENDERING_UPLOAD_PROCESSING", "处理中");
-      return { fileId: STYLE.id, status: "pending_review" as const }; },
+      return { fileId: STYLE.id, status: "ready" as const }; },
   };
   const first = createRenderingStyleDetailPageDefinition(dependencies);
   const firstView = Object.assign(first, { setData(patch: Record<string, unknown>) { Object.assign(first.data, patch); } });
@@ -447,7 +447,8 @@ test("reopening detail keeps a confirmed room file within the same app session",
     createRenderingUploadIntent: async () => { intentCalls++; return { intentId: STYLE.id,
       uploadUrl: "https://example.invalid/signed", headers: {}, expiresAt: "2099-01-01T00:00:00Z" }; },
     putRenderingBytes: async () => undefined,
-    completeRenderingUploadWithRetry: async () => ({ fileId: STYLE.id, status: "pending_review" as const }),
+    completeRenderingUploadWithRetry: async () => ({ fileId: STYLE.id, status: "ready" as const }),
+    fetchRenderingUploadStatus: async () => ({ fileId: STYLE.id, status: "ready" as const, reviewState: null }),
   };
   const first = createRenderingStyleDetailPageDefinition(dependencies);
   const firstView = Object.assign(first, { setData(patch: Record<string, unknown>) { Object.assign(first.data, patch); } });
@@ -461,7 +462,7 @@ test("reopening detail keeps a confirmed room file within the same app session",
   secondView.onLoad({ id: STYLE.id });
   await flush();
   expect(secondView.data.roomFileId).toBe(STYLE.id);
-  expect(secondView.data.roomUploadStatus).toBe("pending_review");
+  expect(secondView.data.roomUploadStatus).toBe("ready");
   await secondView.upload("room");
   expect(intentCalls).toBe(1);
 });
@@ -487,7 +488,7 @@ test("terminal missing, conflicted or unauthorized intent lets the user start fr
       putRenderingBytes: async () => undefined,
       completeRenderingUploadWithRetry: async () => { completeCalls++;
         if (completeCalls === 1) throw error;
-        return { fileId: STYLE.id, status: "pending_review" }; },
+        return { fileId: STYLE.id, status: "ready" }; },
     });
     const view = Object.assign(definition, { setData(patch: Record<string, unknown>) { Object.assign(definition.data, patch); } });
     view.onLoad({ id: STYLE.id });
@@ -496,14 +497,13 @@ test("terminal missing, conflicted or unauthorized intent lets the user start fr
     expect(view.data.roomUploadStatus).toBe("error");
     await view.upload("room");
     expect(intentCalls).toBe(2);
-    expect(view.data.roomUploadStatus).toBe("pending_review");
+    expect(view.data.roomUploadStatus).toBe("ready");
   }
 });
 
-test("manual upload review blocks generation until approved, then displays the private AI reference result", async () => {
+test("completed upload immediately allows Ark generation and displays the private AI reference result", async () => {
   const image: PrivateImage = { bytes: new Uint8Array([0xff, 0xd8, 0xff, 0xd9]).buffer,
     mimeType: "image/jpeg", sizeBytes: 4 };
-  let reviewState: "manual" | null = "manual";
   const submitted: unknown[] = [];
   const definition = createRenderingStyleDetailPageDefinition({
     getApp: () => ({ api: {}, startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
@@ -515,9 +515,8 @@ test("manual upload review blocks generation until approved, then displays the p
     createRenderingUploadIntent: async () => ({ intentId: STYLE.id,
       uploadUrl: "https://example.invalid/signed", headers: {}, expiresAt: "2099-01-01T00:00:00Z" }),
     putRenderingBytes: async () => undefined,
-    completeRenderingUploadWithRetry: async () => ({ fileId: STYLE.id, status: "pending_review" }),
-    fetchRenderingUploadStatus: async () => ({ fileId: STYLE.id,
-      status: reviewState ? "pending_review" : "approved", reviewState }),
+    completeRenderingUploadWithRetry: async () => ({ fileId: STYLE.id, status: "ready" }),
+    fetchRenderingUploadStatus: async () => ({ fileId: STYLE.id, status: "ready", reviewState: null }),
     createIdempotencyKey: () => "22222222-2222-4222-8222-222222222222",
     createRenderingJob: async (_client, input) => { submitted.push(input); return { jobId: STYLE.id, status: "succeeded" }; },
     fetchRenderingJobStatus: async () => ({ jobId: STYLE.id, status: "succeeded",
@@ -529,10 +528,7 @@ test("manual upload review blocks generation until approved, then displays the p
   await flush();
   await view.upload("room");
   await flush();
-  expect(view.data.roomUploadMessage).toContain("人工审核");
-  expect(view.data.canGenerate).toBe(false);
-  reviewState = null;
-  await view.refreshUploads();
+  expect(view.data.roomUploadMessage).toContain("已就绪");
   expect(view.data.canGenerate).toBe(true);
   view.onSelectMode({ currentTarget: { dataset: { value: "renovation" } } });
   view.onKeepNotesInput({ detail: { value: "保留木地板" } });
@@ -561,7 +557,7 @@ test("unknown job submission keeps the persisted request and retries with its or
       createRenderingUploadIntent: async () => { throw new Error("unused"); },
       putRenderingBytes: async () => undefined,
       completeRenderingUploadWithRetry: async () => { throw new Error("unused"); },
-      fetchRenderingUploadStatus: async () => ({ fileId: STYLE.id, status: "approved", reviewState: null }),
+      fetchRenderingUploadStatus: async () => ({ fileId: STYLE.id, status: "ready", reviewState: null }),
       readRenderingRecovery: (identity, id) => readRenderingRecovery(identity, id, storage),
       writeRenderingRecovery: (identity, record) => writeRenderingRecovery(identity, record, storage),
       resolveRecoveryIdentity: async () => OWNER,
@@ -615,7 +611,7 @@ test("account switch clears the prior result and draft, then loads only the new 
     completeRenderingUploadWithRetry: async () => { throw new Error("unused"); },
     readRenderingRecovery: (owner, id) => readRenderingRecovery(owner, id, storage),
     writeRenderingRecovery: (owner, record) => writeRenderingRecovery(owner, record, storage),
-    fetchRenderingUploadStatus: async () => ({ fileId: STYLE.id, status: "approved", reviewState: null }),
+    fetchRenderingUploadStatus: async () => ({ fileId: STYLE.id, status: "ready", reviewState: null }),
     fetchRenderingJobStatus: async () => ({ jobId: STYLE.id, status: "succeeded", result: {
       url: "https://private.example.com/A.webp", expiresAt: "2099-01-01T00:00:00Z", sizeBytes: 42 } }),
   });
@@ -658,7 +654,7 @@ test("missing job unlocks draft while temporary job errors retain its idempotenc
     readRenderingRecovery: () => ({ styleId: STYLE.id, roomIntentId: null, floorIntentId: null,
       roomFileId: STYLE.id, floorFileId: null, jobRequest: request, jobId: STYLE.id, savedAt: Date.now() }),
     writeRenderingRecovery: () => true,
-    fetchRenderingUploadStatus: async () => ({ fileId: STYLE.id, status: "approved", reviewState: null }),
+    fetchRenderingUploadStatus: async () => ({ fileId: STYLE.id, status: "ready", reviewState: null }),
     fetchRenderingJobStatus: async () => { throw new ApiRequestError(missing ? 404 : 0,
       missing ? "RENDERING_JOB_NOT_FOUND" : "NETWORK_ERROR", "failed"); },
   });
@@ -743,7 +739,7 @@ test("an old account's late job response cannot write into the new account's pag
       styleId: STYLE.id, roomIntentId: null, floorIntentId: null, roomFileId: STYLE.id,
       floorFileId: null, jobRequest: null, jobId: null, savedAt: Date.now() } : null,
     writeRenderingRecovery: () => true,
-    fetchRenderingUploadStatus: async () => ({ fileId: STYLE.id, status: "approved", reviewState: null }),
+    fetchRenderingUploadStatus: async () => ({ fileId: STYLE.id, status: "ready", reviewState: null }),
     createRenderingJob: async () => job,
     fetchRenderingJobStatus: async () => ({ jobId: STYLE.id, status: "succeeded", result: {
       url: "https://private.example.com/A.webp", expiresAt: "2099-01-01T00:00:00Z", sizeBytes: 42 } }),
