@@ -124,6 +124,17 @@ describe("admin backend proxy redirects", () => {
     expect(response.headers.get("x-upstream-secret")).toBeNull();
   });
 
+  test.each([200, 409, 500])("keeps customer rendering settings private for status %s", async (status) => {
+    backendFetch.mockResolvedValueOnce(Response.json({ success: status === 200 }, { status }));
+    const { PUT } = await import("./route");
+    const response = await PUT(new Request("https://admin.example.com/api/backend/platform/customer-rendering-settings/tenant-id", {
+      method: "PUT", body: JSON.stringify({ enabled: false }),
+    }), { params: Promise.resolve({ path: ["platform", "customer-rendering-settings", "tenant-id"] }) });
+    expect(response.status).toBe(status);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+  });
+
   test("keeps unauthenticated rendering responses private without calling backend", async () => {
     getAdminToken.mockResolvedValueOnce("");
     const { GET } = await import("./route");

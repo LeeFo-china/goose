@@ -62,3 +62,16 @@ test('repository sends one privileged atomic command and rejects malformed resul
   await expect(new Repository({ rpc: async () => ({ data: { decision: 'updated' }, error: null }) } as never)
     .save(command)).rejects.toMatchObject({ statusCode: 500 });
 });
+
+test('repository reads one tenant-scoped daily usage aggregate and rejects malformed output', async () => {
+  const usage = { budget_date: '2026-09-14', task_count: 2, budget_used_fen: 80 };
+  const rpc = mock(async () => ({ data: usage, error: null }));
+  const repo = new Repository({ rpc } as never);
+  expect(await repo.getDailyUsage(tenantId)).toEqual(usage);
+  expect(rpc).toHaveBeenCalledTimes(1);
+  expect(rpc).toHaveBeenCalledWith('get_tenant_customer_rendering_daily_usage', {
+    p_tenant_id: tenantId,
+  });
+  await expect(new Repository({ rpc: async () => ({ data: { ...usage, task_count: -1 },
+    error: null }) } as never).getDailyUsage(tenantId)).rejects.toMatchObject({ statusCode: 500 });
+});

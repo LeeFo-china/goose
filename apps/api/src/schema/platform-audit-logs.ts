@@ -19,6 +19,7 @@ export const PlatformAuditLogActionSchema = z.enum([
   "platform_billing_recharge_refund_execute",
   "platform_billing_pricing_update",
   "platform_config_update",
+  "customer_rendering_settings_update",
   "platform_release_dispatch",
   "platform_release_tag_create",
   "tenant_service_area_create",

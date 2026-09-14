@@ -14,13 +14,20 @@ const SaveResult = z.discriminatedUnion('decision', [
   z.object({ decision: z.literal('updated'), setting: Setting }),
   z.object({ decision: z.enum(['not_found', 'stale', 'invalid_request', 'tenant_inactive']) }),
 ]);
+const DailyUsage = z.strictObject({
+  budget_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  task_count: z.number().int().nonnegative(),
+  budget_used_fen: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+});
 export type CustomerRenderingSetting = z.infer<typeof Setting>;
+export type CustomerRenderingDailyUsage = z.infer<typeof DailyUsage>;
 export type CustomerRenderingSettingSaveResult = z.infer<typeof SaveResult>;
 export type CustomerRenderingSettingsCommand = CustomerRenderingSettingsUpdate & {
   tenantId: string; operatorEmployeeId: string;
 };
 export interface CustomerRenderingSettingsRepositoryPort {
   get(tenantId: string): Promise<{ tenantExists: boolean; setting: CustomerRenderingSetting | null }>;
+  getDailyUsage(tenantId: string): Promise<CustomerRenderingDailyUsage>;
   save(command: CustomerRenderingSettingsCommand): Promise<CustomerRenderingSettingSaveResult>;
 }
 
@@ -73,6 +80,18 @@ export class PlatformCustomerRenderingSettingsRepository implements CustomerRend
     if (result.error) throw Errors.dbError('保存客户生图试点设置失败');
     const parsed = SaveResult.safeParse(result.data);
     if (!parsed.success) throw Errors.dbError('客户生图试点设置响应无效');
+    return parsed.data;
+  }
+
+  async getDailyUsage(tenantId: string): Promise<CustomerRenderingDailyUsage> {
+    let result: QueryResult;
+    try { result = await this.client().rpc('get_tenant_customer_rendering_daily_usage', {
+      p_tenant_id: tenantId,
+    }); }
+    catch { throw Errors.dbError('读取客户生图当日用量失败'); }
+    if (result.error) throw Errors.dbError('读取客户生图当日用量失败');
+    const parsed = DailyUsage.safeParse(result.data);
+    if (!parsed.success) throw Errors.dbError('客户生图当日用量响应无效');
     return parsed.data;
   }
 }

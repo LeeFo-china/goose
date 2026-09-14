@@ -13,7 +13,7 @@ import {
 import { Get, Put } from '@/utils/decorators/route';
 import { ResponseHandler } from '@/utils/response';
 
-type ControllerService = Pick<PlatformCustomerRenderingSettingsService, 'get' | 'update'>;
+type ControllerService = Pick<PlatformCustomerRenderingSettingsService, 'get' | 'update' | 'getDailyUsage'>;
 
 export class PlatformCustomerRenderingSettingsController extends PlatformBaseController {
   constructor(private readonly service: ControllerService = platformCustomerRenderingSettingsService) {
@@ -40,6 +40,16 @@ export class PlatformCustomerRenderingSettingsController extends PlatformBaseCon
     const body = CustomerRenderingSettingsUpdateSchema.safeParse(request.body || {});
     if (!body.success) throw Errors.fromZod(body.error);
     return ResponseHandler.success(await this.service.update(auth, params.data.tenantId, body.data));
+  }
+
+  @Get('/platform/customer-rendering-settings/:tenantId/usage')
+  async getDailyUsage(request: FastifyRequest) {
+    const auth = await this.getRequiredPlatformSuperAdminContext(request);
+    const params = CustomerRenderingSettingsTenantParamsSchema.safeParse(request.params || {});
+    if (!params.success) throw Errors.fromZod(params.error);
+    const query = CustomerRenderingSettingsEmptyQuerySchema.safeParse(request.query || {});
+    if (!query.success) throw Errors.fromZod(query.error);
+    return ResponseHandler.success(await this.service.getDailyUsage(auth, params.data.tenantId));
   }
 }
 

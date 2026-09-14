@@ -19,7 +19,9 @@ const body = { enabled: false, daily_task_limit: 2, daily_budget_fen: 200,
   per_job_reserve_fen: 100, expected_version: 0, reason: '试点配置准备' };
 
 test('registers owner-independent superadmin read and explicit update routes', async () => {
-  const service = { get: mock(async () => setting), update: mock(async () => setting) };
+  const usage = { budget_date: '2026-09-14', task_count: 2, budget_used_fen: 80 };
+  const service = { get: mock(async () => setting), getDailyUsage: mock(async () => usage),
+    update: mock(async () => setting) };
   const controller = new Controller(service);
   const routes: Array<{ method: string; path: string }> = [];
   controller.registerExtraRoutes({
@@ -29,14 +31,17 @@ test('registers owner-independent superadmin read and explicit update routes', a
   expect(routes).toEqual([
     { method: 'GET', path: '/platform/customer-rendering-settings/:tenantId' },
     { method: 'PUT', path: '/platform/customer-rendering-settings/:tenantId' },
+    { method: 'GET', path: '/platform/customer-rendering-settings/:tenantId/usage' },
   ]);
   const requireSuperAdmin = mock(async () => auth);
   Reflect.set(controller, 'getRequiredPlatformSuperAdminContext', requireSuperAdmin);
   const request = { params: { tenantId }, query: {}, body } as never;
   expect(await controller.getSettings(request)).toEqual({ data: setting, message: 'success' });
   expect(await controller.putSettings(request)).toEqual({ data: setting, message: 'success' });
+  expect(await controller.getDailyUsage(request)).toEqual({ data: usage, message: 'success' });
+  expect(service.getDailyUsage).toHaveBeenCalledWith(auth, tenantId);
   expect(service.update).toHaveBeenCalledWith(auth, tenantId, body);
-  expect(requireSuperAdmin).toHaveBeenCalledTimes(2);
+  expect(requireSuperAdmin).toHaveBeenCalledTimes(3);
 });
 
 test('main route registry installs the settings controller', () => {
@@ -46,7 +51,9 @@ test('main route registry installs the settings controller', () => {
 });
 
 test('settings route rejects forged actor, invalid budget and unauthenticated write', async () => {
-  const service = { get: mock(async () => setting), update: mock(async () => setting) };
+  const service = { get: mock(async () => setting), getDailyUsage: mock(async () => ({
+    budget_date: '2026-09-14', task_count: 0, budget_used_fen: 0 })),
+  update: mock(async () => setting) };
   const controller = new Controller(service);
   Reflect.set(controller, 'getRequiredPlatformSuperAdminContext', async () => auth);
   const params = { tenantId };
