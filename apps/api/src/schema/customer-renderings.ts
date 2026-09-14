@@ -8,7 +8,7 @@ export type RenderingPhoneBind = z.infer<typeof RenderingPhoneBindSchema>;
 
 export const RenderingUploadStatusResponseSchema = z.strictObject({
   file_id: z.uuid(),
-  status: z.enum(['issued', 'processing', 'pending_review', 'approved', 'rejected', 'failed', 'deleted']),
+  status: z.enum(['issued', 'processing', 'pending_review', 'approved', 'ready', 'rejected', 'failed', 'deleted']),
   review_state: z.enum(['pending', 'manual']).nullable(),
   mime_type: z.literal('image/webp').nullable(),
   width: z.number().int().positive().nullable(),

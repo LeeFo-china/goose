@@ -51,7 +51,7 @@ function fixture() {
       if (row) { row.status = 'processing'; row.processing_lease_expires_at = lease; } return true;
     }),
     markNormalized: mock(async (...[_owner, _id, result]: Parameters<CustomerRenderingInputsRepositoryPort['markNormalized']>) => {
-      if (row) Object.assign(row, { status: 'pending_review', normalized_object_key: result.objectKey,
+      if (row) Object.assign(row, { status: 'ready', normalized_object_key: result.objectKey,
         normalized_size_bytes: result.sizeBytes, width: result.width, height: result.height, checksum: result.checksum });
       return true;
     }),
@@ -104,10 +104,10 @@ test('WeChat customer resolves the same owner as visitor; other subject cannot c
   expect(f.storage.readRaw).not.toHaveBeenCalled();
 });
 
-test.each(['issued', 'processing', 'pending_review', 'approved', 'rejected', 'failed', 'deleted'] as const)(
+test.each(['issued', 'processing', 'pending_review', 'approved', 'ready', 'rejected', 'failed', 'deleted'] as const)(
   'status reads owned %s input without storage access or leaking ledger fields', async (status) => {
     const f = fixture(); f.row.status = status;
-    if (status === 'pending_review' || status === 'approved' || status === 'rejected') {
+    if (status === 'pending_review' || status === 'approved' || status === 'ready' || status === 'rejected') {
       f.row.normalized_object_key = normalizedObjectKey;
       f.row.normalized_size_bytes = 100;
       f.row.width = 16; f.row.height = 12;
@@ -227,7 +227,7 @@ test('invalid signed expiry closes issued intent with wrapped storage failure', 
 test('complete normalizes real bytes using persisted location and fenced update, replay same file ID', async () => {
   const f = fixture();
   const result = await f.service.complete(user, 'wechat', id);
-  expect(result).toMatchObject({ file_id: id, status: 'pending_review', mime_type: 'image/webp', width: 16, height: 12 });
+  expect(result).toMatchObject({ file_id: id, status: 'ready', mime_type: 'image/webp', width: 16, height: 12 });
   expect(f.storage.readRaw).toHaveBeenCalledWith(expect.anything(), id, location, 123, 'image/png');
   const bytes = f.storage.putNormalized.mock.calls[0]?.[3];
   expect((await sharp(bytes).metadata()).format).toBe('webp');
@@ -274,7 +274,7 @@ test('unknown normalized PUT recovers after intent expiry through digest HEAD wi
   expect(f.repository.markFailed).not.toHaveBeenCalled();
   f.row.expires_at = new Date(0).toISOString(); f.row.processing_lease_expires_at = new Date(0).toISOString();
   f.storage.hasNormalized.mockResolvedValue(true);
-  await expect(f.service.complete(user, 'wechat', id)).resolves.toMatchObject({ file_id: id, status: 'pending_review' });
+  await expect(f.service.complete(user, 'wechat', id)).resolves.toMatchObject({ file_id: id, status: 'ready' });
   expect(f.storage.hasNormalized).toHaveBeenCalledTimes(1);
   expect(f.storage.putNormalized).toHaveBeenCalledTimes(1);
 });

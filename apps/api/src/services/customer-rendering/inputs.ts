@@ -105,7 +105,7 @@ export class CustomerRenderingInputsService implements CustomerRenderingInputsPo
     if (!parsed.success) throw Errors.fromZod(parsed.error);
     const row = await this.repository.findOwned(owner, parsed.data);
     if (!row) throw Errors.business(404, '上传意图不存在', 'RENDERING_INPUT_NOT_FOUND');
-    if (row.status === 'pending_review') return completed(row);
+    if (row.status === 'ready') return completed(row);
     const now = new Date();
     const recovering = row.status === 'processing';
     if (row.raw_deleted_at !== null || (!recovering && row.status !== 'issued')) {
@@ -158,7 +158,7 @@ export class CustomerRenderingInputsService implements CustomerRenderingInputsPo
         height: normalized.height, checksum: createHash('sha256').update(normalized.bytes).digest('hex') };
       if (!await this.repository.markNormalized(owner, row.id, result, leaseUntil, new Date().toISOString())) throw processing();
       // raw_cleanup_after remains the durable cleanup task; this request never deletes recovery evidence.
-      return { file_id: row.id, status: 'pending_review', mime_type: 'image/webp',
+      return { file_id: row.id, status: 'ready', mime_type: 'image/webp',
         width: result.width, height: result.height, size_bytes: result.sizeBytes };
     } catch (error) {
       if (error instanceof AppError && error.statusCode === 422 && error.code === 'RENDERING_IMAGE_REJECTED') {
@@ -180,7 +180,7 @@ function processing() {
   return Errors.business(409, '图片正在处理中，请稍后重试', ErrorCodes.RENDERING_UPLOAD_PROCESSING);
 }
 function completed(row: CustomerInputRow): CompleteResponse {
-  const parsed = RenderingUploadCompleteResponseSchema.safeParse({ file_id: row.id, status: 'pending_review',
+  const parsed = RenderingUploadCompleteResponseSchema.safeParse({ file_id: row.id, status: 'ready',
     mime_type: 'image/webp', width: row.width, height: row.height, size_bytes: row.normalized_size_bytes });
   if (!parsed.success) throw Errors.dbError('私有输入结果无效');
   return parsed.data;

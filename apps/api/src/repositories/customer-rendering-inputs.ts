@@ -15,7 +15,7 @@ const rowSchema = z.strictObject({
   raw_object_key: z.string().min(1), normalized_object_key: z.string().min(1).nullable(),
   normalized_size_bytes: size.nullable(), width: z.number().int().positive().nullable(),
   height: z.number().int().positive().nullable(), checksum: digest.nullable(),
-  status: z.enum(['issued', 'processing', 'pending_review', 'approved', 'rejected', 'failed', 'deleted']),
+  status: z.enum(['issued', 'processing', 'pending_review', 'approved', 'ready', 'rejected', 'failed', 'deleted']),
   expires_at: timestamp, processing_lease_expires_at: timestamp.nullable(),
   raw_cleanup_after: timestamp, raw_deleted_at: timestamp.nullable(),
   review_due_at: timestamp.nullable(), review_attempts: z.number().int().min(0).max(3),
@@ -24,7 +24,7 @@ const rowSchema = z.strictObject({
   ? row.application_id === null && row.installation_id === null
   : row.application_id !== null && row.installation_id !== null)
   .refine((row) => row.status !== 'processing' || row.processing_lease_expires_at !== null)
-  .refine((row) => !['pending_review', 'approved'].includes(row.status)
+  .refine((row) => !['pending_review', 'approved', 'ready'].includes(row.status)
     || [row.normalized_object_key, row.normalized_size_bytes, row.width, row.height, row.checksum]
       .every((value) => value !== null));
 const ROW_SELECT = Object.keys(rowSchema.shape).join(',');
@@ -147,8 +147,8 @@ export class CustomerRenderingInputsRepository implements CustomerRenderingInput
     return changed(this.owned(this.table().update({
       normalized_object_key: result.objectKey, normalized_size_bytes: result.sizeBytes,
       width: result.width, height: result.height, checksum: result.checksum,
-      status: 'pending_review', processing_lease_expires_at: null,
-      review_due_at: now, review_attempts: 0, review_decision: null, reviewed_at: null,
+      status: 'ready', processing_lease_expires_at: null,
+      review_due_at: null, review_attempts: 0, review_decision: null, reviewed_at: null,
     }), owner).eq('id', id).eq('status', 'processing')
       .eq('processing_lease_expires_at', leaseUntil).gt('processing_lease_expires_at', now)
       .is('raw_deleted_at', null));

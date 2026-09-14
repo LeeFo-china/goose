@@ -206,7 +206,7 @@ describe('CustomerRenderingInputsRepository', () => {
     expect(await db.repository.markNormalized(owner, ID, normalized, LEASE, NOW)).toBe(true);
     expect(await db.repository.markNormalized(owner, ID, normalized, LEASE, NOW)).toBe(false);
     const result = await db.repository.findOwned(owner, ID);
-    expect(result?.status).toBe('pending_review');
+    expect(result?.status).toBe('ready');
     expect(result?.normalized_object_key).toBe(normalized.objectKey);
     expect(result?.processing_lease_expires_at).toBeNull();
   });
