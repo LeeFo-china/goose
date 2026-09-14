@@ -84,6 +84,18 @@ describe("tenant Douyin lead public serializers", () => {
     } });
   });
 
+  test("projects official video identifiers from the immutable appointment snapshot", () => {
+    const result = serializePublicAppointment({ ...appointment, source_snapshot: {
+      attribution: { source_type: "short_video", entry_path: "pages/lead/index",
+        scene: "021001", analysis_info: { type: 1, unique_id: "brand_01",
+          video_item_id: "encrypted-video-1", future_secret: "never" } },
+    } }, { includeSource: true });
+    expect(result).toMatchObject({ source: { attribution: { analysis_info: {
+      type: 1, unique_id: "brand_01", video_item_id: "encrypted-video-1",
+    } } } });
+    expect(JSON.stringify(result)).not.toContain("future_secret");
+  });
+
   test("projects detail source at the service boundary without raw snapshots", () => {
     const result = serializePublicLead({ bundle: {
       lead: { id: LEAD_ID, tenant_id: TENANT_ID,

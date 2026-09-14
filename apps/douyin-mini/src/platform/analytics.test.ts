@@ -45,6 +45,14 @@ function harness(initialValue: unknown = null) {
 }
 
 describe("AnalyticsQueue", () => {
+  test("retains bounded official attribution through the analytics queue", () => {
+    const { analytics, getStored } = harness();
+    expect(analytics.record({ event_id: EVENT_ID, event_name: "page_view",
+      attribution: { ...attribution, analysis_info: { type: 1,
+        unique_id: "brand_01", video_item_id: "encrypted-video-1" } },
+    }).status).toBe("queued");
+    expect(JSON.stringify(getStored())).toContain("encrypted-video-1");
+  });
   test("persists a strict client event once for one event id", () => {
     const { analytics, getStored } = harness();
 

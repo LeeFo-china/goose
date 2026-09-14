@@ -116,6 +116,15 @@ const leadResult = {
 } as const;
 
 describe("DouyinMiniappMarketingRepository.submitMeasurementAppointment", () => {
+  test("passes bounded official identifiers into the appointment snapshot RPC", async () => {
+    const { client, calls } = createClient([{ data: { data: leadResult }, error: null }]);
+    await new DouyinMiniappMarketingRepository(client).submitMeasurementAppointment({ ...leadInput, attribution: {
+      ...leadInput.attribution, analysis_info: { type: 1,
+        unique_id: "brand_01", video_item_id: "encrypted-video-1" },
+    } });
+    expect(calls[0]?.args[1]).toMatchObject({ p_attribution: { analysis_info: { type: 1,
+      unique_id: "brand_01", video_item_id: "encrypted-video-1" } } });
+  });
   test("calls the appointment RPC once with the exact server-owned parameters", async () => {
     const { client, calls } = createClient([{ data: { data: leadResult }, error: null }]);
     const repository = new DouyinMiniappMarketingRepository(client);

@@ -7,10 +7,7 @@ export type LeadStatus = (typeof LEAD_STATUSES)[number];
 export type Pagination = { page: number; pageSize: number; total: number; totalPages: number };
 export type LeadSourceProjection = {
   h5?: CustomerLeadSourceContext["h5"];
-  attribution: Partial<Record<
-    "source_type" | "entry_path" | "scene" | "campaign_code" | "content_id",
-    string
-  >>;
+  attribution: CustomerLeadSourceContext["attribution"];
   demand: string | null;
   budget: { estimate_no: string; minimum_total: number; maximum_total: number;
     ai_status: "pending" | "succeeded" | "failed" | "skipped" | null } | null;
@@ -56,6 +53,16 @@ export const paginationSchema = z.strictObject({
   total: z.number().int().min(0), totalPages: z.number().int().min(0),
 });
 const safeBudgetAmount = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
+const officialId = z.string().trim().min(1).max(256)
+  .regex(/^[^\x00-\x1f\x7f]+$/);
+const officialAnalysisInfoSchema = z.discriminatedUnion("type", [
+  z.strictObject({ type: z.literal(1), video_item_id: officialId,
+    unique_id: officialId.optional(), author_open_id: officialId.optional() }),
+  z.strictObject({ type: z.literal(2), live_room_id: officialId,
+    unique_id: officialId.optional(), anchor_open_id: officialId.optional() }),
+  z.strictObject({ type: z.union([z.literal(3), z.literal(4)]),
+    unique_id: officialId }),
+]);
 const budgetRangeSchema = z.strictObject({
   minimum_total: safeBudgetAmount, maximum_total: safeBudgetAmount,
 }).refine((range) => range.minimum_total <= range.maximum_total);
@@ -67,6 +74,7 @@ const attributionSchema = z.strictObject({
   scene: z.string().regex(/^[0-9]{1,20}$/).optional(),
   campaign_code: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).optional(),
   content_id: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).optional(),
+  analysis_info: officialAnalysisInfoSchema.optional(),
 });
 const budgetSchema = z.strictObject({
   estimate_no: z.string().regex(/^DYYS-\d{8}-\d{6}$/),

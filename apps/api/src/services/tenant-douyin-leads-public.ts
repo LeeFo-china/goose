@@ -1,6 +1,7 @@
 import {
   DouyinBudgetAiAnalysisSchema,
   DouyinBudgetEstimateResultSchema,
+  DouyinEntryPathSchema,
 } from "@gooes/domain";
 import { z } from "zod";
 
@@ -14,18 +15,25 @@ import type {
   TenantDouyinLeadBundle,
 } from "@/repositories/tenant-douyin-leads-hydration";
 
+const OfficialIdSchema = z.string().trim().min(1).max(256)
+  .regex(/^[^\x00-\x1f\x7f]+$/);
+const OfficialAnalysisInfoSchema = z.discriminatedUnion("type", [
+  z.strictObject({ type: z.literal(1), video_item_id: OfficialIdSchema,
+    unique_id: OfficialIdSchema.optional(), author_open_id: OfficialIdSchema.optional() }),
+  z.strictObject({ type: z.literal(2), live_room_id: OfficialIdSchema,
+    unique_id: OfficialIdSchema.optional(), anchor_open_id: OfficialIdSchema.optional() }),
+  z.strictObject({ type: z.union([z.literal(3), z.literal(4)]),
+    unique_id: OfficialIdSchema }),
+]);
 const AttributionSchema = z.strictObject({
   source_type: z.enum([
     "short_video", "live", "search", "profile", "share", "direct", "other",
   ]),
-  entry_path: z.enum([
-    "pages/home/index", "pages/company/index", "pages/privacy/index",
-    "pages/cases/index", "pages/case-detail/index", "pages/sites/index",
-    "pages/site-detail/index", "pages/lead/index", "pages/lead-success/index",
-  ]),
+  entry_path: DouyinEntryPathSchema,
   scene: z.string().regex(/^[0-9]{1,20}$/),
   campaign_code: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).optional(),
   content_id: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).optional(),
+  analysis_info: OfficialAnalysisInfoSchema.optional(),
 });
 const AiStatusSchema = z.enum(["pending", "succeeded", "failed", "skipped"]);
 const SafeAmountSchema = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
@@ -188,8 +196,27 @@ export function serializePublicFollowUp(
 export function serializePublicLeadSource(raw: unknown) {
   const source = asRecord(raw);
   const rawAttribution = asRecord(source?.attribution);
-  const attribution = AttributionSchema.safeParse(rawAttribution).success
-    ? AttributionSchema.parse(rawAttribution) : {};
+  const safeAttribution = { ...rawAttribution };
+  if (safeAttribution.analysis_info !== undefined) {
+    const rawOfficial = asRecord(safeAttribution.analysis_info);
+    const selectedOfficial = rawOfficial && {
+      type: rawOfficial.type,
+      ...(rawOfficial.unique_id !== undefined ? { unique_id: rawOfficial.unique_id } : {}),
+      ...(rawOfficial.video_item_id !== undefined
+        ? { video_item_id: rawOfficial.video_item_id } : {}),
+      ...(rawOfficial.author_open_id !== undefined
+        ? { author_open_id: rawOfficial.author_open_id } : {}),
+      ...(rawOfficial.live_room_id !== undefined
+        ? { live_room_id: rawOfficial.live_room_id } : {}),
+      ...(rawOfficial.anchor_open_id !== undefined
+        ? { anchor_open_id: rawOfficial.anchor_open_id } : {}),
+    };
+    const official = OfficialAnalysisInfoSchema.safeParse(selectedOfficial);
+    if (official.success) safeAttribution.analysis_info = official.data;
+    else delete safeAttribution.analysis_info;
+  }
+  const parsedAttribution = AttributionSchema.safeParse(safeAttribution);
+  const attribution = parsedAttribution.success ? parsedAttribution.data : {};
   const demandResult = z.string().trim().min(1).max(1_000).safeParse(source?.demand);
   const estimate = asRecord(source?.budget_estimate);
   const result = DouyinBudgetEstimateResultSchema.safeParse(estimate?.result);

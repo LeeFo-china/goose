@@ -76,7 +76,12 @@ export interface CustomerLeadSourceContext {
   readonly demand: string | null;
   readonly attribution: Readonly<Partial<Record<
     'source_type' | 'entry_path' | 'scene' | 'campaign_code' | 'content_id', string
-  >>>;
+  >>> & { readonly analysis_info?:
+    | { readonly type: 1; readonly video_item_id: string;
+      readonly unique_id?: string; readonly author_open_id?: string }
+    | { readonly type: 2; readonly live_room_id: string;
+      readonly unique_id?: string; readonly anchor_open_id?: string }
+    | { readonly type: 3 | 4; readonly unique_id: string } };
   readonly budget: CustomerLeadBudget | null;
   readonly ai: {
     readonly summary: string;

@@ -7,6 +7,7 @@ import {
   AnalyticsQueue,
   type ClientAnalyticsEventName,
 } from "./platform/analytics";
+import { EntryAttribution } from "./platform/analysis-info";
 import { readBudgetLeadContext } from "./platform/budget-lead-context";
 import { readDouyinEnvironment } from "./platform/env-info";
 import { readDeploymentConfig } from "./platform/ext-config";
@@ -52,6 +53,7 @@ const customerSession = new CustomerSessionManager({
 });
 const customerApi = new ApiClient(transport, customerSession);
 const analytics = new AnalyticsQueue(api);
+const entryAttribution = new EntryAttribution();
 const bootstrap = new BootstrapStore(
   () => fetchBootstrap(api),
   navigateToServiceUnavailable,
@@ -64,6 +66,8 @@ export type DouyinAppContext = {
   analytics: AnalyticsQueue;
   bootstrap: BootstrapStore;
   launchContext: LaunchContext;
+  attributionEntryVersion: number;
+  getLeadAttribution(): LaunchContext | Promise<LaunchContext>;
   recordAnalytics(eventName: ClientAnalyticsEventName, entityId?: string): void;
   startup: Promise<BootstrapData | null>;
   getRenderingRecoveryIdentity(): Promise<RenderingRecoveryIdentity | null>;
@@ -82,10 +86,14 @@ App({
   analytics,
   bootstrap,
   launchContext: DEFAULT_LAUNCH_CONTEXT,
+  attributionEntryVersion: 0,
+  hasShown: false,
   startup: Promise.resolve(null) as Promise<BootstrapData | null>,
   onLaunch(options) {
     readBudgetLeadContext();
     this.launchContext = captureLaunchContext(options);
+    entryAttribution.start(this.launchContext);
+    this.attributionEntryVersion = entryAttribution.version;
     this.analytics.record({
       event_id: createUuidV4IdempotencyKey(),
       event_name: "app_launch",
@@ -93,21 +101,37 @@ App({
     });
     this.startup = startApplication(this.launchContext);
   },
+  onShow(options) {
+    if (!this.hasShown) { this.hasShown = true; return; }
+    const next = captureLaunchContext(options);
+    if (options.showFrom !== 10 && sameEntry(this.launchContext, next)) return;
+    this.launchContext = next;
+    entryAttribution.start(next);
+    this.attributionEntryVersion = entryAttribution.version;
+  },
   onHide() { void this.analytics.handleAppHide(); },
   async getRenderingRecoveryIdentity() {
     if (!await this.startup) return null;
     try { return recoveryIdentityFromToken(await session.getAccessToken()); }
     catch { return null; }
   },
+  getLeadAttribution() { return entryAttribution.ready(); },
   recordAnalytics(eventName: ClientAnalyticsEventName, entityId?: string) {
     this.analytics.record({
       event_id: createUuidV4IdempotencyKey(),
       event_name: eventName,
-      attribution: this.launchContext,
+      attribution: entryAttribution.current,
       ...(entityId ? { entity_id: entityId } : {}),
     });
   },
 });
+
+function sameEntry(left: LaunchContext, right: LaunchContext): boolean {
+  return left.entry_path === right.entry_path && left.scene === right.scene
+    && left.source_type === right.source_type
+    && left.campaign_code === right.campaign_code
+    && left.content_id === right.content_id;
+}
 
 async function startApplication(launchContext: LaunchContext): Promise<BootstrapData | null> {
   try {

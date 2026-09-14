@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { formatLeadAppointmentOption } from "./leads-workbench-paging";
+import { attributionBasis, officialAttributionEntries } from "./lead-attribution-presentation";
 import type { Appointment, LeadAction, LeadDetail, Pagination } from
   "./leads-workbench-logic";
 
@@ -30,13 +31,16 @@ export function LeadDetailPanel({ detail, actions, busy, followUpLoading,
   onAction: (action: LeadAction) => void; onFollowUpPage: (page: number) => void;
   onFollowUpRetry?: () => void;
 }) {
-  const attributionEntries = Object.entries(detail.attribution);
+  const attributionEntries = Object.entries(detail.attribution)
+    .filter(([key]) => key !== "analysis_info") as Array<[string, string]>;
+  const officialEntries = detail.attribution.analysis_info
+    ? officialAttributionEntries(detail.attribution.analysis_info) : [];
   const appointment = detail.latest_appointment;
   return <div className="flex flex-col gap-6">
     <section className="flex flex-col gap-3"><h3 className="text-base font-semibold">客户概览</h3><dl className="grid gap-3 text-sm sm:grid-cols-2"><DetailItem label="联系人" value={detail.name || "未填写"} /><DetailItem label="手机号" value={detail.phone_masked || "未提供"} /><DetailItem label="小区" value={detail.community || "未填写"} />{detail.source_label ? <DetailItem label="线索来源" value={detail.source_label} /> : null}<DetailItem label="负责人" value={detail.assignee?.name || "待分配"} /><DetailItem label="客户状态" value={detail.customer || detail.customer_id || detail.status === "converted" ? "已关联客户" : "尚未关联客户"} /><DetailItem label="装修需求" value={detail.demand || "未填写"} /></dl>{detail.can_view_customer && detail.customer_id ? <Button asChild variant="outline" size="sm"><Link href={`/customers/${detail.customer_id}`}>查看客户</Link></Button> : null}</section>
     {detail.source !== "h5" ? <section className="flex flex-col gap-3"><h3 className="text-base font-semibold">预约信息</h3>{appointment ? <dl className="grid gap-3 text-sm sm:grid-cols-2"><DetailItem label="预约编号" value={appointment.appointment_no} /><DetailItem label="预约时间" value={formatAppointment(appointment)} /><DetailItem label="预约小区" value={appointment.community} /><DetailItem label="预约状态" value={appointmentStatusLabel(appointment.status)} /></dl> : <CompactEmpty title="暂无量房预约" description="该线索尚未关联可展示的量房预约。" />}</section> : null}
     {detail.h5 ? <section className="flex flex-col gap-3"><h3 className="text-base font-semibold">H5 活动信息</h3><dl className="grid gap-3 text-sm sm:grid-cols-2"><DetailItem label="活动名称" value={detail.h5.page_title || "活动已不可用"} /><DetailItem label="活动标识" value={detail.h5.page_slug || "未提供"} /></dl></section> : null}
-    <section className="flex flex-col gap-3"><h3 className="text-base font-semibold">来源归因</h3>{attributionEntries.length ? <dl className="grid gap-3 text-sm sm:grid-cols-2">{attributionEntries.map(([key, value]) => <DetailItem key={key} label={attributionLabel(key)} value={attributionValue(key, value)} />)}</dl> : <CompactEmpty title="暂无来源归因" description="本次提交未携带可展示的来源信息。" />}</section>
+    <section className="flex flex-col gap-3"><h3 className="text-base font-semibold">本次留资来源</h3><dl className="grid gap-3 text-sm sm:grid-cols-2"><DetailItem label="归因依据" value={attributionBasis(detail.attribution)} />{officialEntries.map(([label, value]) => <DetailItem key={label} label={label} value={value} />)}{attributionEntries.map(([key, value]) => <DetailItem key={key} label={attributionLabel(key)} value={attributionValue(key, value)} />)}</dl></section>
     {detail.source !== "h5" ? <><section className="flex flex-col gap-3"><h3 className="text-base font-semibold">确定性预算</h3>{detail.budget ? <dl className="grid gap-3 text-sm sm:grid-cols-2"><DetailItem label="预算编号" value={detail.budget.estimate_no} /><DetailItem label="预算区间" value={`${formatMoney(detail.budget.minimum_total)} 至 ${formatMoney(detail.budget.maximum_total)}`} /></dl> : <CompactEmpty title="暂无预算结果" description="该预约未关联有效的确定性预算快照。" />}</section>
     <section className="flex flex-col gap-3"><h3 className="text-base font-semibold">AI 建议</h3>{detail.ai ? <div className="flex flex-col gap-3 text-sm"><p>{detail.ai.summary}</p><AdviceList title="预算分配" items={detail.ai.allocation_advice} /><AdviceList title="风险提示" items={detail.ai.risk_factors} /><AdviceList title="量房问题" items={detail.ai.onsite_questions} /></div> : <CompactEmpty title="暂无 AI 建议" description="仅展示预算分析成功且结构完整的建议。" />}</section></> : null}
     {detail.source === "h5" && detail.follow_remark ? <section className="flex flex-col gap-3"><h3 className="text-base font-semibold">已有跟进摘要</h3><p className="whitespace-pre-wrap break-words text-sm">{detail.follow_remark}</p></section> : null}
