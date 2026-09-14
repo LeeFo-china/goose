@@ -4,6 +4,7 @@
 
 - 用户在明确获知覆盖风险后授权继续：基于当前 main 补入调拨 Admin，仅发布 DEV Admin；保留采购工作台改动。
 - 之前真实 Chrome 已能读取租户概览，但 `/warehouse-transfers` 返回 404。DEV 后续自动发布了未包含调拨 Admin 的 `43cb38bf`，不是本轮浏览器连接故障。
+- 被覆盖的首次 DEV Admin 发布及当时的迁移、业务基线证据保存在[历史发布记录](2026-09-09-warehouse-transfer-admin-dev-release.md)。
 - 当前基线 `43cb38bf87a544e3f305f413da70a109003eec13`；既有独立工作区分支 `feature/warehouse-transfer-admin-mainline`。旧分支排障记录已保存于 `a8048208`。
 - 只移植 `2f20df15`、`e20387a1` 中 33 个 Admin 路径，逐文件与旧候选 blob 一致。采购工作台、API、Domain、迁移、依赖、认证、CI 均未改动。未合并 main，不操作生产或 Orange。
 
