@@ -8,6 +8,16 @@ import { PaginationQuerySchema } from "@/schema/request";
 
 const AttributionCodeSchema = z.string().trim()
   .regex(/^[A-Za-z0-9_-]{1,64}$/, "归因编号格式无效");
+const OfficialIdSchema = z.string().trim().min(1).max(256)
+  .regex(/^[^\x00-\x1f\x7f]+$/, "官方归因标识格式无效");
+const OfficialAnalysisInfoSchema = z.discriminatedUnion("type", [
+  z.strictObject({ type: z.literal(1), video_item_id: OfficialIdSchema,
+    unique_id: OfficialIdSchema.optional(), author_open_id: OfficialIdSchema.optional() }),
+  z.strictObject({ type: z.literal(2), live_room_id: OfficialIdSchema,
+    unique_id: OfficialIdSchema.optional(), anchor_open_id: OfficialIdSchema.optional() }),
+  z.strictObject({ type: z.union([z.literal(3), z.literal(4)]),
+    unique_id: OfficialIdSchema }),
+]);
 
 export const DouyinLaunchContextSchema = z.strictObject({
   entry_path: DouyinEntryPathSchema,
@@ -23,6 +33,7 @@ export const DouyinLaunchContextSchema = z.strictObject({
   ]),
   campaign_code: AttributionCodeSchema.optional(),
   content_id: AttributionCodeSchema.optional(),
+  analysis_info: OfficialAnalysisInfoSchema.optional(),
 });
 
 export const DouyinMiniappSessionRequestSchema = z.strictObject({

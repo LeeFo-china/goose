@@ -26,13 +26,14 @@ function auth(codes = ["customer_lead.read"], scope: EffectivePermission["scope"
     postId: null, postName: null, avatar: null, roleCodes: [], roles: [],
     permissions: codes.map((code) => ({ code, scope })) };
 }
-function fixture(source: "douyin_miniapp" | "h5" = "douyin_miniapp") {
+function fixture(source: "douyin_miniapp" | "h5" = "douyin_miniapp",
+  formData?: Record<string, unknown>) {
   const lead = { id: leadId, tenant_id: tenant, source, page_id: followUpId, page_version_id: null,
     douyin_miniapp_installation_id: null,
     customer_id: customerId, assigned_employee_id: employee, name: "客户",
     phone: "13800138000", community: "测试小区", lead_status: "new" as const,
     created_at: timestamp, followed_at: null, follow_remark: null, version: 1,
-    form_data: { demand: "需要设计", openid: "secret", raw_payload: "secret" } };
+    form_data: formData ?? { demand: "需要设计", openid: "secret", raw_payload: "secret" } };
   const customer = { id: customerId, tenant_id: tenant, name: "客户", status: "potential", owner_id: employee };
   const bundle = { lead, customer, appointments: [],
     assignee: { id: employee, tenant_id: tenant, name: "员工", avatar: null, status: "active" } };
@@ -70,6 +71,19 @@ test("generic read is employee-only and does not accept legacy permissions", asy
     await expect(context.service.list(actor, {})).rejects.toMatchObject({ statusCode: 403 });
   }
   expect(context.repository.listLeads).not.toHaveBeenCalled();
+});
+
+test("generic tenant detail carries safe official video attribution", async () => {
+  const context = fixture("douyin_miniapp", { attribution: {
+    entry_path: "pages/lead/index", scene: "021001", source_type: "short_video",
+    analysis_info: { type: 1, unique_id: "brand_01",
+      video_item_id: "encrypted-video-1", token: "secret" },
+  } });
+  const detail = await context.service.getDetail(auth(), leadId);
+  expect(detail.source_context?.attribution).toMatchObject({ analysis_info: {
+    type: 1, unique_id: "brand_01", video_item_id: "encrypted-video-1",
+  } });
+  expect(JSON.stringify(detail)).not.toContain("secret");
 });
 
 test("H5 list/detail preserves the real source and safe activity context without fabricated appointments", async () => {

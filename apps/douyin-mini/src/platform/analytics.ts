@@ -377,7 +377,7 @@ function parseStoredEvent(value: unknown): StoredAnalyticsEvent | null {
 function parseAttribution(value: unknown): LaunchContext | null {
   if (!isRecord(value) || !hasOnlyKeys(
     value,
-    ["entry_path", "scene", "source_type", "campaign_code", "content_id"],
+    ["entry_path", "scene", "source_type", "campaign_code", "content_id", "analysis_info"],
   )) return null;
   if (typeof value.entry_path !== "string"
     || !DOUYIN_ENTRY_PATH_VALUES.includes(value.entry_path as LaunchContext["entry_path"])
@@ -386,7 +386,8 @@ function parseAttribution(value: unknown): LaunchContext | null {
     || typeof value.source_type !== "string"
     || !DOUYIN_SOURCE_TYPES.includes(value.source_type as LaunchContext["source_type"])
     || !isOptionalAttributionCode(value.campaign_code)
-    || !isOptionalAttributionCode(value.content_id)) return null;
+    || !isOptionalAttributionCode(value.content_id)
+    || !isOptionalAnalysisInfo(value.analysis_info)) return null;
   return {
     entry_path: value.entry_path as LaunchContext["entry_path"],
     scene: value.scene,
@@ -395,7 +396,29 @@ function parseAttribution(value: unknown): LaunchContext | null {
       ? { campaign_code: value.campaign_code }
       : {}),
     ...(typeof value.content_id === "string" ? { content_id: value.content_id } : {}),
+    ...(value.analysis_info ? { analysis_info: value.analysis_info as LaunchContext["analysis_info"] } : {}),
   };
+}
+
+function isOptionalAnalysisInfo(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (!isRecord(value) || ![1, 2, 3, 4].includes(value.type as number)) return false;
+  const keys = value.type === 1
+    ? ["type", "video_item_id", "unique_id", "author_open_id"]
+    : value.type === 2
+      ? ["type", "live_room_id", "unique_id", "anchor_open_id"]
+      : ["type", "unique_id"];
+  if (!hasOnlyKeys(value, keys)) return false;
+  const required = value.type === 1 ? value.video_item_id
+    : value.type === 2 ? value.live_room_id : value.unique_id;
+  return isOfficialId(required)
+    && [value.unique_id, value.author_open_id, value.anchor_open_id]
+      .every((item) => item === undefined || isOfficialId(item));
+}
+
+function isOfficialId(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0
+    && value.length <= 256 && !/[\x00-\x1f\x7f]/.test(value);
 }
 
 function isClientEventName(value: unknown): value is ClientAnalyticsEventName {
