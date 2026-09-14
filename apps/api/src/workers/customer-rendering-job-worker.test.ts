@@ -124,6 +124,16 @@ test('explicit Ark content-policy refusal releases the reservation with a distin
   }
 });
 
+test('structured Ark parameter rejection in HTTP 200 releases the reservation', async () => {
+  const f = fixture();
+  f.generate.mockRejectedValue(arkGatewayError('rejected', undefined,
+    { upstreamCode: 'InvalidParameter.ImageURL' }));
+  await runTick(f.dependencies, true);
+  expect(f.repository.finalize).toHaveBeenCalledWith(jobId, attemptId,
+    'provider_rejected', 'ARK_UPSTREAM_REJECTED');
+  expect(f.repository.markReviewRequired).not.toHaveBeenCalled();
+});
+
 test('preflight and lost submission intent never call the paid provider', async () => {
   const failed = fixture(); failed.prepare.mockRejectedValue(Error('input signature unavailable'));
   await runTick(failed.dependencies, true);

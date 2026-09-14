@@ -86,6 +86,9 @@ function explicitProviderRejection(error: unknown): boolean {
   if (getArkGatewayOutcome(error) !== 'rejected' || !(error instanceof AppError)
     || !error.details || typeof error.details !== 'object') return false;
   if (contentPolicyRefusal(error)) return true;
+  const code = 'upstreamCode' in error.details ? error.details.upstreamCode : undefined;
+  if (typeof code === 'string'
+    && /^(InvalidParameter|AuthenticationError|PermissionDenied|RateLimitExceeded)(\.|$)/.test(code)) return true;
   const status = 'upstreamStatus' in error.details ? error.details.upstreamStatus : undefined;
   return typeof status === 'number' && EXPLICIT_REJECTION_STATUSES.has(status);
 }

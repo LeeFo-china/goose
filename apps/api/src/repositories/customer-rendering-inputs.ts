@@ -53,6 +53,8 @@ export type CustomerInputRow = z.infer<typeof rowSchema>;
 const statusRowSchema = z.strictObject({
   id: rowSchema.shape.id, status: rowSchema.shape.status,
   review_decision: rowSchema.shape.review_decision,
+  normalized_object_key: rowSchema.shape.normalized_object_key,
+  checksum: rowSchema.shape.checksum,
   normalized_size_bytes: rowSchema.shape.normalized_size_bytes,
   width: rowSchema.shape.width, height: rowSchema.shape.height,
 });
@@ -81,6 +83,7 @@ export interface CustomerRenderingInputsRepositoryPort {
   createIssued(owner: CustomerInputOwner, input: CreateCustomerInput): Promise<void>;
   findOwned(owner: CustomerInputOwner, id: string): Promise<CustomerInputRow | null>;
   findOwnedStatus(owner: CustomerInputOwner, id: string): Promise<CustomerInputStatusRow | null>;
+  promoteLegacyReady(owner: CustomerInputOwner, id: string, status: 'pending_review' | 'approved'): Promise<boolean>;
   countRecent(owner: CustomerInputOwner, since: string): Promise<number>;
   claimProcessing(owner: CustomerInputOwner, id: string, leaseUntil: string, now: string): Promise<boolean>;
   markNormalized(owner: CustomerInputOwner, id: string, result: NormalizedCustomerInput, leaseUntil: string, now: string): Promise<boolean>;
@@ -116,6 +119,15 @@ export class CustomerRenderingInputsRepository implements CustomerRenderingInput
     const { data } = await execute(this.owned(this.table().select(STATUS_SELECT), owner)
       .eq('id', id).limit(1).maybeSingle());
     return parse(statusRowSchema.nullable(), data);
+  }
+
+  async promoteLegacyReady(owner: CustomerInputOwner, id: string,
+    status: 'pending_review' | 'approved'): Promise<boolean> {
+    // An old API can finish normalization between the migration and API cutover.
+    // The caller first verifies complete normalized metadata; the status and owner
+    // predicates fence this idempotent promotion against concurrent review writes.
+    return changed(this.owned(this.table().update({ status: 'ready', review_due_at: null }), owner)
+      .eq('id', id).eq('status', status));
   }
 
   async countRecent(owner: CustomerInputOwner, since: string): Promise<number> {
