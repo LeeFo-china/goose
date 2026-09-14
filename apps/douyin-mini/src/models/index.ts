@@ -27,12 +27,18 @@ export const DOUYIN_SOURCE_TYPES = [
 export type DouyinEntryPath = (typeof DOUYIN_ENTRY_PATH_VALUES)[number];
 export type DouyinSourceType = (typeof DOUYIN_SOURCE_TYPES)[number];
 
+export type OfficialAnalysisInfo =
+  | { type: 1; video_item_id: string; unique_id?: string; author_open_id?: string }
+  | { type: 2; live_room_id: string; unique_id?: string; anchor_open_id?: string }
+  | { type: 3 | 4; unique_id: string };
+
 export type LaunchContext = {
   entry_path: DouyinEntryPath;
   scene: string;
   source_type: DouyinSourceType;
   campaign_code?: string;
   content_id?: string;
+  analysis_info?: OfficialAnalysisInfo;
 };
 
 export type DouyinEnvironment = {

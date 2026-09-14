@@ -3,7 +3,7 @@ import { describe, expect, mock, test } from "bun:test";
 import type { DouyinAppContext } from "../../app";
 import type { SubmitLeadInput, SubmitLeadResult } from "../../api/leads";
 import { ApiRequestError } from "../../api/request";
-import type { BootstrapData } from "../../models";
+import type { BootstrapData, LaunchContext } from "../../models";
 import {
   createLeadPageDefinition,
   type LeadPageDependencies,
@@ -31,6 +31,53 @@ const BOOTSTRAP = {
 } satisfies BootstrapData;
 
 describe("lead page definition", () => {
+  test("a rapid submit waits for this entry's official video result", async () => {
+    const harness = createHarness();
+    harness.page.onShow();
+    setValidForm(harness.page);
+    const official = deferred<LaunchContext>();
+    harness.app.getLeadAttribution = () => official.promise;
+    const submit = harness.deferredSubmit();
+    const operation = harness.page.onSubmit();
+    expect(harness.submitLead).not.toHaveBeenCalled();
+    official.resolve({ entry_path: "pages/lead/index", scene: "021001",
+      source_type: "short_video", analysis_info: { type: 1,
+        unique_id: "brand_01", video_item_id: "encrypted-video-1" } });
+    await flushPromises();
+    expect(harness.submitLead).toHaveBeenCalledWith({}, expect.objectContaining({
+      attribution: expect.objectContaining({ analysis_info: {
+        type: 1, unique_id: "brand_01", video_item_id: "encrypted-video-1",
+      } }),
+    }));
+    submit.resolve(publicAppointment());
+    await operation;
+  });
+
+  test("a new external entry rotates the submission key", () => {
+    const harness = createHarness();
+    harness.page.onShow();
+    const oldKey = harness.page.idempotency.key;
+    harness.page.onHide();
+    harness.app.attributionEntryVersion = 2;
+    harness.page.onShow();
+    expect(harness.page.idempotency.key).not.toBe(oldKey);
+  });
+
+  test("a hidden submit cannot send after a delayed attribution callback", async () => {
+    const harness = createHarness();
+    harness.page.onShow();
+    setValidForm(harness.page);
+    const official = deferred<LaunchContext>();
+    harness.app.getLeadAttribution = () => official.promise;
+    const operation = harness.page.onSubmit();
+    harness.page.onHide();
+    official.resolve({ entry_path: "pages/lead/index", scene: "021001",
+      source_type: "short_video", analysis_info: { type: 1,
+        video_item_id: "encrypted-video-1" } });
+    await operation;
+    expect(harness.submitLead).not.toHaveBeenCalled();
+  });
+
   test("a stale privacy refresh cannot write or unlock a newer page submit", async () => {
     const harness = createHarness();
     harness.page.onShow();
@@ -45,6 +92,7 @@ describe("lead page definition", () => {
     harness.page.onShow();
     const currentSubmit = harness.deferredSubmit();
     const currentOperation = harness.page.onSubmit();
+    await flushPromises();
     expect(harness.submitLead).toHaveBeenCalledTimes(2);
     const currentState = harness.page.idempotency;
     harness.setData.mockClear();
@@ -273,6 +321,10 @@ function createHarness(bootstrap: BootstrapData = BOOTSTRAP) {
     launchContext: {
       entry_path: "pages/lead/index", scene: "0", source_type: "direct",
     },
+    attributionEntryVersion: 1,
+    getLeadAttribution: () => ({
+      entry_path: "pages/lead/index", scene: "0", source_type: "direct",
+    }),
     recordAnalytics: mock(() => undefined),
   } as unknown as DouyinAppContext;
   const dependencies = {
@@ -295,7 +347,7 @@ function createHarness(bootstrap: BootstrapData = BOOTSTRAP) {
   page.data = { ...page.data, loading: false };
 
   return {
-    page, setData, submitLead, navigateToPage, bootstrapLoads,
+    page, app, setData, submitLead, navigateToPage, bootstrapLoads,
     deferredSubmit() {
       const flight = deferred<SubmitLeadResult>();
       submitFlights.push(flight);

@@ -49,6 +49,22 @@ describe("DouyinMiniappController", () => {
     }).success).toBe(false);
   });
 
+  test("accepts bounded official video attribution and rejects unrecognized fields", () => {
+    const context = { ...body.launch_context, analysis_info: {
+      type: 1, unique_id: "brand_01", author_open_id: "author-1",
+      video_item_id: "encrypted-video-1",
+    } };
+    expect(DouyinLaunchContextSchema.safeParse(context).success).toBe(true);
+    expect(DouyinLaunchContextSchema.safeParse({ ...context,
+      analysis_info: { type: 2, unique_id: "anchor_01", live_room_id: "room-1" } }).success).toBe(true);
+    expect(DouyinLaunchContextSchema.safeParse({ ...context,
+      analysis_info: { type: 4, unique_id: "brand_01" } }).success).toBe(true);
+    expect(DouyinLaunchContextSchema.safeParse({ ...context,
+      analysis_info: { ...context.analysis_info, token: "secret" } }).success).toBe(false);
+    expect(DouyinLaunchContextSchema.safeParse({ ...context,
+      analysis_info: { type: 1, unique_id: "brand_01" } }).success).toBe(false);
+  });
+
   test("registers the session route in the root registry", async () => {
     const source = await Bun.file(new URL("../../routes/index.ts", import.meta.url)).text();
     expect(source).toContain(
