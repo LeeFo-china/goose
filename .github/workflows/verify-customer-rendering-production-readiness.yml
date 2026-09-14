@@ -72,8 +72,6 @@ jobs:
             fi
             echo "${key}=${value}" >> "${GITHUB_STEP_SUMMARY}"
             if [ -n "${expected}" ]; then test "${value}" = "${expected}"; fi
-          done
-          for key in CUSTOMER_RENDERING_JOB_ADMISSION_ENABLED CUSTOMER_RENDERING_JOB_WORKER_ENABLED; do
             runtime="$(docker inspect gooes-api --format '{{json .Config.Env}}' |
               jq -r --arg prefix "${key}=" '[.[] | select(startswith($prefix)) | split("=")[1]] |
                 if length == 0 then "unset" elif length == 1 then .[0] else "duplicate" end')"
