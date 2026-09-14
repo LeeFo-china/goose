@@ -69,6 +69,16 @@ export async function fetchRenderingUploadStatus(client: ApiClient, id: string):
     reviewState: value.review_state as RenderingUploadProgress["reviewState"] };
 }
 
+export async function fetchRenderingUploadPreview(client: ApiClient, id: string): Promise<string> {
+  const normalizedId = normalizeMaterialUuid(id);
+  if (!normalizedId) throw invalidIntent();
+  const value = await client.request<unknown>({ method: 'GET',
+    path: `/douyin-mini/renderings/uploads/${normalizedId}/preview` });
+  if (!isRecord(value) || value.file_id !== normalizedId || typeof value.url !== 'string'
+    || !isCosUrl(value.url)) throw invalidResponse();
+  return value.url;
+}
+
 export async function completeRenderingUploadWithRetry(
   client: ApiClient, id: string,
   delay: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),

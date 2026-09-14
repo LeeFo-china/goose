@@ -1,7 +1,7 @@
 import type { DouyinAppContext } from "../../app";
 import type { sendLeadSms, submitLead } from "../../api/leads";
 import { resolveThemeColor } from "../../components/theme";
-import type { BootstrapData } from "../../models";
+import type { BootstrapData, LaunchContext } from "../../models";
 import type {
   readBudgetLeadContext,
 } from "../../platform/budget-lead-context";
@@ -65,6 +65,7 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
   bootstrapSnapshot: null as BootstrapData | null,
   initialBootstrapConsumed: false,
   attributionEntryVersion: 0,
+  submissionAttribution: null as { key: string; value: LaunchContext } | null,
   successNavigationInFlight: false,
   data: {
     loading: true,
@@ -354,8 +355,10 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
     this.setData({ submitting: true, formError: "", fieldErrors: {}, focusedField: "" });
     try {
       const app = dependencies.getApp();
-      const attribution = await app.getLeadAttribution();
+      const attribution = this.submissionAttribution?.key === decision.key
+        ? this.submissionAttribution.value : await app.getLeadAttribution();
       if (!this.lifecycle.canPresentSubmitContinuation(authority)) return;
+      this.submissionAttribution = { key: decision.key, value: attribution };
       const form = this.data.form;
       const verification = phoneCaptureMode === "douyin_phone"
         ? {

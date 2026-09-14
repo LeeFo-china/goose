@@ -20,6 +20,8 @@ export class CustomerRenderingJobsService implements CustomerRenderingJobsPort {
     digestService?: Pick<CustomerRenderingIdentityDigestService, 'subject' | 'phone'>;
     repository?: CustomerRenderingJobsRepositoryPort;
     admissionEnabled?: () => boolean;
+    pilotTenantId?: () => string | undefined;
+    pilotChannel?: () => string | undefined;
   } = {}) {}
 
   async create(user: JwtPayload | undefined, channel: Channel, command: RenderingJobRequest) {
@@ -30,6 +32,13 @@ export class CustomerRenderingJobsService implements CustomerRenderingJobsPort {
     if (!parsed.success) throw Errors.fromZod(parsed.error);
     const context = this.dependencies.contextService ?? customerRenderingContextService;
     const actor = await (channel === 'wechat' ? context.resolveWechat(user) : context.resolveDouyin(user));
+    const pilotTenantId = (this.dependencies.pilotTenantId
+      ?? (() => process.env.CUSTOMER_RENDERING_JOB_PILOT_TENANT_ID))();
+    const pilotChannel = (this.dependencies.pilotChannel
+      ?? (() => process.env.CUSTOMER_RENDERING_JOB_PILOT_CHANNEL))();
+    if (pilotTenantId !== actor.tenantId || pilotChannel !== actor.channel) {
+      throw Errors.business(503, '客户生图暂未开放', 'RENDERING_JOB_DISABLED');
+    }
     const digest = this.dependencies.digestService ?? getCustomerRenderingIdentityDigestService();
     const subject = digest.subject(actor);
     const phone = actor.verifiedPhone ? digest.phone({ tenantId: actor.tenantId, phone: actor.verifiedPhone }) : null;

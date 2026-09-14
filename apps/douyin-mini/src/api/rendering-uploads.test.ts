@@ -1,6 +1,6 @@
 import { expect, mock, test } from "bun:test";
 import { ApiRequestError } from "./request";
-import { completeRenderingUpload, completeRenderingUploadWithRetry, createRenderingUploadIntent, fetchRenderingUploadStatus, putRenderingBytes } from "./rendering-uploads";
+import { completeRenderingUpload, completeRenderingUploadWithRetry, createRenderingUploadIntent, fetchRenderingUploadStatus, fetchRenderingUploadPreview, putRenderingBytes } from "./rendering-uploads";
 
 const ID = "11111111-1111-4111-8111-111111111111";
 const URL = "https://private-123.cos.ap-shanghai.myqcloud.com/raw?q-signature=opaque";
@@ -87,4 +87,12 @@ test("upload status preserves manual-review state", async () => {
     width: 8, height: 8, size_bytes: 42, review_state: "manual" }));
   expect(await fetchRenderingUploadStatus({ request } as never, ID))
     .toEqual({ fileId: ID, status: "pending_review", reviewState: "manual" });
+});
+
+test("private preview requests a fresh signed URL and rejects a mismatched file ID", async () => {
+  const request = mock(async () => ({ file_id: ID, url: URL }));
+  expect(await fetchRenderingUploadPreview({ request } as never, ID)).toBe(URL);
+  expect(request).toHaveBeenCalledWith({ method: "GET", path: `/douyin-mini/renderings/uploads/${ID}/preview` });
+  request.mockImplementation(async () => ({ file_id: "22222222-2222-4222-8222-222222222222", url: URL }));
+  await expect(fetchRenderingUploadPreview({ request } as never, ID)).rejects.toMatchObject({ code: "INVALID_API_RESPONSE" });
 });

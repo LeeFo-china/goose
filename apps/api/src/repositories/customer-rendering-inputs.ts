@@ -60,6 +60,9 @@ const statusRowSchema = z.strictObject({
 });
 export type CustomerInputStatusRow = z.infer<typeof statusRowSchema>;
 const STATUS_SELECT = Object.keys(statusRowSchema.shape).join(',');
+const previewRowSchema = statusRowSchema.extend({ bucket: rowSchema.shape.bucket, region: rowSchema.shape.region });
+export type CustomerInputPreviewRow = z.infer<typeof previewRowSchema>;
+const PREVIEW_SELECT = Object.keys(previewRowSchema.shape).join(',');
 export interface CustomerInputOwner {
   tenantId: string;
   channel: 'wechat' | 'douyin';
@@ -83,6 +86,7 @@ export interface CustomerRenderingInputsRepositoryPort {
   createIssued(owner: CustomerInputOwner, input: CreateCustomerInput): Promise<void>;
   findOwned(owner: CustomerInputOwner, id: string): Promise<CustomerInputRow | null>;
   findOwnedStatus(owner: CustomerInputOwner, id: string): Promise<CustomerInputStatusRow | null>;
+  findOwnedPreview(owner: CustomerInputOwner, id: string): Promise<CustomerInputPreviewRow | null>;
   promoteLegacyReady(owner: CustomerInputOwner, id: string, status: 'pending_review' | 'approved'): Promise<boolean>;
   countRecent(owner: CustomerInputOwner, since: string): Promise<number>;
   claimProcessing(owner: CustomerInputOwner, id: string, leaseUntil: string, now: string): Promise<boolean>;
@@ -119,6 +123,12 @@ export class CustomerRenderingInputsRepository implements CustomerRenderingInput
     const { data } = await execute(this.owned(this.table().select(STATUS_SELECT), owner)
       .eq('id', id).limit(1).maybeSingle());
     return parse(statusRowSchema.nullable(), data);
+  }
+
+  async findOwnedPreview(owner: CustomerInputOwner, id: string): Promise<CustomerInputPreviewRow | null> {
+    const { data } = await execute(this.owned(this.table().select(PREVIEW_SELECT), owner)
+      .eq('id', id).limit(1).maybeSingle());
+    return parse(previewRowSchema.nullable(), data);
   }
 
   async promoteLegacyReady(owner: CustomerInputOwner, id: string,

@@ -30,7 +30,8 @@ test('trusted actor and stable command hash reach one atomic RPC; replay returns
   }), resolveDouyin: async () => { throw new Error('wrong channel'); } },
   digestService: { subject: () => ({ keyVersion: 1, digest: 'a'.repeat(64) }),
     phone: () => ({ keyVersion: 1, digest: 'b'.repeat(64) }) },
-  repository: { create }, admissionEnabled: () => true });
+  repository: { create }, admissionEnabled: () => true,
+    pilotTenantId: () => tenantId, pilotChannel: () => 'wechat' });
   expect(await service.create(user, 'wechat', command)).toMatchObject({
     job_id: quota.active_job_id, status: 'queued', quota: { reserved: 1, active_job_id: quota.active_job_id },
   });
@@ -54,7 +55,8 @@ test.each([
   }), resolveDouyin: async () => { throw new Error('wrong channel'); } },
   digestService: { subject: () => ({ keyVersion: 1, digest: 'a'.repeat(64) }),
     phone: () => ({ keyVersion: 1, digest: 'b'.repeat(64) }) },
-  repository: { create: async () => ({ decision }) }, admissionEnabled: () => true });
+  repository: { create: async () => ({ decision }) }, admissionEnabled: () => true,
+    pilotTenantId: () => tenantId, pilotChannel: () => 'wechat' });
   await expect(service.create(user, 'wechat', command)).rejects.toMatchObject({ statusCode });
 });
 
@@ -62,5 +64,26 @@ test('default admission switch blocks all database writes', async () => {
   const create = mock(async () => ({ decision: 'disabled' as const }));
   const service = new Service({ repository: { create }, admissionEnabled: () => false });
   await expect(service.create(user, 'wechat', command)).rejects.toMatchObject({ statusCode: 503 });
+  expect(create).not.toHaveBeenCalled();
+});
+
+test('enabled admission fails closed outside the configured pilot tenant', async () => {
+  const create = mock(async () => ({ decision: 'created' as const,
+    job_id: quota.active_job_id, status: 'queued' as const, quota }));
+  const contextService = { resolveWechat: async () => ({
+    tenantId, channel: 'wechat' as const, subject: 'openid', applicationId: null,
+    installationId: null, verifiedPhone: null,
+  }), resolveDouyin: async () => { throw new Error('wrong channel'); } };
+  const digestService = { subject: () => ({ keyVersion: 1, digest: 'a'.repeat(64) }),
+    phone: () => ({ keyVersion: 1, digest: 'b'.repeat(64) }) };
+  const noPilot = new Service({ contextService, repository: { create }, admissionEnabled: () => true,
+    pilotTenantId: () => undefined, pilotChannel: () => 'wechat', digestService });
+  await expect(noPilot.create(user, 'wechat', command)).rejects.toMatchObject({ statusCode: 503 });
+  const otherPilot = new Service({ contextService, repository: { create }, admissionEnabled: () => true,
+    pilotTenantId: () => '77777777-7777-4777-8777-777777777777', pilotChannel: () => 'wechat', digestService });
+  await expect(otherPilot.create(user, 'wechat', command)).rejects.toMatchObject({ statusCode: 503 });
+  const otherChannel = new Service({ contextService, repository: { create }, admissionEnabled: () => true,
+    pilotTenantId: () => tenantId, pilotChannel: () => 'douyin', digestService });
+  await expect(otherChannel.create(user, 'wechat', command)).rejects.toMatchObject({ statusCode: 503 });
   expect(create).not.toHaveBeenCalled();
 });

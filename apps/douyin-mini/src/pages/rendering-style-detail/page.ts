@@ -9,6 +9,7 @@ import {
   type createRenderingUploadIntent,
   type completeRenderingUploadWithRetry,
   type fetchRenderingUploadStatus,
+  type fetchRenderingUploadPreview,
   type putRenderingBytes,
 } from "../../api/rendering-uploads";
 import { resolveThemeColor } from "../../components/theme";
@@ -47,6 +48,8 @@ export type RenderingStyleDetailDependencies = {
   putRenderingBytes: typeof putRenderingBytes;
   completeRenderingUploadWithRetry: typeof completeRenderingUploadWithRetry;
   fetchRenderingUploadStatus?: typeof fetchRenderingUploadStatus;
+  fetchRenderingUploadPreview?: typeof fetchRenderingUploadPreview;
+  previewImage?: (options: Parameters<typeof tt.previewImage>[0]) => void;
   createRenderingJob?: typeof createRenderingJob;
   fetchRenderingJobStatus?: typeof fetchRenderingJobStatus;
   readRenderingRecovery?: typeof readRenderingRecovery;
@@ -272,6 +275,12 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
     onRetry() { void this.load(); },
     onChooseRoom() { void this.upload("room"); },
     onChooseFloorPlan() { void this.upload("floor_plan"); },
+    onPreviewRoom() { void this.preview("room"); },
+    onPreviewFloorPlan() { void this.preview("floor_plan"); },
+    onRemoveRoom() { this.removeFromDraft("room"); },
+    onRemoveFloorPlan() { this.removeFromDraft("floor_plan"); },
+    onKeepRoom() { this.keepOriginal("room"); },
+    onKeepFloorPlan() { this.keepOriginal("floor_plan"); },
     onRetryRoomComplete() { void this.retryComplete("room"); },
     onRetryFloorComplete() { void this.retryComplete("floor_plan"); },
     onCheckUploadStatus() { void this.refreshUploads(); },
@@ -300,6 +309,44 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
       this.invalidateJobDraft();
     },
     onGenerate() { void this.submitJob(); },
+    async preview(purpose: RenderingUploadPurpose) {
+      const fileId = this.recovery.files[purpose];
+      if (!fileId || !this.visible || !this.scopeReady || !dependencies.fetchRenderingUploadPreview
+        || !dependencies.previewImage) return;
+      const scope = this.recoveryScope;
+      const epoch = this.requestEpoch;
+      let reported = false;
+      const reportFailure = () => {
+        if (reported || !this.visible || this.requestEpoch !== epoch || this.recoveryScope !== scope
+          || this.recovery.files[purpose] !== fileId) return;
+        reported = true;
+        dependencies.showToast({ title: "暂无法查看图片，请稍后重试", icon: "none" });
+      };
+      try {
+        const url = await dependencies.fetchRenderingUploadPreview(dependencies.getApp().api, fileId);
+        if (!this.visible || !this.scopeReady || this.requestEpoch !== epoch || this.recoveryScope !== scope
+          || this.recovery.files[purpose] !== fileId) return;
+        dependencies.previewImage({ urls: [url], current: url, showmenu: false, fail: reportFailure });
+      } catch {
+        reportFailure();
+      }
+    },
+    removeFromDraft(purpose: RenderingUploadPurpose) {
+      if (!this.visible || !this.scopeReady || this.uploading || this.pendingIntent[purpose]
+        || this.recovery.jobRequest || this.recovery.jobId || !this.recovery.files[purpose]) return;
+      this.recovery.files[purpose] = undefined;
+      if (purpose === "room") this.setData({ roomFileId: "" });
+      else this.setData({ floorFileId: "" });
+      this.setUploadState(purpose, "idle", purpose === "room" ? "请重新选择房间照" : "本次生成不使用户型图");
+      this.persistRecovery();
+    },
+    keepOriginal(purpose: RenderingUploadPurpose) {
+      if (!this.visible || !this.scopeReady || this.uploading || !this.recovery.files[purpose]
+        || !this.pendingIntent[purpose] || this.recovery.jobRequest || this.recovery.jobId) return;
+      this.pendingIntent[purpose] = undefined;
+      this.persistRecovery();
+      this.setUploadState(purpose, "ready", "原图已保留，可用于 AI 生成");
+    },
     persistRecovery(): boolean {
       if (!this.scopeReady || !this.recoveryIdentity) return false;
       if (!dependencies.writeRenderingRecovery) return true;
@@ -337,10 +384,14 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
       const app = dependencies.getApp();
       for (const purpose of ["room", "floor_plan"] as const) {
         const fileId = this.recovery.files[purpose];
-        if (!fileId) continue;
+        if (!fileId || this.pendingIntent[purpose] || ["selecting", "signing", "uploading", "confirming"].includes(
+          purpose === "room" ? this.data.roomUploadStatus : this.data.floorUploadStatus)) continue;
         try {
           const progress = await dependencies.fetchRenderingUploadStatus(app.api, fileId);
-          if (!this.visible || epoch !== this.requestEpoch || this.recovery.files[purpose] !== fileId) return;
+          if (!this.visible || epoch !== this.requestEpoch) return;
+          if (this.recovery.files[purpose] !== fileId) continue;
+          if (this.pendingIntent[purpose] || ["selecting", "signing", "uploading", "confirming"].includes(
+            purpose === "room" ? this.data.roomUploadStatus : this.data.floorUploadStatus)) continue;
           if (progress.status === "ready" || progress.status === "approved") {
             this.setUploadState(purpose, "ready", "图片已就绪，可用于 AI 生成");
           } else if (progress.status === "pending_review") {
@@ -356,6 +407,9 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
           }
         } catch (error) {
           if (!this.visible || epoch !== this.requestEpoch) return;
+          if (this.recovery.files[purpose] !== fileId || this.pendingIntent[purpose]
+            || ["selecting", "signing", "uploading", "confirming"].includes(
+              purpose === "room" ? this.data.roomUploadStatus : this.data.floorUploadStatus)) continue;
           if (error instanceof ApiRequestError && [401, 403, 404].includes(error.statusCode)) {
             this.recovery.files[purpose] = undefined;
             if (purpose === "room") this.setData({ roomFileId: "" });
@@ -411,7 +465,8 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
         await this.refreshJob();
       } catch (error) {
         if (!currentScope()) return;
-        if (error instanceof ApiRequestError && error.code === "RENDERING_INPUT_UNAVAILABLE") {
+        if (error instanceof ApiRequestError && (error.code === "RENDERING_INPUT_UNAVAILABLE"
+          || error.code === "RENDERING_JOB_DISABLED")) {
           this.recovery.jobRequest = undefined;
           this.persistRecovery();
           this.setData({ jobDraftLocked: false });
@@ -471,7 +526,6 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
         return;
       }
       if (this.uploading) return;
-      if (purpose === "room" ? this.data.roomFileId : this.data.floorFileId) return;
       if (this.pendingIntent[purpose]) {
         await this.retryComplete(purpose);
         return;
@@ -573,7 +627,9 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
     },
     handleUploadError(purpose: RenderingUploadPurpose, error: unknown) {
       if (error instanceof ApiRequestError && error.code === "IMAGE_SELECTION_CANCELLED") {
-        this.setUploadState(purpose, "idle", purpose === "room" ? "房间照为必传，最多 10 MiB" : "户型图可选，最多 10 MiB");
+        this.setUploadState(purpose, this.recovery.files[purpose] ? "ready" : "idle",
+          this.recovery.files[purpose] ? "原图已保留，可用于 AI 生成"
+            : purpose === "room" ? "房间照为必传，最多 10 MiB" : "户型图可选，最多 10 MiB");
         return;
       }
       if (error instanceof ApiRequestError && (error.statusCode === 422
@@ -584,7 +640,9 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
         this.persistRecovery();
       }
       const retryable = Boolean(this.pendingIntent[purpose]);
-      this.setUploadState(purpose, retryable ? "retry_complete" : "error", uploadErrorMessage(error, retryable));
+      const original = Boolean(this.recovery.files[purpose]);
+      this.setUploadState(purpose, retryable ? "retry_complete" : original ? "ready" : "error",
+        original && !retryable ? `原图已保留；${uploadErrorMessage(error, false)}` : uploadErrorMessage(error, retryable));
     },
     onBackToList() {
       void dependencies.navigateToList().catch(() => {
@@ -612,7 +670,7 @@ function jobErrorMessage(error: unknown): string {
   if (error.statusCode === 401) return "登录状态已失效，请重新进入后继续提交";
   if (error.code === "RENDERING_INPUT_UNAVAILABLE") return "上传图片尚未就绪，请检查图片状态";
   if (error.code === "RENDERING_QUOTA_EXHAUSTED") return "当前生成次数已用完";
-  if (error.code === "RENDERING_JOB_DISABLED") return "AI 生成服务暂不可用";
+  if (error.code === "RENDERING_JOB_DISABLED") return "AI 生成服务尚未开放，请稍后重试；图片仍可调整";
   return "任务提交结果未确认，请继续提交同一任务";
 }
 

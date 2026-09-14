@@ -43,7 +43,6 @@ export function readOfficialAnalysisInfo(): Promise<OfficialAnalysisInfo | null>
 
 export class EntryAttribution {
   private generation = 0;
-  private sealed = false;
   private context: LaunchContext = { entry_path: "pages/home/index", scene: "0",
     source_type: "direct" };
   private flight: Promise<void> = Promise.resolve();
@@ -58,10 +57,9 @@ export class EntryAttribution {
 
   start(base: LaunchContext): void {
     const generation = ++this.generation;
-    this.sealed = false;
     this.context = base;
     this.flight = this.read().then((official) => {
-      if (generation !== this.generation || this.sealed || !official) return;
+      if (generation !== this.generation || !official) return;
       this.context = { ...base, source_type: sourceType(official), analysis_info: official };
     }).catch(() => undefined);
   }
@@ -72,7 +70,6 @@ export class EntryAttribution {
       await Promise.race([this.flight, new Promise<void>((resolve) => {
         timer = setTimeout(resolve, timeoutMs);
       })]);
-      this.sealed = true;
       return this.current;
     } finally {
       if (timer) clearTimeout(timer);
