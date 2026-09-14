@@ -6,6 +6,13 @@ const migrationUrl = new URL(
   import.meta.url,
 );
 const sql = existsSync(migrationUrl) ? readFileSync(migrationUrl, "utf8") : "";
+const republishMigrationUrl = new URL(
+  "../../../../supabase/migrations/20260914173000_repair_republished_supplier_purchase_batch_workflow_snapshot.sql",
+  import.meta.url,
+);
+const republishSql = existsSync(republishMigrationUrl)
+  ? readFileSync(republishMigrationUrl, "utf8")
+  : "";
 const assigneeMigrationUrl = new URL(
   "../../../../supabase/migrations/20260902203000_repair_supplier_purchase_batch_workflow_assignee_scope.sql",
   import.meta.url,
@@ -57,6 +64,24 @@ describe("supplier purchase batch workflow snapshot repair migration", () => {
       /UPDATE public\.tenant_supplier_settings[\s\S]*purchase_batch_workflow_enabled/i,
     );
     expect(normalized).not.toMatch(/DELETE FROM public\.workflow_/i);
+  });
+});
+
+describe("republished supplier purchase batch workflow snapshot repair migration", () => {
+  test("repairs only matching published versions without changing workflow activation", () => {
+    expect(existsSync(republishMigrationUrl)).toBe(true);
+    const normalized = compact(stripLineComments(republishSql));
+    expect(normalized).toMatch(/^BEGIN;/);
+    expect(normalized).toContain("SET LOCAL lock_timeout = '5s';");
+    expect(normalized).toContain("UPDATE public.workflow_versions AS version");
+    expect(normalized).toContain("'{subject_type}'");
+    expect(normalized).toContain("definition.tenant_id = version.tenant_id");
+    expect(normalized).toContain("definition.workflow_key = 'supplier_purchase_batch_approval'");
+    expect(normalized).toContain("version.status = 'published'");
+    expect(normalized).toContain("version.snapshot->>'workflow_key' = 'supplier_purchase_batch_approval'");
+    expect(normalized).toContain("version.snapshot->>'subject_type' IS DISTINCT FROM");
+    expect(normalized).toMatch(/COMMIT;$/);
+    expect(normalized).not.toMatch(/UPDATE public\.workflow_definitions/i);
   });
 });
 
