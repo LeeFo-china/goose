@@ -130,11 +130,11 @@ describe('customer rendering public contract', () => {
       tenant_id: id,
     }).success).toBe(false);
     expect(RenderingUploadCompleteResponseSchema.safeParse({
-      file_id: id, status: 'pending_review', mime_type: 'image/webp',
+      file_id: id, status: 'ready', mime_type: 'image/webp',
       width: 1920, height: 1080, size_bytes: 1024,
     }).success).toBe(true);
     expect(RenderingUploadCompleteResponseSchema.safeParse({
-      file_id: id, status: 'pending_review', mime_type: 'image/jpeg',
+      file_id: id, status: 'ready', mime_type: 'image/jpeg',
       width: 1920, height: 1080, size_bytes: 1024,
     }).success).toBe(false);
   });

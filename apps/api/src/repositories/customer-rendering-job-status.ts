@@ -7,13 +7,14 @@ const timestamp = z.iso.datetime({ offset: true });
 const rowSchema = z.strictObject({
   id: z.uuid(), status: z.enum(['queued', 'processing', 'succeeded', 'failed', 'review_required']),
   created_at: timestamp, updated_at: timestamp, finished_at: timestamp.nullable(),
-  attempt_id: z.uuid().nullable(), output_review_decision: z.enum(['approved', 'rejected', 'manual']).nullable(),
+  attempt_id: z.uuid().nullable(),
+  failure_code: z.string().max(120).nullable(),
   result_bucket: z.string().min(1).nullable(), result_region: z.string().min(1).nullable(),
   result_object_key: z.string().min(1).nullable(),
   result_sha256: z.string().regex(/^[0-9a-f]{64}$/).nullable(),
   result_size_bytes: z.number().int().positive().max(10 * 1024 * 1024).nullable(),
 }).refine((row) => row.status !== 'succeeded' || (row.attempt_id !== null
-  && row.output_review_decision === 'approved' && row.result_bucket !== null
+  && row.result_bucket !== null
   && row.result_region !== null && row.result_object_key !== null
   && row.result_sha256 !== null && row.result_size_bytes !== null));
 const SELECT = Object.keys(rowSchema.shape).join(',');

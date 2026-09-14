@@ -18,7 +18,7 @@ test("private upload HTTP validates session, DTO and UUID and wraps success", as
   const { signVisitorSessionToken, signDouyinMiniappToken } = await import("@/utils/jwt");
   const { Errors } = await import("@/errors/error-factory");
   const id = "11111111-1111-4111-8111-111111111111";
-  const result = { file_id: id, status: "pending_review", mime_type: "image/webp", width: 16, height: 12, size_bytes: 100 } as const;
+  const result = { file_id: id, status: "ready", mime_type: "image/webp", width: 16, height: 12, size_bytes: 100 } as const;
   const createIntent = mock(async () => ({ intent_id: id, method: "PUT" as const,
     upload_url: "https://example.com/signed", headers: {}, expires_at: "2026-09-13T12:00:00.000Z" }));
   const complete = mock(async () => result);

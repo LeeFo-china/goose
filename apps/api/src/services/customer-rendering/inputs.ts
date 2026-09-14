@@ -10,7 +10,7 @@ import { AppError } from '@/errors/app-error';
 import { CustomerRenderingInputStorage, type CustomerInputStoragePort } from '@/gateways/customer-rendering-input-storage/client';
 import { loadRenderingStorageConfig } from '@/gateways/rendering-library-storage/client';
 import { CustomerRenderingInputsRepository, type CustomerInputOwner,
-  type CustomerInputRow, type CustomerRenderingInputsRepositoryPort } from '@/repositories/customer-rendering-inputs';
+  type CustomerInputRow, type CustomerInputStatusRow, type CustomerRenderingInputsRepositoryPort } from '@/repositories/customer-rendering-inputs';
 import { RenderingUploadStatusResponseSchema, type RenderingUploadStatusResponse } from '@/schema/customer-renderings';
 import { normalizeRenderingSource } from '@/services/rendering-library-files/image';
 import { systemSettingsService } from '@/services/system-settings';
@@ -23,7 +23,7 @@ type IntentRequest = z.infer<typeof RenderingUploadIntentRequestSchema>;
 type IntentResponse = z.infer<typeof RenderingUploadIntentResponseSchema>;
 type CompleteResponse = z.infer<typeof RenderingUploadCompleteResponseSchema>;
 type Repository = Pick<CustomerRenderingInputsRepositoryPort,
-  'createIssued' | 'findOwned' | 'findOwnedStatus' | 'countRecent' | 'claimProcessing' | 'markNormalized' | 'markFailed'>;
+  'createIssued' | 'findOwned' | 'findOwnedStatus' | 'promoteLegacyReady' | 'countRecent' | 'claimProcessing' | 'markNormalized' | 'markFailed'>;
 export interface CustomerRenderingInputsPort {
   createIntent(user: JwtPayload | undefined, channel: Channel, request: IntentRequest): Promise<IntentResponse>;
   complete(user: JwtPayload | undefined, channel: Channel, intentId: string): Promise<CompleteResponse>;
@@ -103,9 +103,10 @@ export class CustomerRenderingInputsService implements CustomerRenderingInputsPo
     const owner = await this.owner(user, channel);
     const parsed = z.uuid('无效的上传意图 ID').safeParse(intentId);
     if (!parsed.success) throw Errors.fromZod(parsed.error);
-    const row = await this.repository.findOwned(owner, parsed.data);
+    let row = await this.repository.findOwned(owner, parsed.data);
     if (!row) throw Errors.business(404, '上传意图不存在', 'RENDERING_INPUT_NOT_FOUND');
-    if (row.status === 'pending_review') return completed(row);
+    row = await this.promoteLegacyReady(owner, row, () => this.repository.findOwned(owner, parsed.data));
+    if (row.status === 'ready') return completed(row);
     const now = new Date();
     const recovering = row.status === 'processing';
     if (row.raw_deleted_at !== null || (!recovering && row.status !== 'issued')) {
@@ -124,8 +125,9 @@ export class CustomerRenderingInputsService implements CustomerRenderingInputsPo
     const owner = await this.owner(user, channel);
     const parsed = z.uuid('无效的上传意图 ID').safeParse(intentId);
     if (!parsed.success) throw Errors.fromZod(parsed.error);
-    const row = await this.repository.findOwnedStatus(owner, parsed.data);
+    let row = await this.repository.findOwnedStatus(owner, parsed.data);
     if (!row) throw Errors.business(404, '上传意图不存在', 'RENDERING_INPUT_NOT_FOUND');
+    row = await this.promoteLegacyReady(owner, row, () => this.repository.findOwnedStatus(owner, parsed.data));
     const result = RenderingUploadStatusResponseSchema.safeParse({
       file_id: row.id, status: row.status,
       review_state: row.status === 'pending_review'
@@ -135,6 +137,22 @@ export class CustomerRenderingInputsService implements CustomerRenderingInputsPo
     });
     if (!result.success) throw Errors.dbError('私有输入状态无效');
     return result.data;
+  }
+
+  private async promoteLegacyReady<T extends CustomerInputRow | CustomerInputStatusRow>(
+    owner: CustomerInputOwner, initial: T, reload: () => Promise<T | null>,
+  ): Promise<T> {
+    let row = initial;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if ((row.status !== 'pending_review' && row.status !== 'approved')
+        || [row.normalized_object_key, row.normalized_size_bytes, row.width, row.height, row.checksum]
+          .some((value) => value === null)) break;
+      await this.repository.promoteLegacyReady(owner, row.id, row.status);
+      const refreshed = await reload();
+      if (!refreshed) throw Errors.business(404, '上传意图不存在', 'RENDERING_INPUT_NOT_FOUND');
+      row = refreshed;
+    }
+    return row;
   }
 
   private async process(owner: CustomerInputOwner, row: CustomerInputRow, leaseUntil: string, recovering: boolean): Promise<CompleteResponse> {
@@ -158,7 +176,7 @@ export class CustomerRenderingInputsService implements CustomerRenderingInputsPo
         height: normalized.height, checksum: createHash('sha256').update(normalized.bytes).digest('hex') };
       if (!await this.repository.markNormalized(owner, row.id, result, leaseUntil, new Date().toISOString())) throw processing();
       // raw_cleanup_after remains the durable cleanup task; this request never deletes recovery evidence.
-      return { file_id: row.id, status: 'pending_review', mime_type: 'image/webp',
+      return { file_id: row.id, status: 'ready', mime_type: 'image/webp',
         width: result.width, height: result.height, size_bytes: result.sizeBytes };
     } catch (error) {
       if (error instanceof AppError && error.statusCode === 422 && error.code === 'RENDERING_IMAGE_REJECTED') {
@@ -180,7 +198,7 @@ function processing() {
   return Errors.business(409, '图片正在处理中，请稍后重试', ErrorCodes.RENDERING_UPLOAD_PROCESSING);
 }
 function completed(row: CustomerInputRow): CompleteResponse {
-  const parsed = RenderingUploadCompleteResponseSchema.safeParse({ file_id: row.id, status: 'pending_review',
+  const parsed = RenderingUploadCompleteResponseSchema.safeParse({ file_id: row.id, status: 'ready',
     mime_type: 'image/webp', width: row.width, height: row.height, size_bytes: row.normalized_size_bytes });
   if (!parsed.success) throw Errors.dbError('私有输入结果无效');
   return parsed.data;

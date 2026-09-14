@@ -29,7 +29,8 @@ function validateEnvelope(payload: unknown): asserts payload is Record<string, u
     const code = isRecord(payload.error) ? payload.error.code : undefined;
     const isExplicitRejection = typeof code === "string"
       && /^(ContentPolicyViolation|InvalidParameter|AuthenticationError|PermissionDenied|RateLimitExceeded)(\.|$)/.test(code);
-    throw arkGatewayError(isExplicitRejection ? "rejected" : "submission_unknown");
+    throw arkGatewayError(isExplicitRejection ? "rejected" : "submission_unknown",
+      undefined, isExplicitRejection ? { upstreamCode: code } : {});
   }
 }
 

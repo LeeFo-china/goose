@@ -1,12 +1,12 @@
 # 客户私有房间照片 / 户型图上传交接
 
-2026-09-13 建立上传合同，2026-09-14 补充查询审核状态。生产 migration `20260913035110_create_customer_rendering_private_inputs.sql`、API 和复用镜像的 COS worker 已随 `aea829524365ae4862ff6b91601adeee9d6a0f53` 发布；用户反馈抖音生产上传成功，具体审核和真机细项仍待补证。只读核查发现 orange 已有微信上传 service/页面，但微信团队仍需处理 PUT 结果未知时的同 ID 恢复并自行发布。本仓库未修改 orange；AI 生图准入与 Worker 仍默认关闭。生产配置和验收缺口见[上传证据](../operations/evidence/2026-09-13-private-input-upload-production-gate.md)与[生图门禁](../operations/evidence/2026-09-14-customer-rendering-generation-gate.md)。
+2026-09-13 建立上传合同，2026-09-14 补充状态查询。本分支进一步将规范化成功状态改为 `ready`，移除数据万象图片审核；历史生产部署证据见[上传证据](../operations/evidence/2026-09-13-private-input-upload-production-gate.md)与[旧生图门禁](../operations/evidence/2026-09-14-customer-rendering-generation-gate.md)，不能将其视为本分支已上线。只读核查发现 orange 已有微信上传 service/页面，但微信团队仍需处理 PUT 结果未知时的同 ID 恢复并自行发布。本仓库未修改 orange。
 
 ## 上传与状态接口身份
 
 以下为 API origin 下完整路径，无额外 `/api` 前缀；返回单条结果，无列表/分页参数。
 
-| 客户端 | 创建上传意图（POST） | 确认上传（POST） | 查询审核状态（GET） |
+| 客户端 | 创建上传意图（POST） | 确认上传（POST） | 查询图片状态（GET） |
 | --- | --- | --- | --- |
 | 微信 | `/visitor/renderings/uploads:intent` | `/visitor/renderings/uploads/:id/complete` | `/visitor/renderings/uploads/:id` |
 | 抖音 | `/douyin-mini/renderings/uploads:intent` | `/douyin-mini/renderings/uploads/:id/complete` | `/douyin-mini/renderings/uploads/:id` |
@@ -27,19 +27,19 @@
 3. intent data 为 `{ intent_id: UUID, method: "PUT", upload_url: HTTPS签名URL, headers: Record<string,string>, expires_at: ISO日期 }`。期限最多 10 分钟，以返回 expires_at 为准。URL 是临时上传凭据，不能显示为原图预览、写埋点、日志或持久化到通用文件库。
 4. 客户端按返回 method 对 upload_url 直接发送文件原始字节，不能使用 multipart 表单封装。COS 请求不得带业务 Bearer token。必传返回 headers 的 `Content-Type`、`Content-Length`、`x-cos-acl: private`、`x-cos-forbid-overwrite: true`。Host 由 URL 决定；平台自动管理 Content-Length 时必须验证实际传输长度精确相符。微信/抖音原生网络层、域名白名单及 CORS 的可行性须分别真机验证。
 5. PUT 成功后，以 intent_id 替换 UUID 路径参数调用 complete，body 必须是 `{}`（允许无 body，不允许 null 或额外字段）。不传 URL、对象位置或图片字节。
-6. complete data 为 `{ file_id: UUID, status: "pending_review", mime_type: "image/webp", width: 正整数, height: 正整数, size_bytes: 正整数 }`。file_id 等于本意图 ID；大小和宽高属于服务器规范图，不是声明原图。响应没有任何原图/规范图公共 URL。
+6. complete data 为 `{ file_id: UUID, status: "ready", mime_type: "image/webp", width: 正整数, height: 正整数, size_bytes: 正整数 }`。file_id 等于本意图 ID；大小和宽高属于服务器规范图，不是声明原图。响应没有任何原图/规范图公共 URL。
 
-随后可用相同 ID 调用 GET 状态接口查询审核结果。路径 ID 必须是 UUID，不接受任何 query 参数；响应为 `{ file_id, status, review_state, mime_type, width, height, size_bytes }`。status 可能为 `issued | processing | pending_review | approved | rejected | failed | deleted`；仅当 status 为 `pending_review` 时，`review_state` 是 `pending` 或 `manual`，其他状态为 `null`。`manual` 表示需人工处理，客户端应停止自动轮询并提示用户稍后查询。`mime_type` 仅在规范图存在时为 `image/webp`，否则为 `null`，宽、高、大小同样可能为 `null`。状态由服务端当前租户、渠道、主体及安装身份限定；他人文件与不存在文件都返回 404。该接口不返回审核原始响应、COS 地址或签名 URL，也不表示生成任务状态。
+随后可用相同 ID 调用 GET 状态接口查询图片状态。路径 ID 必须是 UUID，不接受任何 query 参数；响应为 `{ file_id, status, review_state, mime_type, width, height, size_bytes }`。新规范图返回 `ready`；状态枚举仍兼容 `issued | processing | pending_review | approved | ready | rejected | failed | deleted`，以便发布切换时读取旧记录。`pending_review` 的 `review_state` 可为 `pending` 或 `manual`，其他状态为 `null`；迁移会将元数据完整的旧待审核／已批准规范图改为 `ready`。旧 API 在迁移后、切换前写入的完整规范图，也会在新版 API 的同 ID GET／complete 时幂等转成 `ready`。`mime_type` 仅在规范图存在时为 `image/webp`，否则为 `null`，宽、高、大小同样可能为 `null`。状态由服务端当前租户、渠道、主体及安装身份限定；他人文件与不存在文件都返回 404。该接口不返回历史审核原始响应、COS 地址或签名 URL，也不表示生成任务状态。
 
-服务器先验证 HEAD 的大小和 MIME，再限量读取并实际解码静态图，规范化为私有 WebP 并验证长度/MIME/SHA-256 元数据才提交 `pending_review`。已安装 COS SDK 2.15.4 **不签名 Content-Type**：它是必传头，但不是加密绑定的签名头。签名绑定 Content-Length、Host、ACL 与 forbid-overwrite；不能据此跳过 HEAD 和图片解码。
+服务器先验证 HEAD 的大小和 MIME，再限量读取并实际解码静态图，规范化为私有 WebP 并验证长度/MIME/SHA-256 元数据才提交 `ready`。已安装 COS SDK 2.15.4 **不签名 Content-Type**：它是必传头，但不是加密绑定的签名头。签名绑定 Content-Length、Host、ACL 与 forbid-overwrite；不能据此跳过 HEAD 和图片解码。
 
-`pending_review` 只表示上传及规范化完成，不代表内容审核通过，更不代表 AI 任务资格。两个客户端显示“待审核”，生图按钮保持关闭；只有 `approved` 才可按[任务交接契约](customer-rendering-generation-handoff.md)提交生成任务。生产准入开关与 Worker 应继续关闭，直到生图门禁通过。
+`ready` 表示上传及规范化完成，可以按[任务交接契约](customer-rendering-generation-handoff.md)提交生成任务；它不表示图片内容已获批准。方舟在生成时执行模型安全判断。生产准入开关与付费 Worker 应保持关闭，直到新迁移、模型护栏及试点验收完成。
 
 ## 重放、并发与错误映射
 
 intent 没有幂等键，每次成功请求生成新 ID；按钮需防双击，响应不确定时不要无界自动重发。频控为同 tenant/channel/主体/scope 的 **best-effort 预检查**：10 分钟 3 个、上海本地自然日 10 个；countRecent 后 createIssued 不是原子操作，并发可能突破阈值，不能对外宣称硬上限。失败的已签发账本记录也会计数。
 
-PUT 禁止覆盖；首次成功但客户端未收到响应时可尝试 complete，由服务器核实对象。不要用重传覆盖已有对象。已到 `pending_review` 的 complete 重放返回同一 file_id 和元数据，包括原图已清理之后。有效 processing 租约期间返回 409；客户端退避重试同一 ID。处理租约过期后允许恢复，即使原 intent 期限已过；服务器重读 raw 并核对确定性规范图 SHA-256，绝不盲目覆盖未知写入。已过期且从未处理的 issued 返回过期错误。清理关闭后的 deleted 返回状态冲突。
+PUT 禁止覆盖；首次成功但客户端未收到响应时可尝试 complete，由服务器核实对象。不要用重传覆盖已有对象。已到 `ready` 的 complete 重放返回同一 file_id 和元数据，包括原图已清理之后。有效 processing 租约期间返回 409；客户端退避重试同一 ID。处理租约过期后允许恢复，即使原 intent 期限已过；服务器重读 raw 并核对确定性规范图 SHA-256，绝不盲目覆盖未知写入。已过期且从未处理的 issued 返回过期错误。清理关闭后的 deleted 返回状态冲突。
 
 错误由统一处理器返回 HTTP 状态及 `code`、`message`（可能含 details/requestId）；客户端以 HTTP + code 判定，不解析中文消息。
 
@@ -67,13 +67,13 @@ PUT 禁止覆盖；首次成功但客户端未收到响应时可尝试 complete�
 
 gooes 抖音端已在 `apps/douyin-mini/src/pages/rendering-style-detail/` 增加房间照必传、户型图可选的上传区，并由 `src/api/rendering-uploads.ts` 和 `src/platform/private-image.ts` 负责双业务接口、独立 ArrayBuffer PUT 与真实字节检查。仍需在抖音开放平台配置签名 COS 主机的 **request 合法域名**，关闭开发者工具的跳过校验选项，用 iOS/Android 真机核对 `Content-Length`、全部 COS 头和上传结果；未完成前不得宣称可发布。orange 严格只读。
 
-抖音体验版反馈选图后显示通用上传失败；本地同参数调用 `tt.chooseImage` 复现 `api scope is not declared in the privacy agreement`，失败发生在 intent 之前。按[抖音隐私协议配置说明](https://developer.open-douyin.com/docs/resource/zh-CN/mini-app/open-capacity/basic-capacities/privacy-agreement)，应用所有者须在对应小程序「设置 → 基础设置 → 类目与配置 → 用户隐私保护协议」添加**相册**信息类型（该类型覆盖 `tt.chooseImage`），据实写明用途，例如“用户主动选择房间照片及可选户型图，私有上传供装修公司审核；审核前不用于 AI 生成”。由所有者预览并生成协议后，在体验版重新验证选图；不能通过关闭隐私校验绕过。客户端已将未声明与用户未授权分别识别，避免继续显示笼统上传失败。此平台配置与 COS request 域名白名单是两个独立门禁。
+抖音体验版曾反馈选图后显示通用上传失败；本地同参数调用 `tt.chooseImage` 复现 `api scope is not declared in the privacy agreement`，失败发生在 intent 之前。按[抖音隐私协议配置说明](https://developer.open-douyin.com/docs/resource/zh-CN/mini-app/open-capacity/basic-capacities/privacy-agreement)，应用所有者须在对应小程序「设置 → 基础设置 → 类目与配置 → 用户隐私保护协议」添加**相册**信息类型（该类型覆盖 `tt.chooseImage`），并使用途描述与当前流程一致，例如“用户主动选择房间照片及可选户型图，私有上传后用于 AI 装修参考图生成”。由所有者预览并生成协议后，在体验版重新验证选图；不能通过关闭隐私校验绕过。客户端已将未声明与用户未授权分别识别，避免继续显示笼统上传失败。此平台配置与 COS request 域名白名单是两个独立门禁。
 
 ## 清理部署与运行门禁
 
 raw_cleanup_after 默认创建后 24 小时。清理复用 `gooes-cos-reconcile-worker` / `gooes-cos-reconcile-worker-dev` 的 API 镜像与现有源文件入口；不新增服务、Redis、队列或 API fire-and-forget。原 worker 的 enabled 开关仍控制整个循环；新 `CUSTOMER_RENDERING_INPUT_CLEANUP_ENABLED` 默认 false。legacy reconcile 失败后仍 await 清理子任务，清理失败只记录计数，不含原始错误、主体、签名 URL 或字节。
 
-每轮只执行一次 indexed due 查询，`raw_deleted_at IS NULL AND raw_cleanup_after <= now`，按 due/id 排序且 limit=100。每条原子比较状态和原 due，推进 5 分钟租约；issued 只有过期、processing 只有处理租约过期才被关闭为 deleted，保护进行中的 complete。pending_review/approved 仅删除 raw，成品及状态不变。删除失败不填 raw_deleted_at，后续重试；成功写入也必须匹配本次尚有效的 due 租约。网关使用账本 bucket/region/raw key，旧位置凭据必须仍可访问。
+每轮只执行一次 indexed due 查询，`raw_deleted_at IS NULL AND raw_cleanup_after <= now`，按 due/id 排序且 limit=100。每条原子比较状态和原 due，推进 5 分钟租约；issued 只有过期、processing 只有处理租约过期才被关闭为 deleted，保护进行中的 complete。`ready`／旧 `pending_review`／`approved` 仅删除 raw，成品及状态不变。删除失败不填 raw_deleted_at，后续重试；成功写入也必须匹配本次尚有效的 due 租约。网关使用账本 bucket/region/raw key，旧位置凭据必须仍可访问。
 
 raw 清理启用顺序（生产 migration/API/worker 发布已完成，以下配置与真实验收尚未完成）：
 
@@ -84,7 +84,7 @@ raw 清理启用顺序（生产 migration/API/worker 发布已完成，以下配
 
 默认间隔 10 分钟，理论最多 100 条/轮（约 600 条/小时），实际还受 legacy 时长、COS 请求耗时、受保护记录占位和失败重试影响；不是 24 小时精确删除 SLA。大规模启用前验证积压与吞吐，不能取消 limit 以追平积压。回退先关闭新入口与新清理开关，保留账本/私有对象，修正用 forward migration，不 DROP。
 
-**公开上线阻塞项：** 除 migration、真实 COS/真机验证、数据库真实并发 claim/fencing 验证外，必须以独立 migration/RPC 实现并验证原子频控/额度预占。规范图 PUT 成功但账本未提交、最终处理失败等情形可能遗留 normalized 孤儿；本 worker 明确不删除 normalized，因此其对账、保留期限、删除授权和重试政策必须在公开上线前落地。内容审核未连通亦不能开放 AI 生成。
+**公开上线阻塞项：** 除 migration、真实 COS/真机验证、数据库真实并发 claim/fencing 验证外，必须验证原子频控/额度预占。规范图 PUT 成功但账本未提交、最终处理失败等情形可能遗留 normalized 孤儿；本 worker 明确不删除 normalized，因此其对账、保留期限、删除授权和重试政策必须在公开上线前落地。付费 AI 生成还须核实方舟端点安全护栏。
 
 ## Fastify inject 与客户端 smoke
 
@@ -98,4 +98,4 @@ bun run api:typecheck
 bun run api:build
 ```
 
-controller 测试通过 Fastify inject + 签名测试会话、注入 service 替身验证路由；service/repository/gateway 测试验证相应业务和边界，不能把组合替身结果宣称为远端端到端证明。交接验收需双端分别覆盖：合法会话 intent/complete 200、无会话 401、微信未选公司 409、非法 DTO/ID 400、跨主体 404、过期 issued 409 / RENDERING_UPLOAD_EXPIRED、并发 processing 409、complete 重放同 file_id、raw 清理后仍可重放 pending_review、响应始终无原图公共 URL。真实 CORS、COS policy、PUT 网络重放和真机测试仍待发布前执行，不在本地 smoke 结果中。
+controller 测试通过 Fastify inject + 签名测试会话、注入 service 替身验证路由；service/repository/gateway 测试验证相应业务和边界，不能把组合替身结果宣称为远端端到端证明。交接验收需双端分别覆盖：合法会话 intent/complete 200 且返回 `ready`、无会话 401、微信未选公司 409、非法 DTO/ID 400、跨主体 404、过期 issued 409 / RENDERING_UPLOAD_EXPIRED、并发 processing 409、complete 重放同 file_id、raw 清理后仍可重放 `ready`、响应始终无原图公共 URL。真实 CORS、COS policy、PUT 网络重放和真机测试仍待发布前执行，不在本地 smoke 结果中。

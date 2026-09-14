@@ -44,7 +44,7 @@ on:
         description: "Service to deploy"
         required: true
         type: choice
-        options: [api, admin, h5, web, social-video-worker, cos-reconcile-worker, billing-reconcile-worker, customer-rendering-input-review-worker, customer-rendering-job-worker]
+        options: [api, admin, h5, web, social-video-worker, cos-reconcile-worker, billing-reconcile-worker, customer-rendering-job-worker]
       commit_sha:
         description: "Exact 40-character commit SHA already built for development"
         required: true
@@ -112,12 +112,11 @@ jobs:
             social-video-worker) DEPLOY_SERVICES=social-video-worker; MANIFEST_SERVICE=social-video-worker ;;
             cos-reconcile-worker) DEPLOY_SERVICES=cos-reconcile-worker; MANIFEST_SERVICE=api ;;
             billing-reconcile-worker) DEPLOY_SERVICES=billing-reconcile-worker; MANIFEST_SERVICE=api ;;
-            customer-rendering-input-review-worker) DEPLOY_SERVICES=customer-rendering-input-review-worker; MANIFEST_SERVICE=api ;;
             customer-rendering-job-worker) DEPLOY_SERVICES=customer-rendering-job-worker; MANIFEST_SERVICE=api ;;
             *) echo "Unknown service: ${RELEASE_SERVICE}"; exit 1 ;;
           esac
           case "${RELEASE_SERVICE}" in
-            customer-rendering-input-review-worker|customer-rendering-job-worker)
+            customer-rendering-job-worker)
               # release-dev verifies the complete migration history in this same run.
               test "${EVIDENCE_MODE}" = same_run
               test "${EXPECTED_BUILD_WORKFLOW_PATH}" = .github/workflows/release-dev.yml ;;
@@ -341,14 +340,10 @@ jobs:
             social-video-worker) compose_service=gooes-social-video-worker-dev; export GOOES_SOCIAL_VIDEO_WORKER_IMAGE="${DEPLOY_IMAGE_REF}" ;;
             cos-reconcile-worker) compose_service=gooes-cos-reconcile-worker-dev; export GOOES_API_IMAGE="${DEPLOY_IMAGE_REF}" ;;
             billing-reconcile-worker) compose_service=gooes-billing-reconcile-worker-dev; export GOOES_API_IMAGE="${DEPLOY_IMAGE_REF}" ;;
-            customer-rendering-input-review-worker) compose_service=gooes-customer-rendering-input-review-worker-dev; export GOOES_API_IMAGE="${DEPLOY_IMAGE_REF}" ;;
             customer-rendering-job-worker) compose_service=gooes-customer-rendering-job-worker-dev; export GOOES_API_IMAGE="${DEPLOY_IMAGE_REF}" ;;
           esac
           cd "${DEV_DEPLOY_DIR}"
           case "${RELEASE_SERVICE}" in
-            customer-rendering-input-review-worker)
-              test "$(grep -Ec '^CUSTOMER_RENDERING_INPUT_REVIEW_ENABLED=' .env.dev.api)" -eq 1
-              grep -Eq '^CUSTOMER_RENDERING_INPUT_REVIEW_ENABLED=true$' .env.dev.api ;;
             customer-rendering-job-worker)
               test "$(grep -Ec '^CUSTOMER_RENDERING_JOB_WORKER_ENABLED=' .env.dev.api)" -eq 1
               grep -Eq '^CUSTOMER_RENDERING_JOB_WORKER_ENABLED=true$' .env.dev.api ;;
@@ -433,7 +428,6 @@ jobs:
             social-video-worker) container=gooes-social-video-worker-dev; url= ;;
             cos-reconcile-worker) container=gooes-cos-reconcile-worker-dev; url= ;;
             billing-reconcile-worker) container=gooes-billing-reconcile-worker-dev; url= ;;
-            customer-rendering-input-review-worker) container=gooes-customer-rendering-input-review-worker-dev; url= ;;
             customer-rendering-job-worker) container=gooes-customer-rendering-job-worker-dev; url= ;;
           esac
           for _ in $(seq 1 60); do
@@ -489,6 +483,18 @@ jobs:
             process.exit(1);
           }
           NODE
+          fi
+
+      - name: Retire obsolete customer image review worker
+        if: ${{ inputs.service == 'api' }}
+        run: |
+          set -euo pipefail
+          if [ "${EVIDENCE_MODE}" = same_run ] \
+            && [ "${EXPECTED_BUILD_WORKFLOW_PATH}" = .github/workflows/release-dev.yml ] \
+            && [ -f supabase/migrations/20260914191000_customer_rendering_ark_safety.sql ] \
+            && docker inspect gooes-customer-rendering-input-review-worker-dev >/dev/null 2>&1; then
+            docker stop --time 90 gooes-customer-rendering-input-review-worker-dev
+            docker rm gooes-customer-rendering-input-review-worker-dev
           fi
 
       - name: Deploy gated dev web

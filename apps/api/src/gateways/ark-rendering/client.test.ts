@@ -211,7 +211,7 @@ describe("Ark rendering HTTP boundary", () => {
 
   test("recognizes explicit structured provider rejection in a success envelope", async () => {
     await expect(generateArkRendering(config, input, { fetch: async () => Response.json({ error: { code: "ContentPolicyViolation", message: "private" } }) }))
-      .rejects.toMatchObject({ code: "ARK_UPSTREAM_REJECTED" });
+      .rejects.toMatchObject({ code: "ARK_UPSTREAM_REJECTED", details: { upstreamCode: "ContentPolicyViolation" } });
   });
 
   test("does not return unsafe correlation or unknown usage fields", async () => {

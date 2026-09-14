@@ -614,6 +614,27 @@ jobs:
           backup_file=""
           applied_versions=()
           if [ "${MIGRATE_MODE}" = "apply" ]; then
+            ark_safety_cutover=false
+            for file in "${pending_files[@]}"; do
+              if [ "$(basename "${file}")" = "20260914191000_customer_rendering_ark_safety.sql" ]; then
+                ark_safety_cutover=true
+              fi
+            done
+            if [ "${ark_safety_cutover}" = true ]; then
+              # Freeze admission before stopping the old paid worker. No secret values
+              # are printed: only the exact running API switch is inspected.
+              admission_enabled="$(docker inspect gooes-api --format '{{json .Config.Env}}' |
+                jq -r '[.[] | select(startswith("CUSTOMER_RENDERING_JOB_ADMISSION_ENABLED=")) |
+                  split("=")[1]] | if length == 0 then "false" elif length == 1 then .[0] else "invalid" end')"
+              test "${admission_enabled}" = false
+              for container in gooes-customer-rendering-job-worker gooes-customer-rendering-input-review-worker; do
+                if docker inspect "${container}" >/dev/null 2>&1; then
+                  docker stop --time 330 "${container}"
+                fi
+              done
+              processing_count="$(psql_prod -Atc "select count(*) from public.customer_rendering_jobs where status = 'processing';")"
+              test "${processing_count}" = 0
+            fi
             mkdir -p "${BACKUP_DIR}"
             backup_file="${BACKUP_DIR}/prod-migrate-${GITHUB_RUN_ID}-$(date +%Y%m%d%H%M%S).sql"
             docker exec supabase-db pg_dump -U postgres -d postgres --schema=public --schema=supabase_migrations > "${backup_file}"
@@ -674,6 +695,9 @@ jobs:
 
               applied_versions+=("${version}")
             done
+            if [ "${ark_safety_cutover}" = true ] && docker inspect gooes-customer-rendering-input-review-worker >/dev/null 2>&1; then
+              docker rm gooes-customer-rendering-input-review-worker
+            fi
 
             psql_prod -c "notify pgrst, 'reload schema';" >/dev/null
           fi

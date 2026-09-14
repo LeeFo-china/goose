@@ -16,6 +16,7 @@ export type RenderingJobRequest = {
 export type RenderingJobCreated = { jobId: string; status: RenderingJobStatus };
 export type RenderingJobProgress = RenderingJobCreated & {
   result: { url: string; expiresAt: string; sizeBytes: number } | null;
+  failureReason?: 'content_rejected' | 'provider_rejected' | null;
 };
 
 const STATUSES: RenderingJobStatus[] = ['queued', 'processing', 'succeeded', 'failed', 'review_required'];
@@ -42,11 +43,15 @@ export async function fetchRenderingJobStatus(client: ApiClient, id: string): Pr
   if (!isRecord(value) || value.job_id !== normalizedId
     || !STATUSES.includes(value.status as RenderingJobStatus)
     || !validTimestamp(value.created_at) || !validTimestamp(value.updated_at)
-    || !(value.finished_at === null || validTimestamp(value.finished_at))) throw invalidResponse();
+    || !(value.finished_at === null || validTimestamp(value.finished_at))
+    || !(value.failure_reason === null || value.failure_reason === 'content_rejected'
+      || value.failure_reason === 'provider_rejected')) throw invalidResponse();
   const status = value.status as RenderingJobStatus;
+  if (status !== 'failed' && value.failure_reason !== null) throw invalidResponse();
   if (status !== 'succeeded') {
     if (value.result !== null) throw invalidResponse();
-    return { jobId: normalizedId, status, result: null };
+    return { jobId: normalizedId, status, result: null,
+      failureReason: value.failure_reason as RenderingJobProgress['failureReason'] };
   }
   if (!isRecord(value.result) || value.result.mime_type !== 'image/webp'
     || !isPositiveInteger(value.result.size_bytes)
@@ -54,7 +59,7 @@ export async function fetchRenderingJobStatus(client: ApiClient, id: string): Pr
     || !validPrivateResultUrl(value.result.download_url, normalizedId)
     || !validTimestamp(value.result.expires_at)
     || Date.parse(value.result.expires_at) <= Date.now()) throw invalidResponse();
-  return { jobId: normalizedId, status, result: {
+  return { jobId: normalizedId, status, failureReason: null, result: {
     url: value.result.download_url,
     expiresAt: value.result.expires_at,
     sizeBytes: value.result.size_bytes,

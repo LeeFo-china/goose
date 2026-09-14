@@ -7,7 +7,7 @@ const LEGACY_ALL_SERVICES = [
   "cos-reconcile-worker",
   "billing-reconcile-worker",
 ];
-const OPT_IN_WORKERS = ["customer-rendering-input-review-worker", "customer-rendering-job-worker"];
+const OPT_IN_WORKERS = ["customer-rendering-job-worker"];
 const ALLOWED_SERVICES = new Set([...LEGACY_ALL_SERVICES, ...OPT_IN_WORKERS, "h5", "web"]);
 
 function reject(message) {

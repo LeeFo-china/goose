@@ -57,7 +57,7 @@ export class CustomerRenderingJobsService implements CustomerRenderingJobsPort {
       case 'disabled': throw Errors.business(503, '客户生图暂未开放', 'RENDERING_JOB_DISABLED');
       case 'invalid_request': throw Errors.badRequest('任务参数无效');
       case 'style_unavailable': throw Errors.business(422, '所选装修效果素材不可用', 'RENDERING_STYLE_UNAVAILABLE');
-      case 'input_unavailable': throw Errors.business(422, '图片尚未通过审核或不属于当前账号', 'RENDERING_INPUT_UNAVAILABLE');
+      case 'input_unavailable': throw Errors.business(422, '图片尚未就绪或不属于当前账号', 'RENDERING_INPUT_UNAVAILABLE');
       case 'daily_task_limit': throw Errors.business(429, '今日生成任务已达上限', 'RENDERING_DAILY_TASK_LIMIT');
       case 'daily_budget_limit': throw Errors.business(429, '今日生成预算已达上限', 'RENDERING_DAILY_BUDGET_LIMIT');
       case 'job_active': throw Errors.business(409, '已有正在进行的任务', ErrorCodes.RENDERING_JOB_ACTIVE);

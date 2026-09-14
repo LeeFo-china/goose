@@ -99,13 +99,28 @@ describe('CustomerRenderingInputsRepository', () => {
     const db = database([row({ status: 'rejected', normalized_size_bytes: 100, width: 20, height: 10 })]);
     expect(await db.repository.findOwnedStatus(owner, ID)).toEqual({
       id: ID, status: 'rejected', review_decision: null,
+      normalized_object_key: null, checksum: null,
       normalized_size_bytes: 100, width: 20, height: 10,
     });
     const request = db.requests[0]!;
-    expect(request.url.searchParams.get('select')).toBe('id,status,review_decision,normalized_size_bytes,width,height');
+    expect(request.url.searchParams.get('select')).toBe('id,status,review_decision,normalized_object_key,checksum,normalized_size_bytes,width,height');
     expect(request.url.searchParams.get('limit')).toBe('1');
     expect(request.url.searchParams.get('subject_digest')).toBe(`eq.${owner.subjectDigest}`);
     expect(await db.repository.findOwnedStatus({ ...owner, subjectDigest: 'b'.repeat(64) }, ID)).toBeNull();
+  });
+
+  test('promotes only owned legacy normalized status and preserves historical decision', async () => {
+    const db = database([row({ status: 'pending_review', normalized_object_key: normalized.objectKey,
+      normalized_size_bytes: normalized.sizeBytes, width: normalized.width, height: normalized.height,
+      checksum: normalized.checksum, review_decision: 'manual', reviewed_at: NOW })]);
+    expect(await db.repository.promoteLegacyReady({ ...owner, subjectDigest: 'b'.repeat(64) }, ID,
+      'pending_review')).toBe(false);
+    expect(await db.repository.promoteLegacyReady(owner, ID, 'approved')).toBe(false);
+    expect(await db.repository.promoteLegacyReady(owner, ID, 'pending_review')).toBe(true);
+    expect(db.rows[0]?.status).toBe('ready');
+    expect(db.rows[0]?.review_due_at).toBeNull();
+    expect(db.rows[0]?.review_decision).toBe('manual');
+    expect(await db.repository.promoteLegacyReady(owner, ID, 'pending_review')).toBe(false);
   });
 
   test('conditional updates use primary-key bounds without PATCH limit while reads stay bounded', async () => {
@@ -206,7 +221,7 @@ describe('CustomerRenderingInputsRepository', () => {
     expect(await db.repository.markNormalized(owner, ID, normalized, LEASE, NOW)).toBe(true);
     expect(await db.repository.markNormalized(owner, ID, normalized, LEASE, NOW)).toBe(false);
     const result = await db.repository.findOwned(owner, ID);
-    expect(result?.status).toBe('pending_review');
+    expect(result?.status).toBe('ready');
     expect(result?.normalized_object_key).toBe(normalized.objectKey);
     expect(result?.processing_lease_expires_at).toBeNull();
   });
@@ -225,22 +240,6 @@ describe('CustomerRenderingInputsRepository', () => {
     expect(db.requests[0]?.url.searchParams.get('limit')).toBe('100');
     expect(db.requests[0]?.url.searchParams.get('order')).toBe('raw_cleanup_after.asc,id.asc');
     for (const limit of [0, -1, NaN, 1.5]) await expect(db.repository.listRawCleanupDue(NOW, limit)).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
-  });
-
-  test('review queue is bounded and each decision requires the claimed due token', async () => {
-    const db = database([row({ status: 'pending_review', review_due_at: PAST,
-      normalized_object_key: normalized.objectKey, normalized_size_bytes: 100,
-      width: 20, height: 10, checksum: normalized.checksum })]);
-    expect(await db.repository.listReviewDue(NOW, 100)).toHaveLength(1);
-    expect(db.requests[0]?.url.searchParams.get('limit')).toBe('25');
-    expect(db.requests[0]?.url.searchParams.get('select')).toBe(
-      'id,tenant_id,bucket,region,normalized_object_key,review_due_at,review_attempts');
-    expect(await db.repository.claimReview(ID, ID, PAST, LEASE, 0, NOW)).toBe(true);
-    expect(await db.repository.claimReview(ID, ID, PAST, LEASE, 0, NOW)).toBe(false);
-    expect(await db.repository.markReviewed(ID, ID, PAST, 'approved')).toBe(false);
-    expect(await db.repository.markReviewed(ID, ID, LEASE, 'approved')).toBe(true);
-    expect(db.rows[0]?.status).toBe('approved');
-    expect(await db.repository.listReviewDue(FUTURE, 25)).toHaveLength(0);
   });
 
   test('cleanup claims compare due and status and fence expired uploads before deletion', async () => {

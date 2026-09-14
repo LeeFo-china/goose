@@ -4,8 +4,6 @@ import { getArkGatewayOutcome } from '@/gateways/ark-rendering/errors';
 import { arkEndpoint, buildArkRenderingRequest } from '@/gateways/ark-rendering/requests';
 import { CustomerRenderingInputStorage,
   type CustomerInputNormalizedReadPort } from '@/gateways/customer-rendering-input-storage/client';
-import { CustomerRenderingResultReviewer,
-  type CustomerRenderingResultReviewerPort } from '@/gateways/customer-rendering-result-review/client';
 import { CustomerRenderingResultStorage,
   type CustomerRenderingResultStoragePort } from '@/gateways/customer-rendering-result-storage/client';
 import { customerRenderingStyleReferenceUrl } from '@/gateways/customer-rendering-style-reference/url';
@@ -33,11 +31,10 @@ export interface CustomerRenderingJobWorkerDependencies {
   download: typeof downloadArkRenderingResult;
   normalize: typeof normalizeRenderingSource;
   storage: Pick<CustomerRenderingResultStoragePort, 'location' | 'put'>;
-  reviewer: CustomerRenderingResultReviewerPort;
 }
-type JobOutcome = 'approved' | 'rejected' | 'failed' | 'providerRejected' | 'reviewRequired' | 'lost';
+type JobOutcome = 'approved' | 'failed' | 'providerRejected' | 'reviewRequired' | 'lost';
 interface TickSummary {
-  reconciled: number; claimed: number; approved: number; rejected: number; failed: number;
+  reconciled: number; claimed: number; approved: number; failed: number;
   providerRejected: number; reviewRequired: number; lost: number;
 }
 
@@ -76,11 +73,10 @@ async function requireReview(dependencies: CustomerRenderingJobWorkerDependencie
 }
 
 async function finalize(dependencies: CustomerRenderingJobWorkerDependencies, claim: ClaimedCustomerRenderingJob,
-  outcome: 'approved' | 'rejected' | 'failed' | 'provider_rejected', failureCode: string | null): Promise<JobOutcome> {
+  outcome: 'approved' | 'failed' | 'provider_rejected', failureCode: string | null): Promise<JobOutcome> {
   const result = await dependencies.repository.finalize(claim.job_id, claim.attempt_id, outcome, failureCode);
   if (result.decision === 'finalized') {
-    return outcome === 'approved' ? 'approved' : outcome === 'rejected' ? 'rejected'
-      : outcome === 'failed' ? 'failed' : 'providerRejected';
+    return outcome === 'approved' ? 'approved' : outcome === 'failed' ? 'failed' : 'providerRejected';
   }
   if (result.decision === 'stale') return 'lost';
   return requireReview(dependencies, claim, 'WORKER_SETTLEMENT_INVALID');
@@ -89,8 +85,19 @@ async function finalize(dependencies: CustomerRenderingJobWorkerDependencies, cl
 function explicitProviderRejection(error: unknown): boolean {
   if (getArkGatewayOutcome(error) !== 'rejected' || !(error instanceof AppError)
     || !error.details || typeof error.details !== 'object') return false;
+  if (contentPolicyRefusal(error)) return true;
+  const code = 'upstreamCode' in error.details ? error.details.upstreamCode : undefined;
+  if (typeof code === 'string'
+    && /^(InvalidParameter|AuthenticationError|PermissionDenied|RateLimitExceeded)(\.|$)/.test(code)) return true;
   const status = 'upstreamStatus' in error.details ? error.details.upstreamStatus : undefined;
   return typeof status === 'number' && EXPLICIT_REJECTION_STATUSES.has(status);
+}
+
+function contentPolicyRefusal(error: AppError): boolean {
+  const details = error.details;
+  const code = details && typeof details === 'object' && 'upstreamCode' in details
+    ? details.upstreamCode : undefined;
+  return typeof code === 'string' && /^ContentPolicyViolation(?:\.|$)/.test(code);
 }
 
 async function processClaim(dependencies: CustomerRenderingJobWorkerDependencies,
@@ -127,7 +134,8 @@ async function processClaim(dependencies: CustomerRenderingJobWorkerDependencies
   try { provider = await dependencies.generate(prepared.config, prepared.input); }
   catch (error) {
     if (explicitProviderRejection(error)) {
-      try { return await finalize(dependencies, claim, 'provider_rejected', 'ARK_UPSTREAM_REJECTED'); }
+      try { return await finalize(dependencies, claim, 'provider_rejected',
+        error instanceof AppError && contentPolicyRefusal(error) ? 'ARK_CONTENT_REJECTED' : 'ARK_UPSTREAM_REJECTED'); }
       catch { return requireReview(dependencies, claim, 'WORKER_SETTLEMENT_UNAVAILABLE'); }
     }
     return requireReview(dependencies, claim, 'ARK_SUBMISSION_UNKNOWN');
@@ -151,24 +159,9 @@ async function processClaim(dependencies: CustomerRenderingJobWorkerDependencies
   if (resultRecorded === 'stale') return 'lost';
   if (resultRecorded !== 'recorded') return requireReview(dependencies, claim, 'WORKER_RESULT_RECORD_INVALID');
 
-  let review: Awaited<ReturnType<CustomerRenderingResultReviewerPort['review']>>;
-  try { review = await dependencies.reviewer.review(claim.tenant_id, claim.job_id,
-    claim.attempt_id, stored.location); }
-  catch { return requireReview(dependencies, claim, 'WORKER_OUTPUT_REVIEW_UNAVAILABLE'); }
-  // A missing CI request ID cannot prove an approval/rejection; keep the raw verdict for audit.
-  const trustedDecision = review.providerRequestId && (
-    (review.decision === 'approved' && review.rawResult === 0)
-    || (review.decision === 'rejected' && review.rawResult === 1)) ? review.decision : 'manual';
-  let reviewRecorded: Awaited<ReturnType<CustomerRenderingJobWorkerRepositoryPort['recordOutputReview']>>;
-  try {
-    reviewRecorded = await dependencies.repository.recordOutputReview(claim.job_id, claim.attempt_id,
-      { ...review, decision: trustedDecision });
-  } catch { return requireReview(dependencies, claim, 'WORKER_OUTPUT_REVIEW_UNAVAILABLE'); }
-  if (reviewRecorded === 'stale') return 'lost';
-  if (reviewRecorded !== 'recorded') return requireReview(dependencies, claim, 'WORKER_OUTPUT_REVIEW_RECORD_INVALID');
-  if (trustedDecision === 'manual') return requireReview(dependencies, claim, 'OUTPUT_REVIEW_MANUAL');
-  try { return await finalize(dependencies, claim, trustedDecision,
-    trustedDecision === 'rejected' ? 'OUTPUT_REVIEW_REJECTED' : null); }
+  // Ark returned one image and the private result is durably recorded. The account's
+  // standard Ark guardrail is the content gate; no separate COS CI verdict exists.
+  try { return await finalize(dependencies, claim, 'approved', null); }
   catch { return requireReview(dependencies, claim, 'WORKER_SETTLEMENT_UNAVAILABLE'); }
 }
 
@@ -177,7 +170,7 @@ export async function runCustomerRenderingJobTick(dependencies: CustomerRenderin
   enabled: boolean): Promise<TickSummary | { disabled: true }> {
   if (!enabled) return { disabled: true };
   const summary: TickSummary = { reconciled: await dependencies.repository.reconcileExpired(),
-    claimed: 0, approved: 0, rejected: 0, failed: 0, providerRejected: 0, reviewRequired: 0, lost: 0 };
+    claimed: 0, approved: 0, failed: 0, providerRejected: 0, reviewRequired: 0, lost: 0 };
   const claim = await dependencies.repository.claim();
   if (claim.decision === 'empty') return summary;
   if (claim.decision !== 'claimed') throw Errors.dbError('客户生图任务领取响应无效');
@@ -197,7 +190,6 @@ function createDependencies(): CustomerRenderingJobWorkerDependencies {
     generate: generateArkRendering, download: downloadArkRenderingResult,
     normalize: normalizeRenderingSource,
     storage: new CustomerRenderingResultStorage({ loadConfig }),
-    reviewer: new CustomerRenderingResultReviewer({ loadConfig }),
   };
 }
 

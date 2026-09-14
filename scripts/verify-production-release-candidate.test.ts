@@ -129,10 +129,7 @@ describe("production release candidate verifier", () => {
     ).toEqual(candidate);
   });
 
-  test.each([
-    "customer-rendering-input-review-worker",
-    "customer-rendering-job-worker",
-  ])("accepts an explicitly selected %s backed by the API digest", (worker) => {
+  test.each(["customer-rendering-job-worker"])("accepts an explicitly selected %s backed by the API digest", (worker) => {
     const evidence = cloneEvidence();
     evidence.candidate.requested_services = [worker];
     evidence.expected.services = [worker];
