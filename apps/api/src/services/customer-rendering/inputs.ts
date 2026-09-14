@@ -7,7 +7,7 @@ import {
 import { ErrorCodes } from '@/errors/error-codes';
 import { Errors } from '@/errors/error-factory';
 import { AppError } from '@/errors/app-error';
-import { CustomerRenderingInputStorage, type CustomerInputStoragePort } from '@/gateways/customer-rendering-input-storage/client';
+import { CustomerRenderingInputStorage, type CustomerInputStoragePort, type CustomerInputNormalizedReadPort } from '@/gateways/customer-rendering-input-storage/client';
 import { loadRenderingStorageConfig } from '@/gateways/rendering-library-storage/client';
 import { CustomerRenderingInputsRepository, type CustomerInputOwner,
   type CustomerInputRow, type CustomerInputStatusRow, type CustomerRenderingInputsRepositoryPort } from '@/repositories/customer-rendering-inputs';
@@ -23,11 +23,12 @@ type IntentRequest = z.infer<typeof RenderingUploadIntentRequestSchema>;
 type IntentResponse = z.infer<typeof RenderingUploadIntentResponseSchema>;
 type CompleteResponse = z.infer<typeof RenderingUploadCompleteResponseSchema>;
 type Repository = Pick<CustomerRenderingInputsRepositoryPort,
-  'createIssued' | 'findOwned' | 'findOwnedStatus' | 'promoteLegacyReady' | 'countRecent' | 'claimProcessing' | 'markNormalized' | 'markFailed'>;
+  'createIssued' | 'findOwned' | 'findOwnedStatus' | 'findOwnedPreview' | 'promoteLegacyReady' | 'countRecent' | 'claimProcessing' | 'markNormalized' | 'markFailed'>;
 export interface CustomerRenderingInputsPort {
   createIntent(user: JwtPayload | undefined, channel: Channel, request: IntentRequest): Promise<IntentResponse>;
   complete(user: JwtPayload | undefined, channel: Channel, intentId: string): Promise<CompleteResponse>;
   getStatus(user: JwtPayload | undefined, channel: Channel, intentId: string): Promise<RenderingUploadStatusResponse>;
+  preview(user: JwtPayload | undefined, channel: Channel, intentId: string): Promise<{ file_id: string; url: string }>;
 }
 const INTENT_TTL_MS = 10 * 60_000;
 const PROCESSING_LEASE_MS = 2 * 60_000;
@@ -38,14 +39,14 @@ export class CustomerRenderingInputsService implements CustomerRenderingInputsPo
   private readonly contextService: Pick<CustomerRenderingContextService, 'resolveWechat' | 'resolveDouyin'>;
   private readonly digestService: Pick<CustomerRenderingIdentityDigestService, 'subject'>;
   private readonly repository: Repository;
-  private readonly storage: CustomerInputStoragePort;
+  private readonly storage: CustomerInputStoragePort & CustomerInputNormalizedReadPort;
   private readonly normalize: typeof normalizeRenderingSource;
 
   constructor(dependencies: {
     contextService?: Pick<CustomerRenderingContextService, 'resolveWechat' | 'resolveDouyin'>;
     digestService?: Pick<CustomerRenderingIdentityDigestService, 'subject'>;
     repository?: Repository;
-    storage?: CustomerInputStoragePort;
+    storage?: CustomerInputStoragePort & CustomerInputNormalizedReadPort;
     normalize?: typeof normalizeRenderingSource;
   } = {}) {
     this.contextService = dependencies.contextService ?? customerRenderingContextService;
@@ -137,6 +138,22 @@ export class CustomerRenderingInputsService implements CustomerRenderingInputsPo
     });
     if (!result.success) throw Errors.dbError('私有输入状态无效');
     return result.data;
+  }
+
+  async preview(user: JwtPayload | undefined, channel: Channel, intentId: string): Promise<{ file_id: string; url: string }> {
+    const owner = await this.owner(user, channel);
+    const parsed = z.uuid('无效的上传意图 ID').safeParse(intentId);
+    if (!parsed.success) throw Errors.fromZod(parsed.error);
+    let row = await this.repository.findOwnedPreview(owner, parsed.data);
+    if (!row) throw Errors.business(404, '上传意图不存在', 'RENDERING_INPUT_NOT_FOUND');
+    row = await this.promoteLegacyReady(owner, row, () => this.repository.findOwnedPreview(owner, parsed.data));
+    if (row.status !== 'ready' || !row.normalized_object_key) {
+      throw Errors.business(409, '图片尚未就绪', 'RENDERING_INPUT_STATE_CONFLICT');
+    }
+    const url = await this.storage.signNormalizedRead(owner.tenantId, row.id, {
+      bucket: row.bucket, region: row.region, object_key: row.normalized_object_key,
+    });
+    return { file_id: row.id, url };
   }
 
   private async promoteLegacyReady<T extends CustomerInputRow | CustomerInputStatusRow>(

@@ -109,6 +109,21 @@ describe('CustomerRenderingInputsRepository', () => {
     expect(await db.repository.findOwnedStatus({ ...owner, subjectDigest: 'b'.repeat(64) }, ID)).toBeNull();
   });
 
+  test('findOwnedPreview selects only signing fields and enforces the owner boundary', async () => {
+    const db = database([row({ status: 'ready', normalized_object_key: normalized.objectKey,
+      normalized_size_bytes: normalized.sizeBytes, width: normalized.width, height: normalized.height,
+      checksum: normalized.checksum })]);
+    expect(await db.repository.findOwnedPreview(owner, ID)).toEqual({
+      id: ID, status: 'ready', review_decision: null, bucket: 'issued-bucket', region: 'ap-guangzhou',
+      normalized_object_key: normalized.objectKey, normalized_size_bytes: normalized.sizeBytes,
+      width: normalized.width, height: normalized.height, checksum: normalized.checksum,
+    });
+    expect(db.requests[0]?.url.searchParams.get('select')).toBe(
+      'id,status,review_decision,normalized_object_key,checksum,normalized_size_bytes,width,height,bucket,region');
+    expect(db.requests[0]?.url.searchParams.get('limit')).toBe('1');
+    expect(await db.repository.findOwnedPreview({ ...owner, subjectDigest: 'b'.repeat(64) }, ID)).toBeNull();
+  });
+
   test('promotes only owned legacy normalized status and preserves historical decision', async () => {
     const db = database([row({ status: 'pending_review', normalized_object_key: normalized.objectKey,
       normalized_size_bytes: normalized.sizeBytes, width: normalized.width, height: normalized.height,

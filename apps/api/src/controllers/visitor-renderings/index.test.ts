@@ -24,10 +24,11 @@ test("private upload HTTP validates session, DTO and UUID and wraps success", as
   const complete = mock(async () => result);
   const getStatus = mock(async () => ({ file_id: id, status: 'issued' as const,
     review_state: null, mime_type: null, width: null, height: null, size_bytes: null }));
-  await expect(new Controller(undefined, undefined, { createIntent, complete, getStatus })
+  const preview = mock(async () => ({ file_id: id, url: 'https://example.com/signed' }));
+  await expect(new Controller(undefined, undefined, { createIntent, complete, getStatus, preview })
     .completeInput({ params: { id }, body: null } as never)).rejects.toMatchObject({ statusCode: 400 });
   const app = Fastify({ logger: false }); errorHandler(app); authPlugin(app);
-  new Controller(undefined, undefined, { createIntent, complete, getStatus }).registerExtraRoutes(app);
+  new Controller(undefined, undefined, { createIntent, complete, getStatus, preview }).registerExtraRoutes(app);
   await app.ready();
   const token = signVisitorSessionToken({ openid: "openid", visitor_id: "visitor" });
   const headers = { authorization: `Bearer ${token}` };

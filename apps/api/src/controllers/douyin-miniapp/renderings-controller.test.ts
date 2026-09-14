@@ -24,10 +24,11 @@ test("private upload HTTP validates session, DTO and UUID and wraps success", as
   const complete = mock(async () => result);
   const getStatus = mock(async () => ({ file_id: id, status: 'issued' as const,
     review_state: null, mime_type: null, width: null, height: null, size_bytes: null }));
-  await expect(new Controller(undefined, undefined, { createIntent, complete, getStatus })
+  const preview = mock(async () => ({ file_id: id, url: 'https://example.com/signed' }));
+  await expect(new Controller(undefined, undefined, { createIntent, complete, getStatus, preview })
     .completeInput({ params: { id }, body: null } as never)).rejects.toMatchObject({ statusCode: 400 });
   const app = Fastify({ logger: false }); errorHandler(app); authPlugin(app);
-  new Controller(undefined, undefined, { createIntent, complete, getStatus }).registerExtraRoutes(app);
+  new Controller(undefined, undefined, { createIntent, complete, getStatus, preview }).registerExtraRoutes(app);
   await app.ready();
   const token = signDouyinMiniappToken({ tenant_id: id, douyin_installation_id: id, douyin_app_id: "tt-app", subject_hash: "a".repeat(64) });
   const headers = { authorization: `Bearer ${token}` };
@@ -86,6 +87,33 @@ test('private upload status GET validates session, UUID and empty query before d
     const responseBody: unknown = response.json();
     expect(responseBody).toEqual({ data: result, message: 'success' });
     expect(getStatus).toHaveBeenCalledWith(expect.objectContaining({ token_type: 'douyin_miniapp' }), 'douyin', id);
+  } finally { await app.close(); }
+});
+
+test('private preview GET requires the Douyin owner session and disables caching', async () => {
+  const { default: authPlugin } = await import('@/plugins/auth/legacy-plugin');
+  const { default: errorHandler } = await import('@/plugins/error-handler');
+  const { signDouyinMiniappToken } = await import('@/utils/jwt');
+  const id = '11111111-1111-4111-8111-111111111111';
+  const preview = mock(async () => ({ file_id: id,
+    url: 'https://bucket-123.cos.ap-guangzhou.myqcloud.com/signed?q-signature=opaque' }));
+  const app = Fastify({ logger: false }); errorHandler(app); authPlugin(app);
+  new Controller(undefined, undefined, { preview } as never).registerExtraRoutes(app);
+  await app.ready();
+  const url = `/douyin-mini/renderings/uploads/${id}/preview`;
+  const headers = { authorization: `Bearer ${signDouyinMiniappToken({ tenant_id: id,
+    douyin_installation_id: id, douyin_app_id: 'tt-app', subject_hash: 'a'.repeat(64) })}` };
+  try {
+    expect((await app.inject({ method: 'GET', url })).statusCode).toBe(401);
+    expect((await app.inject({ method: 'GET', url: `${url}?owner=forged`, headers })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'GET', url: '/douyin-mini/renderings/uploads/invalid/preview', headers })).statusCode).toBe(400);
+    expect(preview).not.toHaveBeenCalled();
+    const response = await app.inject({ method: 'GET', url, headers });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['cache-control']).toBe('private, no-store');
+    expect(response.json()).toMatchObject({ data: { file_id: id,
+      url: 'https://bucket-123.cos.ap-guangzhou.myqcloud.com/signed?q-signature=opaque' }, message: 'success' });
+    expect(preview).toHaveBeenCalledWith(expect.objectContaining({ token_type: 'douyin_miniapp' }), 'douyin', id);
   } finally { await app.close(); }
 });
 
@@ -158,6 +186,7 @@ describe("DouyinRenderingsController", () => {
       { method: "POST", path: "/douyin-mini/renderings/uploads:intent", access: "session" },
       { method: "POST", path: "/douyin-mini/renderings/uploads/:id/complete", access: "session" },
       { method: "GET", path: "/douyin-mini/renderings/uploads/:id", access: "session" },
+      { method: "GET", path: "/douyin-mini/renderings/uploads/:id/preview", access: "session" },
       { method: "POST", path: "/douyin-mini/renderings/jobs", access: "session" },
       { method: "GET", path: "/douyin-mini/renderings/jobs/:id", access: "session" },
     ]);

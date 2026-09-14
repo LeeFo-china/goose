@@ -16,6 +16,131 @@ const OWNER = { tenantId: STYLE.id, appId: "tt-app", installationId: STYLE.id,
   subjectHash: "a".repeat(64) };
 const OTHER = { ...OWNER, subjectHash: "b".repeat(64) };
 
+test("ready room image can be previewed, replaced without losing the old image, and removed from the draft", async () => {
+  const replacementId = "22222222-2222-4222-8222-222222222222";
+  const previews: string[] = [];
+  const image: PrivateImage = { bytes: new Uint8Array([0xff, 0xd8, 0xff, 0xd9]).buffer,
+    mimeType: "image/jpeg", sizeBytes: 4 };
+  let resolvePut!: () => void;
+  const put = new Promise<void>((resolve) => { resolvePut = resolve; });
+  let uploadCount = 0;
+  const definition = createRenderingStyleDetailPageDefinition({
+    getApp: () => ({ api: {}, startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
+      recordAnalytics: () => undefined }) as never,
+    resolveRecoveryIdentity: async () => OWNER,
+    fetchPublishedStyleDetail: async () => STYLE,
+    navigateToList: async () => undefined,
+    showToast: () => undefined,
+    choosePrivateImage: async () => image,
+    createRenderingUploadIntent: async () => { uploadCount++; return { intentId: replacementId,
+      uploadUrl: "https://example.invalid/signed", headers: {}, expiresAt: "2099-01-01T00:00:00Z" }; },
+    putRenderingBytes: async () => put,
+    completeRenderingUploadWithRetry: async () => ({ fileId: replacementId, status: "ready" }),
+    fetchRenderingUploadStatus: async () => ({ fileId: STYLE.id, status: "ready", reviewState: null }),
+    fetchRenderingUploadPreview: async () => "https://private.example.com/signed.webp",
+    previewImage: ({ current }) => { if (current) previews.push(current); },
+    readRenderingRecovery: () => ({ styleId: STYLE.id, roomIntentId: null, floorIntentId: null,
+      roomFileId: STYLE.id, floorFileId: null, jobRequest: null, jobId: null, savedAt: Date.now() }),
+    writeRenderingRecovery: () => true,
+  });
+  const view = Object.assign(definition, { setData(patch: Record<string, unknown>) { Object.assign(definition.data, patch); } });
+  view.onLoad({ id: STYLE.id }); await flush();
+  await view.preview("room");
+  expect(previews).toEqual(["https://private.example.com/signed.webp"]);
+  const replacing = view.upload("room"); await flush();
+  expect(uploadCount).toBe(1);
+  expect(view.data.roomFileId).toBe(STYLE.id);
+  resolvePut(); await replacing;
+  expect(view.data.roomFileId).toBe(replacementId);
+  view.removeFromDraft("room");
+  expect(view.data.roomFileId).toBe("");
+  expect(view.data.canGenerate).toBe(false);
+});
+
+test("closed generation admission releases the draft so its image can be changed", async () => {
+  const definition = createRenderingStyleDetailPageDefinition({
+    getApp: () => ({ api: {}, startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
+      recordAnalytics: () => undefined }) as never,
+    resolveRecoveryIdentity: async () => OWNER,
+    fetchPublishedStyleDetail: async () => STYLE,
+    navigateToList: async () => undefined, showToast: () => undefined,
+    choosePrivateImage: async () => { throw new Error("unused"); },
+    createRenderingUploadIntent: async () => { throw new Error("unused"); },
+    putRenderingBytes: async () => undefined,
+    completeRenderingUploadWithRetry: async () => { throw new Error("unused"); },
+    readRenderingRecovery: () => ({ styleId: STYLE.id, roomIntentId: null, floorIntentId: null,
+      roomFileId: STYLE.id, floorFileId: null, jobRequest: null, jobId: null, savedAt: Date.now() }),
+    writeRenderingRecovery: () => true,
+    fetchRenderingUploadStatus: async () => ({ fileId: STYLE.id, status: "ready", reviewState: null }),
+    createRenderingJob: async () => { throw new ApiRequestError(503, "RENDERING_JOB_DISABLED", "closed"); },
+  });
+  const view = Object.assign(definition, { setData(patch: Record<string, unknown>) { Object.assign(definition.data, patch); } });
+  view.onLoad({ id: STYLE.id }); await flush();
+  await view.submitJob();
+  expect(view.data.jobDraftLocked).toBe(false);
+  expect(view.data.generateButtonLabel).toBe("生成 AI 参考效果图");
+  view.removeFromDraft("room");
+  expect(view.data.roomFileId).toBe("");
+});
+
+test("an old status failure cannot remove a newly confirmed replacement", async () => {
+  const replacementId = "22222222-2222-4222-8222-222222222222";
+  let rejectOld!: (error: unknown) => void;
+  const oldStatus = new Promise<never>((_resolve, reject) => { rejectOld = reject; });
+  const image: PrivateImage = { bytes: new Uint8Array([0xff, 0xd8, 0xff, 0xd9]).buffer,
+    mimeType: "image/jpeg", sizeBytes: 4 };
+  const definition = createRenderingStyleDetailPageDefinition({
+    getApp: () => ({ api: {}, startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
+      recordAnalytics: () => undefined }) as never,
+    resolveRecoveryIdentity: async () => OWNER,
+    fetchPublishedStyleDetail: async () => STYLE,
+    navigateToList: async () => undefined, showToast: () => undefined,
+    choosePrivateImage: async () => image,
+    createRenderingUploadIntent: async () => ({ intentId: replacementId,
+      uploadUrl: "https://example.invalid/signed", headers: {}, expiresAt: "2099-01-01T00:00:00Z" }),
+    putRenderingBytes: async () => undefined,
+    completeRenderingUploadWithRetry: async () => ({ fileId: replacementId, status: "ready" }),
+    fetchRenderingUploadStatus: async () => oldStatus,
+    readRenderingRecovery: () => ({ styleId: STYLE.id, roomIntentId: null, floorIntentId: null,
+      roomFileId: STYLE.id, floorFileId: null, jobRequest: null, jobId: null, savedAt: Date.now() }),
+    writeRenderingRecovery: () => true,
+  });
+  const view = Object.assign(definition, { setData(patch: Record<string, unknown>) { Object.assign(definition.data, patch); } });
+  view.onLoad({ id: STYLE.id }); await flush();
+  await view.upload("room");
+  expect(view.data.roomFileId).toBe(replacementId);
+  rejectOld(new ApiRequestError(404, "RENDERING_INPUT_NOT_FOUND", "old image missing"));
+  await flush();
+  expect(view.data.roomFileId).toBe(replacementId);
+  expect(view.data.roomUploadStatus).toBe("ready");
+});
+
+test("native private image preview failure shows a retryable message", async () => {
+  const toasts: string[] = [];
+  const definition = createRenderingStyleDetailPageDefinition({
+    getApp: () => ({ api: {}, startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
+      recordAnalytics: () => undefined }) as never,
+    resolveRecoveryIdentity: async () => OWNER,
+    fetchPublishedStyleDetail: async () => STYLE,
+    navigateToList: async () => undefined,
+    showToast: ({ title }) => { toasts.push(title); },
+    choosePrivateImage: async () => { throw new Error("unused"); },
+    createRenderingUploadIntent: async () => { throw new Error("unused"); },
+    putRenderingBytes: async () => undefined,
+    completeRenderingUploadWithRetry: async () => { throw new Error("unused"); },
+    fetchRenderingUploadPreview: async () => "https://private.example.com/signed.webp",
+    previewImage: ({ fail }) => { fail?.({ errMsg: "download failed" }); },
+    readRenderingRecovery: () => ({ styleId: STYLE.id, roomIntentId: null, floorIntentId: null,
+      roomFileId: STYLE.id, floorFileId: null, jobRequest: null, jobId: null, savedAt: Date.now() }),
+    writeRenderingRecovery: () => true,
+    fetchRenderingUploadStatus: async () => ({ fileId: STYLE.id, status: "ready", reviewState: null }),
+  });
+  const view = Object.assign(definition, { setData(patch: Record<string, unknown>) { Object.assign(definition.data, patch); } });
+  view.onLoad({ id: STYLE.id }); await flush();
+  await view.preview("room");
+  expect(toasts).toEqual(["暂无法查看图片，请稍后重试"]);
+});
+
 test("rendering detail refreshes after return and treats hidden style as not found", async () => {
   let calls = 0;
   const fetch = mock(async () => {
@@ -432,7 +557,7 @@ test("unloading and reopening keeps an in-flight intent ID scoped to the app ses
   expect(intentCalls).toBe(1);
 });
 
-test("reopening detail keeps a confirmed room file within the same app session", async () => {
+test("reopening detail keeps a confirmed room file and allows a deliberate replacement", async () => {
   const api = {} as never;
   let intentCalls = 0;
   const dependencies = {
@@ -464,7 +589,7 @@ test("reopening detail keeps a confirmed room file within the same app session",
   expect(secondView.data.roomFileId).toBe(STYLE.id);
   expect(secondView.data.roomUploadStatus).toBe("ready");
   await secondView.upload("room");
-  expect(intentCalls).toBe(1);
+  expect(intentCalls).toBe(2);
 });
 
 test("terminal missing, conflicted or unauthorized intent lets the user start fresh", async () => {

@@ -32,7 +32,7 @@ export interface CustomerInputStoragePort {
   hasNormalized(tenantId: string, id: string, location: RenderingStorageLocation, bytes: Buffer): Promise<boolean>;
   removeRaw(tenantId: string, id: string, location: RenderingStorageLocation): Promise<void>;
 }
-/** Worker-only: caller must have loaded an approved room row before signing. */
+/** Caller must have verified the owner and ready row before signing normalized input. */
 export interface CustomerInputNormalizedReadPort {
   signNormalizedRead(tenantId: string, id: string, location: RenderingStorageLocation): Promise<string>;
 }

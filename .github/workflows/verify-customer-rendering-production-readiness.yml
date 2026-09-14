@@ -1,0 +1,108 @@
+name: Verify Customer Rendering Production Readiness
+run-name: Verify production customer rendering readiness
+
+on:
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: "preflight checks closed admission; live checks enabled admission and worker"
+        required: true
+        default: preflight
+        type: choice
+        options: [preflight, live]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-docker-services-main
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: [self-hosted, Linux, X64, gooes-prod-deploy]
+    environment: production
+    timeout-minutes: 10
+    env:
+      PHASE: ${{ inputs.phase }}
+    steps:
+      - name: Check deployed configuration and tenant gate without generating an image
+        run: |
+          set -euo pipefail
+          case "${PHASE}" in preflight|live) ;; *) exit 1 ;; esac
+          test "${RUNNER_NAME}" = "gooes-prod-vm-0-3"
+          cd /opt/supabase/docker
+          test -r docker-compose.api.yml
+          docker inspect gooes-api >/dev/null
+          test "$(docker inspect -f '{{.State.Health.Status}}' gooes-api)" = healthy
+          docker exec gooes-api sh -ceu \
+            'grep -Fq "CUSTOMER_RENDERING_JOB_ADMISSION_ENABLED" /app/apps/api/src/services/customer-rendering/jobs.ts'
+          migration_count="$(docker exec -e SQL="SELECT count(*) FROM supabase_migrations.schema_migrations
+            WHERE version IN ('20260914014930', '20260914022533', '20260914034000', '20260914191000');" \
+            supabase-db sh -ceu 'export PGPASSWORD="${POSTGRES_PASSWORD:?}";
+              exec psql -U supabase_admin -d postgres -At -v ON_ERROR_STOP=1 -c "${SQL}"')"
+          test "${migration_count}" = 4
+          if [ -z "${GOOES_API_ENV_FILE:-}" ] && [ -f .env ] \
+            && grep -Eq '^[[:space:]]*(export[[:space:]]+)?GOOES_API_ENV_FILE[[:space:]]*=' .env; then
+            echo "::error::Set GOOES_API_ENV_FILE in the runner environment."
+            exit 1
+          fi
+          env_file="${GOOES_API_ENV_FILE:-./.env.api}"
+          test -r "${env_file}"
+          for key in CUSTOMER_RENDERING_JOB_ADMISSION_ENABLED CUSTOMER_RENDERING_JOB_WORKER_ENABLED; do
+            expected=""
+            if [ "${PHASE}" = live ]; then expected=true; fi
+            if [ "${PHASE}" = preflight ] && [ "${key}" = CUSTOMER_RENDERING_JOB_ADMISSION_ENABLED ]; then
+              expected=false
+            fi
+            test "$(grep -Ec "^${key}=" "${env_file}")" = 1
+            value="$(grep -E "^${key}=" "${env_file}" | cut -d= -f2-)"
+            case "${value}" in true|false) ;; *) exit 1 ;; esac
+            echo "${key}=${value}" >> "${GITHUB_STEP_SUMMARY}"
+            if [ -n "${expected}" ]; then test "${value}" = "${expected}"; fi
+          done
+          for key in CUSTOMER_RENDERING_JOB_ADMISSION_ENABLED CUSTOMER_RENDERING_JOB_WORKER_ENABLED; do
+            runtime="$(docker inspect gooes-api --format '{{json .Config.Env}}' |
+              jq -r --arg prefix "${key}=" '[.[] | select(startswith($prefix)) | split("=")[1]] |
+                if length == 0 then "unset" elif length == 1 then .[0] else "duplicate" end')"
+            echo "running_api_${key}=${runtime}" >> "${GITHUB_STEP_SUMMARY}"
+            test "${runtime}" = "${value}"
+          done
+          worker_status="$(docker inspect -f '{{.State.Status}}' gooes-customer-rendering-job-worker 2>/dev/null || true)"
+          echo "worker_status=${worker_status:-absent}" >> "${GITHUB_STEP_SUMMARY}"
+          if [ "${PHASE}" = live ]; then
+            test "${worker_status}" = running
+            test "$(docker inspect -f '{{.State.Health.Status}}' gooes-customer-rendering-job-worker)" = healthy
+            test "$(docker inspect -f '{{.Image}}' gooes-customer-rendering-job-worker)" = "$(docker inspect -f '{{.Image}}' gooes-api)"
+            docker inspect gooes-customer-rendering-job-worker --format '{{json .Config.Env}}' |
+              jq -e '[.[] | select(. == "CUSTOMER_RENDERING_JOB_WORKER_ENABLED=true")] | length == 1' >/dev/null
+          else
+            test "${worker_status}" != running
+          fi
+          sql="SELECT count(*), count(*) FILTER (WHERE t.status = 'active' AND s.enabled = true
+            AND s.daily_task_limit > 0 AND s.daily_budget_fen > 0 AND s.per_job_reserve_fen > 0
+            AND s.per_job_reserve_fen <= s.daily_budget_fen),
+            count(*) FILTER (WHERE EXISTS (SELECT 1 FROM public.douyin_miniapp_installations i
+              WHERE i.tenant_id = t.id AND i.installation_kind = 'merchant'
+                AND i.authorization_status = 'active'))
+            FROM public.tenants t LEFT JOIN public.tenant_customer_rendering_settings s ON s.tenant_id = t.id
+            WHERE t.id = '3eebca47-961f-4899-b976-a3d3208d326b'
+              AND t.name = '河南晴天装饰工程有限公司';"
+          tenant_gate="$(docker exec -e "SQL=${sql}" supabase-db sh -ceu \
+            'export PGPASSWORD="${POSTGRES_PASSWORD:?}"; exec psql -U supabase_admin -d postgres -At -v ON_ERROR_STOP=1 -c "${SQL}"')"
+          echo "tenant_gate=${tenant_gate}" >> "${GITHUB_STEP_SUMMARY}"
+          if [ "${PHASE}" = live ]; then
+            test "${tenant_gate}" = '1|1|1'
+          else
+            case "${tenant_gate}" in '1|0|1'|'1|1|1') ;; *) exit 1 ;; esac
+          fi
+          job_counts="$(docker exec -e SQL="SELECT status, count(*) FROM public.customer_rendering_jobs
+            WHERE status IN ('queued', 'processing', 'review_required') GROUP BY status ORDER BY status;" \
+            supabase-db sh -ceu 'export PGPASSWORD="${POSTGRES_PASSWORD:?}";
+              exec psql -U supabase_admin -d postgres -At -v ON_ERROR_STOP=1 -c "${SQL}"')"
+          echo "active_job_counts=${job_counts:-none}" >> "${GITHUB_STEP_SUMMARY}"
+          smoke="$(docker exec gooes-api bun /app/apps/api/src/scripts/customer-rendering-ark-smoke.ts)"
+          echo "${smoke}" | jq -e '.ok == true and .executed == false and .storageReady == true
+            and .modelName == "doubao-seedream-5-0-pro-260628"' >/dev/null
+          echo "ark_model=$(echo "${smoke}" | jq -r '.modelName')" >> "${GITHUB_STEP_SUMMARY}"
+          echo "ark_storage_ready=true" >> "${GITHUB_STEP_SUMMARY}"
