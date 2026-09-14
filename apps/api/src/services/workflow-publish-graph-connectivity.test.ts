@@ -39,7 +39,7 @@ describe("validateWorkflowPublishGraph connectivity", () => {
 });
 
 describe("buildWorkflowSnapshot template metadata", () => {
-  test("preserves a trusted template subject without requiring it for custom workflows", () => {
+  test("preserves the supplier purchase batch subject when the designer republishes", () => {
     const workflowDefinition = definition("supplier_purchase_batch_approval", "approval");
     const baseInput = {
       definition: workflowDefinition,
@@ -55,7 +55,19 @@ describe("buildWorkflowSnapshot template metadata", () => {
       workflow_key: "supplier_purchase_batch_approval",
       subject_type: "supplier_purchase_batch",
     });
-    expect(buildWorkflowSnapshot(baseInput)).not.toHaveProperty("subject_type");
+    expect(buildWorkflowSnapshot(baseInput)).toMatchObject({
+      workflow_key: "supplier_purchase_batch_approval",
+      subject_type: "supplier_purchase_batch",
+    });
+  });
+
+  test("does not add a subject type to a custom workflow", () => {
+    expect(buildWorkflowSnapshot({
+      definition: definition("custom_workflow", "approval"),
+      nodes: [node("start", "start"), node("end", "end")],
+      edges: [],
+      publishedAt: NOW,
+    })).not.toHaveProperty("subject_type");
   });
 });
 
