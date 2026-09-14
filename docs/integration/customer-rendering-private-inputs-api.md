@@ -29,7 +29,7 @@
 5. PUT 成功后，以 intent_id 替换 UUID 路径参数调用 complete，body 必须是 `{}`（允许无 body，不允许 null 或额外字段）。不传 URL、对象位置或图片字节。
 6. complete data 为 `{ file_id: UUID, status: "ready", mime_type: "image/webp", width: 正整数, height: 正整数, size_bytes: 正整数 }`。file_id 等于本意图 ID；大小和宽高属于服务器规范图，不是声明原图。响应没有任何原图/规范图公共 URL。
 
-随后可用相同 ID 调用 GET 状态接口查询图片状态。路径 ID 必须是 UUID，不接受任何 query 参数；响应为 `{ file_id, status, review_state, mime_type, width, height, size_bytes }`。新规范图返回 `ready`；状态枚举仍兼容 `issued | processing | pending_review | approved | ready | rejected | failed | deleted`，以便发布切换时读取旧记录。`pending_review` 的 `review_state` 可为 `pending` 或 `manual`，其他状态为 `null`；迁移会将元数据完整的旧待审核／已批准规范图改为 `ready`。`mime_type` 仅在规范图存在时为 `image/webp`，否则为 `null`，宽、高、大小同样可能为 `null`。状态由服务端当前租户、渠道、主体及安装身份限定；他人文件与不存在文件都返回 404。该接口不返回历史审核原始响应、COS 地址或签名 URL，也不表示生成任务状态。
+随后可用相同 ID 调用 GET 状态接口查询图片状态。路径 ID 必须是 UUID，不接受任何 query 参数；响应为 `{ file_id, status, review_state, mime_type, width, height, size_bytes }`。新规范图返回 `ready`；状态枚举仍兼容 `issued | processing | pending_review | approved | ready | rejected | failed | deleted`，以便发布切换时读取旧记录。`pending_review` 的 `review_state` 可为 `pending` 或 `manual`，其他状态为 `null`；迁移会将元数据完整的旧待审核／已批准规范图改为 `ready`。旧 API 在迁移后、切换前写入的完整规范图，也会在新版 API 的同 ID GET／complete 时幂等转成 `ready`。`mime_type` 仅在规范图存在时为 `image/webp`，否则为 `null`，宽、高、大小同样可能为 `null`。状态由服务端当前租户、渠道、主体及安装身份限定；他人文件与不存在文件都返回 404。该接口不返回历史审核原始响应、COS 地址或签名 URL，也不表示生成任务状态。
 
 服务器先验证 HEAD 的大小和 MIME，再限量读取并实际解码静态图，规范化为私有 WebP 并验证长度/MIME/SHA-256 元数据才提交 `ready`。已安装 COS SDK 2.15.4 **不签名 Content-Type**：它是必传头，但不是加密绑定的签名头。签名绑定 Content-Length、Host、ACL 与 forbid-overwrite；不能据此跳过 HEAD 和图片解码。
 

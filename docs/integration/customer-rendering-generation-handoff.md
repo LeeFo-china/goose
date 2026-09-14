@@ -8,7 +8,7 @@
 
 1. 读取 `GET /styles?page=1&pageSize=20` 并选择当前公开素材。列表必须保持分页，`pageSize` 最大 100。
 2. 用 `POST /uploads:intent` 分别为房间照片（必需）和户型图（可选）申请私有上传，按返回的 `PUT` URL 与完整 headers 直传，再 `POST /uploads/{id}/complete`。请求／响应细节见 [私有上传契约](customer-rendering-private-inputs-api.md)。
-3. `GET /uploads/{id}` 查询 `status`。规范化完成的新图片返回 `ready`，可以提交生成任务；迁移将元数据完整的旧 `pending_review`／`approved` 图片转为 `ready`。旧 `rejected`／`failed` 或规范图不完整的图片须重新上传。`ready` 只表示可提交方舟，内容由模型在生成时判断。不要展示或持久化 COS 签名 URL。
+3. `GET /uploads/{id}` 查询 `status`。规范化完成的新图片返回 `ready`，可以提交生成任务；迁移将元数据完整的旧 `pending_review`／`approved` 图片转为 `ready`。若旧 API 恰在迁移与新版 API 上线之间完成上传，新版 API 的同 ID `GET` 或 `complete` 会在核实规范图元数据后将其幂等转为 `ready`。旧 `rejected`／`failed` 或规范图不完整的图片须重新上传。`ready` 只表示可提交方舟，内容由模型在生成时判断。不要展示或持久化 COS 签名 URL。
 4. `POST /jobs` 用新 UUID `idempotency_key` 发起一次任务：
 
 ```json
