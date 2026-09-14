@@ -2,6 +2,9 @@ name: Freeze Production Customer Rendering Admission
 run-name: Freeze production customer rendering admission
 
 on:
+  workflow_run:
+    workflows: [Enable Customer Rendering Production]
+    types: [completed]
   workflow_dispatch:
     inputs:
       confirm_text:
@@ -18,13 +21,14 @@ concurrency:
 
 jobs:
   freeze:
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion != 'success' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository) }}
     runs-on: [self-hosted, Linux, X64, gooes-prod-deploy]
     environment: production
     timeout-minutes: 10
     steps:
       - name: Freeze running API admission
         env:
-          CONFIRM_TEXT: ${{ inputs.confirm_text }}
+          CONFIRM_TEXT: ${{ github.event_name == 'workflow_run' && '确认关闭生产生图准入' || inputs.confirm_text }}
           OCR_RESULT_ENCRYPTION_KEY: ${{ secrets.OCR_RESULT_ENCRYPTION_KEY }}
           WECHAT_MINI_SESSION_ENCRYPTION_KEY_V1: ${{ secrets.WECHAT_MINI_SESSION_ENCRYPTION_KEY_V1 }}
           GOOES_WEB_PROXY_SHARED_SECRET: ${{ secrets.GOOES_WEB_PROXY_SHARED_SECRET }}
@@ -36,10 +40,6 @@ jobs:
           test "${CONFIRM_TEXT}" = "确认关闭生产生图准入"
           cd /opt/supabase/docker
           test -r docker-compose.api.yml
-          docker inspect gooes-api >/dev/null
-          # The pinned running image must actually enforce this switch.
-          docker exec gooes-api sh -ceu \
-            'grep -Fq "CUSTOMER_RENDERING_JOB_ADMISSION_ENABLED" /app/apps/api/src/services/customer-rendering/jobs.ts'
 
           # Match the same env-file resolution guard used by the production deploy.
           if [ -z "${GOOES_API_ENV_FILE:-}" ] && [ -f .env ] \
@@ -51,15 +51,6 @@ jobs:
           test -r "${env_file}"
           key=CUSTOMER_RENDERING_JOB_ADMISSION_ENABLED
           test "$(grep -Ec "^${key}=" "${env_file}")" = 1
-          for required in OCR_RESULT_ENCRYPTION_KEY WECHAT_MINI_SESSION_ENCRYPTION_KEY_V1 \
-            GOOES_WEB_PROXY_SHARED_SECRET GOOES_PREVIEW_SHARED_SECRET GOOES_WEB_REVALIDATE_SHARED_SECRET; do
-            test -n "${!required}"
-          done
-          current_image_id="$(docker inspect -f '{{.Image}}' gooes-api)"
-          docker image inspect "${current_image_id}" >/dev/null
-          export GOOES_API_IMAGE="gooes-api:admission-freeze-${GITHUB_RUN_ID}"
-          docker tag "${current_image_id}" "${GOOES_API_IMAGE}"
-          docker compose -f docker-compose.api.yml config --quiet
           if grep -Fxq "${key}=false" "${env_file}"; then
             echo "Production customer rendering admission is already closed in the env file."
           else
@@ -71,11 +62,26 @@ jobs:
             grep -Fxq "${key}=false" "${env_file}"
           fi
 
+          # Close the persistent flag before touching Docker: a stopped or missing
+          # container must never leave the next API restart with admission open.
+          for required in OCR_RESULT_ENCRYPTION_KEY WECHAT_MINI_SESSION_ENCRYPTION_KEY_V1 \
+            GOOES_WEB_PROXY_SHARED_SECRET GOOES_PREVIEW_SHARED_SECRET GOOES_WEB_REVALIDATE_SHARED_SECRET; do
+            test -n "${!required}"
+          done
+          current_image_id="$(docker inspect -f '{{.Image}}' gooes-api)"
+          docker image inspect "${current_image_id}" >/dev/null
+          export GOOES_API_IMAGE="gooes-api:admission-freeze-${GITHUB_RUN_ID}"
+          docker tag "${current_image_id}" "${GOOES_API_IMAGE}"
+          docker compose -f docker-compose.api.yml config --quiet
+
           running_value="$(docker inspect gooes-api --format '{{json .Config.Env}}' |
             jq -r --arg key "${key}=" '[.[] | select(startswith($key)) |
               split("=")[1]] | if length == 0 then "false" elif length == 1 then .[0] else "invalid" end')"
           case "${running_value}" in true|false) ;; *) running_value=invalid ;; esac
-          if [ "${running_value}" != false ]; then
+          running_status="$(docker inspect -f '{{.State.Status}}' gooes-api)"
+          running_health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' gooes-api)"
+          if [ "${running_value}" != false ] || [ "${running_status}" != running ] \
+            || [ "${running_health}" != healthy ]; then
             docker compose -f docker-compose.api.yml \
               --profile workers up -d --no-deps --force-recreate gooes-api
           fi
@@ -90,6 +96,12 @@ jobs:
           done
           test "${status}" = running
           test "${health}" = healthy
+          if ! docker exec gooes-api sh -ceu \
+            'grep -Fq "CUSTOMER_RENDERING_JOB_ADMISSION_ENABLED" /app/apps/api/src/services/customer-rendering/jobs.ts'; then
+            docker stop gooes-api
+            echo '::error::API image does not enforce the admission switch; stopped it after closing the env flag.'
+            exit 1
+          fi
           admission_enabled="$(docker inspect gooes-api --format '{{json .Config.Env}}' |
             jq -r --arg key "${key}=" '[.[] | select(startswith($key)) |
               split("=")[1]] | if length == 0 then "false" elif length == 1 then .[0] else "invalid" end')"

@@ -1,0 +1,227 @@
+name: Enable Customer Rendering Production
+run-name: Enable production customer rendering for 河南晴天装饰
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_image_sha:
+        description: "Exact deployed API image source SHA"
+        required: true
+        type: string
+      confirm_text:
+        description: "Type 确认开启生产生图服务"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-docker-services-main
+  cancel-in-progress: false
+
+jobs:
+  enable:
+    runs-on: [self-hosted, Linux, X64, gooes-prod-deploy]
+    environment: production
+    timeout-minutes: 15
+    env:
+      EXPECTED_API_SHA: ${{ inputs.api_image_sha }}
+      CONFIRM_TEXT: ${{ inputs.confirm_text }}
+      OCR_RESULT_ENCRYPTION_KEY: ${{ secrets.OCR_RESULT_ENCRYPTION_KEY }}
+      WECHAT_MINI_SESSION_ENCRYPTION_KEY_V1: ${{ secrets.WECHAT_MINI_SESSION_ENCRYPTION_KEY_V1 }}
+      GOOES_WEB_PROXY_SHARED_SECRET: ${{ secrets.GOOES_WEB_PROXY_SHARED_SECRET }}
+      GOOES_PREVIEW_SHARED_SECRET: ${{ secrets.GOOES_PREVIEW_SHARED_SECRET }}
+      GOOES_WEB_REVALIDATE_SHARED_SECRET: ${{ secrets.GOOES_WEB_REVALIDATE_SHARED_SECRET }}
+    steps:
+      - name: Verify trial scope, start paid worker, then open admission
+        run: |
+          set -euo pipefail
+          stage=runner
+          trap 'echo "::error::Production rendering enable failed at ${stage}"' ERR
+          test "${RUNNER_NAME}" = gooes-prod-vm-0-3
+          test "${GITHUB_REF}" = refs/heads/main
+          test "${CONFIRM_TEXT}" = '确认开启生产生图服务'
+          [[ "${EXPECTED_API_SHA}" =~ ^[a-f0-9]{40}$ ]]
+          for required in OCR_RESULT_ENCRYPTION_KEY WECHAT_MINI_SESSION_ENCRYPTION_KEY_V1 \
+            GOOES_WEB_PROXY_SHARED_SECRET GOOES_PREVIEW_SHARED_SECRET GOOES_WEB_REVALIDATE_SHARED_SECRET; do
+            test -n "${!required}"
+          done
+          cd /opt/supabase/docker
+          test -r docker-compose.api.yml
+          test "$(docker inspect -f '{{.State.Health.Status}}' gooes-api)" = healthy
+          actual_sha="$(docker inspect gooes-api --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
+          test "${actual_sha}" = "${EXPECTED_API_SHA}"
+          docker exec gooes-api sh -ceu \
+            'grep -Fq "CUSTOMER_RENDERING_JOB_PILOT_TENANT_ID" /app/apps/api/src/services/customer-rendering/jobs.ts'
+
+          stage=configuration
+          if [ -z "${GOOES_API_ENV_FILE:-}" ] && [ -f .env ] \
+            && grep -Eq '^[[:space:]]*(export[[:space:]]+)?GOOES_API_ENV_FILE[[:space:]]*=' .env; then
+            echo "::error::Set GOOES_API_ENV_FILE in the runner environment."
+            exit 1
+          fi
+          env_file="${GOOES_API_ENV_FILE:-./.env.api}"
+          test -r "${env_file}"
+          test "$(grep -Ec '^CUSTOMER_RENDERING_JOB_ADMISSION_ENABLED=' "${env_file}")" = 1
+          worker_flag_count="$(grep -Ec '^CUSTOMER_RENDERING_JOB_WORKER_ENABLED=' "${env_file}" || true)"
+          test "${worker_flag_count}" -le 1
+          if [ "${worker_flag_count}" = 1 ]; then
+            grep -Eq '^CUSTOMER_RENDERING_JOB_WORKER_ENABLED=(true|false)$' "${env_file}"
+          fi
+          pilot_count="$(grep -Ec '^CUSTOMER_RENDERING_JOB_PILOT_TENANT_ID=' "${env_file}" || true)"
+          test "${pilot_count}" -le 1
+          if [ "${pilot_count}" = 1 ]; then
+            grep -Fxq 'CUSTOMER_RENDERING_JOB_PILOT_TENANT_ID=3eebca47-961f-4899-b976-a3d3208d326b' "${env_file}"
+          fi
+          channel_count="$(grep -Ec '^CUSTOMER_RENDERING_JOB_PILOT_CHANNEL=' "${env_file}" || true)"
+          test "${channel_count}" -le 1
+          if [ "${channel_count}" = 1 ]; then
+            grep -Fxq 'CUSTOMER_RENDERING_JOB_PILOT_CHANNEL=douyin' "${env_file}"
+          fi
+          grep -Fxq 'CUSTOMER_RENDERING_JOB_ADMISSION_ENABLED=false' "${env_file}"
+          docker inspect gooes-api --format '{{json .Config.Env}}' |
+            jq -e '[.[] | select(. == "CUSTOMER_RENDERING_JOB_ADMISSION_ENABLED=false")] | length == 1' >/dev/null
+          worker_status="$(docker inspect -f '{{.State.Status}}' gooes-customer-rendering-job-worker 2>/dev/null || true)"
+          test "${worker_status}" != running
+
+          stage=database_gate
+          migration_count="$(docker exec -e SQL="SELECT count(*) FROM supabase_migrations.schema_migrations
+            WHERE version IN ('20260914014930', '20260914022533', '20260914034000', '20260914191000');" \
+            supabase-db sh -ceu 'export PGPASSWORD="${POSTGRES_PASSWORD:?}";
+              exec psql -U supabase_admin -d postgres -At -v ON_ERROR_STOP=1 -c "${SQL}"')"
+          test "${migration_count}" = 4
+          sql="SELECT count(*), count(*) FILTER (WHERE t.status = 'active' AND s.enabled = true
+            AND s.daily_task_limit BETWEEN 1 AND 10 AND s.daily_budget_fen BETWEEN 1 AND 10000
+            AND s.per_job_reserve_fen BETWEEN 1 AND 1000
+            AND s.per_job_reserve_fen <= s.daily_budget_fen),
+            count(*) FILTER (WHERE EXISTS (SELECT 1 FROM public.douyin_miniapp_installations i
+              WHERE i.tenant_id = t.id AND i.installation_kind = 'merchant'
+                AND i.authorization_status = 'active'))
+            FROM public.tenants t LEFT JOIN public.tenant_customer_rendering_settings s ON s.tenant_id = t.id
+            WHERE t.id = '3eebca47-961f-4899-b976-a3d3208d326b'
+              AND t.name = '河南晴天装饰工程有限公司';"
+          tenant_gate="$(docker exec -e "SQL=${sql}" supabase-db sh -ceu \
+            'export PGPASSWORD="${POSTGRES_PASSWORD:?}"; exec psql -U supabase_admin -d postgres -At -v ON_ERROR_STOP=1 -c "${SQL}"')"
+          echo "tenant_gate=${tenant_gate}"
+          test "${tenant_gate}" = '1|1|1'
+          other_enabled="$(docker exec -e SQL="SELECT count(*) FROM public.tenant_customer_rendering_settings
+            WHERE enabled = true AND tenant_id <> '3eebca47-961f-4899-b976-a3d3208d326b';" \
+            supabase-db sh -ceu 'export PGPASSWORD="${POSTGRES_PASSWORD:?}";
+              exec psql -U supabase_admin -d postgres -At -v ON_ERROR_STOP=1 -c "${SQL}"')"
+          echo "other_enabled_tenants=${other_enabled}"
+          test "${other_enabled}" = 0
+          active_jobs="$(docker exec -e SQL="SELECT count(*) FROM public.customer_rendering_jobs
+            WHERE status IN ('queued', 'processing', 'review_required');" \
+            supabase-db sh -ceu 'export PGPASSWORD="${POSTGRES_PASSWORD:?}";
+              exec psql -U supabase_admin -d postgres -At -v ON_ERROR_STOP=1 -c "${SQL}"')"
+          echo "active_jobs_before_enable=${active_jobs}"
+          test "${active_jobs}" = 0
+
+          stage=model_preflight
+          smoke="$(docker exec gooes-api bun /app/apps/api/src/scripts/customer-rendering-ark-smoke.ts)"
+          echo "${smoke}" | jq -e '.ok == true and .executed == false and .storageReady == true
+            and .modelName == "doubao-seedream-5-0-pro-260628"' >/dev/null
+
+          stage=worker_start
+          current_image_id="$(docker inspect -f '{{.Image}}' gooes-api)"
+          export GOOES_API_IMAGE="gooes-api:rendering-enable-${GITHUB_RUN_ID}"
+          docker tag "${current_image_id}" "${GOOES_API_IMAGE}"
+          docker compose -f docker-compose.api.yml config --quiet
+          worker_started=false
+          admission_changed=false
+          activation_complete=false
+          rollback() {
+            local original_exit="$?"
+            trap - EXIT ERR INT TERM
+            if [ "${activation_complete}" = true ]; then return; fi
+            echo "::error::Rolling back customer rendering admission after ${stage}"
+            local rollback_failed=false
+            if [ "${admission_changed}" = true ]; then
+              if ! sudo sed -i 's/^CUSTOMER_RENDERING_JOB_ADMISSION_ENABLED=true$/CUSTOMER_RENDERING_JOB_ADMISSION_ENABLED=false/' "${env_file}"; then rollback_failed=true; fi
+              if ! docker compose -f docker-compose.api.yml --profile workers up -d --no-deps --force-recreate gooes-api; then rollback_failed=true; fi
+              if ! docker inspect gooes-api --format '{{json .Config.Env}}' |
+                jq -e '[.[] | select(. == "CUSTOMER_RENDERING_JOB_ADMISSION_ENABLED=false")] | length == 1' >/dev/null; then rollback_failed=true; fi
+              api_recovered=false
+              for _ in $(seq 1 30); do
+                if [ "$(docker inspect -f '{{.State.Health.Status}}' gooes-api 2>/dev/null || true)" = healthy ]; then
+                  api_recovered=true
+                  break
+                fi
+                sleep 2
+              done
+              if [ "${api_recovered}" != true ]; then rollback_failed=true; fi
+            fi
+            if [ "${worker_started}" = true ]; then
+              if ! docker stop --time 90 gooes-customer-rendering-job-worker; then rollback_failed=true; fi
+              if [ "$(docker inspect -f '{{.State.Status}}' gooes-customer-rendering-job-worker 2>/dev/null || true)" = running ]; then rollback_failed=true; fi
+            fi
+            if [ "${rollback_failed}" = true ]; then echo '::error::Automatic rollback incomplete; dispatch Freeze Production Customer Rendering Admission immediately.'; fi
+            if [ "${original_exit}" = 0 ]; then exit 1; else exit "${original_exit}"; fi
+          }
+          trap rollback EXIT
+          trap 'exit 130' INT TERM
+          if [ "${pilot_count}" = 0 ]; then
+            sudo sh -c 'printf "%s\n" "CUSTOMER_RENDERING_JOB_PILOT_TENANT_ID=3eebca47-961f-4899-b976-a3d3208d326b" >> "$1"' sh "${env_file}"
+          fi
+          if [ "${channel_count}" = 0 ]; then
+            sudo sh -c 'printf "%s\n" "CUSTOMER_RENDERING_JOB_PILOT_CHANNEL=douyin" >> "$1"' sh "${env_file}"
+          fi
+          if [ "${worker_flag_count}" = 0 ]; then
+            sudo sh -c 'printf "%s\n" "CUSTOMER_RENDERING_JOB_WORKER_ENABLED=true" >> "$1"' sh "${env_file}"
+          else
+            sudo sed -i 's/^CUSTOMER_RENDERING_JOB_WORKER_ENABLED=false$/CUSTOMER_RENDERING_JOB_WORKER_ENABLED=true/' "${env_file}"
+          fi
+          grep -Fxq 'CUSTOMER_RENDERING_JOB_PILOT_TENANT_ID=3eebca47-961f-4899-b976-a3d3208d326b' "${env_file}"
+          grep -Fxq 'CUSTOMER_RENDERING_JOB_PILOT_CHANNEL=douyin' "${env_file}"
+          grep -Fxq 'CUSTOMER_RENDERING_JOB_WORKER_ENABLED=true' "${env_file}"
+          worker_started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          worker_started=true
+          docker compose -f docker-compose.api.yml --profile workers up -d --no-deps --force-recreate gooes-customer-rendering-job-worker
+          for _ in $(seq 1 60); do
+            worker_status="$(docker inspect -f '{{.State.Status}}' gooes-customer-rendering-job-worker 2>/dev/null || true)"
+            worker_health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' gooes-customer-rendering-job-worker 2>/dev/null || true)"
+            if [ "${worker_status}" = running ] && [ "${worker_health}" = healthy ]; then break; fi
+            sleep 2
+          done
+          test "${worker_status}" = running
+          test "${worker_health}" = healthy
+          test "$(docker inspect -f '{{.Image}}' gooes-customer-rendering-job-worker)" = "${current_image_id}"
+          stage=worker_tick
+          tick_ok=false
+          for _ in $(seq 1 30); do
+            if docker logs --since "${worker_started_at}" gooes-customer-rendering-job-worker 2>&1 |
+              jq -R -s -e 'split("\n") | any(.[]; try (fromjson | has("reconciled") and has("claimed")) catch false)' >/dev/null; then
+              tick_ok=true
+              break
+            fi
+            sleep 2
+          done
+          test "${tick_ok}" = true
+
+          stage=admission_open
+          backup_file="${env_file}.bak.rendering-enable-${GITHUB_RUN_ID}"
+          sudo cp -p "${env_file}" "${backup_file}"
+          sudo chmod 0600 "${backup_file}"
+          admission_changed=true
+          sudo sed -i 's/^CUSTOMER_RENDERING_JOB_ADMISSION_ENABLED=false$/CUSTOMER_RENDERING_JOB_ADMISSION_ENABLED=true/' "${env_file}"
+          grep -Fxq 'CUSTOMER_RENDERING_JOB_ADMISSION_ENABLED=true' "${env_file}"
+          docker compose -f docker-compose.api.yml --profile workers up -d --no-deps --force-recreate gooes-api
+          for _ in $(seq 1 60); do
+            api_status="$(docker inspect -f '{{.State.Status}}' gooes-api 2>/dev/null || true)"
+            api_health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' gooes-api 2>/dev/null || true)"
+            if [ "${api_status}" = running ] && [ "${api_health}" = healthy ]; then break; fi
+            sleep 2
+          done
+          test "${api_status}" = running
+          test "${api_health}" = healthy
+          test "$(docker inspect -f '{{.Image}}' gooes-api)" = "${current_image_id}"
+          docker inspect gooes-api --format '{{json .Config.Env}}' |
+            jq -e '[.[] | select(. == "CUSTOMER_RENDERING_JOB_ADMISSION_ENABLED=true")] | length == 1' >/dev/null
+          docker inspect gooes-api --format '{{json .Config.Env}}' |
+            jq -e '[.[] | select(. == "CUSTOMER_RENDERING_JOB_PILOT_TENANT_ID=3eebca47-961f-4899-b976-a3d3208d326b")] | length == 1' >/dev/null
+          docker inspect gooes-api --format '{{json .Config.Env}}' |
+            jq -e '[.[] | select(. == "CUSTOMER_RENDERING_JOB_PILOT_CHANNEL=douyin")] | length == 1' >/dev/null
+          test "$(docker inspect -f '{{.State.Health.Status}}' gooes-customer-rendering-job-worker)" = healthy
+          activation_complete=true
+          echo "Production customer rendering admission open for the configured tenant; paid worker healthy."
