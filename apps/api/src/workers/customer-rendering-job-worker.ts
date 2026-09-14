@@ -4,8 +4,6 @@ import { getArkGatewayOutcome } from '@/gateways/ark-rendering/errors';
 import { arkEndpoint, buildArkRenderingRequest } from '@/gateways/ark-rendering/requests';
 import { CustomerRenderingInputStorage,
   type CustomerInputNormalizedReadPort } from '@/gateways/customer-rendering-input-storage/client';
-import { CustomerRenderingResultReviewer,
-  type CustomerRenderingResultReviewerPort } from '@/gateways/customer-rendering-result-review/client';
 import { CustomerRenderingResultStorage,
   type CustomerRenderingResultStoragePort } from '@/gateways/customer-rendering-result-storage/client';
 import { customerRenderingStyleReferenceUrl } from '@/gateways/customer-rendering-style-reference/url';
@@ -33,7 +31,6 @@ export interface CustomerRenderingJobWorkerDependencies {
   download: typeof downloadArkRenderingResult;
   normalize: typeof normalizeRenderingSource;
   storage: Pick<CustomerRenderingResultStoragePort, 'location' | 'put'>;
-  reviewer: CustomerRenderingResultReviewerPort;
 }
 type JobOutcome = 'approved' | 'rejected' | 'failed' | 'providerRejected' | 'reviewRequired' | 'lost';
 interface TickSummary {
@@ -151,24 +148,9 @@ async function processClaim(dependencies: CustomerRenderingJobWorkerDependencies
   if (resultRecorded === 'stale') return 'lost';
   if (resultRecorded !== 'recorded') return requireReview(dependencies, claim, 'WORKER_RESULT_RECORD_INVALID');
 
-  let review: Awaited<ReturnType<CustomerRenderingResultReviewerPort['review']>>;
-  try { review = await dependencies.reviewer.review(claim.tenant_id, claim.job_id,
-    claim.attempt_id, stored.location); }
-  catch { return requireReview(dependencies, claim, 'WORKER_OUTPUT_REVIEW_UNAVAILABLE'); }
-  // A missing CI request ID cannot prove an approval/rejection; keep the raw verdict for audit.
-  const trustedDecision = review.providerRequestId && (
-    (review.decision === 'approved' && review.rawResult === 0)
-    || (review.decision === 'rejected' && review.rawResult === 1)) ? review.decision : 'manual';
-  let reviewRecorded: Awaited<ReturnType<CustomerRenderingJobWorkerRepositoryPort['recordOutputReview']>>;
-  try {
-    reviewRecorded = await dependencies.repository.recordOutputReview(claim.job_id, claim.attempt_id,
-      { ...review, decision: trustedDecision });
-  } catch { return requireReview(dependencies, claim, 'WORKER_OUTPUT_REVIEW_UNAVAILABLE'); }
-  if (reviewRecorded === 'stale') return 'lost';
-  if (reviewRecorded !== 'recorded') return requireReview(dependencies, claim, 'WORKER_OUTPUT_REVIEW_RECORD_INVALID');
-  if (trustedDecision === 'manual') return requireReview(dependencies, claim, 'OUTPUT_REVIEW_MANUAL');
-  try { return await finalize(dependencies, claim, trustedDecision,
-    trustedDecision === 'rejected' ? 'OUTPUT_REVIEW_REJECTED' : null); }
+  // Ark returned one image and the private result is durably recorded. The account's
+  // standard Ark guardrail is the content gate; no separate COS CI verdict exists.
+  try { return await finalize(dependencies, claim, 'approved', null); }
   catch { return requireReview(dependencies, claim, 'WORKER_SETTLEMENT_UNAVAILABLE'); }
 }
 
@@ -197,7 +179,6 @@ function createDependencies(): CustomerRenderingJobWorkerDependencies {
     generate: generateArkRendering, download: downloadArkRenderingResult,
     normalize: normalizeRenderingSource,
     storage: new CustomerRenderingResultStorage({ loadConfig }),
-    reviewer: new CustomerRenderingResultReviewer({ loadConfig }),
   };
 }
 

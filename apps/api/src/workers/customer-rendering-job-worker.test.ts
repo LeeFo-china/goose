@@ -1,6 +1,5 @@
 import { beforeAll, expect, mock, test } from 'bun:test';
 import { arkGatewayError } from '@/gateways/ark-rendering/errors';
-import type { ResultReviewOutcome } from '@/gateways/customer-rendering-result-review/client';
 import type { ClaimedCustomerRenderingJob } from '@/repositories/customer-rendering-job-worker';
 
 process.env.SUPABASE_URL ??= 'http://127.0.0.1:54321';
@@ -45,7 +44,6 @@ function fixture() {
       sequence.push('submitted'); return 'submitted';
     }),
     recordResult: mock(async () => 'recorded' as const),
-    recordOutputReview: mock(async () => 'recorded' as const),
     markReviewRequired: mock(async () => 'review_required' as const),
     finalize: mock(async () => ({ decision: 'finalized' as const, status: 'succeeded' as const })),
   };
@@ -55,10 +53,8 @@ function fixture() {
   const normalize = mock(async () => ({ bytes: image.bytes, mimeType: 'image/webp' as const, width: 16, height: 12 }));
   const storage = { location: mock(async () => location), put: mock(async () => ({ location,
     sizeBytes: image.bytes.length, sha256: 'c'.repeat(64) })) };
-  const reviewer = { review: mock(async (): Promise<ResultReviewOutcome> => ({ decision: 'approved',
-    providerRequestId: 'ci-request', rawResult: 0 })) };
-  return { sequence, repository, prepare, generate, download, normalize, storage, reviewer,
-    dependencies: { repository, prepare, generate, download, normalize, storage, reviewer } };
+  return { sequence, repository, prepare, generate, download, normalize, storage,
+    dependencies: { repository, prepare, generate, download, normalize, storage } };
 }
 
 test('disabled default makes no RPC or provider call', async () => {
@@ -70,7 +66,7 @@ test('disabled default makes no RPC or provider call', async () => {
   expect(f.generate).not.toHaveBeenCalled();
 });
 
-test('preparation signs only the approved room snapshot and immutable published style reference', async () => {
+test('preparation signs only the ready room snapshot and immutable published style reference', async () => {
   const signRoom = mock(async () => 'https://signed.example/room');
   const prepared = await prepareJob(claim, { signRoom,
     resolveImageConfig: async () => ({ providerCode: 'ark', providerType: 'openai_compatible',
@@ -85,7 +81,7 @@ test('preparation signs only the approved room snapshot and immutable published 
   expect(JSON.stringify(prepared)).not.toContain('floor_plan');
 });
 
-test('records provider intent before paid Ark call and finalizes only approved audited output', async () => {
+test('records provider intent before paid Ark call and finalizes the stored result', async () => {
   const f = fixture();
   const result = await runTick(f.dependencies, true);
   expect(result).toMatchObject({ claimed: 1, approved: 1, reviewRequired: 0 });
@@ -95,9 +91,6 @@ test('records provider intent before paid Ark call and finalizes only approved a
   expect(f.generate).toHaveBeenCalledWith(config, input);
   expect(f.repository.recordResult).toHaveBeenCalledWith(jobId, attemptId, {
     location, sizeBytes: image.bytes.length, sha256: 'c'.repeat(64), providerRequestId: 'ark-request',
-  });
-  expect(f.repository.recordOutputReview).toHaveBeenCalledWith(jobId, attemptId, {
-    decision: 'approved', providerRequestId: 'ci-request', rawResult: 0,
   });
   expect(f.repository.finalize).toHaveBeenCalledWith(jobId, attemptId, 'approved', null);
 });
@@ -146,48 +139,23 @@ test('preflight and lost submission intent never call the paid provider', async 
   expect(uncertain.generate).not.toHaveBeenCalled();
 });
 
-test.each(['download', 'storage', 'reviewer'] as const)('%s failure becomes review_required after one Ark call', async (stage) => {
+test.each(['download', 'storage'] as const)('%s failure becomes review_required after one Ark call', async (stage) => {
   const f = fixture();
   if (stage === 'download') f.download.mockRejectedValue(Error('download'));
   if (stage === 'storage') f.storage.put.mockRejectedValue(Error('storage'));
-  if (stage === 'reviewer') f.reviewer.review.mockRejectedValue(Error('review'));
   await runTick(f.dependencies, true);
   expect(f.repository.markReviewRequired).toHaveBeenCalledTimes(1);
   expect(f.repository.finalize).not.toHaveBeenCalled();
   expect(f.generate).toHaveBeenCalledTimes(1);
 });
 
-test('rejected CI output is audited then released; manual or missing request ID needs review', async () => {
-  const rejected = fixture(); rejected.reviewer.review.mockResolvedValue({ decision: 'rejected',
-    providerRequestId: 'ci-request', rawResult: 1 });
-  await runTick(rejected.dependencies, true);
-  expect(rejected.repository.finalize).toHaveBeenCalledWith(jobId, attemptId, 'rejected', 'OUTPUT_REVIEW_REJECTED');
-  const manual = fixture(); manual.reviewer.review.mockResolvedValue({ decision: 'manual',
-    providerRequestId: null, rawResult: 9 });
-  await runTick(manual.dependencies, true);
-  expect(manual.repository.recordOutputReview).toHaveBeenCalledWith(jobId, attemptId, {
-    decision: 'manual', providerRequestId: null, rawResult: 9,
-  });
-  expect(manual.repository.markReviewRequired).toHaveBeenCalledWith(jobId, attemptId, 'OUTPUT_REVIEW_MANUAL');
-  expect(manual.repository.finalize).not.toHaveBeenCalled();
-  const missingId = fixture(); missingId.reviewer.review.mockResolvedValue({ decision: 'rejected',
-    providerRequestId: null, rawResult: 1 });
-  await runTick(missingId.dependencies, true);
-  expect(missingId.repository.recordOutputReview).toHaveBeenCalledWith(jobId, attemptId, {
-    decision: 'manual', providerRequestId: null, rawResult: 1,
-  });
-  expect(missingId.repository.finalize).not.toHaveBeenCalled();
-});
-
-test('result or review audit RPC failure leaves the reservation for reconciliation', async () => {
+test('result record or settlement RPC failure leaves the reservation for reconciliation', async () => {
   const result = fixture(); result.repository.recordResult.mockRejectedValue(Error('DB unknown'));
   await runTick(result.dependencies, true);
   expect(result.repository.markReviewRequired).toHaveBeenCalledWith(jobId, attemptId, 'WORKER_RESULT_RECORD_UNAVAILABLE');
-  expect(result.reviewer.review).not.toHaveBeenCalled();
-  const review = fixture(); review.repository.recordOutputReview.mockRejectedValue(Error('DB unknown'));
-  await runTick(review.dependencies, true);
-  expect(review.repository.markReviewRequired).toHaveBeenCalledWith(jobId, attemptId, 'WORKER_OUTPUT_REVIEW_UNAVAILABLE');
-  expect(review.repository.finalize).not.toHaveBeenCalled();
+  const settlement = fixture(); settlement.repository.finalize.mockRejectedValue(Error('DB unknown'));
+  await runTick(settlement.dependencies, true);
+  expect(settlement.repository.markReviewRequired).toHaveBeenCalledWith(jobId, attemptId, 'WORKER_SETTLEMENT_UNAVAILABLE');
 });
 
 test('lost submitted fence prevents Ark call and expired attempts are reconciled each tick', async () => {

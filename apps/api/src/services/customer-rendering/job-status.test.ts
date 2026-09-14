@@ -31,7 +31,7 @@ test('processing status exposes no private URL or provider details', async () =>
   expect(signResultRead).not.toHaveBeenCalled();
 });
 
-test('only approved success receives a short-lived private result link', async () => {
+test('stored Ark success receives a short-lived private result link without a CI verdict', async () => {
   const location = { bucket: 'test-bucket-12345', region: 'ap-beijing',
     object_key: `private/customer-rendering-results/${tenantId}/${jobId}/${attemptId}/result.webp` };
   const signResultRead = mock(async (_tenant: string, _job: string, _attempt: string,
@@ -39,7 +39,7 @@ test('only approved success receives a short-lived private result link', async (
     expiresAt: '2026-09-14T00:10:00Z' }));
   const service = new Service({ contextService, digestService,
     repository: { findOwned: async () => ({ ...base, status: 'succeeded' as const, finished_at: '2026-09-14T00:02:00Z',
-      output_review_decision: 'approved' as const, result_bucket: location.bucket,
+      output_review_decision: null, result_bucket: location.bucket,
       result_region: location.region, result_object_key: location.object_key,
       result_sha256: 'a'.repeat(64), result_size_bytes: 100 }) },
     storage: { signResultRead } });

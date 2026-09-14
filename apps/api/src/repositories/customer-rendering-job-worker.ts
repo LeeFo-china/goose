@@ -25,7 +25,6 @@ const Claim = z.discriminatedUnion('decision', [
 const Submitted = z.object({ decision: z.enum(['submitted', 'stale', 'invalid_request']) });
 const Recorded = z.object({ decision: z.enum(['recorded', 'stale', 'invalid_request']) });
 const ReviewRequired = z.object({ decision: z.enum(['review_required', 'stale', 'invalid_request']) });
-const OutputReviewRecorded = z.object({ decision: z.enum(['recorded', 'stale', 'invalid_request']) });
 const Finalized = z.discriminatedUnion('decision', [
   z.object({ decision: z.literal('finalized'), status: z.enum(['succeeded', 'failed']) }),
   z.object({ decision: z.enum(['stale', 'invalid_request', 'invalid_state']) }),
@@ -40,7 +39,6 @@ export interface CustomerRenderingJobWorkerRepositoryPort {
   markSubmitted(jobId: string, attemptId: string, modelCode: string): Promise<z.infer<typeof Submitted>['decision']>;
   recordResult(jobId: string, attemptId: string, result: CustomerRenderingJobResultFact): Promise<z.infer<typeof Recorded>['decision']>;
   markReviewRequired(jobId: string, attemptId: string, failureCode: string): Promise<z.infer<typeof ReviewRequired>['decision']>;
-  recordOutputReview(jobId: string, attemptId: string, review: { decision: 'approved' | 'rejected' | 'manual'; providerRequestId: string | null; rawResult: number | null }): Promise<z.infer<typeof OutputReviewRecorded>['decision']>;
   finalize(jobId: string, attemptId: string, outcome: 'approved' | 'rejected' | 'failed' | 'provider_rejected', failureCode: string | null): Promise<z.infer<typeof Finalized>>;
   reconcileExpired(): Promise<number>;
 }
@@ -80,15 +78,6 @@ export class CustomerRenderingJobWorkerRepository implements CustomerRenderingJo
   async markReviewRequired(jobId: string, attemptId: string, failureCode: string): Promise<z.infer<typeof ReviewRequired>['decision']> {
     const result = await this.call('mark_customer_rendering_job_review_required',
       { p_job_id: jobId, p_attempt_id: attemptId, p_failure_code: failureCode }, ReviewRequired);
-    return result.decision;
-  }
-  async recordOutputReview(jobId: string, attemptId: string,
-    review: { decision: 'approved' | 'rejected' | 'manual'; providerRequestId: string | null; rawResult: number | null },
-  ): Promise<z.infer<typeof OutputReviewRecorded>['decision']> {
-    const result = await this.call('record_customer_rendering_job_output_review', {
-      p_job_id: jobId, p_attempt_id: attemptId, p_decision: review.decision,
-      p_request_id: review.providerRequestId, p_raw_result: review.rawResult,
-    }, OutputReviewRecorded);
     return result.decision;
   }
   finalize(jobId: string, attemptId: string, outcome: 'approved' | 'rejected' | 'failed' | 'provider_rejected', failureCode: string | null): Promise<z.infer<typeof Finalized>> {

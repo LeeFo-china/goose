@@ -13,7 +13,7 @@ const rowSchema = z.strictObject({
   result_sha256: z.string().regex(/^[0-9a-f]{64}$/).nullable(),
   result_size_bytes: z.number().int().positive().max(10 * 1024 * 1024).nullable(),
 }).refine((row) => row.status !== 'succeeded' || (row.attempt_id !== null
-  && row.output_review_decision === 'approved' && row.result_bucket !== null
+  && row.result_bucket !== null
   && row.result_region !== null && row.result_object_key !== null
   && row.result_sha256 !== null && row.result_size_bytes !== null));
 const SELECT = Object.keys(rowSchema.shape).join(',');
