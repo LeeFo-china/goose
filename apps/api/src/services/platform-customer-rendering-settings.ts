@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { Errors } from '@/errors/error-factory';
 import {
   platformCustomerRenderingSettingsRepository,
+  type CustomerRenderingDailyUsage,
   type CustomerRenderingSetting,
   type CustomerRenderingSettingsRepositoryPort,
 } from '@/repositories/platform-customer-rendering-settings';
@@ -62,6 +63,11 @@ export class PlatformCustomerRenderingSettingsService {
       throw Errors.dbError('客户生图试点设置响应无效');
     }
     return result.setting;
+  }
+
+  async getDailyUsage(auth: SuperAdminIdentity, tenantId: string): Promise<CustomerRenderingDailyUsage> {
+    await this.get(auth, tenantId);
+    return this.repository.getDailyUsage(tenantId);
   }
 }
 

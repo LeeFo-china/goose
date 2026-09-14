@@ -321,18 +321,18 @@ export default async function PlatformTenantDetailPage({
             </p>
           </div>
         </div>
-        {tenant?.unified_social_credit_code && canReviewApplications ? (
-          <Button asChild variant="outline" className="w-fit shrink-0">
-            <Link
-              href={buildOnboardingRecordHref(
-                tenant.unified_social_credit_code,
-              )}
-            >
-              <ClipboardList data-icon="inline-start" />
-              查看入驻记录
-            </Link>
-          </Button>
-        ) : null}
+        <div className="flex flex-wrap gap-2">
+          {tenant && session.is_platform_super_admin ? <Button asChild variant="outline" className="w-fit shrink-0">
+            <Link href={`/platform/tenants/${tenant.id}/rendering-settings`}>客户生图额度</Link>
+          </Button> : null}
+          {tenant?.unified_social_credit_code && canReviewApplications ? (
+            <Button asChild variant="outline" className="w-fit shrink-0">
+              <Link href={buildOnboardingRecordHref(tenant.unified_social_credit_code)}>
+                <ClipboardList data-icon="inline-start" />查看入驻记录
+              </Link>
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       {error ? <StatusAlert>{error}</StatusAlert> : null}
