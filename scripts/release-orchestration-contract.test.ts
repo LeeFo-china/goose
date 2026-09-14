@@ -1245,6 +1245,24 @@ describe("production migration precheck workflow", () => {
     expect(migrateProductionWorkflow).not.toContain("git clone");
   });
 
+  test("Ark safety migration drains old workers only during apply with admission closed", () => {
+    const script = extractWorkflowRunScript(
+      sliceWorkflowStep(migrateProductionWorkflow, "Plan and apply migrations"),
+    );
+    const apply = script.indexOf('if [ "${MIGRATE_MODE}" = "apply" ]; then');
+    const admission = script.indexOf('test "${admission_enabled}" = false', apply);
+    const stop = script.indexOf('docker stop --time 330 "${container}"', admission);
+    const guard = script.indexOf('test "${processing_count}" = 0', stop);
+    const ddl = script.indexOf('for file in "${pending_files[@]}"; do', guard);
+    expect(script).toContain('20260914191000_customer_rendering_ark_safety.sql');
+    expect(apply).toBeGreaterThanOrEqual(0);
+    expect(admission).toBeGreaterThan(apply);
+    expect(stop).toBeGreaterThan(admission);
+    expect(guard).toBeGreaterThan(stop);
+    expect(ddl).toBeGreaterThan(guard);
+    expect(script).toContain('docker rm gooes-customer-rendering-input-review-worker');
+  });
+
   const fixtureIndexMarker =
     "-- gooes:expected-index=public.fixture_idx|public.fixture|false|gin|name|extensions.gin_trgm_ops|null";
   const validFixtureIndexState =

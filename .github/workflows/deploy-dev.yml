@@ -485,6 +485,18 @@ jobs:
           NODE
           fi
 
+      - name: Retire obsolete customer image review worker
+        if: ${{ inputs.service == 'api' }}
+        run: |
+          set -euo pipefail
+          if [ "${EVIDENCE_MODE}" = same_run ] \
+            && [ "${EXPECTED_BUILD_WORKFLOW_PATH}" = .github/workflows/release-dev.yml ] \
+            && [ -f supabase/migrations/20260914191000_customer_rendering_ark_safety.sql ] \
+            && docker inspect gooes-customer-rendering-input-review-worker-dev >/dev/null 2>&1; then
+            docker stop --time 90 gooes-customer-rendering-input-review-worker-dev
+            docker rm gooes-customer-rendering-input-review-worker-dev
+          fi
+
       - name: Deploy gated dev web
         if: ${{ env.WEB_DEPLOY_APPROVED == 'true' }}
         env:

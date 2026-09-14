@@ -22,13 +22,14 @@ const evidenceStepStart = workflow.indexOf("- name: Validate immutable build evi
 const deployStepStart = workflow.indexOf("- name: Deploy dev services");
 const checkStepStart = workflow.indexOf("- name: Check dev services");
 const gateStepStart = workflow.indexOf("- name: Validate gated dev web deployment");
+const retireStepStart = workflow.indexOf("- name: Retire obsolete customer image review worker");
 const gatedDeployStepStart = workflow.indexOf("- name: Deploy gated dev web");
 const gatedCheckStepStart = workflow.indexOf("- name: Check gated dev web");
 const loginStepStart = workflow.indexOf("- name: Login to Tencent CCR");
 const evidenceStep = workflow.slice(evidenceStepStart, gateStepStart);
 const loginStep = workflow.slice(loginStepStart, deployStepStart);
 const deployStep = workflow.slice(deployStepStart, checkStepStart);
-const checkStep = workflow.slice(checkStepStart, gatedDeployStepStart);
+const checkStep = workflow.slice(checkStepStart, retireStepStart);
 const gatedDeployStep = workflow.slice(gatedDeployStepStart, gatedCheckStepStart);
 const gatedCheckStep = workflow.slice(
   gatedCheckStepStart,
@@ -77,6 +78,14 @@ test("customer rendering job worker requires the migration-gated release and ena
   expect(deployStep).toContain("grep -Eq '^CUSTOMER_RENDERING_JOB_WORKER_ENABLED=true$' .env.dev.api");
   expect(deployStep).toContain("grep -Ec '^CUSTOMER_RENDERING_JOB_WORKER_ENABLED=' .env.dev.api");
   expect(devCompose).toContain("gooes-customer-rendering-job-worker-dev:");
+});
+
+test("the gated API release retires the obsolete input review container after health checks", () => {
+  expect(workflow.indexOf('- name: Retire obsolete customer image review worker'))
+    .toBeGreaterThan(checkStepStart);
+  expect(workflow).toContain('docker stop --time 90 gooes-customer-rendering-input-review-worker-dev');
+  expect(workflow).toContain('docker rm gooes-customer-rendering-input-review-worker-dev');
+  expect(workflow).toContain('supabase/migrations/20260914191000_customer_rendering_ark_safety.sql');
 });
 const requiredProjectHealthSmokeFragments = [
   'if [ "${RELEASE_SERVICE}" = api ] || [ "${RELEASE_SERVICE}" = admin ]; then',
