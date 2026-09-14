@@ -644,6 +644,8 @@ jobs:
               test "${admission_enabled}" = false
               test "$(docker inspect -f '{{.State.Status}}' gooes-api)" = running
               test "$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' gooes-api)" = healthy
+              docker exec gooes-api sh -ceu \
+                'grep -Fq "CUSTOMER_RENDERING_JOB_ADMISSION_ENABLED" /app/apps/api/src/services/customer-rendering/jobs.ts'
               for container in gooes-customer-rendering-job-worker gooes-customer-rendering-input-review-worker; do
                 if docker inspect "${container}" >/dev/null 2>&1; then
                   docker stop --time 330 "${container}"

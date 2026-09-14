@@ -1267,6 +1267,7 @@ describe("production migration precheck workflow", () => {
     expect(guard).toBeGreaterThan(stop);
     expect(ddl).toBeGreaterThan(guard);
     expect(script).toContain("'{{if .State.Health}}{{.State.Health.Status}}{{end}}' gooes-api)\" = healthy");
+    expect(script).toContain('grep -Fq "CUSTOMER_RENDERING_JOB_ADMISSION_ENABLED" /app/apps/api/src/services/customer-rendering/jobs.ts');
     expect(script).toContain('docker rm gooes-customer-rendering-input-review-worker');
   });
 
@@ -1291,6 +1292,7 @@ describe("production migration precheck workflow", () => {
     expect(recreate).toBeGreaterThan(close);
     expect(verify).toBeGreaterThan(recreate);
     expect(script).toContain('test "${health}" = healthy');
+    expect(script).toContain('grep -Fq "CUSTOMER_RENDERING_JOB_ADMISSION_ENABLED" /app/apps/api/src/services/customer-rendering/jobs.ts');
   });
 
   const fixtureIndexMarker =

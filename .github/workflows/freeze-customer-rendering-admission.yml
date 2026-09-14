@@ -37,6 +37,9 @@ jobs:
           cd /opt/supabase/docker
           test -r docker-compose.api.yml
           docker inspect gooes-api >/dev/null
+          # The pinned running image must actually enforce this switch.
+          docker exec gooes-api sh -ceu \
+            'grep -Fq "CUSTOMER_RENDERING_JOB_ADMISSION_ENABLED" /app/apps/api/src/services/customer-rendering/jobs.ts'
 
           # Match the same env-file resolution guard used by the production deploy.
           if [ -z "${GOOES_API_ENV_FILE:-}" ] && [ -f .env ] \
