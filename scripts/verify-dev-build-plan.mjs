@@ -36,6 +36,7 @@ const DEPLOY_ORDER = [
   "social-video-worker",
   "cos-reconcile-worker",
   "billing-reconcile-worker",
+  "customer-rendering-job-worker",
 ];
 const SHA_PATTERN = /^[a-f0-9]{40}$/u;
 const RUN_ID_PATTERN = /^[1-9][0-9]*$/u;
@@ -116,6 +117,7 @@ function assertServiceEvidence(plan) {
   for (const service of deployServices) {
     const requiredBuild = service === "cos-reconcile-worker"
       || service === "billing-reconcile-worker"
+      || service === "customer-rendering-job-worker"
       ? "api"
       : service;
     assert(buildServices.has(requiredBuild), `missing build evidence for ${service}`);

@@ -8,6 +8,7 @@ const REQUESTED_ORDER = [
   "social-video-worker",
   "cos-reconcile-worker",
   "billing-reconcile-worker",
+  "customer-rendering-job-worker",
 ];
 const BUILD_ORDER = ["api", "admin", "social-video-worker"];
 const IMAGE_REPOSITORIES = {
@@ -67,6 +68,7 @@ function expectedBuildServices(requestedServices) {
       ? requested.has("api")
         || requested.has("cos-reconcile-worker")
         || requested.has("billing-reconcile-worker")
+        || requested.has("customer-rendering-job-worker")
       : requested.has(service)
   );
 }

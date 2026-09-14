@@ -7,7 +7,8 @@ const LEGACY_ALL_SERVICES = [
   "cos-reconcile-worker",
   "billing-reconcile-worker",
 ];
-const ALLOWED_SERVICES = new Set([...LEGACY_ALL_SERVICES, "h5", "web"]);
+const OPT_IN_WORKERS = ["customer-rendering-job-worker"];
+const ALLOWED_SERVICES = new Set([...LEGACY_ALL_SERVICES, ...OPT_IN_WORKERS, "h5", "web"]);
 
 function reject(message) {
   console.error(message);
@@ -41,6 +42,7 @@ if (mode === "deploy" && services.includes("web") && services.length !== 1) {
 const normalizedServices = mode === "build"
   ? services.map((service) =>
     service === "cos-reconcile-worker" || service === "billing-reconcile-worker"
+      || OPT_IN_WORKERS.includes(service)
       ? "api"
       : service
   )

@@ -37,21 +37,32 @@ function fixture() {
     normalized_size_bytes: null, width: null, height: null, checksum: null,
     status: 'issued', expires_at: new Date(Date.now() + 600_000).toISOString(),
     processing_lease_expires_at: null, raw_cleanup_after: new Date(Date.now() + 86_400_000).toISOString(), raw_deleted_at: null,
+    review_due_at: null, review_attempts: 0, review_decision: null, reviewed_at: null,
   };
   const repository = {
     createIssued: mock(async (..._args: Parameters<CustomerRenderingInputsRepositoryPort['createIssued']>) => {}),
     countRecent: mock(async (..._args: Parameters<CustomerRenderingInputsRepositoryPort['countRecent']>) => 0),
     findOwned: mock(async (..._args: Parameters<CustomerRenderingInputsRepositoryPort['findOwned']>) => row),
+    findOwnedStatus: mock(async (..._args: Parameters<CustomerRenderingInputsRepositoryPort['findOwnedStatus']>) => row && ({
+      id: row.id, status: row.status, width: row.width, height: row.height,
+      normalized_object_key: row.normalized_object_key, checksum: row.checksum,
+      normalized_size_bytes: row.normalized_size_bytes, review_decision: row.review_decision,
+    })),
+    promoteLegacyReady: mock(async (...[_owner, _id, status]: Parameters<CustomerRenderingInputsRepositoryPort['promoteLegacyReady']>) => {
+      if (!row || row.status !== status) return false;
+      row.status = 'ready'; row.review_due_at = null;
+      return true;
+    }),
     claimProcessing: mock(async (...[_owner, _id, lease]: Parameters<CustomerRenderingInputsRepositoryPort['claimProcessing']>) => {
       if (row) { row.status = 'processing'; row.processing_lease_expires_at = lease; } return true;
     }),
     markNormalized: mock(async (...[_owner, _id, result]: Parameters<CustomerRenderingInputsRepositoryPort['markNormalized']>) => {
-      if (row) Object.assign(row, { status: 'pending_review', normalized_object_key: result.objectKey,
+      if (row) Object.assign(row, { status: 'ready', normalized_object_key: result.objectKey,
         normalized_size_bytes: result.sizeBytes, width: result.width, height: result.height, checksum: result.checksum });
       return true;
     }),
     markFailed: mock(async (..._args: Parameters<CustomerRenderingInputsRepositoryPort['markFailed']>) => { if (row) row.status = 'failed'; return true; }),
-  } satisfies Pick<CustomerRenderingInputsRepositoryPort, 'createIssued' | 'countRecent' | 'findOwned' | 'claimProcessing' | 'markNormalized' | 'markFailed'>;
+  } satisfies Pick<CustomerRenderingInputsRepositoryPort, 'createIssued' | 'countRecent' | 'findOwned' | 'findOwnedStatus' | 'promoteLegacyReady' | 'claimProcessing' | 'markNormalized' | 'markFailed'>;
   const storage = {
     rawObjectKey: (_tenant: string, fileId: string) => `private/customer-rendering-inputs/${tenantId}/${fileId}/raw`,
     normalizedObjectKey: () => rawKey.replace('/raw', '/normalized.webp'),
@@ -97,6 +108,79 @@ test('WeChat customer resolves the same owner as visitor; other subject cannot c
   f.repository.findOwned.mockImplementation(async (candidate) => candidate.subjectDigest === owner.subjectDigest ? f.row : null);
   await expect(f.service.complete({ ...user, openid: 'different' }, 'wechat', id)).rejects.toMatchObject({ statusCode: 404 });
   expect(f.storage.readRaw).not.toHaveBeenCalled();
+});
+
+test('old API normalization in the migration window becomes ready on status lookup or complete replay', async () => {
+  for (const operation of ['status', 'complete'] as const) {
+    const f = fixture();
+    f.row.status = 'pending_review';
+    f.row.review_due_at = new Date(Date.now() + 60_000).toISOString();
+    f.row.normalized_object_key = normalizedObjectKey;
+    f.row.normalized_size_bytes = 100; f.row.width = 16; f.row.height = 12;
+    f.row.checksum = 'b'.repeat(64);
+    const response = operation === 'status'
+      ? await f.service.getStatus(user, 'wechat', id)
+      : await f.service.complete(user, 'wechat', id);
+    expect(response.status).toBe('ready');
+    expect(f.repository.promoteLegacyReady).toHaveBeenCalledTimes(1);
+    expect(f.row).toMatchObject({ status: 'ready' });
+  }
+});
+
+test.each(['issued', 'processing', 'pending_review', 'approved', 'ready', 'rejected', 'failed', 'deleted'] as const)(
+  'status reads owned %s input without storage access or leaking ledger fields', async (status) => {
+    const f = fixture(); f.row.status = status;
+    if (status === 'pending_review' || status === 'approved' || status === 'ready' || status === 'rejected') {
+      f.row.normalized_object_key = normalizedObjectKey;
+      f.row.checksum = 'b'.repeat(64);
+      f.row.normalized_size_bytes = 100;
+      f.row.width = 16; f.row.height = 12;
+    }
+    if (status === 'pending_review') f.row.review_due_at = new Date(Date.now() + 60_000).toISOString();
+    if (status === 'approved') {
+      f.row.review_decision = 'approved'; f.row.reviewed_at = new Date().toISOString();
+    }
+    const result = await f.service.getStatus(user, 'wechat', id);
+    expect(result).toEqual({ file_id: id,
+      status: status === 'pending_review' || status === 'approved' ? 'ready' : status,
+      review_state: null,
+      mime_type: f.row.normalized_object_key ? 'image/webp' : null,
+      width: f.row.width, height: f.row.height, size_bytes: f.row.normalized_size_bytes });
+    expect(f.repository.findOwnedStatus).toHaveBeenCalledWith(expect.objectContaining({ tenantId, channel: 'wechat' }), id);
+    expect(f.storage.readRaw).not.toHaveBeenCalled();
+  });
+
+test('historical manual review is preserved in storage but no longer blocks readiness', async () => {
+  const f = fixture();
+  f.row.status = 'pending_review';
+  f.row.review_decision = 'manual';
+  f.row.reviewed_at = new Date().toISOString();
+  f.row.normalized_object_key = normalizedObjectKey;
+  f.row.checksum = 'b'.repeat(64);
+  f.row.normalized_size_bytes = 100; f.row.width = 16; f.row.height = 12;
+  expect(await f.service.getStatus(user, 'wechat', id)).toMatchObject({
+    status: 'ready', review_state: null,
+  });
+  expect(f.row.review_decision).toBe('manual');
+});
+
+const normalizedObjectKey = 'private/normalized.webp';
+
+test('status hides a missing or different owner and rejects invalid ID', async () => {
+  const f = fixture();
+  const owned = f.digestService.subject(await f.contextService.resolveWechat(user));
+  f.repository.findOwnedStatus.mockImplementation(async (candidate) => candidate.subjectDigest === owned.digest
+    ? { id: f.row.id, status: f.row.status, width: f.row.width, height: f.row.height,
+      normalized_object_key: f.row.normalized_object_key, checksum: f.row.checksum,
+      normalized_size_bytes: f.row.normalized_size_bytes, review_decision: f.row.review_decision } : null);
+  await expect(f.service.getStatus({ ...user, openid: 'other' }, 'wechat', id))
+    .rejects.toMatchObject({ statusCode: 404, code: 'RENDERING_INPUT_NOT_FOUND' });
+  await expect(f.service.getStatus(user, 'wechat', 'invalid'))
+    .rejects.toMatchObject({ statusCode: 400 });
+  f.hide();
+  f.repository.findOwnedStatus.mockResolvedValue(null);
+  await expect(f.service.getStatus(user, 'wechat', id))
+    .rejects.toMatchObject({ statusCode: 404, code: 'RENDERING_INPUT_NOT_FOUND' });
 });
 
 test('Douyin miniapp and customer use installation-bound HMAC identity', async () => {
@@ -176,7 +260,7 @@ test('invalid signed expiry closes issued intent with wrapped storage failure', 
 test('complete normalizes real bytes using persisted location and fenced update, replay same file ID', async () => {
   const f = fixture();
   const result = await f.service.complete(user, 'wechat', id);
-  expect(result).toMatchObject({ file_id: id, status: 'pending_review', mime_type: 'image/webp', width: 16, height: 12 });
+  expect(result).toMatchObject({ file_id: id, status: 'ready', mime_type: 'image/webp', width: 16, height: 12 });
   expect(f.storage.readRaw).toHaveBeenCalledWith(expect.anything(), id, location, 123, 'image/png');
   const bytes = f.storage.putNormalized.mock.calls[0]?.[3];
   expect((await sharp(bytes).metadata()).format).toBe('webp');
@@ -223,7 +307,7 @@ test('unknown normalized PUT recovers after intent expiry through digest HEAD wi
   expect(f.repository.markFailed).not.toHaveBeenCalled();
   f.row.expires_at = new Date(0).toISOString(); f.row.processing_lease_expires_at = new Date(0).toISOString();
   f.storage.hasNormalized.mockResolvedValue(true);
-  await expect(f.service.complete(user, 'wechat', id)).resolves.toMatchObject({ file_id: id, status: 'pending_review' });
+  await expect(f.service.complete(user, 'wechat', id)).resolves.toMatchObject({ file_id: id, status: 'ready' });
   expect(f.storage.hasNormalized).toHaveBeenCalledTimes(1);
   expect(f.storage.putNormalized).toHaveBeenCalledTimes(1);
 });

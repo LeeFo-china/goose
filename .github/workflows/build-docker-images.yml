@@ -166,7 +166,7 @@ jobs:
               RAW_DEPLOY_SERVICES="${RAW_DEPLOY_SERVICES} h5"
             fi
             BUILD_SERVICES="$(canonicalize_services "${RAW_BUILD_SERVICES}" api admin h5 web social-video-worker)"
-            DEPLOY_SERVICES="$(canonicalize_services "${RAW_DEPLOY_SERVICES}" api admin h5 web social-video-worker cos-reconcile-worker billing-reconcile-worker)"
+            DEPLOY_SERVICES="$(canonicalize_services "${RAW_DEPLOY_SERVICES}" api admin h5 web social-video-worker cos-reconcile-worker billing-reconcile-worker customer-rendering-job-worker)"
             test -n "${BUILD_SERVICES}"
             test -n "${DEPLOY_SERVICES}"
 

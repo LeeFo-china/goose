@@ -15,14 +15,16 @@ const rowSchema = z.strictObject({
   raw_object_key: z.string().min(1), normalized_object_key: z.string().min(1).nullable(),
   normalized_size_bytes: size.nullable(), width: z.number().int().positive().nullable(),
   height: z.number().int().positive().nullable(), checksum: digest.nullable(),
-  status: z.enum(['issued', 'processing', 'pending_review', 'approved', 'rejected', 'failed', 'deleted']),
+  status: z.enum(['issued', 'processing', 'pending_review', 'approved', 'ready', 'rejected', 'failed', 'deleted']),
   expires_at: timestamp, processing_lease_expires_at: timestamp.nullable(),
   raw_cleanup_after: timestamp, raw_deleted_at: timestamp.nullable(),
+  review_due_at: timestamp.nullable(), review_attempts: z.number().int().min(0).max(3),
+  review_decision: z.enum(['approved', 'rejected', 'manual']).nullable(), reviewed_at: timestamp.nullable(),
 }).refine((row) => row.channel === 'wechat'
   ? row.application_id === null && row.installation_id === null
   : row.application_id !== null && row.installation_id !== null)
   .refine((row) => row.status !== 'processing' || row.processing_lease_expires_at !== null)
-  .refine((row) => !['pending_review', 'approved'].includes(row.status)
+  .refine((row) => !['pending_review', 'approved', 'ready'].includes(row.status)
     || [row.normalized_object_key, row.normalized_size_bytes, row.width, row.height, row.checksum]
       .every((value) => value !== null));
 const ROW_SELECT = Object.keys(rowSchema.shape).join(',');
@@ -48,6 +50,16 @@ interface DatabaseClient {
 }
 
 export type CustomerInputRow = z.infer<typeof rowSchema>;
+const statusRowSchema = z.strictObject({
+  id: rowSchema.shape.id, status: rowSchema.shape.status,
+  review_decision: rowSchema.shape.review_decision,
+  normalized_object_key: rowSchema.shape.normalized_object_key,
+  checksum: rowSchema.shape.checksum,
+  normalized_size_bytes: rowSchema.shape.normalized_size_bytes,
+  width: rowSchema.shape.width, height: rowSchema.shape.height,
+});
+export type CustomerInputStatusRow = z.infer<typeof statusRowSchema>;
+const STATUS_SELECT = Object.keys(statusRowSchema.shape).join(',');
 export interface CustomerInputOwner {
   tenantId: string;
   channel: 'wechat' | 'douyin';
@@ -70,6 +82,8 @@ export interface RawCleanupClaim {
 export interface CustomerRenderingInputsRepositoryPort {
   createIssued(owner: CustomerInputOwner, input: CreateCustomerInput): Promise<void>;
   findOwned(owner: CustomerInputOwner, id: string): Promise<CustomerInputRow | null>;
+  findOwnedStatus(owner: CustomerInputOwner, id: string): Promise<CustomerInputStatusRow | null>;
+  promoteLegacyReady(owner: CustomerInputOwner, id: string, status: 'pending_review' | 'approved'): Promise<boolean>;
   countRecent(owner: CustomerInputOwner, since: string): Promise<number>;
   claimProcessing(owner: CustomerInputOwner, id: string, leaseUntil: string, now: string): Promise<boolean>;
   markNormalized(owner: CustomerInputOwner, id: string, result: NormalizedCustomerInput, leaseUntil: string, now: string): Promise<boolean>;
@@ -101,6 +115,21 @@ export class CustomerRenderingInputsRepository implements CustomerRenderingInput
     return parse(rowSchema.nullable(), data);
   }
 
+  async findOwnedStatus(owner: CustomerInputOwner, id: string): Promise<CustomerInputStatusRow | null> {
+    const { data } = await execute(this.owned(this.table().select(STATUS_SELECT), owner)
+      .eq('id', id).limit(1).maybeSingle());
+    return parse(statusRowSchema.nullable(), data);
+  }
+
+  async promoteLegacyReady(owner: CustomerInputOwner, id: string,
+    status: 'pending_review' | 'approved'): Promise<boolean> {
+    // An old API can finish normalization between the migration and API cutover.
+    // The caller first verifies complete normalized metadata; the status and owner
+    // predicates fence this idempotent promotion against concurrent review writes.
+    return changed(this.owned(this.table().update({ status: 'ready', review_due_at: null }), owner)
+      .eq('id', id).eq('status', status));
+  }
+
   async countRecent(owner: CustomerInputOwner, since: string): Promise<number> {
     const { count } = await execute(this.owned(this.table().select('id', { head: true, count: 'exact' }), owner)
       .gte('created_at', since));
@@ -121,7 +150,8 @@ export class CustomerRenderingInputsRepository implements CustomerRenderingInput
     return changed(this.owned(this.table().update({
       normalized_object_key: result.objectKey, normalized_size_bytes: result.sizeBytes,
       width: result.width, height: result.height, checksum: result.checksum,
-      status: 'pending_review', processing_lease_expires_at: null,
+      status: 'ready', processing_lease_expires_at: null,
+      review_due_at: null, review_attempts: 0, review_decision: null, reviewed_at: null,
     }), owner).eq('id', id).eq('status', 'processing')
       .eq('processing_lease_expires_at', leaseUntil).gt('processing_lease_expires_at', now)
       .is('raw_deleted_at', null));

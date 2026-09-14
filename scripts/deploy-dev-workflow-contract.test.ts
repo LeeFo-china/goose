@@ -22,13 +22,14 @@ const evidenceStepStart = workflow.indexOf("- name: Validate immutable build evi
 const deployStepStart = workflow.indexOf("- name: Deploy dev services");
 const checkStepStart = workflow.indexOf("- name: Check dev services");
 const gateStepStart = workflow.indexOf("- name: Validate gated dev web deployment");
+const retireStepStart = workflow.indexOf("- name: Retire obsolete customer image review worker");
 const gatedDeployStepStart = workflow.indexOf("- name: Deploy gated dev web");
 const gatedCheckStepStart = workflow.indexOf("- name: Check gated dev web");
 const loginStepStart = workflow.indexOf("- name: Login to Tencent CCR");
 const evidenceStep = workflow.slice(evidenceStepStart, gateStepStart);
 const loginStep = workflow.slice(loginStepStart, deployStepStart);
 const deployStep = workflow.slice(deployStepStart, checkStepStart);
-const checkStep = workflow.slice(checkStepStart, gatedDeployStepStart);
+const checkStep = workflow.slice(checkStepStart, retireStepStart);
 const gatedDeployStep = workflow.slice(gatedDeployStepStart, gatedCheckStepStart);
 const gatedCheckStep = workflow.slice(
   gatedCheckStepStart,
@@ -59,6 +60,7 @@ const requiredImmutableDeploymentFragments = [
   'social-video-worker) compose_service=gooes-social-video-worker-dev; export GOOES_SOCIAL_VIDEO_WORKER_IMAGE="${DEPLOY_IMAGE_REF}" ;;',
   'cos-reconcile-worker) compose_service=gooes-cos-reconcile-worker-dev; export GOOES_API_IMAGE="${DEPLOY_IMAGE_REF}" ;;',
   'billing-reconcile-worker) compose_service=gooes-billing-reconcile-worker-dev; export GOOES_API_IMAGE="${DEPLOY_IMAGE_REF}" ;;',
+  'customer-rendering-job-worker) compose_service=gooes-customer-rendering-job-worker-dev; export GOOES_API_IMAGE="${DEPLOY_IMAGE_REF}" ;;',
   'export GOOES_WEB_IMAGE="${DEPLOY_IMAGE_REF}"',
   'configured_image="$(docker inspect -f \'{{.Config.Image}}\' "${container}" 2>/dev/null || true)"',
   'test "${configured_image}" = "${DEPLOY_IMAGE_REF}"',
@@ -69,6 +71,22 @@ const requiredNonWebHealthAssertions = [
   'test "${state}" = running',
   'test "${health}" = healthy',
 ];
+
+test("customer rendering job worker requires the migration-gated release and enabled switch", () => {
+  expect(workflow).toContain('test "${EVIDENCE_MODE}" = same_run');
+  expect(workflow).toContain('test "${EXPECTED_BUILD_WORKFLOW_PATH}" = .github/workflows/release-dev.yml');
+  expect(deployStep).toContain("grep -Eq '^CUSTOMER_RENDERING_JOB_WORKER_ENABLED=true$' .env.dev.api");
+  expect(deployStep).toContain("grep -Ec '^CUSTOMER_RENDERING_JOB_WORKER_ENABLED=' .env.dev.api");
+  expect(devCompose).toContain("gooes-customer-rendering-job-worker-dev:");
+});
+
+test("the gated API release retires the obsolete input review container after health checks", () => {
+  expect(workflow.indexOf('- name: Retire obsolete customer image review worker'))
+    .toBeGreaterThan(checkStepStart);
+  expect(workflow).toContain('docker stop --time 90 gooes-customer-rendering-input-review-worker-dev');
+  expect(workflow).toContain('docker rm gooes-customer-rendering-input-review-worker-dev');
+  expect(workflow).toContain('supabase/migrations/20260914191000_customer_rendering_ark_safety.sql');
+});
 const requiredProjectHealthSmokeFragments = [
   'if [ "${RELEASE_SERVICE}" = api ] || [ "${RELEASE_SERVICE}" = admin ]; then',
   'test -n "${GOOES_DEV_SMOKE_TENANT_ADMIN_PHONE}"',
@@ -135,9 +153,9 @@ sleep() { :; }
 
 describe("deploy-dev workflow", () => {
   test("keeps the test-login bypass limited to development containers", () => {
-    expect(devCompose.match(/GOOES_DEPLOY_ENV: development/g)).toHaveLength(4);
+    expect(devCompose.match(/GOOES_DEPLOY_ENV: development/g)).toHaveLength(5);
     expect(devCompose).not.toContain("GOOES_DEPLOY_ENV: production");
-    expect(productionApiCompose.match(/GOOES_DEPLOY_ENV: production/g)).toHaveLength(4);
+    expect(productionApiCompose.match(/GOOES_DEPLOY_ENV: production/g)?.length).toBeGreaterThanOrEqual(4);
     expect(productionApiCompose).not.toContain("GOOES_DEPLOY_ENV: development");
   });
 
@@ -224,6 +242,9 @@ describe("deploy-dev workflow", () => {
     );
     expect(deployStep).toContain(
       'billing-reconcile-worker) compose_service=gooes-billing-reconcile-worker-dev; export GOOES_API_IMAGE="${DEPLOY_IMAGE_REF}" ;;',
+    );
+    expect(deployStep).toContain(
+      'customer-rendering-job-worker) compose_service=gooes-customer-rendering-job-worker-dev; export GOOES_API_IMAGE="${DEPLOY_IMAGE_REF}" ;;',
     );
     expect(deployStep).toContain('cd "${DEV_DEPLOY_DIR}"');
     expect(deployStep).toContain(

@@ -2,6 +2,7 @@ import { expect, mock, test } from "bun:test";
 import type { PublishedRenderingStyle } from "../../api/rendering-styles";
 import { ApiRequestError } from "../../api/request";
 import type { PrivateImage } from "../../platform/private-image";
+import { readRenderingRecovery, writeRenderingRecovery } from "../../platform/rendering-recovery";
 import { createRenderingStyleDetailPageDefinition } from "./page";
 
 const STYLE: PublishedRenderingStyle = {
@@ -11,6 +12,9 @@ const STYLE: PublishedRenderingStyle = {
   image_url: "https://cdn.example.com/rendering.webp",
   published_at: "2026-09-13T08:00:00.000Z",
 };
+const OWNER = { tenantId: STYLE.id, appId: "tt-app", installationId: STYLE.id,
+  subjectHash: "a".repeat(64) };
+const OTHER = { ...OWNER, subjectHash: "b".repeat(64) };
 
 test("rendering detail refreshes after return and treats hidden style as not found", async () => {
   let calls = 0;
@@ -49,7 +53,7 @@ test("rendering detail retains the current image through a network failure", asy
   expect(page.data.style?.id).toBe(STYLE.id);
 });
 
-test("detail requires a room photo, then accepts an optional floor plan as private pending review", async () => {
+test("detail requires a room photo, then accepts an optional ready floor plan", async () => {
   const purposes: string[] = [];
   const toasts: string[] = [];
   const image: PrivateImage = { bytes: new Uint8Array([0xff, 0xd8, 0xff, 0xd9]).buffer,
@@ -57,6 +61,7 @@ test("detail requires a room photo, then accepts an optional floor plan as priva
   const page = createRenderingStyleDetailPageDefinition({
     getApp: () => ({ api: {}, startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
       recordAnalytics: () => undefined }) as never,
+    resolveRecoveryIdentity: async () => OWNER,
     fetchPublishedStyleDetail: async () => STYLE,
     navigateToList: async () => undefined,
     showToast: ({ title }) => { toasts.push(title); },
@@ -66,7 +71,7 @@ test("detail requires a room photo, then accepts an optional floor plan as priva
       return { intentId: STYLE.id, uploadUrl: "https://example.invalid/signed", headers: {}, expiresAt: "2099-01-01T00:00:00Z" };
     },
     putRenderingBytes: async () => undefined,
-    completeRenderingUploadWithRetry: async () => ({ fileId: STYLE.id, status: "pending_review" }),
+    completeRenderingUploadWithRetry: async () => ({ fileId: STYLE.id, status: "ready" }),
   });
   const view = Object.assign(page, { setData(patch: Record<string, unknown>) { Object.assign(page.data, patch); } });
   view.onLoad({ id: STYLE.id });
@@ -76,13 +81,13 @@ test("detail requires a room photo, then accepts an optional floor plan as priva
   expect(toasts[0]).toContain("房间照");
   expect(view.data.floorUploadMessage).toContain("先上传房间照");
   await view.upload("room");
-  expect(view.data.roomUploadStatus).toBe("pending_review");
+  expect(view.data.roomUploadStatus).toBe("ready");
   expect(view.data.roomFileId).toBe(STYLE.id);
   await view.upload("floor_plan");
   expect(purposes).toEqual(["room", "floor_plan"]);
-  expect(view.data.floorUploadStatus).toBe("pending_review");
+  expect(view.data.floorUploadStatus).toBe("ready");
   expect(view.data.floorFileId).toBe(STYLE.id);
-  expect("canGenerate" in view.data).toBe(false);
+  expect(view.data.canGenerate).toBe(true);
 });
 
 test("detail keeps the same intent for an uncertain PUT and retryable completion", async () => {
@@ -93,6 +98,7 @@ test("detail keeps the same intent for an uncertain PUT and retryable completion
   const page = createRenderingStyleDetailPageDefinition({
     getApp: () => ({ api: {}, startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
       recordAnalytics: () => undefined }) as never,
+    resolveRecoveryIdentity: async () => OWNER,
     fetchPublishedStyleDetail: async () => STYLE,
     navigateToList: async () => undefined,
     showToast: () => undefined,
@@ -103,7 +109,7 @@ test("detail keeps the same intent for an uncertain PUT and retryable completion
     completeRenderingUploadWithRetry: async () => {
       completeCalls++;
       if (completeCalls === 1) throw new ApiRequestError(409, "RENDERING_UPLOAD_PROCESSING", "处理中");
-      return { fileId: STYLE.id, status: "pending_review" };
+      return { fileId: STYLE.id, status: "ready" };
     },
   });
   const view = Object.assign(page, { setData(patch: Record<string, unknown>) { Object.assign(page.data, patch); } });
@@ -112,7 +118,7 @@ test("detail keeps the same intent for an uncertain PUT and retryable completion
   await view.upload("room");
   expect(view.data.roomUploadStatus).toBe("retry_complete");
   await view.retryComplete("room");
-  expect(view.data.roomUploadStatus).toBe("pending_review");
+  expect(view.data.roomUploadStatus).toBe("ready");
   expect(intentCalls).toBe(1);
   expect(completeCalls).toBe(2);
 });
@@ -128,13 +134,14 @@ test("upload maps 401 and missing-company 409 without attempting a COS PUT", asy
   const page = createRenderingStyleDetailPageDefinition({
     getApp: () => ({ api: {}, startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
       recordAnalytics: () => undefined }) as never,
+    resolveRecoveryIdentity: async () => OWNER,
     fetchPublishedStyleDetail: async () => STYLE,
     navigateToList: async () => undefined,
     showToast: () => undefined,
     choosePrivateImage: async () => image,
     createRenderingUploadIntent: async () => { throw errors.shift(); },
     putRenderingBytes: async () => { putCalls++; },
-    completeRenderingUploadWithRetry: async () => ({ fileId: STYLE.id, status: "pending_review" }),
+    completeRenderingUploadWithRetry: async () => ({ fileId: STYLE.id, status: "ready" }),
   });
   const view = Object.assign(page, { setData(patch: Record<string, unknown>) { Object.assign(page.data, patch); } });
   view.onLoad({ id: STYLE.id });
@@ -151,6 +158,7 @@ test("undeclared album scope is shown as a configuration issue before intent", a
   const definition = createRenderingStyleDetailPageDefinition({
     getApp: () => ({ api: {}, startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
       recordAnalytics: () => undefined }) as never,
+    resolveRecoveryIdentity: async () => OWNER,
     fetchPublishedStyleDetail: async () => STYLE,
     navigateToList: async () => undefined,
     showToast: () => undefined,
@@ -159,7 +167,7 @@ test("undeclared album scope is shown as a configuration issue before intent", a
     },
     createRenderingUploadIntent: async () => { intents++; throw new Error("unexpected intent"); },
     putRenderingBytes: async () => undefined,
-    completeRenderingUploadWithRetry: async () => ({ fileId: STYLE.id, status: "pending_review" }),
+    completeRenderingUploadWithRetry: async () => ({ fileId: STYLE.id, status: "ready" }),
   });
   const view = Object.assign(definition, { setData(patch: Record<string, unknown>) { Object.assign(definition.data, patch); } });
   view.onLoad({ id: STYLE.id });
@@ -178,6 +186,7 @@ test("422 clears rejected intent so selecting a replacement issues a new ID", as
   const page = createRenderingStyleDetailPageDefinition({
     getApp: () => ({ api: {}, startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
       recordAnalytics: () => undefined }) as never,
+    resolveRecoveryIdentity: async () => OWNER,
     fetchPublishedStyleDetail: async () => STYLE,
     navigateToList: async () => undefined,
     showToast: () => undefined,
@@ -188,7 +197,7 @@ test("422 clears rejected intent so selecting a replacement issues a new ID", as
     completeRenderingUploadWithRetry: async () => {
       completes++;
       if (completes === 1) throw new ApiRequestError(422, "RENDERING_IMAGE_REJECTED", "bad");
-      return { fileId: STYLE.id, status: "pending_review" };
+      return { fileId: STYLE.id, status: "ready" };
     },
   });
   const view = Object.assign(page, { setData(patch: Record<string, unknown>) { Object.assign(page.data, patch); } });
@@ -199,7 +208,7 @@ test("422 clears rejected intent so selecting a replacement issues a new ID", as
   expect(view.data.roomUploadMessage).toContain("图片不合格");
   await view.upload("room");
   expect(intentCalls).toBe(2);
-  expect(view.data.roomUploadStatus).toBe("pending_review");
+  expect(view.data.roomUploadStatus).toBe("ready");
 });
 
 test("leaving detail before image selection resolves prevents a stale intent request", async () => {
@@ -208,13 +217,14 @@ test("leaving detail before image selection resolves prevents a stale intent req
   const page = createRenderingStyleDetailPageDefinition({
     getApp: () => ({ api: {}, startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
       recordAnalytics: () => undefined }) as never,
+    resolveRecoveryIdentity: async () => OWNER,
     fetchPublishedStyleDetail: async () => STYLE,
     navigateToList: async () => undefined,
     showToast: () => undefined,
     choosePrivateImage: () => new Promise((resolve) => { resolveImage = resolve; }),
     createRenderingUploadIntent: async () => { intents++; throw new Error("stale request"); },
     putRenderingBytes: async () => undefined,
-    completeRenderingUploadWithRetry: async () => ({ fileId: STYLE.id, status: "pending_review" }),
+    completeRenderingUploadWithRetry: async () => ({ fileId: STYLE.id, status: "ready" }),
   });
   const view = Object.assign(page, { setData(patch: Record<string, unknown>) { Object.assign(page.data, patch); } });
   view.onLoad({ id: STYLE.id });
@@ -235,6 +245,7 @@ test("selection resumes after the native picker hides and shows the detail page"
   const definition = createRenderingStyleDetailPageDefinition({
     getApp: () => ({ api: {}, startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
       recordAnalytics: () => undefined }) as never,
+    resolveRecoveryIdentity: async () => OWNER,
     fetchPublishedStyleDetail: async () => STYLE,
     navigateToList: async () => undefined,
     showToast: () => undefined,
@@ -242,7 +253,7 @@ test("selection resumes after the native picker hides and shows the detail page"
     createRenderingUploadIntent: async () => { intents++; return { intentId: STYLE.id,
       uploadUrl: "https://example.invalid/signed", headers: {}, expiresAt: "2099-01-01T00:00:00Z" }; },
     putRenderingBytes: async () => undefined,
-    completeRenderingUploadWithRetry: async () => ({ fileId: STYLE.id, status: "pending_review" }),
+    completeRenderingUploadWithRetry: async () => ({ fileId: STYLE.id, status: "ready" }),
   });
   const view = Object.assign(definition, { setData(patch: Record<string, unknown>) { Object.assign(definition.data, patch); } });
   view.onLoad({ id: STYLE.id });
@@ -256,7 +267,7 @@ test("selection resumes after the native picker hides and shows the detail page"
     mimeType: "image/jpeg", sizeBytes: 4 });
   await upload;
   expect(intents).toBe(1);
-  expect(view.data.roomUploadStatus).toBe("pending_review");
+  expect(view.data.roomUploadStatus).toBe("ready");
 });
 
 test("selection waits for the detail page to show before starting a private upload", async () => {
@@ -265,6 +276,7 @@ test("selection waits for the detail page to show before starting a private uplo
   const definition = createRenderingStyleDetailPageDefinition({
     getApp: () => ({ api: {}, startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
       recordAnalytics: () => undefined }) as never,
+    resolveRecoveryIdentity: async () => OWNER,
     fetchPublishedStyleDetail: async () => STYLE,
     navigateToList: async () => undefined,
     showToast: () => undefined,
@@ -272,7 +284,7 @@ test("selection waits for the detail page to show before starting a private uplo
     createRenderingUploadIntent: async () => { intents++; return { intentId: STYLE.id,
       uploadUrl: "https://example.invalid/signed", headers: {}, expiresAt: "2099-01-01T00:00:00Z" }; },
     putRenderingBytes: async () => undefined,
-    completeRenderingUploadWithRetry: async () => ({ fileId: STYLE.id, status: "pending_review" }),
+    completeRenderingUploadWithRetry: async () => ({ fileId: STYLE.id, status: "ready" }),
   });
   const view = Object.assign(definition, { setData(patch: Record<string, unknown>) { Object.assign(definition.data, patch); } });
   view.onLoad({ id: STYLE.id });
@@ -287,7 +299,7 @@ test("selection waits for the detail page to show before starting a private uplo
   view.onShow();
   await upload;
   expect(intents).toBe(1);
-  expect(view.data.roomUploadStatus).toBe("pending_review");
+  expect(view.data.roomUploadStatus).toBe("ready");
 });
 
 test("picker failure after a native hide becomes visible when detail shows again", async () => {
@@ -295,13 +307,14 @@ test("picker failure after a native hide becomes visible when detail shows again
   const definition = createRenderingStyleDetailPageDefinition({
     getApp: () => ({ api: {}, startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
       recordAnalytics: () => undefined }) as never,
+    resolveRecoveryIdentity: async () => OWNER,
     fetchPublishedStyleDetail: async () => STYLE,
     navigateToList: async () => undefined,
     showToast: () => undefined,
     choosePrivateImage: () => new Promise((_resolve, reject) => { rejectImage = reject; }),
     createRenderingUploadIntent: async () => { throw new Error("unexpected intent"); },
     putRenderingBytes: async () => undefined,
-    completeRenderingUploadWithRetry: async () => ({ fileId: STYLE.id, status: "pending_review" }),
+    completeRenderingUploadWithRetry: async () => ({ fileId: STYLE.id, status: "ready" }),
   });
   const view = Object.assign(definition, { setData(patch: Record<string, unknown>) { Object.assign(definition.data, patch); } });
   view.onLoad({ id: STYLE.id });
@@ -323,6 +336,7 @@ test("an uncertain PUT followed by missing raw asks for a new image instead of b
   const page = createRenderingStyleDetailPageDefinition({
     getApp: () => ({ api: {}, startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
       recordAnalytics: () => undefined }) as never,
+    resolveRecoveryIdentity: async () => OWNER,
     fetchPublishedStyleDetail: async () => STYLE,
     navigateToList: async () => undefined,
     showToast: () => undefined,
@@ -353,6 +367,7 @@ test("returning while PUT is in flight waits for that PUT before confirming the 
   const dependencies = {
     getApp: () => ({ api, startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
       recordAnalytics: () => undefined }) as never,
+    resolveRecoveryIdentity: async () => OWNER,
     fetchPublishedStyleDetail: async () => STYLE,
     navigateToList: async () => undefined,
     showToast: () => undefined,
@@ -361,7 +376,7 @@ test("returning while PUT is in flight waits for that PUT before confirming the 
       uploadUrl: "https://example.invalid/signed", headers: {}, expiresAt: "2099-01-01T00:00:00Z" }; },
     putRenderingBytes: () => new Promise<void>((resolve) => { finishPut = resolve; }),
     completeRenderingUploadWithRetry: async () => { completeCalls++;
-      return { fileId: STYLE.id, status: "pending_review" as const }; },
+      return { fileId: STYLE.id, status: "ready" as const }; },
   };
   const definition = createRenderingStyleDetailPageDefinition(dependencies);
   const view = Object.assign(definition, { setData(patch: Record<string, unknown>) { Object.assign(definition.data, patch); } });
@@ -388,6 +403,7 @@ test("unloading and reopening keeps an in-flight intent ID scoped to the app ses
   const dependencies = {
     getApp: () => ({ api, startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
       recordAnalytics: () => undefined }) as never,
+    resolveRecoveryIdentity: async () => OWNER,
     fetchPublishedStyleDetail: async () => STYLE,
     navigateToList: async () => undefined,
     showToast: () => undefined,
@@ -398,7 +414,7 @@ test("unloading and reopening keeps an in-flight intent ID scoped to the app ses
     putRenderingBytes: async () => undefined,
     completeRenderingUploadWithRetry: async () => { completeCalls++;
       if (completeCalls === 1) throw new ApiRequestError(409, "RENDERING_UPLOAD_PROCESSING", "处理中");
-      return { fileId: STYLE.id, status: "pending_review" as const }; },
+      return { fileId: STYLE.id, status: "ready" as const }; },
   };
   const first = createRenderingStyleDetailPageDefinition(dependencies);
   const firstView = Object.assign(first, { setData(patch: Record<string, unknown>) { Object.assign(first.data, patch); } });
@@ -422,6 +438,7 @@ test("reopening detail keeps a confirmed room file within the same app session",
   const dependencies = {
     getApp: () => ({ api, startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
       recordAnalytics: () => undefined }) as never,
+    resolveRecoveryIdentity: async () => OWNER,
     fetchPublishedStyleDetail: async () => STYLE,
     navigateToList: async () => undefined,
     showToast: () => undefined,
@@ -430,7 +447,8 @@ test("reopening detail keeps a confirmed room file within the same app session",
     createRenderingUploadIntent: async () => { intentCalls++; return { intentId: STYLE.id,
       uploadUrl: "https://example.invalid/signed", headers: {}, expiresAt: "2099-01-01T00:00:00Z" }; },
     putRenderingBytes: async () => undefined,
-    completeRenderingUploadWithRetry: async () => ({ fileId: STYLE.id, status: "pending_review" as const }),
+    completeRenderingUploadWithRetry: async () => ({ fileId: STYLE.id, status: "ready" as const }),
+    fetchRenderingUploadStatus: async () => ({ fileId: STYLE.id, status: "ready" as const, reviewState: null }),
   };
   const first = createRenderingStyleDetailPageDefinition(dependencies);
   const firstView = Object.assign(first, { setData(patch: Record<string, unknown>) { Object.assign(first.data, patch); } });
@@ -444,7 +462,7 @@ test("reopening detail keeps a confirmed room file within the same app session",
   secondView.onLoad({ id: STYLE.id });
   await flush();
   expect(secondView.data.roomFileId).toBe(STYLE.id);
-  expect(secondView.data.roomUploadStatus).toBe("pending_review");
+  expect(secondView.data.roomUploadStatus).toBe("ready");
   await secondView.upload("room");
   expect(intentCalls).toBe(1);
 });
@@ -460,6 +478,7 @@ test("terminal missing, conflicted or unauthorized intent lets the user start fr
     const definition = createRenderingStyleDetailPageDefinition({
       getApp: () => ({ api: {}, startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
         recordAnalytics: () => undefined }) as never,
+    resolveRecoveryIdentity: async () => OWNER,
       fetchPublishedStyleDetail: async () => STYLE,
       navigateToList: async () => undefined,
       showToast: () => undefined,
@@ -469,7 +488,7 @@ test("terminal missing, conflicted or unauthorized intent lets the user start fr
       putRenderingBytes: async () => undefined,
       completeRenderingUploadWithRetry: async () => { completeCalls++;
         if (completeCalls === 1) throw error;
-        return { fileId: STYLE.id, status: "pending_review" }; },
+        return { fileId: STYLE.id, status: "ready" }; },
     });
     const view = Object.assign(definition, { setData(patch: Record<string, unknown>) { Object.assign(definition.data, patch); } });
     view.onLoad({ id: STYLE.id });
@@ -478,14 +497,295 @@ test("terminal missing, conflicted or unauthorized intent lets the user start fr
     expect(view.data.roomUploadStatus).toBe("error");
     await view.upload("room");
     expect(intentCalls).toBe(2);
-    expect(view.data.roomUploadStatus).toBe("pending_review");
+    expect(view.data.roomUploadStatus).toBe("ready");
   }
+});
+
+test("completed upload immediately allows Ark generation and displays the private AI reference result", async () => {
+  const image: PrivateImage = { bytes: new Uint8Array([0xff, 0xd8, 0xff, 0xd9]).buffer,
+    mimeType: "image/jpeg", sizeBytes: 4 };
+  const submitted: unknown[] = [];
+  const definition = createRenderingStyleDetailPageDefinition({
+    getApp: () => ({ api: {}, startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
+      recordAnalytics: () => undefined }) as never,
+    fetchPublishedStyleDetail: async () => STYLE,
+    navigateToList: async () => undefined,
+    showToast: () => undefined,
+    choosePrivateImage: async () => image,
+    createRenderingUploadIntent: async () => ({ intentId: STYLE.id,
+      uploadUrl: "https://example.invalid/signed", headers: {}, expiresAt: "2099-01-01T00:00:00Z" }),
+    putRenderingBytes: async () => undefined,
+    completeRenderingUploadWithRetry: async () => ({ fileId: STYLE.id, status: "ready" }),
+    fetchRenderingUploadStatus: async () => ({ fileId: STYLE.id, status: "ready", reviewState: null }),
+    createIdempotencyKey: () => "22222222-2222-4222-8222-222222222222",
+    createRenderingJob: async (_client, input) => { submitted.push(input); return { jobId: STYLE.id, status: "succeeded" }; },
+    fetchRenderingJobStatus: async () => ({ jobId: STYLE.id, status: "succeeded",
+      result: { url: "https://private.example.com/result.webp", expiresAt: "2099-01-01T00:00:00Z", sizeBytes: 42 } }),
+    resolveRecoveryIdentity: async () => OWNER,
+  });
+  const view = Object.assign(definition, { setData(patch: Record<string, unknown>) { Object.assign(definition.data, patch); } });
+  view.onLoad({ id: STYLE.id });
+  await flush();
+  await view.upload("room");
+  await flush();
+  expect(view.data.roomUploadMessage).toContain("已就绪");
+  expect(view.data.canGenerate).toBe(true);
+  view.onSelectMode({ currentTarget: { dataset: { value: "renovation" } } });
+  view.onKeepNotesInput({ detail: { value: "保留木地板" } });
+  await view.submitJob();
+  expect(submitted).toEqual([{ style_asset_id: STYLE.id, room_file_id: STYLE.id,
+    space: "living_room", mode: "renovation", keep_notes: "保留木地板",
+    idempotency_key: "22222222-2222-4222-8222-222222222222" }]);
+  expect(view.data.jobStatus).toBe("succeeded");
+  expect(view.data.resultUrl).toContain("result.webp");
+});
+
+test("Ark content refusal gives a retryable explanation without exposing provider details", async () => {
+  const definition = createRenderingStyleDetailPageDefinition({
+    getApp: () => ({ api: {}, startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
+      recordAnalytics: () => undefined }) as never,
+    fetchPublishedStyleDetail: async () => STYLE,
+    navigateToList: async () => undefined, showToast: () => undefined,
+    choosePrivateImage: async () => { throw new Error("unused"); },
+    createRenderingUploadIntent: async () => { throw new Error("unused"); },
+    putRenderingBytes: async () => undefined,
+    completeRenderingUploadWithRetry: async () => { throw new Error("unused"); },
+    resolveRecoveryIdentity: async () => OWNER,
+    readRenderingRecovery: () => ({ styleId: STYLE.id, roomIntentId: null, floorIntentId: null,
+      roomFileId: STYLE.id, floorFileId: null, jobRequest: null, jobId: STYLE.id, savedAt: Date.now() }),
+    fetchRenderingUploadStatus: async () => ({ fileId: STYLE.id, status: "ready", reviewState: null }),
+    fetchRenderingJobStatus: async () => ({ jobId: STYLE.id, status: "failed", result: null,
+      failureReason: "content_rejected" }),
+  });
+  const view = Object.assign(definition, { setData(patch: Record<string, unknown>) { Object.assign(definition.data, patch); } });
+  view.onLoad({ id: STYLE.id });
+  await flush();
+  expect(view.data.jobMessage).toContain("模型未接受当前图片或描述");
+  expect(view.data.resultUrl).toBe("");
+});
+
+test("unknown job submission keeps the persisted request and retries with its original idempotency key", async () => {
+  const saved = new Map<string, unknown>();
+  const storage = { read: (key: string) => saved.get(key),
+    write: (key: string, value: unknown) => { saved.set(key, value); },
+    remove: (key: string) => { saved.delete(key); } };
+  const requests: unknown[] = [];
+  const makeIntegratedPage = () => {
+    const definition = createRenderingStyleDetailPageDefinition({
+      getApp: () => ({ api: {}, startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
+        recordAnalytics: () => undefined }) as never,
+      fetchPublishedStyleDetail: async () => STYLE,
+      navigateToList: async () => undefined,
+      showToast: () => undefined,
+      choosePrivateImage: async () => { throw new Error("unused"); },
+      createRenderingUploadIntent: async () => { throw new Error("unused"); },
+      putRenderingBytes: async () => undefined,
+      completeRenderingUploadWithRetry: async () => { throw new Error("unused"); },
+      fetchRenderingUploadStatus: async () => ({ fileId: STYLE.id, status: "ready", reviewState: null }),
+      readRenderingRecovery: (identity, id) => readRenderingRecovery(identity, id, storage),
+      writeRenderingRecovery: (identity, record) => writeRenderingRecovery(identity, record, storage),
+      resolveRecoveryIdentity: async () => OWNER,
+      createIdempotencyKey: () => "33333333-3333-4333-8333-333333333333",
+      createRenderingJob: async (_client, input) => {
+        requests.push(input);
+        if (requests.length === 1) throw new ApiRequestError(0, "NETWORK_ERROR", "unknown");
+        return { jobId: STYLE.id, status: "succeeded" };
+      },
+      fetchRenderingJobStatus: async () => ({ jobId: STYLE.id, status: "succeeded", result: null }),
+    });
+    return Object.assign(definition, { setData(patch: Record<string, unknown>) { Object.assign(definition.data, patch); } });
+  };
+  writeRenderingRecovery(OWNER, { styleId: STYLE.id, roomIntentId: null, floorIntentId: null,
+    roomFileId: STYLE.id, floorFileId: null, jobRequest: null, jobId: null, savedAt: Date.now() }, storage);
+  const first = makeIntegratedPage();
+  first.onLoad({ id: STYLE.id });
+  await flush();
+  expect(first.data.canGenerate).toBe(true);
+  await first.submitJob();
+  expect(first.data.jobMessage).toContain("继续提交同一任务");
+  first.onUnload();
+  const reopened = makeIntegratedPage();
+  reopened.onLoad({ id: STYLE.id });
+  await flush();
+  expect(reopened.data.jobDraftLocked).toBe(true);
+  await reopened.submitJob();
+  expect(requests).toHaveLength(2);
+  expect(requests[1]).toEqual(requests[0]);
+});
+
+test("account switch clears the prior result and draft, then loads only the new owner's recovery", async () => {
+  let identity = OWNER;
+  const values = new Map<string, unknown>();
+  const storage = { read: (key: string) => values.get(key),
+    write: (key: string, value: unknown) => { values.set(key, value); },
+    remove: (key: string) => { values.delete(key); } };
+  const request = { style_asset_id: STYLE.id, room_file_id: STYLE.id, space: "living_room" as const,
+    mode: "renovation" as const, keep_notes: "A 的私有备注", idempotency_key: STYLE.id };
+  writeRenderingRecovery(OWNER, { styleId: STYLE.id, roomIntentId: null, floorIntentId: null,
+    roomFileId: STYLE.id, floorFileId: null, jobRequest: request, jobId: STYLE.id, savedAt: Date.now() }, storage);
+  const definition = createRenderingStyleDetailPageDefinition({
+    getApp: () => ({ api: {}, startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
+      recordAnalytics: () => undefined }) as never,
+    resolveRecoveryIdentity: async () => identity,
+    fetchPublishedStyleDetail: async () => STYLE,
+    navigateToList: async () => undefined, showToast: () => undefined,
+    choosePrivateImage: async () => { throw new Error("unused"); },
+    createRenderingUploadIntent: async () => { throw new Error("unused"); },
+    putRenderingBytes: async () => undefined,
+    completeRenderingUploadWithRetry: async () => { throw new Error("unused"); },
+    readRenderingRecovery: (owner, id) => readRenderingRecovery(owner, id, storage),
+    writeRenderingRecovery: (owner, record) => writeRenderingRecovery(owner, record, storage),
+    fetchRenderingUploadStatus: async () => ({ fileId: STYLE.id, status: "ready", reviewState: null }),
+    fetchRenderingJobStatus: async () => ({ jobId: STYLE.id, status: "succeeded", result: {
+      url: "https://private.example.com/A.webp", expiresAt: "2099-01-01T00:00:00Z", sizeBytes: 42 } }),
+  });
+  const view = Object.assign(definition, { setData(patch: Record<string, unknown>) { Object.assign(definition.data, patch); } });
+  view.onLoad({ id: STYLE.id });
+  await flush();
+  expect(view.data.resultUrl).toContain("A.webp");
+  expect(view.data.keepNotes).toBe("A 的私有备注");
+  view.onHide();
+  expect(view.data.resultUrl).toBe("");
+  expect(view.data.keepNotes).toBe("");
+  expect(view.data.roomFileId).toBe("");
+  expect(view.data.jobId).toBe("");
+  identity = OTHER;
+  view.onShow();
+  expect(view.data.keepNotes).toBe("");
+  expect(view.data.roomFileId).toBe("");
+  await flush();
+  expect(view.data.resultUrl).toBe("");
+  expect(view.data.keepNotes).toBe("");
+  expect(view.data.roomFileId).toBe("");
+  expect(view.data.jobId).toBe("");
+  expect(view.data.jobDraftLocked).toBe(false);
+});
+
+test("missing job unlocks draft while temporary job errors retain its idempotency request", async () => {
+  let missing = false;
+  const request = { style_asset_id: STYLE.id, room_file_id: STYLE.id, space: "living_room" as const,
+    mode: "renovation" as const, idempotency_key: STYLE.id };
+  const definition = createRenderingStyleDetailPageDefinition({
+    getApp: () => ({ api: {}, startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
+      recordAnalytics: () => undefined }) as never,
+    resolveRecoveryIdentity: async () => OWNER,
+    fetchPublishedStyleDetail: async () => STYLE,
+    navigateToList: async () => undefined, showToast: () => undefined,
+    choosePrivateImage: async () => { throw new Error("unused"); },
+    createRenderingUploadIntent: async () => { throw new Error("unused"); },
+    putRenderingBytes: async () => undefined,
+    completeRenderingUploadWithRetry: async () => { throw new Error("unused"); },
+    readRenderingRecovery: () => ({ styleId: STYLE.id, roomIntentId: null, floorIntentId: null,
+      roomFileId: STYLE.id, floorFileId: null, jobRequest: request, jobId: STYLE.id, savedAt: Date.now() }),
+    writeRenderingRecovery: () => true,
+    fetchRenderingUploadStatus: async () => ({ fileId: STYLE.id, status: "ready", reviewState: null }),
+    fetchRenderingJobStatus: async () => { throw new ApiRequestError(missing ? 404 : 0,
+      missing ? "RENDERING_JOB_NOT_FOUND" : "NETWORK_ERROR", "failed"); },
+  });
+  const view = Object.assign(definition, { setData(patch: Record<string, unknown>) { Object.assign(definition.data, patch); } });
+  view.onLoad({ id: STYLE.id }); await flush();
+  expect(view.data.jobDraftLocked).toBe(true);
+  expect(view.data.jobId).toBe(STYLE.id);
+  missing = true;
+  await view.refreshJob(true);
+  expect(view.data.jobDraftLocked).toBe(false);
+  expect(view.data.jobId).toBe("");
+  expect(view.data.resultUrl).toBe("");
+});
+
+test("unconfirmed identity neither replays stored IDs nor submits a paid job", async () => {
+  let reads = 0;
+  let submits = 0;
+  const definition = createRenderingStyleDetailPageDefinition({
+    getApp: () => ({ api: {}, startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
+      recordAnalytics: () => undefined }) as never,
+    resolveRecoveryIdentity: async () => null,
+    fetchPublishedStyleDetail: async () => STYLE,
+    navigateToList: async () => undefined, showToast: () => undefined,
+    choosePrivateImage: async () => { throw new Error("unused"); },
+    createRenderingUploadIntent: async () => { throw new Error("unused"); },
+    putRenderingBytes: async () => undefined,
+    completeRenderingUploadWithRetry: async () => { throw new Error("unused"); },
+    readRenderingRecovery: () => { reads++; return null; },
+    createRenderingJob: async () => { submits++; return { jobId: STYLE.id, status: "queued" }; },
+  });
+  const view = Object.assign(definition, { setData(patch: Record<string, unknown>) { Object.assign(definition.data, patch); } });
+  view.onLoad({ id: STYLE.id }); await flush();
+  expect(reads).toBe(0);
+  expect(view.data.canGenerate).toBe(false);
+  await view.submitJob();
+  expect(submits).toBe(0);
+});
+
+test("missing upload clears its file ID but a temporary review error preserves it", async () => {
+  let missing = false;
+  const persisted: unknown[] = [];
+  const definition = createRenderingStyleDetailPageDefinition({
+    getApp: () => ({ api: {}, startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
+      recordAnalytics: () => undefined }) as never,
+    resolveRecoveryIdentity: async () => OWNER,
+    fetchPublishedStyleDetail: async () => STYLE,
+    navigateToList: async () => undefined, showToast: () => undefined,
+    choosePrivateImage: async () => { throw new Error("unused"); },
+    createRenderingUploadIntent: async () => { throw new Error("unused"); },
+    putRenderingBytes: async () => undefined,
+    completeRenderingUploadWithRetry: async () => { throw new Error("unused"); },
+    readRenderingRecovery: () => ({ styleId: STYLE.id, roomIntentId: null, floorIntentId: null,
+      roomFileId: STYLE.id, floorFileId: null, jobRequest: null, jobId: null, savedAt: Date.now() }),
+    writeRenderingRecovery: (_owner, record) => { persisted.push(record); return true; },
+    fetchRenderingUploadStatus: async () => { throw new ApiRequestError(missing ? 404 : 0,
+      missing ? "RENDERING_INPUT_NOT_FOUND" : "NETWORK_ERROR", "failed"); },
+  });
+  const view = Object.assign(definition, { setData(patch: Record<string, unknown>) { Object.assign(definition.data, patch); } });
+  view.onLoad({ id: STYLE.id }); await flush();
+  expect(view.data.roomFileId).toBe(STYLE.id);
+  missing = true;
+  await view.refreshUploads();
+  expect(view.data.roomFileId).toBe("");
+  expect((persisted[persisted.length - 1] as { roomFileId: string | null }).roomFileId).toBeNull();
+});
+
+test("an old account's late job response cannot write into the new account's page", async () => {
+  let identity = OWNER;
+  let finishJob!: (value: { jobId: string; status: "succeeded" }) => void;
+  const job = new Promise<{ jobId: string; status: "succeeded" }>((resolve) => { finishJob = resolve; });
+  const definition = createRenderingStyleDetailPageDefinition({
+    getApp: () => ({ api: {}, startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
+      recordAnalytics: () => undefined }) as never,
+    resolveRecoveryIdentity: async () => identity,
+    fetchPublishedStyleDetail: async () => STYLE,
+    navigateToList: async () => undefined, showToast: () => undefined,
+    choosePrivateImage: async () => { throw new Error("unused"); },
+    createRenderingUploadIntent: async () => { throw new Error("unused"); },
+    putRenderingBytes: async () => undefined,
+    completeRenderingUploadWithRetry: async () => { throw new Error("unused"); },
+    readRenderingRecovery: (owner) => owner.subjectHash === OWNER.subjectHash ? {
+      styleId: STYLE.id, roomIntentId: null, floorIntentId: null, roomFileId: STYLE.id,
+      floorFileId: null, jobRequest: null, jobId: null, savedAt: Date.now() } : null,
+    writeRenderingRecovery: () => true,
+    fetchRenderingUploadStatus: async () => ({ fileId: STYLE.id, status: "ready", reviewState: null }),
+    createRenderingJob: async () => job,
+    fetchRenderingJobStatus: async () => ({ jobId: STYLE.id, status: "succeeded", result: {
+      url: "https://private.example.com/A.webp", expiresAt: "2099-01-01T00:00:00Z", sizeBytes: 42 } }),
+  });
+  const view = Object.assign(definition, { setData(patch: Record<string, unknown>) { Object.assign(definition.data, patch); } });
+  view.onLoad({ id: STYLE.id }); await flush();
+  expect(view.data.canGenerate).toBe(true);
+  const submission = view.submitJob(); await flush();
+  view.onHide(); identity = OTHER; view.onShow(); await flush();
+  finishJob({ jobId: STYLE.id, status: "succeeded" });
+  await submission;
+  expect(view.data.jobId).toBe("");
+  expect(view.data.resultUrl).toBe("");
+  expect(view.data.jobDraftLocked).toBe(false);
+  expect(view.data.roomFileId).toBe("");
 });
 
 function makePage(fetchPublishedStyleDetail: ReturnType<typeof mock>) {
   const definition = createRenderingStyleDetailPageDefinition({
     getApp: () => ({ api: {}, startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
       recordAnalytics: () => undefined }),
+    resolveRecoveryIdentity: async () => OWNER,
     fetchPublishedStyleDetail,
     navigateToList: async () => undefined,
     showToast: () => undefined,

@@ -10,7 +10,9 @@ export type RenderingUploadIntent = {
   headers: Record<string, string>;
   expiresAt: string;
 };
-export type RenderingUploadResult = { fileId: string; status: "pending_review" };
+export type RenderingUploadResult = { fileId: string; status: "ready" };
+export type RenderingUploadStatus = "issued" | "processing" | "pending_review" | "approved" | "ready" | "rejected" | "failed" | "deleted";
+export type RenderingUploadProgress = { fileId: string; status: RenderingUploadStatus; reviewState: "pending" | "manual" | null };
 
 const MAX_BYTES = 10 * 1024 * 1024;
 
@@ -41,10 +43,30 @@ export async function completeRenderingUpload(client: ApiClient, id: string): Pr
   if (!normalizedId) throw invalidIntent();
   const value = await client.request<unknown>({ method: "POST",
     path: `/douyin-mini/renderings/uploads/${normalizedId}/complete`, data: {} });
-  if (!isRecord(value) || value.file_id !== normalizedId || value.status !== "pending_review"
+  if (!isRecord(value) || value.file_id !== normalizedId || value.status !== "ready"
     || value.mime_type !== "image/webp" || !isPositiveInteger(value.width)
     || !isPositiveInteger(value.height) || !isPositiveInteger(value.size_bytes)) throw invalidResponse();
-  return { fileId: normalizedId, status: "pending_review" };
+  return { fileId: normalizedId, status: "ready" };
+}
+
+export async function fetchRenderingUploadStatus(client: ApiClient, id: string): Promise<RenderingUploadProgress> {
+  const normalizedId = normalizeMaterialUuid(id);
+  if (!normalizedId) throw invalidIntent();
+  const value = await client.request<unknown>({ method: "GET",
+    path: `/douyin-mini/renderings/uploads/${normalizedId}` });
+  if (!isRecord(value) || value.file_id !== normalizedId
+    || !(["issued", "processing", "pending_review", "approved", "ready", "rejected", "failed", "deleted"] as unknown[]).includes(value.status)
+    || !(value.mime_type === null || value.mime_type === "image/webp")
+    || !(value.status === "pending_review"
+      ? value.review_state === "pending" || value.review_state === "manual"
+      : value.review_state === null)
+    || ![value.width, value.height, value.size_bytes].every((item) => item === null || isPositiveInteger(item))
+    || ((value.status === "ready" || value.status === "approved") && (value.mime_type !== "image/webp"
+      || !isPositiveInteger(value.width) || !isPositiveInteger(value.height) || !isPositiveInteger(value.size_bytes)))) {
+    throw invalidResponse();
+  }
+  return { fileId: normalizedId, status: value.status as RenderingUploadStatus,
+    reviewState: value.review_state as RenderingUploadProgress["reviewState"] };
 }
 
 export async function completeRenderingUploadWithRetry(

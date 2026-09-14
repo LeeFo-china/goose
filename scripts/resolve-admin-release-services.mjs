@@ -4,7 +4,10 @@ const REQUESTED_ORDER = [
   "social-video-worker",
   "cos-reconcile-worker",
   "billing-reconcile-worker",
+  "customer-rendering-job-worker",
 ];
+// Rendering workers exit while disabled and must be selected explicitly after their env gates are ready.
+const ALL_SERVICES = REQUESTED_ORDER.slice(0, 5);
 const BUILD_ORDER = ["api", "admin", "social-video-worker"];
 const ALLOWED_SERVICES = new Set(REQUESTED_ORDER);
 
@@ -23,7 +26,7 @@ const normalizedInput = rawServices.replaceAll(/\s/gu, "");
 if (normalizedInput.length === 0) reject("No release service selected");
 
 const services = normalizedInput === "all"
-  ? REQUESTED_ORDER
+  ? ALL_SERVICES
   : normalizedInput.split(",");
 
 if (services.some((service) => service.length === 0)) {
@@ -42,6 +45,7 @@ const resolvedServices = mode === "requested"
       ? requestedServices.has("api")
         || requestedServices.has("cos-reconcile-worker")
         || requestedServices.has("billing-reconcile-worker")
+        || requestedServices.has("customer-rendering-job-worker")
       : requestedServices.has(service)
   );
 

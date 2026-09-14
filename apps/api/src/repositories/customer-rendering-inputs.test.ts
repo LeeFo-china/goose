@@ -27,7 +27,8 @@ function row(overrides: Partial<CustomerInputRow> = {}): CustomerInputRow {
     bucket: 'issued-bucket', region: 'ap-guangzhou', raw_object_key: 'private/raw',
     normalized_object_key: null, normalized_size_bytes: null, width: null, height: null,
     checksum: null, status: 'issued', expires_at: FUTURE, processing_lease_expires_at: null,
-    raw_cleanup_after: FUTURE, raw_deleted_at: null, ...overrides,
+    raw_cleanup_after: FUTURE, raw_deleted_at: null,
+    review_due_at: null, review_attempts: 0, review_decision: null, reviewed_at: null, ...overrides,
   };
 }
 
@@ -92,6 +93,34 @@ describe('CustomerRenderingInputsRepository', () => {
     expect(await db.repository.findOwned(owner, ID)).toEqual(row());
     expect(db.requests[0]?.url.searchParams.get('limit')).toBe('1');
     expect(db.requests[0]?.url.searchParams.get('select')).not.toContain('*');
+  });
+
+  test('findOwnedStatus selects only safe status fields with the same owner boundary', async () => {
+    const db = database([row({ status: 'rejected', normalized_size_bytes: 100, width: 20, height: 10 })]);
+    expect(await db.repository.findOwnedStatus(owner, ID)).toEqual({
+      id: ID, status: 'rejected', review_decision: null,
+      normalized_object_key: null, checksum: null,
+      normalized_size_bytes: 100, width: 20, height: 10,
+    });
+    const request = db.requests[0]!;
+    expect(request.url.searchParams.get('select')).toBe('id,status,review_decision,normalized_object_key,checksum,normalized_size_bytes,width,height');
+    expect(request.url.searchParams.get('limit')).toBe('1');
+    expect(request.url.searchParams.get('subject_digest')).toBe(`eq.${owner.subjectDigest}`);
+    expect(await db.repository.findOwnedStatus({ ...owner, subjectDigest: 'b'.repeat(64) }, ID)).toBeNull();
+  });
+
+  test('promotes only owned legacy normalized status and preserves historical decision', async () => {
+    const db = database([row({ status: 'pending_review', normalized_object_key: normalized.objectKey,
+      normalized_size_bytes: normalized.sizeBytes, width: normalized.width, height: normalized.height,
+      checksum: normalized.checksum, review_decision: 'manual', reviewed_at: NOW })]);
+    expect(await db.repository.promoteLegacyReady({ ...owner, subjectDigest: 'b'.repeat(64) }, ID,
+      'pending_review')).toBe(false);
+    expect(await db.repository.promoteLegacyReady(owner, ID, 'approved')).toBe(false);
+    expect(await db.repository.promoteLegacyReady(owner, ID, 'pending_review')).toBe(true);
+    expect(db.rows[0]?.status).toBe('ready');
+    expect(db.rows[0]?.review_due_at).toBeNull();
+    expect(db.rows[0]?.review_decision).toBe('manual');
+    expect(await db.repository.promoteLegacyReady(owner, ID, 'pending_review')).toBe(false);
   });
 
   test('conditional updates use primary-key bounds without PATCH limit while reads stay bounded', async () => {
@@ -192,7 +221,7 @@ describe('CustomerRenderingInputsRepository', () => {
     expect(await db.repository.markNormalized(owner, ID, normalized, LEASE, NOW)).toBe(true);
     expect(await db.repository.markNormalized(owner, ID, normalized, LEASE, NOW)).toBe(false);
     const result = await db.repository.findOwned(owner, ID);
-    expect(result?.status).toBe('pending_review');
+    expect(result?.status).toBe('ready');
     expect(result?.normalized_object_key).toBe(normalized.objectKey);
     expect(result?.processing_lease_expires_at).toBeNull();
   });

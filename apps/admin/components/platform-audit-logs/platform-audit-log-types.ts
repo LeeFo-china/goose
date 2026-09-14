@@ -11,7 +11,8 @@ export type PlatformAuditLogAction =
   | "platform_device_password_reset"
   | "platform_device_cloud_delete"
   | "platform_release_dispatch"
-  | "platform_config_update";
+  | "platform_config_update"
+  | "customer_rendering_settings_update";
 
 export type PlatformAuditLogStatus = "success" | "failure";
 
@@ -73,6 +74,7 @@ export const platformAuditLogActionOptions = [
   { value: "platform_billing_pricing_update", label: "调整价格规则" },
   { value: "platform_release_dispatch", label: "发起版本发布" },
   { value: "platform_config_update", label: "更新平台配置" },
+  { value: "customer_rendering_settings_update", label: "修改客户生图额度" },
 ] as const;
 
 export function getPlatformAuditLogActionLabel(action: string | null | undefined) {
@@ -90,6 +92,7 @@ export function getPlatformAuditLogActionVariant(action: string | null | undefin
   if (action === "platform_billing_pricing_update") return "secondary" as const;
   if (action === "platform_release_dispatch") return "warning" as const;
   if (action === "platform_config_update") return "secondary" as const;
+  if (action === "customer_rendering_settings_update") return "secondary" as const;
   return "outline" as const;
 }
 

@@ -269,7 +269,8 @@ jobs:
 
           if [[ ",${requested_services}," == *,api,* \
             || ",${requested_services}," == *,cos-reconcile-worker,* \
-            || ",${requested_services}," == *,billing-reconcile-worker,* ]]; then
+            || ",${requested_services}," == *,billing-reconcile-worker,* \
+            || ",${requested_services}," == *,customer-rendering-job-worker,* ]]; then
             api_image="$(jq -er '.image | select(type == "string" and length > 0)' "${evidence_dir}/image-manifest-api.json")"
             api_repository="${api_image%:*}"
             api_digest="$(jq -er '.digest | select(type == "string" and test("^sha256:[a-f0-9]{64}$"))' "${evidence_dir}/image-manifest-api.json")"
@@ -409,6 +410,38 @@ jobs:
             echo "Web image may be built by the caller, but Web is excluded from the default all deployment." >> "${GITHUB_STEP_SUMMARY}"
           fi
 
+      - name: Verify rendering worker prerequisites
+        run: |
+          set -euo pipefail
+          if [[ " ${DEPLOY_SERVICES} " != *" customer-rendering-job-worker "* ]]; then
+            exit 0
+          fi
+          test "${ADMIN_CANDIDATE:-false}" = true
+          docker inspect supabase-db >/dev/null
+          migration_count="$(docker exec -i supabase-db sh -ceu \
+            'export PGPASSWORD="${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}"; exec psql -U supabase_admin -d postgres -At -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version IN ('"'"'20260914014930'"'"', '"'"'20260914022533'"'"', '"'"'20260914034000'"'"', '"'"'20260914191000'"'"');"')"
+          test "${migration_count}" = 4
+          cd "${DEPLOY_DIR}"
+          # Compose reads .env for interpolation; reject an implicit override that this guard cannot see.
+          if [ -z "${GOOES_API_ENV_FILE:-}" ] && [ -f .env ] \
+            && grep -Eq '^[[:space:]]*(export[[:space:]]+)?GOOES_API_ENV_FILE[[:space:]]*=' .env; then
+            echo "::error::Set GOOES_API_ENV_FILE in the runner environment to use a non-default API env file."
+            exit 1
+          fi
+          env_file="${GOOES_API_ENV_FILE:-./.env.api}"
+          test -r "${env_file}"
+          require_worker_enabled() {
+            local key="$1"
+            if ! test "$(grep -Ec "^${key}=" "${env_file}")" = 1 \
+              || ! grep -Fxq "${key}=true" "${env_file}"; then
+              echo "::error::${key} must be set to true exactly once before worker deployment."
+              exit 1
+            fi
+          }
+          if [[ " ${DEPLOY_SERVICES} " == *" customer-rendering-job-worker "* ]]; then
+            require_worker_enabled CUSTOMER_RENDERING_JOB_WORKER_ENABLED
+          fi
+
       - name: Sync compose fragments
         run: |
           set -euo pipefail
@@ -479,6 +512,7 @@ jobs:
               social-video-worker) compose_services+=("gooes-social-video-worker") ;;
               cos-reconcile-worker) compose_services+=("gooes-cos-reconcile-worker") ;;
               billing-reconcile-worker) compose_services+=("gooes-billing-reconcile-worker") ;;
+              customer-rendering-job-worker) compose_services+=("gooes-customer-rendering-job-worker") ;;
             esac
           done
           services="${compose_services[*]}"
@@ -535,6 +569,9 @@ jobs:
           if service_selected billing-reconcile-worker; then
             docker compose ${COMPOSE_ENV_FILE:+--env-file ${COMPOSE_ENV_FILE}} ${COMPOSE_FILES} --profile workers up -d --no-deps --force-recreate gooes-billing-reconcile-worker
           fi
+          if service_selected customer-rendering-job-worker; then
+            docker compose ${COMPOSE_ENV_FILE:+--env-file ${COMPOSE_ENV_FILE}} ${COMPOSE_FILES} --profile workers up -d --no-deps --force-recreate gooes-customer-rendering-job-worker
+          fi
           if service_selected admin; then
             docker compose ${COMPOSE_ENV_FILE:+--env-file ${COMPOSE_ENV_FILE}} ${COMPOSE_FILES} --profile workers up -d --no-deps --force-recreate gooes-admin
           fi
@@ -589,6 +626,7 @@ jobs:
           if service_selected social-video-worker; then check_container gooes-social-video-worker; fi
           if service_selected cos-reconcile-worker; then check_container gooes-cos-reconcile-worker; fi
           if service_selected billing-reconcile-worker; then check_container gooes-billing-reconcile-worker; fi
+          if service_selected customer-rendering-job-worker; then check_container gooes-customer-rendering-job-worker; fi
           if service_selected admin; then check_container gooes-admin; fi
           if service_selected web; then check_container gooes-web; fi
           if service_selected api; then
@@ -610,6 +648,10 @@ jobs:
           if service_selected billing-reconcile-worker; then
             test "${ADMIN_CANDIDATE:-false}" = true
             check_runtime_evidence billing-reconcile-worker gooes-billing-reconcile-worker "${GOOES_API_IMAGE}" api
+          fi
+          if service_selected customer-rendering-job-worker; then
+            test "${ADMIN_CANDIDATE:-false}" = true
+            check_runtime_evidence customer-rendering-job-worker gooes-customer-rendering-job-worker "${GOOES_API_IMAGE}" api
           fi
           if service_selected web; then
             test "${WEB_DIRECT_DEPLOY:-false}" = true

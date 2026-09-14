@@ -28,7 +28,7 @@ export const RenderingUploadIntentResponseSchema = z.strictObject({
 });
 export const RenderingUploadCompleteResponseSchema = z.strictObject({
   file_id: z.uuid(),
-  status: z.literal('pending_review'),
+  status: z.literal('ready'),
   mime_type: z.literal('image/webp'),
   width: z.number().int().positive(),
   height: z.number().int().positive(),
