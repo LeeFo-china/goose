@@ -7,7 +7,7 @@ import {
 } from "@gooes/domain";
 import { AppError } from "@/errors/app-error";
 import { Errors } from "@/errors/error-factory";
-import type { Database } from "@/types/database";
+import type { Database, Json } from "@/types/database";
 import { SupabaseDB } from "@/utils/supabase";
 
 const MIN_EVENT_COUNT = 1;
@@ -66,6 +66,14 @@ export type DouyinMarketingAttribution = {
   readonly scene?: string;
   readonly campaign_code?: string;
   readonly content_id?: string;
+  readonly analysis_info?: {
+    readonly type: 1 | 2 | 3 | 4;
+    readonly unique_id?: string;
+    readonly author_open_id?: string;
+    readonly video_item_id?: string;
+    readonly live_room_id?: string;
+    readonly anchor_open_id?: string;
+  };
 };
 
 export type SubmitDouyinMeasurementAppointmentInput = {
@@ -353,13 +361,14 @@ function throwMeasurementCommandError(
   throw Errors.business(mapped.statusCode, mapped.message, error.code);
 }
 
-function copyAttribution(input: DouyinMarketingAttribution): Record<string, string> {
-  const output: Record<string, string> = {};
+function copyAttribution(input: DouyinMarketingAttribution): Record<string, Json> {
+  const output: Record<string, Json> = {};
   if (input.source_type !== undefined) output.source_type = input.source_type;
   if (input.entry_path !== undefined) output.entry_path = input.entry_path;
   if (input.scene !== undefined) output.scene = input.scene;
   if (input.campaign_code !== undefined) output.campaign_code = input.campaign_code;
   if (input.content_id !== undefined) output.content_id = input.content_id;
+  if (input.analysis_info) output.analysis_info = { ...input.analysis_info };
   return output;
 }
 

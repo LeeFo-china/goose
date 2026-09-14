@@ -71,6 +71,10 @@ export class LeadPageCoordinator {
     return this.isVisible();
   }
 
+  canContinueSms(authority: LeadOperationAuthority): boolean {
+    return this.isVisible() && matches(authority, this.activeSms);
+  }
+
   beginSubmit(): LeadOperationAuthority | null {
     if (!this.isVisible() || this.activeSubmit) return null;
     this.activeSubmit = { operation: "submit", sequence: ++this.submitSequence };

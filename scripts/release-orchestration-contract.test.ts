@@ -1286,10 +1286,10 @@ describe("production migration precheck workflow", () => {
     expect(confirm).toBeGreaterThanOrEqual(0);
     expect(script).toContain('current_image_id="$(docker inspect -f \'{{.Image}}\' gooes-api)"');
     expect(script).toContain('export GOOES_API_IMAGE="gooes-api:admission-freeze-${GITHUB_RUN_ID}"');
-    expect(config).toBeGreaterThan(confirm);
-    expect(backup).toBeGreaterThan(config);
+    expect(backup).toBeGreaterThan(confirm);
     expect(close).toBeGreaterThan(backup);
-    expect(recreate).toBeGreaterThan(close);
+    expect(config).toBeGreaterThan(close);
+    expect(recreate).toBeGreaterThan(config);
     expect(verify).toBeGreaterThan(recreate);
     expect(script).toContain('test "${health}" = healthy');
     expect(script).toContain('grep -Fq "CUSTOMER_RENDERING_JOB_ADMISSION_ENABLED" /app/apps/api/src/services/customer-rendering/jobs.ts');

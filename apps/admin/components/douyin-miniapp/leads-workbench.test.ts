@@ -368,6 +368,18 @@ describe("tenant Douyin lead workbench behavior", () => {
     expect(html).not.toContain(APPOINTMENT_ID);
   });
 
+  test("shows the captured account and encrypted video ID with its basis", () => {
+    const html = renderToStaticMarkup(createElement(LeadDetailPanel, {
+      detail: { ...detail, attribution: { ...detail.attribution,
+        analysis_info: { type: 1, unique_id: "brand_01",
+          video_item_id: "encrypted-video-1" } } },
+      actions: [], busy: false, followUpLoading: false,
+      onAction: () => undefined, onFollowUpPage: () => undefined,
+    }));
+    for (const value of ["抖音接口返回（客户端采集）", "来源抖音号", "brand_01",
+      "视频标识（加密 ID）", "encrypted-video-1"]) expect(html).toContain(value);
+  });
+
   test("uses stable accessible field relationships for invalid follow-up input", () => {
     const html = renderToStaticMarkup(createElement(LeadActionForm, {
       action: "follow_up",

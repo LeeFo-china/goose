@@ -1,7 +1,7 @@
 import type { DouyinAppContext } from "../../app";
 import type { sendLeadSms, submitLead } from "../../api/leads";
 import { resolveThemeColor } from "../../components/theme";
-import type { BootstrapData } from "../../models";
+import type { BootstrapData, LaunchContext } from "../../models";
 import type {
   readBudgetLeadContext,
 } from "../../platform/budget-lead-context";
@@ -64,6 +64,8 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
   cooldownUntil: 0,
   bootstrapSnapshot: null as BootstrapData | null,
   initialBootstrapConsumed: false,
+  attributionEntryVersion: 0,
+  submissionAttribution: null as { key: string; value: LaunchContext } | null,
   successNavigationInFlight: false,
   data: {
     loading: true,
@@ -99,6 +101,11 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
   onShow() {
     const becameVisible = this.lifecycle.onShow();
     if (!this.lifecycle.isVisible()) return;
+    const entryVersion = dependencies.getApp().attributionEntryVersion;
+    if (this.attributionEntryVersion && entryVersion !== this.attributionEntryVersion) {
+      this.idempotency = createIdempotencyState(this.idempotency.draft);
+    }
+    this.attributionEntryVersion = entryVersion;
     this.setData({ smsSending: false, submitting: false });
     this.syncBudgetContext();
     this.resumeCooldown();
@@ -248,9 +255,11 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
     this.setData({ smsSending: true, formError: "" });
     try {
       const app = dependencies.getApp();
+      const attribution = await app.getLeadAttribution();
+      if (!this.lifecycle.canContinueSms(authority)) return;
       const result = await dependencies.sendLeadSms(app.api, {
         phone,
-        attribution: app.launchContext,
+        attribution,
       });
       this.cooldownUntil = recordSmsCooldownUntil(
         this.cooldownUntil,
@@ -346,6 +355,10 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
     this.setData({ submitting: true, formError: "", fieldErrors: {}, focusedField: "" });
     try {
       const app = dependencies.getApp();
+      const attribution = this.submissionAttribution?.key === decision.key
+        ? this.submissionAttribution.value : await app.getLeadAttribution();
+      if (!this.lifecycle.canPresentSubmitContinuation(authority)) return;
+      this.submissionAttribution = { key: decision.key, value: attribution };
       const form = this.data.form;
       const verification = phoneCaptureMode === "douyin_phone"
         ? {
@@ -367,7 +380,7 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
         privacy_policy_version: this.data.privacyPolicyVersion,
         consented_at: form.consented_at,
         idempotency_key: decision.key,
-        attribution: app.launchContext,
+        attribution,
         ...verification,
       });
       const succeeded = succeedIdempotentSubmission(this.idempotency, decision.key);
