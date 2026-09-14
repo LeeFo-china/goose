@@ -1,11 +1,106 @@
 -- Preserve the latest reviewed appointment command and extend only its
 -- attribution validator for bounded tt.getAnalysisInfo identifiers.
 -- Historical 105500 migration remains immutable. No existing rows are changed.
--- Rollback: a reviewed forward migration restoring the previous validator;
--- stored appointment snapshots remain readable JSONB.
+-- Rollback: first restore the previous miniapp/API contract. Keep the expanded
+-- customer-source validator while any official-attribution appointments can be
+-- converted later; a reviewed forward migration may replace it only after
+-- accounting for those immutable snapshots.
 BEGIN;
 SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '30s';
+
+-- Customer-source inserts and later lead conversion validate the same nested
+-- attribution snapshot as the appointment command. Keep both paths compatible.
+CREATE OR REPLACE FUNCTION public.is_valid_douyin_measurement_attribution_snapshot(
+  p_snapshot jsonb
+)
+RETURNS boolean
+LANGUAGE sql
+IMMUTABLE
+SET search_path = pg_catalog, public
+AS $function$
+  SELECT CASE
+    WHEN jsonb_typeof(p_snapshot) <> 'object' THEN false
+    ELSE p_snapshot - ARRAY[
+      'source_type', 'entry_path', 'scene', 'campaign_code', 'content_id',
+      'analysis_info'
+    ] = '{}'::jsonb
+      AND jsonb_typeof(p_snapshot->'source_type') = 'string'
+      AND p_snapshot->>'source_type' IN (
+        'short_video', 'live', 'search', 'profile', 'share', 'direct', 'other'
+      )
+      AND jsonb_typeof(p_snapshot->'entry_path') = 'string'
+      AND p_snapshot->>'entry_path' IN (
+        'pages/home/index', 'pages/company/index', 'pages/privacy/index',
+        'pages/cases/index', 'pages/case-detail/index', 'pages/sites/index',
+        'pages/site-detail/index', 'pages/budget/index', 'pages/qa/index',
+        'pages/lead/index', 'pages/lead-success/index', 'pages/materials/index',
+        'pages/material-detail/index', 'pages/my-materials/index',
+        'pages/customer-login/index', 'pages/customer-projects/index',
+        'pages/customer-project-detail/index', 'pages/rendering-styles/index',
+        'pages/rendering-style-detail/index'
+      )
+      AND jsonb_typeof(p_snapshot->'scene') = 'string'
+      AND p_snapshot->>'scene' ~ '^[0-9]{1,20}$'
+      AND (
+        NOT p_snapshot ? 'campaign_code'
+        OR jsonb_typeof(p_snapshot->'campaign_code') = 'null'
+        OR (
+          jsonb_typeof(p_snapshot->'campaign_code') = 'string'
+          AND p_snapshot->>'campaign_code' = btrim(p_snapshot->>'campaign_code')
+          AND p_snapshot->>'campaign_code' ~ '^[A-Za-z0-9_-]{1,64}$'
+        )
+      )
+      AND (
+        NOT p_snapshot ? 'content_id'
+        OR jsonb_typeof(p_snapshot->'content_id') = 'null'
+        OR (
+          jsonb_typeof(p_snapshot->'content_id') = 'string'
+          AND p_snapshot->>'content_id' = btrim(p_snapshot->>'content_id')
+          AND p_snapshot->>'content_id' ~ '^[A-Za-z0-9_-]{1,64}$'
+        )
+      )
+      AND (
+        NOT p_snapshot ? 'analysis_info'
+        OR CASE
+          WHEN jsonb_typeof(p_snapshot->'analysis_info') <> 'object' THEN false
+          ELSE
+            jsonb_typeof(p_snapshot->'analysis_info'->'type') = 'number'
+            AND p_snapshot->'analysis_info'->>'type' IN ('1', '2', '3', '4')
+            AND CASE p_snapshot->'analysis_info'->>'type'
+              WHEN '1' THEN
+                (p_snapshot->'analysis_info') - ARRAY[
+                  'type', 'unique_id', 'author_open_id', 'video_item_id'
+                ] = '{}'::jsonb
+                AND jsonb_typeof(p_snapshot->'analysis_info'->'video_item_id') = 'string'
+              WHEN '2' THEN
+                (p_snapshot->'analysis_info') - ARRAY[
+                  'type', 'unique_id', 'anchor_open_id', 'live_room_id'
+                ] = '{}'::jsonb
+                AND jsonb_typeof(p_snapshot->'analysis_info'->'live_room_id') = 'string'
+              WHEN '3' THEN
+                (p_snapshot->'analysis_info') - ARRAY['type', 'unique_id'] = '{}'::jsonb
+                AND jsonb_typeof(p_snapshot->'analysis_info'->'unique_id') = 'string'
+              WHEN '4' THEN
+                (p_snapshot->'analysis_info') - ARRAY['type', 'unique_id'] = '{}'::jsonb
+                AND jsonb_typeof(p_snapshot->'analysis_info'->'unique_id') = 'string'
+              ELSE false
+            END
+            AND NOT EXISTS (
+              SELECT 1
+              FROM jsonb_each((p_snapshot->'analysis_info') - 'type') AS official(key, value)
+              WHERE jsonb_typeof(official.value) <> 'string'
+                OR char_length(official.value #>> '{}') NOT BETWEEN 1 AND 256
+                OR official.value #>> '{}' <> btrim(official.value #>> '{}')
+                OR official.value #>> '{}' ~ '[[:cntrl:]]'
+            )
+        END
+      )
+  END;
+$function$;
+
+REVOKE ALL ON FUNCTION public.is_valid_douyin_measurement_attribution_snapshot(jsonb)
+FROM PUBLIC, anon, authenticated, service_role;
 
 CREATE OR REPLACE FUNCTION public.submit_douyin_measurement_appointment(
   p_douyin_miniapp_installation_id uuid,

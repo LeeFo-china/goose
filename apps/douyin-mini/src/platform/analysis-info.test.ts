@@ -48,7 +48,7 @@ describe("official entry attribution", () => {
       content_id: undefined });
   });
 
-  test("submitting while the API hangs uses this entry's marked fallback", async () => {
+  test("an early SMS timeout does not discard official attribution for later submission", async () => {
     const late = deferred<ReturnType<typeof parseAnalysisInfo>>();
     const capture = new EntryAttribution(() => late.promise);
     capture.start(base);
@@ -56,6 +56,7 @@ describe("official entry attribution", () => {
     late.resolve({ type: 1, unique_id: "late", video_item_id: "late-video" });
     await late.promise;
     await Promise.resolve();
-    expect(capture.current).toEqual(base);
+    expect(await capture.ready()).toEqual({ ...base, source_type: "short_video",
+      analysis_info: { type: 1, unique_id: "late", video_item_id: "late-video" } });
   });
 });

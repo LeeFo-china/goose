@@ -4,6 +4,8 @@
 
 先应用 `20260914202700_accept_douyin_official_lead_attribution.sql`，核对 `supabase migration list` 的 Local/Remote 对齐，再发布 API 和租户 Admin，最后上传目标抖音小程序体验版。旧 RPC 会拒绝新的 `analysis_info` 对象，因此不可先上传小程序。
 
+如需回滚，先恢复上一版小程序和 API；保留已扩展的客户来源快照校验器，使带官方归因的既有预约仍可转为客户。只有核对这些不可变快照的后续转换路径后，才能通过新的前向 migration 收紧校验器，不能直接恢复旧白名单。
+
 仓库 `apps/douyin-mini/project.config.json` 当前是模板 AppID `tt0d647bd99301341b01`；用户要验收的“好店智装云”体验版 AppID 为 `ttd033a68e4e56ccd301`。上传前必须在开发者工具确认实际登录与上传目标是后者。抖音开放平台须确认目标应用与用于测试的品牌号、员工号已绑定，真机基础库须达到 `tt.getAnalysisInfo` 要求的 2.99.0 或更高。此处均不能从代码推断为已满足。
 
 ## 真机用例

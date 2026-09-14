@@ -53,6 +53,34 @@ describe("lead page definition", () => {
     await operation;
   });
 
+  test("a retry with the same idempotency key keeps its first attribution snapshot", async () => {
+    const harness = createHarness();
+    harness.page.onShow();
+    setValidForm(harness.page);
+    const firstSource: LaunchContext = { entry_path: "pages/lead/index", scene: "021001",
+      source_type: "direct" };
+    const laterSource: LaunchContext = { ...firstSource, source_type: "short_video",
+      analysis_info: { type: 1, video_item_id: "late-video" } };
+    harness.app.getLeadAttribution = () => firstSource;
+    const first = harness.deferredSubmit();
+    const firstAttempt = harness.page.onSubmit();
+    await flushPromises();
+    first.reject(new ApiRequestError(503, "UNAVAILABLE", "暂不可用"));
+    await firstAttempt;
+    const key = harness.page.idempotency.key;
+
+    harness.app.getLeadAttribution = () => laterSource;
+    const retry = harness.deferredSubmit();
+    const secondAttempt = harness.page.onSubmit();
+    await flushPromises();
+    const payloads = harness.submitLead.mock.calls.map(([, body]) => body);
+    expect(payloads).toHaveLength(2);
+    expect(payloads[0]).toMatchObject({ idempotency_key: key, attribution: firstSource });
+    expect(payloads[1]).toMatchObject({ idempotency_key: key, attribution: firstSource });
+    retry.resolve(publicAppointment());
+    await secondAttempt;
+  });
+
   test("a new external entry rotates the submission key", () => {
     const harness = createHarness();
     harness.page.onShow();
