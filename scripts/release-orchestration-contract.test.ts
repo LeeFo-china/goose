@@ -1084,6 +1084,10 @@ describe("admin release service resolver", () => {
     ["build", "cos-reconcile-worker", "api"],
     ["requested", "billing-reconcile-worker", "billing-reconcile-worker"],
     ["build", "billing-reconcile-worker", "api"],
+    ["requested", "customer-rendering-input-review-worker", "customer-rendering-input-review-worker"],
+    ["build", "customer-rendering-input-review-worker", "api"],
+    ["requested", "customer-rendering-job-worker", "customer-rendering-job-worker"],
+    ["build", "customer-rendering-job-worker", "api"],
     ["requested", "admin,api,admin", "api,admin"],
     ["requested", " admin, api, admin ", "api,admin"],
   ])("resolves %s services %s in dependency order", (mode, services, expected) => {
@@ -1092,6 +1096,94 @@ describe("admin release service resolver", () => {
     expect(result.exitCode).toBe(0);
     expect(result.stderr.toString("utf8")).toBe("");
     expect(result.stdout.toString("utf8").trim()).toBe(expected);
+  });
+
+  test("keeps rendering workers out of the default all-service release", () => {
+    const result = resolve("requested", "all");
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.toString("utf8")).not.toContain("customer-rendering-");
+  });
+
+  test("deploys explicitly selected rendering workers only with exact enabled env and API image evidence", () => {
+    const preflight = sliceWorkflowStep(deployProductionWorkflow, "Verify rendering worker prerequisites");
+    expect(deployProductionWorkflow.indexOf("- name: Verify rendering worker prerequisites"))
+      .toBeLessThan(deployProductionWorkflow.indexOf("- name: Sync compose fragments"));
+    expect(preflight).toContain("supabase_migrations.schema_migrations");
+    expect(preflight).toContain("20260914014930");
+    expect(preflight).toContain("20260914022533");
+    expect(preflight).toContain("20260914034000");
+    expect(preflight).toContain('test "${migration_count}" = 3');
+    for (const [service, composeName, envName] of [
+      ["customer-rendering-input-review-worker", "gooes-customer-rendering-input-review-worker", "CUSTOMER_RENDERING_INPUT_REVIEW_ENABLED"],
+      ["customer-rendering-job-worker", "gooes-customer-rendering-job-worker", "CUSTOMER_RENDERING_JOB_WORKER_ENABLED"],
+    ]) {
+      expect(apiCompose).toContain(`  ${composeName}:\n    image: \${GOOES_API_IMAGE:?set GOOES_API_IMAGE}`);
+      expect(deployProductionWorkflow).toContain(`${service}) compose_services+=("${composeName}") ;;`);
+      expect(deployProductionWorkflow).toContain(`if service_selected ${service}; then`);
+      expect(deployProductionWorkflow).toContain(`check_container ${composeName};`);
+      expect(deployProductionWorkflow).toContain(`check_runtime_evidence ${service} ${composeName} "\${GOOES_API_IMAGE}" api`);
+      expect(preflight).toContain(`require_worker_enabled ${envName}`);
+    }
+    expect(preflight).toContain('test "$(grep -Ec "^${key}=" "${env_file}")" = 1');
+    expect(preflight).toContain('grep -Fxq "${key}=true" "${env_file}"');
+    expect(releaseProductionWorkflow).toContain('uses: ./.github/workflows/deploy-docker-services.yml');
+    expect(releaseProductionWorkflow).toContain('service: ${{ needs.authorize-deploy.outputs.requested_services }}');
+  });
+
+  test("rendering worker preflight rejects stale migrations, disabled flags, and duplicate env values", () => {
+    const root = mkdtempSync(join(tmpdir(), "rendering-worker-production-preflight-"));
+    const envFile = join(root, ".env.api");
+    const script = extractWorkflowRunScript(sliceWorkflowStep(
+      deployProductionWorkflow,
+      "Verify rendering worker prerequisites",
+    ));
+    const dockerStub = `docker() {
+      case "$1" in
+        inspect) return 0 ;;
+        exec) printf '%s\\n' "\${MOCK_MIGRATION_COUNT}" ;;
+        *) return 1 ;;
+      esac
+    }
+    `;
+    const run = (service: string, migrations: string, envText: string) => {
+      writeFileSync(envFile, envText);
+      return Bun.spawnSync(["bash", "-c", `${dockerStub}\n${script}`], {
+        env: {
+          ...process.env,
+          ADMIN_CANDIDATE: "true",
+          DEPLOY_DIR: root,
+          DEPLOY_SERVICES: service,
+          GOOES_API_ENV_FILE: envFile,
+          MOCK_MIGRATION_COUNT: migrations,
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+    };
+    try {
+      expect(run("customer-rendering-job-worker", "3", "CUSTOMER_RENDERING_JOB_WORKER_ENABLED=true\n").exitCode).toBe(0);
+      expect(run("customer-rendering-job-worker", "2", "CUSTOMER_RENDERING_JOB_WORKER_ENABLED=true\n").exitCode).not.toBe(0);
+      expect(run("customer-rendering-job-worker", "3", "CUSTOMER_RENDERING_JOB_WORKER_ENABLED=false\n").exitCode).not.toBe(0);
+      expect(run("customer-rendering-job-worker", "3", "CUSTOMER_RENDERING_JOB_WORKER_ENABLED=true\nCUSTOMER_RENDERING_JOB_WORKER_ENABLED=false\n").exitCode).not.toBe(0);
+      expect(run("customer-rendering-input-review-worker", "3", "CUSTOMER_RENDERING_INPUT_REVIEW_ENABLED=true\n").exitCode).toBe(0);
+      expect(run("api", "0", "").exitCode).toBe(0);
+      writeFileSync(join(root, ".env"), "GOOES_API_ENV_FILE=./alternate.env\n");
+      const implicitOverride = Bun.spawnSync(["bash", "-c", `${dockerStub}\n${script}`], {
+        env: {
+          ...process.env,
+          ADMIN_CANDIDATE: "true",
+          DEPLOY_DIR: root,
+          DEPLOY_SERVICES: "customer-rendering-job-worker",
+          GOOES_API_ENV_FILE: "",
+          MOCK_MIGRATION_COUNT: "3",
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      expect(implicitOverride.exitCode).not.toBe(0);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
   });
 
   test.each([

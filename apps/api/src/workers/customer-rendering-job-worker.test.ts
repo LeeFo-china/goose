@@ -31,7 +31,7 @@ const claim: ClaimedCustomerRenderingJob = { decision: 'claimed', tenant_id: ten
 };
 const location = { bucket: 'bucket-123', region: 'ap-beijing',
   object_key: `private/customer-rendering-results/${tenantId}/${jobId}/${attemptId}/result.webp` };
-const config = { baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', apiKey: 'key', model: 'ark-model', timeoutMs: 30_000 };
+const config = { baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', apiKey: 'key', model: 'ark-model', timeoutMs: 300_000 };
 const input = { roomImageUrl: 'https://example.com/room', referenceImageUrl: 'https://example.com/style',
   prompt: '装修效果', size: '2K' as const };
 const image = { bytes: Buffer.from('RIFF____WEBP'), mimeType: 'image/webp' as const };
@@ -132,6 +132,14 @@ test('preflight and lost submission intent never call the paid provider', async 
   expect(invalidConfig.repository.finalize).toHaveBeenCalledWith(jobId, attemptId, 'failed', 'WORKER_PREFLIGHT_UNAVAILABLE');
   expect(invalidConfig.repository.markSubmitted).not.toHaveBeenCalled();
   expect(invalidConfig.generate).not.toHaveBeenCalled();
+  const shortTimeout = fixture(); shortTimeout.prepare.mockResolvedValue({
+    config: { ...config, timeoutMs: 60_000 }, input, modelCode: 'ark-model-code',
+  });
+  await runTick(shortTimeout.dependencies, true);
+  expect(shortTimeout.repository.finalize).toHaveBeenCalledWith(jobId, attemptId,
+    'failed', 'RENDERING_MODEL_TIMEOUT_UNSAFE');
+  expect(shortTimeout.repository.markSubmitted).not.toHaveBeenCalled();
+  expect(shortTimeout.generate).not.toHaveBeenCalled();
   const uncertain = fixture(); uncertain.repository.markSubmitted.mockRejectedValue(Error('RPC unknown'));
   await runTick(uncertain.dependencies, true);
   expect(uncertain.repository.markReviewRequired).toHaveBeenCalledWith(jobId, attemptId, 'WORKER_SUBMISSION_INTENT_UNAVAILABLE');

@@ -106,6 +106,7 @@ import TenantRenderingLibraryFilesController from "@/controllers/tenant-renderin
 import TenantDouyinMaterialNotesController from "@/controllers/tenant-douyin-material-notes";
 import TenantOwnerDailyDashboardController from "@/controllers/tenant-owner-daily-dashboard";
 import PlatformDouyinMiniappsController from "@/controllers/platform-douyin-miniapps";
+import PlatformCustomerRenderingSettingsController from "@/controllers/platform-customer-rendering-settings";
 import SiteContentController from "@/controllers/site-content";
 import ProjectHealthController from "@/controllers/project-health";
 import TenantOnboardingController from "@/controllers/tenant-onboarding";
@@ -244,6 +245,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   TenantDouyinMaterialNotesController.registerExtraRoutes(app);
   TenantOwnerDailyDashboardController.registerExtraRoutes(app);
   PlatformDouyinMiniappsController.registerExtraRoutes(app);
+  PlatformCustomerRenderingSettingsController.registerExtraRoutes(app);
   SiteContentController.registerExtraRoutes(app);
   ProjectHealthController.registerExtraRoutes(app);
   TenantOnboardingController.registerExtraRoutes(app);

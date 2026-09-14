@@ -21,6 +21,8 @@ import { systemSettingsService } from '@/services/system-settings';
 
 const SCENE_CODE = 'decoration_raw_drawing';
 const INTERVAL_MS = 60_000;
+// The paid 2K pilot completed in about 94 seconds; give Ark the full supported route timeout.
+const MIN_ARK_RENDERING_TIMEOUT_MS = 300_000;
 const EXPLICIT_REJECTION_STATUSES = new Set([400, 401, 403, 404, 405, 413, 415, 422, 429]);
 
 interface PreparedJob { config: ArkGatewayConfig; input: ArkRenderingInput; modelCode: string }
@@ -102,11 +104,16 @@ async function processClaim(dependencies: CustomerRenderingJobWorkerDependencies
     ]);
     arkEndpoint(prepared.config, '/images/generations');
     buildArkRenderingRequest(prepared.config, prepared.input);
+    if (prepared.config.timeoutMs < MIN_ARK_RENDERING_TIMEOUT_MS) {
+      throw Errors.business(503, '客户生图模型超时配置过短', 'RENDERING_MODEL_TIMEOUT_UNSAFE');
+    }
     if (!prepared.modelCode.trim() || prepared.modelCode.length > 120) {
       throw Errors.badRequest('客户生图模型配置无效');
     }
-  } catch {
-    try { return await finalize(dependencies, claim, 'failed', 'WORKER_PREFLIGHT_UNAVAILABLE'); }
+  } catch (error) {
+    const failureCode = error instanceof AppError && error.code === 'RENDERING_MODEL_TIMEOUT_UNSAFE'
+      ? error.code : 'WORKER_PREFLIGHT_UNAVAILABLE';
+    try { return await finalize(dependencies, claim, 'failed', failureCode); }
     catch { return requireReview(dependencies, claim, 'WORKER_PREFLIGHT_SETTLEMENT_UNAVAILABLE'); }
   }
 
