@@ -611,21 +611,28 @@ jobs:
             fi
           done < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | sort)
 
+          ark_safety_cutover=false
+          for file in "${pending_files[@]}"; do
+            if [ "$(basename "${file}")" = "20260914191000_customer_rendering_ark_safety.sql" ]; then
+              ark_safety_cutover=true
+            fi
+          done
+          if [ "${ark_safety_cutover}" = true ]; then
+            admission_enabled="$(docker inspect gooes-api --format '{{json .Config.Env}}' |
+              jq -r '[.[] | select(startswith("CUSTOMER_RENDERING_JOB_ADMISSION_ENABLED=")) |
+                split("=")[1]] | if length == 0 then "false" elif length == 1 then .[0] else "invalid" end')"
+            case "${admission_enabled}" in true|false) ;; *) admission_enabled=invalid ;; esac
+            processing_before="$(psql_prod -Atc "select count(*) from public.customer_rendering_jobs where status = 'processing';")"
+            [[ "${processing_before}" =~ ^[0-9]+$ ]]
+            echo "ark_safety_preflight_admission=${admission_enabled} processing=${processing_before}"
+          fi
+
           backup_file=""
           applied_versions=()
           if [ "${MIGRATE_MODE}" = "apply" ]; then
-            ark_safety_cutover=false
-            for file in "${pending_files[@]}"; do
-              if [ "$(basename "${file}")" = "20260914191000_customer_rendering_ark_safety.sql" ]; then
-                ark_safety_cutover=true
-              fi
-            done
             if [ "${ark_safety_cutover}" = true ]; then
               # Freeze admission before stopping the old paid worker. No secret values
               # are printed: only the exact running API switch is inspected.
-              admission_enabled="$(docker inspect gooes-api --format '{{json .Config.Env}}' |
-                jq -r '[.[] | select(startswith("CUSTOMER_RENDERING_JOB_ADMISSION_ENABLED=")) |
-                  split("=")[1]] | if length == 0 then "false" elif length == 1 then .[0] else "invalid" end')"
               test "${admission_enabled}" = false
               for container in gooes-customer-rendering-job-worker gooes-customer-rendering-input-review-worker; do
                 if docker inspect "${container}" >/dev/null 2>&1; then
