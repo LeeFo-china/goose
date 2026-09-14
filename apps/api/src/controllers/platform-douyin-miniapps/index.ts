@@ -1,4 +1,5 @@
 import { PlatformBaseController } from "@/controllers/PlatformBaseController";
+import { z } from "zod";
 import { Errors } from "@/errors/error-factory";
 import {
   BindPlatformDouyinMiniappSchema,
@@ -22,6 +23,10 @@ import {
   PlatformDouyinMiniappsService,
   platformDouyinMiniappsService,
 } from "@/services/platform-douyin-miniapps";
+import {
+  platformCustomerRenderingJobReconciliationService,
+  type PlatformCustomerRenderingJobReconciliationService,
+} from "@/services/platform-customer-rendering-job-reconciliation";
 import type { AuthContext } from "@/services/authorization";
 import { Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
@@ -51,6 +56,13 @@ type PromotionControllerService = Pick<
   "getStatus" | "confirmLatest"
 >;
 type PromotionServiceProvider = () => Promise<PromotionControllerService>;
+const RenderingJobParams = z.strictObject({ id: z.uuid() });
+const RenderingJobEmptyQuery = z.strictObject({});
+const RenderingJobReconcileBody = z.strictObject({
+  tenant_id: z.uuid(),
+  decision: z.enum(['approve_audited', 'release']),
+  evidence_ref: z.string().regex(/^[A-Za-z0-9._:@/-]{3,120}$/),
+});
 
 export class PlatformDouyinMiniappsController extends PlatformBaseController {
   constructor(
@@ -59,6 +71,8 @@ export class PlatformDouyinMiniappsController extends PlatformBaseController {
       getPlatformDouyinMiniappReleasesService,
     private readonly promotionServiceProvider: PromotionServiceProvider =
       getPlatformDouyinTemplatePromotionService,
+    private readonly renderingReconciliationService: Pick<PlatformCustomerRenderingJobReconciliationService, 'reconcile'> =
+      platformCustomerRenderingJobReconciliationService,
   ) {
     super("platform-douyin-miniapps");
   }
@@ -177,6 +191,23 @@ export class PlatformDouyinMiniappsController extends PlatformBaseController {
     const releaseService = await this.releaseServiceProvider();
     const data = await releaseService.list(authContext, installationId, queryResult.data);
     return ResponseHandler.success(data);
+  }
+
+  @Post('/platform/customer-rendering-jobs/:id/reconcile')
+  async reconcileCustomerRenderingJob(request: FastifyRequest) {
+    const authContext = await this.getRequiredPlatformSuperAdminContext(request);
+    const query = RenderingJobEmptyQuery.safeParse(request.query || {});
+    if (!query.success) throw Errors.fromZod(query.error);
+    const params = RenderingJobParams.safeParse(request.params || {});
+    if (!params.success) throw Errors.fromZod(params.error);
+    const body = RenderingJobReconcileBody.safeParse(request.body || {});
+    if (!body.success) throw Errors.fromZod(body.error);
+    return ResponseHandler.success(await this.renderingReconciliationService.reconcile(authContext, {
+      jobId: params.data.id,
+      tenantId: body.data.tenant_id,
+      decision: body.data.decision,
+      evidenceRef: body.data.evidence_ref,
+    }));
   }
 
   private async runIdAction(

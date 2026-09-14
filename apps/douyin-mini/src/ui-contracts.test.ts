@@ -382,5 +382,20 @@ test("rendering catalog has a home entry and separate list and detail pages", as
   expect(home).toContain('bindtap="onViewRenderingStyles"');
   expect(list).toContain("AI 概念图");
   expect(detail).toContain("sourceLabel");
-  expect(list + detail).not.toMatch(/上传房间|立即生成|开始生图/);
+  expect(list + detail).not.toMatch(/立即生成|开始生图/);
+});
+
+test("rendering detail exposes reviewed uploads and a clearly labelled AI reference action", async () => {
+  const template = await readSource("pages/rendering-style-detail/index.ttml");
+  expect(template).toContain('bindtap="onChooseRoom"');
+  expect(template).toContain('bindtap="onChooseFloorPlan"');
+  expect(template).toContain('bindtap="onRetryRoomComplete"');
+  expect(template).toContain('bindtap="onRetryFloorComplete"');
+  expect(template).toContain("房间照（必传）");
+  expect(template).toContain("户型图（可选）");
+  expect(template).not.toContain("!roomFileId || floorUploadStatus");
+  expect(template).toContain("pending_review");
+  expect(template).toContain('bindtap="onGenerate"');
+  expect(template).toContain('bindtap="onCheckUploadReview"');
+  expect(template).toContain("AI 参考效果图");
 });

@@ -129,6 +129,35 @@ describe("production release candidate verifier", () => {
     ).toEqual(candidate);
   });
 
+  test.each([
+    "customer-rendering-input-review-worker",
+    "customer-rendering-job-worker",
+  ])("accepts an explicitly selected %s backed by the API digest", (worker) => {
+    const evidence = cloneEvidence();
+    evidence.candidate.requested_services = [worker];
+    evidence.expected.services = [worker];
+    evidence.plan.deploy_services = [worker];
+
+    expect(
+      verifyProductionReleaseCandidate(
+        evidence.candidate,
+        evidence.plan,
+        evidence.manifests,
+        evidence.expected,
+      ),
+    ).toEqual(evidence.candidate);
+
+    evidence.manifests = {};
+    expect(() =>
+      verifyProductionReleaseCandidate(
+        evidence.candidate,
+        evidence.plan,
+        evidence.manifests,
+        evidence.expected,
+      )
+    ).toThrow("missing manifest for api");
+  });
+
   test("accepts release sequence zero", () => {
     const evidence = cloneEvidence();
     evidence.candidate.tag = "v2026.07.13.0";

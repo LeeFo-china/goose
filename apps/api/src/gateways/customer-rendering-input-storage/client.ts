@@ -6,9 +6,11 @@ import { z } from 'zod';
 import { RenderingUploadMimeSchema, RENDERING_UPLOAD_MAX_BYTES } from '@gooes/domain';
 import { Errors } from '@/errors/error-factory';
 import type { RenderingStorageConfig, RenderingStorageLocation } from '@/gateways/rendering-library-storage/client';
+import { validateCosSignedReadUrl } from '@/gateways/rendering-library-storage/signed-read-url';
 
 export interface CustomerInputCosPort {
   getAuth(params: COS.GetAuthParams): string;
+  getObjectUrl?(params: COS.GetObjectUrlParams): string;
   headObject(params: COS.HeadObjectParams): Promise<COS.HeadObjectResult>;
   getObject(params: COS.GetObjectParams): Promise<COS.GetObjectResult>;
   putObject(params: COS.PutObjectParams): Promise<unknown>;
@@ -29,6 +31,10 @@ export interface CustomerInputStoragePort {
   putNormalized(tenantId: string, id: string, location: RenderingStorageLocation, bytes: Buffer): Promise<void>;
   hasNormalized(tenantId: string, id: string, location: RenderingStorageLocation, bytes: Buffer): Promise<boolean>;
   removeRaw(tenantId: string, id: string, location: RenderingStorageLocation): Promise<void>;
+}
+/** Worker-only: caller must have loaded an approved room row before signing. */
+export interface CustomerInputNormalizedReadPort {
+  signNormalizedRead(tenantId: string, id: string, location: RenderingStorageLocation): Promise<string>;
 }
 interface Dependencies {
   loadConfig: () => Promise<RenderingStorageConfig>;
@@ -51,7 +57,7 @@ function metadata(result: COS.HeadObjectResult, size: number, mime: string, sha2
     && result.headers?.['content-type'] === mime && (!sha256 || result.headers?.['x-cos-meta-sha256'] === sha256);
 }
 
-export class CustomerRenderingInputStorage implements CustomerInputStoragePort {
+export class CustomerRenderingInputStorage implements CustomerInputStoragePort, CustomerInputNormalizedReadPort {
   constructor(private readonly dependencies: Dependencies) {}
 
   rawObjectKey(tenantId: string, id: string): string { return `${this.prefix(tenantId, id)}/raw`; }
@@ -162,6 +168,20 @@ export class CustomerRenderingInputStorage implements CustomerInputStoragePort {
       if (typeof error === 'object' && error !== null && 'statusCode' in error && error.statusCode === 404) return false;
       throw failure();
     }
+  }
+  async signNormalizedRead(tenantId: string, id: string, location: RenderingStorageLocation): Promise<string> {
+    const key = this.normalizedObjectKey(tenantId, id);
+    this.assertLocation(location, key);
+    const config = await this.config();
+    try {
+      const cos = this.cos(config);
+      if (!cos.getObjectUrl) throw failure();
+      const signed = cos.getObjectUrl({ ...params(location), Sign: true, Method: 'GET',
+        Expires: TTL_SECONDS, Protocol: 'https:' });
+      const verified = validateCosSignedReadUrl(signed, location, config.secretId, TTL_SECONDS);
+      if (!verified) throw failure();
+      return verified.url;
+    } catch { throw failure(); }
   }
   async removeRaw(tenantId: string, id: string, location: RenderingStorageLocation): Promise<void> {
     this.assertLocation(location, this.rawObjectKey(tenantId, id));

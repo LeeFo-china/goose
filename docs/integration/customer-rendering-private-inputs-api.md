@@ -1,26 +1,26 @@
 # 客户私有房间照片 / 户型图上传交接
 
-2026-09-13：本文描述分支中的实现合同，不代表接口已发布。共享 DTO、账本仓储、COS 网关、双端 HTTP 与 raw 清理 worker 已有本地实现；`20260913035110_create_customer_rendering_private_inputs.sql` 尚未应用远端。没有发布路由、部署 worker、真实 COS/AI 调用，也没有修改 orange。客户端页面仍需各团队实施。
+2026-09-13 建立上传合同，2026-09-14 补充查询审核状态。生产 migration `20260913035110_create_customer_rendering_private_inputs.sql`、API 和复用镜像的 COS worker 已随 `aea829524365ae4862ff6b91601adeee9d6a0f53` 发布；用户反馈抖音生产上传成功，具体审核和真机细项仍待补证。只读核查发现 orange 已有微信上传 service/页面，但微信团队仍需处理 PUT 结果未知时的同 ID 恢复并自行发布。本仓库未修改 orange；AI 生图准入与 Worker 仍默认关闭。生产配置和验收缺口见[上传证据](../operations/evidence/2026-09-13-private-input-upload-production-gate.md)与[生图门禁](../operations/evidence/2026-09-14-customer-rendering-generation-gate.md)。
 
-## 四条接口与身份
+## 上传与状态接口身份
 
-以下为 API origin 下完整路径，无额外 `/api` 前缀；均为 POST，返回单条结果，无列表/分页参数。
+以下为 API origin 下完整路径，无额外 `/api` 前缀；返回单条结果，无列表/分页参数。
 
-| 客户端 | 创建上传意图 | 确认上传 |
-| --- | --- | --- |
-| 微信 | `/visitor/renderings/uploads:intent` | `/visitor/renderings/uploads/:id/complete` |
-| 抖音 | `/douyin-mini/renderings/uploads:intent` | `/douyin-mini/renderings/uploads/:id/complete` |
+| 客户端 | 创建上传意图（POST） | 确认上传（POST） | 查询审核状态（GET） |
+| --- | --- | --- | --- |
+| 微信 | `/visitor/renderings/uploads:intent` | `/visitor/renderings/uploads/:id/complete` | `/visitor/renderings/uploads/:id` |
+| 抖音 | `/douyin-mini/renderings/uploads:intent` | `/douyin-mini/renderings/uploads/:id/complete` | `/douyin-mini/renderings/uploads/:id` |
 
-业务 API 传 `Authorization: Bearer <当前会话 token>`、`Content-Type: application/json`。四条接口均标记 `tenantServiceAccess=session`，不是匿名上传入口，也不要求将上传绑定到员工身份。
+业务 API 传 `Authorization: Bearer <当前会话 token>`；POST 另传 `Content-Type: application/json`。六条接口均标记 `tenantServiceAccess=session`，不是匿名上传入口，也不要求将上传绑定到员工身份。
 
 - 微信接受 `visitor_session`（可信 openid、visitor_id），通过服务器最近有效的选公司记录找租户；或者 `auth` + `login_channel=wechat`（可信 openid、tenant_id）。没有选公司返回 409，客户端进入既有选公司流程后重试。租户停用返回 403。
 - 抖音接受 `douyin_miniapp`，或者 `auth` + `login_channel=douyin`；使用 token 内 tenant_id、subject_hash、douyin_app_id、douyin_installation_id，miniapp 的 sub 必须匹配 subject_hash。安装必须有效且 app/tenant/scope 相符，停用安装返回 409。缺少完整可信身份返回 401，不能由 body 补齐公司信息。
 - 后端按 tenant + channel + HMAC 主体版本/摘要 + app/installation scope 绑定文件。不同主体访问同一 ID 与不存在统一 404。body 不接受 tenant_id、subject、openid、任意 URL、bucket 或 object key。
-- 微信 visitor 的精确 POST uploads 白名单已接入；抖音 token 仍限于既有抖音命名空间，不获得通用上传能力。旧 `/visitor/picture-library/*` 与本合同不兼容，不能复用旧图库的 401 匿名回退。
+- 微信 visitor 的精确 POST 上传及 GET/HEAD 状态白名单已接入；抖音 token 仍限于既有抖音命名空间，不获得通用上传能力。旧 `/visitor/picture-library/*` 与本合同不兼容，不能复用旧图库的 401 匿名回退。
 
 ## DTO 与调用顺序
 
-共享定义：`packages/domain/src/customer-rendering.ts`。成功包裹为 `{ "data": <以下 DTO>, "message": "success" }`；客户端若现有 request wrapper 已解包 data，不要二次解包。
+上传与确认的共享定义位于 `packages/domain/src/customer-rendering.ts`；状态响应定义位于 `apps/api/src/schema/customer-renderings.ts`。成功包裹为 `{ "data": <以下 DTO>, "message": "success" }`；客户端若现有 request wrapper 已解包 data，不要二次解包。
 
 1. 选择并检查真实静态 JPEG / PNG / WebP，读取最终待上传文件字节数。HEIC/HEIF 需真实转码，不能只改扩展名或 MIME。原文件要求 `1 <= size_bytes <= 10485760`（10 MiB）。
 2. intent body 为严格对象：`{ "purpose": "room", "mime_type": "image/jpeg", "size_bytes": 1024 }`。purpose 仅 `room | floor_plan`，mime_type 仅 `image/jpeg | image/png | image/webp`，size_bytes 是整数。额外字段返回 400。
@@ -29,9 +29,11 @@
 5. PUT 成功后，以 intent_id 替换 UUID 路径参数调用 complete，body 必须是 `{}`（允许无 body，不允许 null 或额外字段）。不传 URL、对象位置或图片字节。
 6. complete data 为 `{ file_id: UUID, status: "pending_review", mime_type: "image/webp", width: 正整数, height: 正整数, size_bytes: 正整数 }`。file_id 等于本意图 ID；大小和宽高属于服务器规范图，不是声明原图。响应没有任何原图/规范图公共 URL。
 
+随后可用相同 ID 调用 GET 状态接口查询审核结果。路径 ID 必须是 UUID，不接受任何 query 参数；响应为 `{ file_id, status, review_state, mime_type, width, height, size_bytes }`。status 可能为 `issued | processing | pending_review | approved | rejected | failed | deleted`；仅当 status 为 `pending_review` 时，`review_state` 是 `pending` 或 `manual`，其他状态为 `null`。`manual` 表示需人工处理，客户端应停止自动轮询并提示用户稍后查询。`mime_type` 仅在规范图存在时为 `image/webp`，否则为 `null`，宽、高、大小同样可能为 `null`。状态由服务端当前租户、渠道、主体及安装身份限定；他人文件与不存在文件都返回 404。该接口不返回审核原始响应、COS 地址或签名 URL，也不表示生成任务状态。
+
 服务器先验证 HEAD 的大小和 MIME，再限量读取并实际解码静态图，规范化为私有 WebP 并验证长度/MIME/SHA-256 元数据才提交 `pending_review`。已安装 COS SDK 2.15.4 **不签名 Content-Type**：它是必传头，但不是加密绑定的签名头。签名绑定 Content-Length、Host、ACL 与 forbid-overwrite；不能据此跳过 HEAD 和图片解码。
 
-`pending_review` 只表示上传及规范化完成，不代表内容审核通过，更不代表 AI 任务资格。两个客户端显示“待审核”，生图按钮保持关闭；审核、原子额度与预算、任务创建、生成和结果获取均属于后续计划。
+`pending_review` 只表示上传及规范化完成，不代表内容审核通过，更不代表 AI 任务资格。两个客户端显示“待审核”，生图按钮保持关闭；只有 `approved` 才可按[任务交接契约](customer-rendering-generation-handoff.md)提交生成任务。生产准入开关与 Worker 应继续关闭，直到生图门禁通过。
 
 ## 重放、并发与错误映射
 
@@ -61,9 +63,11 @@ PUT 禁止覆盖；首次成功但客户端未收到响应时可尝试 complete�
 
 ## 双端实施边界
 
-已只读参考微信 `orange/src/services/visitor_rendering_styles.ts`、`orange/src/packageVisitor/pages/rendering-style-detail/index.tsx`：现有 service/详情页仅消费公开素材。微信团队应新增独立私有上传 service 与房间照片/可选户型图页面，接既有会话、选公司及错误 UI；不得将公共素材 image_url 规范化函数用于私有输入。同步独立 DTO 类型，核对 wrapper 解包与二进制 PUT 支持，清除上传凭据和本地预览生命周期数据。
+已只读参考微信 `orange/src/services/visitor_rendering_uploads.ts`、`orange/src/packageVisitor/pages/rendering-upload/index.tsx`：当前已有独立私有上传 service 与房间照片/可选户型图页面。微信团队仍需核对会话、选公司、二进制 PUT 的真机行为，并修复 PUT 结果未知时未沿用原 intent ID complete 核实、重新提交重复签发的问题；不得将公共素材 image_url 规范化函数用于私有输入。同步核对 wrapper 解包、清除上传凭据和本地预览生命周期数据。具体只读发现见[生产验收门禁](../operations/evidence/2026-09-13-private-input-upload-production-gate.md)。
 
-已参考 gooes `apps/douyin-mini/src/api/rendering-styles.ts`、`apps/douyin-mini/src/pages/rendering-style-detail/page.ts`：现有 API 只做目录/详情。抖音团队应新增私有上传 API 模块及页面，以现有 ApiClient 完成 intent/complete，以独立二进制请求完成 COS PUT；页面沿用 startup 会话和 requestEpoch 防陈旧响应机制。两端 UI 不在本次代码范围，orange 严格只读。
+gooes 抖音端已在 `apps/douyin-mini/src/pages/rendering-style-detail/` 增加房间照必传、户型图可选的上传区，并由 `src/api/rendering-uploads.ts` 和 `src/platform/private-image.ts` 负责双业务接口、独立 ArrayBuffer PUT 与真实字节检查。仍需在抖音开放平台配置签名 COS 主机的 **request 合法域名**，关闭开发者工具的跳过校验选项，用 iOS/Android 真机核对 `Content-Length`、全部 COS 头和上传结果；未完成前不得宣称可发布。orange 严格只读。
+
+抖音体验版反馈选图后显示通用上传失败；本地同参数调用 `tt.chooseImage` 复现 `api scope is not declared in the privacy agreement`，失败发生在 intent 之前。按[抖音隐私协议配置说明](https://developer.open-douyin.com/docs/resource/zh-CN/mini-app/open-capacity/basic-capacities/privacy-agreement)，应用所有者须在对应小程序「设置 → 基础设置 → 类目与配置 → 用户隐私保护协议」添加**相册**信息类型（该类型覆盖 `tt.chooseImage`），据实写明用途，例如“用户主动选择房间照片及可选户型图，私有上传供装修公司审核；审核前不用于 AI 生成”。由所有者预览并生成协议后，在体验版重新验证选图；不能通过关闭隐私校验绕过。客户端已将未声明与用户未授权分别识别，避免继续显示笼统上传失败。此平台配置与 COS request 域名白名单是两个独立门禁。
 
 ## 清理部署与运行门禁
 
@@ -71,10 +75,10 @@ raw_cleanup_after 默认创建后 24 小时。清理复用 `gooes-cos-reconcile-
 
 每轮只执行一次 indexed due 查询，`raw_deleted_at IS NULL AND raw_cleanup_after <= now`，按 due/id 排序且 limit=100。每条原子比较状态和原 due，推进 5 分钟租约；issued 只有过期、processing 只有处理租约过期才被关闭为 deleted，保护进行中的 complete。pending_review/approved 仅删除 raw，成品及状态不变。删除失败不填 raw_deleted_at，后续重试；成功写入也必须匹配本次尚有效的 due 租约。网关使用账本 bucket/region/raw key，旧位置凭据必须仍可访问。
 
-启用顺序（尚未执行）：
+raw 清理启用顺序（生产 migration/API/worker 发布已完成，以下配置与真实验收尚未完成）：
 
-1. 对目标库运行 migration plan，列出并审查**全部**待应用版本，确认 `20260913035110` 的顺序、依赖和目标环境；按批准流程 apply 后用 `supabase migration list` 核对 Local/Remote。本任务不 apply，不能假定目标库只有这一条待执行版本。
-2. 完成真实 COS 私有 bucket policy、CORS/平台必传头、禁止覆盖与旧位置访问 smoke；按既有镜像发布流程发布 API 和复用镜像的 COS worker。
+1. 生产目标库已按批准流程应用 `20260913035110` 并完成迁移历史对齐验证；其他目标环境或后续 migration 仍须各自 plan → apply → `supabase migration list`，不能沿用本次生产证据。
+2. API 和复用镜像的 COS worker 已发布；仍需完成真实 COS 私有 bucket policy、CORS/平台必传头、禁止覆盖与旧位置访问 smoke。
 3. 在对应 compose env_file 配置 `PROJECT_LOG_COMMENT_COS_RECONCILE_WORKER_ENABLED=true`、`CUSTOMER_RENDERING_INPUT_CLEANUP_ENABLED=true`、`PROJECT_LOG_COMMENT_COS_RECONCILE_APPLY=false`，先观察 bounded scanned 计数。apply=false 只读，既不领取也不删除；这也令原有 reconcile 为 dry-run，变更前需协调运营窗口。
 4. 具备上线授权后恢复 `PROJECT_LOG_COMMENT_COS_RECONCILE_APPLY=true`；观察 `private_inputs` 的 scanned/claimed/deleted/failed/lost。部署 healthcheck 仅判断进程存活，不保证清理进度，需对持续 failed/lost 和积压告警。
 

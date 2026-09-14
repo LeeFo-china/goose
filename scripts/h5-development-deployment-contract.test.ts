@@ -28,6 +28,25 @@ function resolveManual(mode: "build" | "deploy", service: string) {
 }
 
 describe("H5 development build plan", () => {
+  test("resolves customer rendering workers only when explicitly selected", () => {
+    for (const service of ["customer-rendering-input-review-worker", "customer-rendering-job-worker"]) {
+      const build = resolveManual("build", service);
+      const deploy = resolveManual("deploy", service);
+      expect(build.exitCode).toBe(0);
+      expect(deploy.exitCode).toBe(0);
+      expect(build.stdout.toString().trim()).toBe("api");
+      expect(deploy.stdout.toString().trim()).toBe(service);
+      const plan = { ...resolveDevChangePlan([], metadata), build_services: ["api"],
+        deploy_services: [service], no_op: false };
+      expect(verifyDevBuildPlan(plan, {
+        commitSha: metadata.commitSha, workflowRunId: metadata.workflowRunId,
+      })).toEqual(plan);
+    }
+    const all = resolveManual("deploy", "all").stdout.toString();
+    expect(all).not.toContain("customer-rendering-input-review-worker");
+    expect(all).not.toContain("customer-rendering-job-worker");
+  });
+
   test("classifies Douyin mini-program changes as a development deploy no-op", () => {
     const plan = resolveDevChangePlan(
       [
@@ -155,7 +174,7 @@ describe("H5 development hostname cutover", () => {
     );
 
     expect(workflow).toContain(
-      "options: [api, admin, h5, web, social-video-worker, cos-reconcile-worker, billing-reconcile-worker]",
+      "options: [api, admin, h5, web, social-video-worker, cos-reconcile-worker, billing-reconcile-worker, customer-rendering-input-review-worker, customer-rendering-job-worker]",
     );
     expect(workflow).toContain(
       "h5) DEPLOY_SERVICES=h5; MANIFEST_SERVICE=h5 ;;",

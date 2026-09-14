@@ -1,17 +1,26 @@
 # 客户效果库：分阶段实施记录
 
-日期：2026-09-11；最新补记：2026-09-13。设计依据：
+日期：2026-09-11；最新补记：2026-09-14。设计依据：
 `2026-09-11-customer-rendering-library-design.md`，以及
 `2026-09-13-rendering-library-self-publish-design.md`。
 
 ## 当前结论
 
-截至 2026-09-13，租户素材**自助发布、公开副本、微信 visitor 与抖音客户浏览
-接口、Admin 发布交互**已在隔离分支完成离线实现和 mock 回归；开发环境
-migration、COS 原站合成样本 smoke 及 API/Admin 发布已完成，证据见
-`../../operations/evidence/2026-09-13-rendering-library-self-publish-dev-release.md`。
-双端已认证会话验收、小程序页面、客户上传与生图仍未完成。**不能据此称完整效果库上线**。
-阶段 A 的真实模型能力验证也未完成。
+截至 2026-09-14，租户素材自助发布、公开副本、微信 visitor 与抖音客户浏览接口、
+Admin 发布交互已有开发发布证据；后续客户上传服务端已发布，抖音详情页上传代码
+已提交为 `086b70585`。2026-09-14 用户反馈抖音生产图片上传成功；三步状态、机型、
+私有性与重放等脱敏验收细项待补，微信端真机链路亦未验收。方舟双图
+生成及私有转存已有一次非客户合成图真实 smoke，不能推断客户照片的质量和内容审核。
+本记录的历史 B1–B4 说明不代表完整客户生图已上线。详见
+[自助发布开发记录](../../operations/evidence/2026-09-13-rendering-library-self-publish-dev-release.md)、
+[Ark 实图 smoke](../../operations/evidence/2026-09-12-customer-rendering-ark-live-smoke.md)和
+[私有上传生产门禁](../../operations/evidence/2026-09-13-private-input-upload-production-gate.md)。
+
+按[首期四阶段设计](2026-09-13-customer-rendering-ai-mvp-design.md)，当前处于**阶段 1：
+后端私有输入与任务底座**。私有输入服务与双端上传合同已落地，额度账本已有原子
+预占/结算能力；客户任务创建、租户预算预占及输入审核尚未接线。阶段 2 的持久化
+Worker、建议和私有结果交付，阶段 3 的双端结果页/真机联调，以及阶段 4 的小流量
+灰度均未完成。生成开关不能开启。
 
 以下 B1–B4、配置阻点和旧测试数字保留为 2026-09-11 的历史实施记录；最新
 自助发布证据见文末“2026-09-13 自助发布阶段”小节。

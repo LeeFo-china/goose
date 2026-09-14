@@ -13,6 +13,7 @@ import { readDeploymentConfig } from "./platform/ext-config";
 import { captureLaunchContext } from "./platform/launch-context";
 import { loginOnce } from "./platform/login";
 import { navigateToServiceUnavailable } from "./platform/navigation";
+import { recoveryIdentityFromToken, type RenderingRecoveryIdentity } from "./platform/rendering-recovery";
 import {
   clearStoredSession,
   clearStoredCustomerSession,
@@ -65,6 +66,7 @@ export type DouyinAppContext = {
   launchContext: LaunchContext;
   recordAnalytics(eventName: ClientAnalyticsEventName, entityId?: string): void;
   startup: Promise<BootstrapData | null>;
+  getRenderingRecoveryIdentity(): Promise<RenderingRecoveryIdentity | null>;
 };
 
 const DEFAULT_LAUNCH_CONTEXT: LaunchContext = {
@@ -92,6 +94,11 @@ App({
     this.startup = startApplication(this.launchContext);
   },
   onHide() { void this.analytics.handleAppHide(); },
+  async getRenderingRecoveryIdentity() {
+    if (!await this.startup) return null;
+    try { return recoveryIdentityFromToken(await session.getAccessToken()); }
+    catch { return null; }
+  },
   recordAnalytics(eventName: ClientAnalyticsEventName, entityId?: string) {
     this.analytics.record({
       event_id: createUuidV4IdempotencyKey(),

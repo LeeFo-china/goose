@@ -15,3 +15,23 @@
 .detail-back { min-height: 76rpx; margin: 28rpx 0 0; padding: 0 24rpx; border-radius: 12rpx; background: #191817; color: #fff; font-size: 26rpx; line-height: 76rpx; }
 .detail-stale { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; margin: 12rpx 0 20rpx; padding: 18rpx 20rpx; font-size: 23rpx; line-height: 1.5; }
 .detail-inline-action { flex: none; min-height: 60rpx; margin: 0; padding: 0 18rpx; border: 1rpx solid currentColor; border-radius: 10rpx; background: transparent; color: inherit; font-size: 23rpx; line-height: 60rpx; }
+.private-inputs { padding-top: 30rpx; border-top: 1rpx solid #dddad5; }
+.private-inputs-note { margin-top: 14rpx; color: #625f5b; font-size: 23rpx; line-height: 1.6; }
+.private-input-row { display: flex; align-items: center; gap: 16rpx; margin-top: 24rpx; padding: 20rpx; border: 1rpx solid #dddad5; border-radius: 16rpx; background: #fff; }
+.private-input-copy { min-width: 0; flex: 1; }
+.private-input-title { color: #191817; font-size: 26rpx; font-weight: 650; line-height: 1.4; }
+.private-input-message { margin-top: 6rpx; color: #625f5b; font-size: 21rpx; line-height: 1.45; word-break: break-word; }
+.private-input-button { min-height: 76rpx; flex: none; margin: 0; padding: 0 20rpx; border-radius: 12rpx; background: #191817; color: #fff; font-size: 23rpx; line-height: 76rpx; }
+.private-input-button[disabled] { background: #dddad5; color: #625f5b; }
+.private-input-pending { flex: none; padding: 8rpx 14rpx; border-radius: 999rpx; background: #edf5ef; color: #245239; font-size: 22rpx; line-height: 1.4; }
+.detail-check-button { min-height: 68rpx; margin: 20rpx 0 0; padding: 0 20rpx; border: 1rpx solid #7d7770; border-radius: 12rpx; background: #fff; color: #403d39; font-size: 23rpx; line-height: 68rpx; }
+.generation-section { padding-top: 30rpx; border-top: 1rpx solid #dddad5; }
+.generation-mode-row { display: flex; gap: 16rpx; margin-top: 24rpx; }
+.generation-mode { flex: 1; min-height: 76rpx; margin: 0; padding: 0 10rpx; border: 1rpx solid #dddad5; border-radius: 12rpx; background: #fff; color: #403d39; font-size: 24rpx; line-height: 76rpx; }
+.generation-mode--active { border-color: #191817; background: #f5f3ee; color: #191817; font-weight: 650; }
+.generation-notes { box-sizing: border-box; width: 100%; min-height: 160rpx; margin-top: 20rpx; padding: 18rpx; border: 1rpx solid #dddad5; border-radius: 12rpx; background: #fff; color: #191817; font-size: 24rpx; line-height: 1.5; }
+.generation-button { min-height: 82rpx; margin: 22rpx 0 0; border-radius: 12rpx; background: #191817; color: #fff; font-size: 26rpx; line-height: 82rpx; }
+.generation-button[disabled] { background: #dddad5; color: #625f5b; }
+.generation-message { margin-top: 18rpx; color: #403d39; font-size: 23rpx; line-height: 1.55; }
+.generation-result { margin-top: 28rpx; }
+.generation-result-image { display: block; width: 100%; height: 520rpx; margin-top: 16rpx; border-radius: 16rpx; background: #eceae6; }

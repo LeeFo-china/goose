@@ -35,9 +35,10 @@ const raw = { bucket: config.bucket, region: config.region, object_key: `private
 function fixture() {
   const calls: { operation: string; params: unknown }[] = [];
   const state = { config: { ...config }, body: Buffer.from('raw'), mime: 'image/png', length: '3', putError: false, headError: false,
-    getError: false, mutateAuth: (auth: string) => auth };
+    getError: false, mutateAuth: (auth: string) => auth, mutateSignedUrl: (url: string) => url };
   const storage = new CustomerRenderingInputStorage({ loadConfig: async () => state.config, createCos: (options) => ({
     getAuth: (params) => state.mutateAuth(new COS(options).getAuth(params)),
+    getObjectUrl: (params) => state.mutateSignedUrl(new COS(options).getObjectUrl(params)),
     async headObject(params) {
       calls.push({ operation: 'head', params });
       if (state.headError) throw { statusCode: 404 };
@@ -156,6 +157,43 @@ test('normalized metadata mismatch is unknown and recovery requires exact bytes 
   await expect(storage.putNormalized(tenant, id, normalized, state.body)).rejects.toMatchObject({ code: 'RENDERING_INPUT_STORAGE_NORMALIZED_UNKNOWN' });
   state.mime = 'image/webp';
   expect(await storage.hasNormalized(tenant, id, normalized, Buffer.from('bad'))).toBe(false);
+});
+
+test('worker signs a ten-minute GET only for the persisted canonical normalized image', async () => {
+  const { storage, state, calls } = fixture();
+  const normalized = { ...raw, object_key: storage.normalizedObjectKey(tenant, id) };
+  state.config.bucket = 'new-default-654321';
+  state.config.region = 'ap-shanghai';
+  const signed = new URL(await storage.signNormalizedRead(tenant, id, normalized));
+  expect(signed.protocol).toBe('https:');
+  expect(signed.host).toBe(`${raw.bucket}.cos.${raw.region}.myqcloud.com`);
+  expect(signed.pathname).toBe(`/${normalized.object_key}`);
+  expect(signed.searchParams.get('q-sign-algorithm')).toBe('sha1');
+  expect(signed.searchParams.get('q-header-list')).toBe('host');
+  expect(signed.searchParams.get('q-key-time')).toBe(signed.searchParams.get('q-sign-time'));
+  expect(signed.searchParams.get('q-signature')).toMatch(/^[a-f0-9]{40}$/);
+  const [start, end] = signed.searchParams.get('q-sign-time')!.split(';').map(Number);
+  expect(end! - start!).toBe(600);
+  expect(calls).toEqual([]);
+});
+
+test('worker signer refuses raw, foreign, malformed and tampered signed locations', async () => {
+  const { storage, state, calls } = fixture();
+  const normalized = { ...raw, object_key: storage.normalizedObjectKey(tenant, id) };
+  for (const invalid of [raw, { ...normalized, bucket: 'evil.example.com' },
+    { ...normalized, region: 'ap-guangzhou/evil' },
+    { ...normalized, object_key: normalized.object_key.replace(tenant, id) },
+    { ...normalized, object_key: `${normalized.object_key}/../normalized.webp` }]) {
+    await expect(storage.signNormalizedRead(tenant, id, invalid))
+      .rejects.toMatchObject({ code: 'RENDERING_INPUT_STORAGE_UNAVAILABLE' });
+  }
+  state.mutateSignedUrl = (url) => url.replace(`${raw.bucket}.cos`, 'evil.example.com');
+  await expect(storage.signNormalizedRead(tenant, id, normalized))
+    .rejects.toMatchObject({ code: 'RENDERING_INPUT_STORAGE_FAILED' });
+  state.mutateSignedUrl = (url) => url.replace('q-sign-time=', 'wrong-time=');
+  await expect(storage.signNormalizedRead(tenant, id, normalized))
+    .rejects.toMatchObject({ code: 'RENDERING_INPUT_STORAGE_FAILED' });
+  expect(calls).toEqual([]);
 });
 
 test('missing raw is rejected deterministically while HEAD transport failures remain retryable', async () => {

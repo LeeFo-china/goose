@@ -22,10 +22,12 @@ test("private upload HTTP validates session, DTO and UUID and wraps success", as
   const createIntent = mock(async () => ({ intent_id: id, method: "PUT" as const,
     upload_url: "https://example.com/signed", headers: {}, expires_at: "2026-09-13T12:00:00.000Z" }));
   const complete = mock(async () => result);
-  await expect(new Controller(undefined, undefined, { createIntent, complete })
+  const getStatus = mock(async () => ({ file_id: id, status: 'issued' as const,
+    review_state: null, mime_type: null, width: null, height: null, size_bytes: null }));
+  await expect(new Controller(undefined, undefined, { createIntent, complete, getStatus })
     .completeInput({ params: { id }, body: null } as never)).rejects.toMatchObject({ statusCode: 400 });
   const app = Fastify({ logger: false }); errorHandler(app); authPlugin(app);
-  new Controller(undefined, undefined, { createIntent, complete }).registerExtraRoutes(app);
+  new Controller(undefined, undefined, { createIntent, complete, getStatus }).registerExtraRoutes(app);
   await app.ready();
   const token = signDouyinMiniappToken({ tenant_id: id, douyin_installation_id: id, douyin_app_id: "tt-app", subject_hash: "a".repeat(64) });
   const headers = { authorization: `Bearer ${token}` };
@@ -57,6 +59,88 @@ test("private upload HTTP validates session, DTO and UUID and wraps success", as
   } finally { await app.close(); }
 });
 
+test('private upload status GET validates session, UUID and empty query before dispatch', async () => {
+  const { default: authPlugin } = await import('@/plugins/auth/legacy-plugin');
+  const { default: errorHandler } = await import('@/plugins/error-handler');
+  const { signDouyinMiniappToken, signVisitorSessionToken } = await import('@/utils/jwt');
+  const id = '11111111-1111-4111-8111-111111111111';
+  const result = { file_id: id, status: 'rejected', review_state: null, mime_type: 'image/webp', width: 16, height: 12, size_bytes: 100 } as const;
+  const getStatus = mock(async () => result);
+  const app = Fastify({ logger: false }); errorHandler(app); authPlugin(app);
+  new Controller(undefined, undefined, { getStatus } as never).registerExtraRoutes(app);
+  await app.ready();
+  const url = `/douyin-mini/renderings/uploads/${id}`;
+  const headers = { authorization: `Bearer ${signDouyinMiniappToken({ tenant_id: id,
+    douyin_installation_id: id, douyin_app_id: 'tt-app', subject_hash: 'a'.repeat(64) })}` };
+  try {
+    expect((await app.inject({ method: 'GET', url })).statusCode).toBe(401);
+    expect((await app.inject({ method: 'GET', url, headers: { authorization: `Bearer ${signVisitorSessionToken({
+      openid: 'openid', visitor_id: 'visitor',
+    })}` } })).statusCode).toBe(401);
+    expect((await app.inject({ method: 'GET', url: '/douyin-mini/renderings/uploads/invalid', headers })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'GET', url: `${url}?subject=forged`, headers })).statusCode).toBe(400);
+    expect(getStatus).not.toHaveBeenCalled();
+    const response = await app.inject({ method: 'GET', url, headers });
+    expect(response.statusCode).toBe(200);
+    expect((await app.inject({ method: 'HEAD', url, headers })).statusCode).toBe(200);
+    const responseBody: unknown = response.json();
+    expect(responseBody).toEqual({ data: result, message: 'success' });
+    expect(getStatus).toHaveBeenCalledWith(expect.objectContaining({ token_type: 'douyin_miniapp' }), 'douyin', id);
+  } finally { await app.close(); }
+});
+
+test('job HTTP accepts only signed Douyin session and strict shared DTO', async () => {
+  const { default: authPlugin } = await import('@/plugins/auth/legacy-plugin');
+  const { default: errorHandler } = await import('@/plugins/error-handler');
+  const { signDouyinMiniappToken } = await import('@/utils/jwt');
+  const jobId = '66666666-6666-4666-8666-666666666666';
+  const create = mock(async () => ({ job_id: jobId, status: 'queued' as const, quota: { remaining: 0 } }));
+  const app = Fastify({ logger: false }); errorHandler(app); authPlugin(app);
+  new Controller(undefined, undefined, undefined, { create } as never).registerExtraRoutes(app);
+  await app.ready();
+  const url = '/douyin-mini/renderings/jobs';
+  const payload = { style_asset_id: '22222222-2222-4222-8222-222222222222',
+    room_file_id: '33333333-3333-4333-8333-333333333333', space: 'living_room',
+    mode: 'soft_furnishing', idempotency_key: '44444444-4444-4444-8444-444444444444' };
+  const headers = { authorization: `Bearer ${signDouyinMiniappToken({
+    tenant_id: jobId, douyin_installation_id: jobId, douyin_app_id: 'tt-app', subject_hash: 'a'.repeat(64),
+  })}` };
+  try {
+    expect((await app.inject({ method: 'POST', url, payload })).statusCode).toBe(401);
+    expect((await app.inject({ method: 'POST', url, headers, payload: { ...payload, tenant_id: jobId } })).statusCode).toBe(400);
+    expect(create).not.toHaveBeenCalled();
+    const result = await app.inject({ method: 'POST', url, headers, payload });
+    expect(result.statusCode).toBe(202);
+    expect(result.json()).toMatchObject({ data: { job_id: jobId, status: 'queued' } });
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ token_type: 'douyin_miniapp' }), 'douyin', payload);
+  } finally { await app.close(); }
+});
+
+test('job status GET requires the Douyin session and rejects forged query scope', async () => {
+  const { default: authPlugin } = await import('@/plugins/auth/legacy-plugin');
+  const { default: errorHandler } = await import('@/plugins/error-handler');
+  const { signDouyinMiniappToken } = await import('@/utils/jwt');
+  const id = '11111111-1111-4111-8111-111111111111';
+  const result = { job_id: id, status: 'processing' as const, created_at: '2026-09-14T00:00:00Z',
+    updated_at: '2026-09-14T00:00:00Z', finished_at: null, result: null };
+  const get = mock(async () => result);
+  const app = Fastify({ logger: false }); errorHandler(app); authPlugin(app);
+  new Controller(undefined, undefined, undefined, undefined, { get } as never).registerExtraRoutes(app);
+  await app.ready();
+  const url = `/douyin-mini/renderings/jobs/${id}`;
+  const headers = { authorization: `Bearer ${signDouyinMiniappToken({ tenant_id: id,
+    douyin_installation_id: id, douyin_app_id: 'tt-app', subject_hash: 'a'.repeat(64) })}` };
+  try {
+    expect((await app.inject({ method: 'GET', url })).statusCode).toBe(401);
+    expect((await app.inject({ method: 'GET', url: '/douyin-mini/renderings/jobs/invalid', headers })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'GET', url: `${url}?subject=forged`, headers })).statusCode).toBe(400);
+    expect(get).not.toHaveBeenCalled();
+    const responseBody: unknown = (await app.inject({ method: 'GET', url, headers })).json();
+    expect(responseBody).toEqual({ data: result, message: 'success' });
+    expect(get).toHaveBeenCalledWith(expect.objectContaining({ token_type: 'douyin_miniapp' }), 'douyin', id);
+  } finally { await app.close(); }
+});
+
 describe("DouyinRenderingsController", () => {
   test("registers exact session-only rendering routes", () => {
     const controller = new Controller({ getQuota: mock(), bindPhone: mock() } as never);
@@ -73,6 +157,9 @@ describe("DouyinRenderingsController", () => {
       { method: "GET", path: "/douyin-mini/renderings/styles/:id", access: "session" },
       { method: "POST", path: "/douyin-mini/renderings/uploads:intent", access: "session" },
       { method: "POST", path: "/douyin-mini/renderings/uploads/:id/complete", access: "session" },
+      { method: "GET", path: "/douyin-mini/renderings/uploads/:id", access: "session" },
+      { method: "POST", path: "/douyin-mini/renderings/jobs", access: "session" },
+      { method: "GET", path: "/douyin-mini/renderings/jobs/:id", access: "session" },
     ]);
   });
 
