@@ -1259,11 +1259,14 @@ describe("production migration precheck workflow", () => {
     const guard = script.indexOf('test "${processing_count}" = 0', stop);
     const ddl = script.indexOf('for file in "${pending_files[@]}"; do', guard);
     expect(script).toContain('20260914191000_customer_rendering_ark_safety.sql');
+    expect(migrateProductionWorkflow).toContain('group: deploy-docker-services-main');
+    expect(script).toContain("to_regclass('public.customer_rendering_jobs') is not null");
     expect(apply).toBeGreaterThanOrEqual(0);
     expect(admission).toBeGreaterThan(apply);
     expect(stop).toBeGreaterThan(admission);
     expect(guard).toBeGreaterThan(stop);
     expect(ddl).toBeGreaterThan(guard);
+    expect(script).toContain("'{{if .State.Health}}{{.State.Health.Status}}{{end}}' gooes-api)\" = healthy");
     expect(script).toContain('docker rm gooes-customer-rendering-input-review-worker');
   });
 
@@ -1272,6 +1275,7 @@ describe("production migration precheck workflow", () => {
       sliceWorkflowStep(freezeRenderingAdmissionWorkflow, "Freeze running API admission"),
     );
     const confirm = script.indexOf('test "${CONFIRM_TEXT}" = "确认关闭生产生图准入"');
+    const config = script.indexOf('docker compose -f docker-compose.api.yml config --quiet');
     const backup = script.indexOf('sudo cp -p "${env_file}" "${backup_file}"');
     const close = script.indexOf('sudo sed -i "s/^${key}=true$/${key}=false/" "${env_file}"');
     const recreate = script.indexOf('--profile workers up -d --no-deps --force-recreate gooes-api');
@@ -1279,7 +1283,10 @@ describe("production migration precheck workflow", () => {
     expect(freezeRenderingAdmissionWorkflow).toContain('group: deploy-docker-services-main');
     expect(freezeRenderingAdmissionWorkflow).toContain('environment: production');
     expect(confirm).toBeGreaterThanOrEqual(0);
-    expect(backup).toBeGreaterThan(confirm);
+    expect(script).toContain('current_image_id="$(docker inspect -f \'{{.Image}}\' gooes-api)"');
+    expect(script).toContain('export GOOES_API_IMAGE="gooes-api:admission-freeze-${GITHUB_RUN_ID}"');
+    expect(config).toBeGreaterThan(confirm);
+    expect(backup).toBeGreaterThan(config);
     expect(close).toBeGreaterThan(backup);
     expect(recreate).toBeGreaterThan(close);
     expect(verify).toBeGreaterThan(recreate);

@@ -25,13 +25,17 @@ jobs:
       - name: Freeze running API admission
         env:
           CONFIRM_TEXT: ${{ inputs.confirm_text }}
+          OCR_RESULT_ENCRYPTION_KEY: ${{ secrets.OCR_RESULT_ENCRYPTION_KEY }}
+          WECHAT_MINI_SESSION_ENCRYPTION_KEY_V1: ${{ secrets.WECHAT_MINI_SESSION_ENCRYPTION_KEY_V1 }}
+          GOOES_WEB_PROXY_SHARED_SECRET: ${{ secrets.GOOES_WEB_PROXY_SHARED_SECRET }}
+          GOOES_PREVIEW_SHARED_SECRET: ${{ secrets.GOOES_PREVIEW_SHARED_SECRET }}
+          GOOES_WEB_REVALIDATE_SHARED_SECRET: ${{ secrets.GOOES_WEB_REVALIDATE_SHARED_SECRET }}
         run: |
           set -euo pipefail
           test "${RUNNER_NAME}" = "gooes-prod-vm-0-3"
           test "${CONFIRM_TEXT}" = "确认关闭生产生图准入"
           cd /opt/supabase/docker
           test -r docker-compose.api.yml
-          test -r docker-compose.admin.yml
           docker inspect gooes-api >/dev/null
 
           # Match the same env-file resolution guard used by the production deploy.
@@ -44,6 +48,15 @@ jobs:
           test -r "${env_file}"
           key=CUSTOMER_RENDERING_JOB_ADMISSION_ENABLED
           test "$(grep -Ec "^${key}=" "${env_file}")" = 1
+          for required in OCR_RESULT_ENCRYPTION_KEY WECHAT_MINI_SESSION_ENCRYPTION_KEY_V1 \
+            GOOES_WEB_PROXY_SHARED_SECRET GOOES_PREVIEW_SHARED_SECRET GOOES_WEB_REVALIDATE_SHARED_SECRET; do
+            test -n "${!required}"
+          done
+          current_image_id="$(docker inspect -f '{{.Image}}' gooes-api)"
+          docker image inspect "${current_image_id}" >/dev/null
+          export GOOES_API_IMAGE="gooes-api:admission-freeze-${GITHUB_RUN_ID}"
+          docker tag "${current_image_id}" "${GOOES_API_IMAGE}"
+          docker compose -f docker-compose.api.yml config --quiet
           if grep -Fxq "${key}=false" "${env_file}"; then
             echo "Production customer rendering admission is already closed in the env file."
           else
@@ -60,7 +73,7 @@ jobs:
               split("=")[1]] | if length == 0 then "false" elif length == 1 then .[0] else "invalid" end')"
           case "${running_value}" in true|false) ;; *) running_value=invalid ;; esac
           if [ "${running_value}" != false ]; then
-            docker compose -f docker-compose.api.yml -f docker-compose.admin.yml \
+            docker compose -f docker-compose.api.yml \
               --profile workers up -d --no-deps --force-recreate gooes-api
           fi
 

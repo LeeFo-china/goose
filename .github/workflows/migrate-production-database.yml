@@ -27,7 +27,8 @@ permissions:
   actions: read
 
 concurrency:
-  group: migrate-production-database
+  # Serialize the admission freeze, API deployment, and database cutover.
+  group: deploy-docker-services-main
   cancel-in-progress: false
 
 env:
@@ -622,8 +623,15 @@ jobs:
               jq -r '[.[] | select(startswith("CUSTOMER_RENDERING_JOB_ADMISSION_ENABLED=")) |
                 split("=")[1]] | if length == 0 then "false" elif length == 1 then .[0] else "invalid" end')"
             case "${admission_enabled}" in true|false) ;; *) admission_enabled=invalid ;; esac
-            processing_before="$(psql_prod -Atc "select count(*) from public.customer_rendering_jobs where status = 'processing';")"
-            [[ "${processing_before}" =~ ^[0-9]+$ ]]
+            processing_table_exists="$(psql_prod -Atc "select to_regclass('public.customer_rendering_jobs') is not null;")"
+            case "${processing_table_exists}" in
+              t) processing_before="$(psql_prod -Atc "select count(*) from public.customer_rendering_jobs where status = 'processing';")" ;;
+              f) processing_before=not_installed ;;
+              *) echo "error=rendering_jobs_table_check_failed" >&2; exit 1 ;;
+            esac
+            if [ "${processing_table_exists}" = t ]; then
+              [[ "${processing_before}" =~ ^[0-9]+$ ]]
+            fi
             echo "ark_safety_preflight_admission=${admission_enabled} processing=${processing_before}"
           fi
 
@@ -634,12 +642,18 @@ jobs:
               # Freeze admission before stopping the old paid worker. No secret values
               # are printed: only the exact running API switch is inspected.
               test "${admission_enabled}" = false
+              test "$(docker inspect -f '{{.State.Status}}' gooes-api)" = running
+              test "$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' gooes-api)" = healthy
               for container in gooes-customer-rendering-job-worker gooes-customer-rendering-input-review-worker; do
                 if docker inspect "${container}" >/dev/null 2>&1; then
                   docker stop --time 330 "${container}"
                 fi
               done
-              processing_count="$(psql_prod -Atc "select count(*) from public.customer_rendering_jobs where status = 'processing';")"
+              if [ "${processing_table_exists}" = t ]; then
+                processing_count="$(psql_prod -Atc "select count(*) from public.customer_rendering_jobs where status = 'processing';")"
+              else
+                processing_count=0
+              fi
               test "${processing_count}" = 0
             fi
             mkdir -p "${BACKUP_DIR}"
