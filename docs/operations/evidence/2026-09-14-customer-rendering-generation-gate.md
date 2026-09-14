@@ -23,7 +23,7 @@ API 已运行 `bun run check`（typecheck、build、文件大小检查均通过�
 - 开发 [migration plan run 34804543383](https://github.com/LeeFo-china/goose/actions/runs/34804543383) 在提交 `04bb725490ddc992a47b5d7f9931c5f6765d2114` 上成功：`before_count=620`、`after_count=620`、待执行 `20260914014930 20260914022533 20260914034000`，应用 0 版。开发 [migration apply run 34804572398](https://github.com/LeeFo-china/goose/actions/runs/34804572398) 成功：`after_count=623`、`after_latest=20260914034000`，恰好应用上述三版。没有手工远端 DDL/DML。
 - 开发 [API release run 34804610699](https://github.com/LeeFo-china/goose/actions/runs/34804610699) 成功；构建、迁移历史门禁、API 部署及健康检查均通过。该次仅选择 `service=api`，没有发布两个 Worker 或开启付费生图入口。
 - 开发后台现有平台超管会话通过 `/api/backend/platform/customer-rendering-settings/3eebca47-961f-4899-b976-a3d3208d326b` 读取：`enabled=false`、`version=0`、日任务数/预算/单任务预占均为 `null`。通过现有 AI 模型路由 Admin 将 `decoration_raw_drawing` 的 `timeout_ms` 从 `60000` 改为 `300000`；保存后列表复核为 `300000 ms`。主模型仍为 `doubao-seedream-5-0-pro-260628`，这些配置不证明真实推理成功。
-- 腾讯云 COS 控制台只读查看：账号下 `windwill-1259348056` 桶位于 `ap-nanjing`，桶列表访问列显示“指定用户”；内容审核页仍显示“开通数据万象”并要求同意服务协议后才能使用。未勾选协议、未开通服务、未调用付费审核，不能据此证明桶策略、Worker CAM 或 COS CI 可用。
+- 腾讯云 COS 控制台只读查看：账号下 `windwill-1259348056` 桶位于 `ap-nanjing`，桶列表访问列显示“指定用户”；桶公共权限选中“私有读写”，Policy 规则表未列出规则。CORS 现有来源为 `https://api.goodcms.cn`、`https://servicewechat.com`、`https://servicewechat.weixin.qq.com`、`https://admin.goodcms.cn`，方法含 PUT/GET/POST/DELETE/HEAD，Allow-Headers 为 `*`。这些控制台配置仍需用匿名请求和签名到期实际验证对象私有性，且尚未确认运行中的 Worker 使用哪个 CAM 身份。内容审核页仍显示“开通数据万象”并要求同意服务协议后才能使用；未勾选协议、未开通服务、未调用付费审核，COS CI 尚不可验收。
 
 本检查点只使指定租户的**开发环境 API 和数据库**具备下一轮联调基础。生产库仍停留在前述 620 版只读计划状态，生产服务/开关/试点设置未改。COS CI 尚未开通、Worker CAM/私有对象读写及真实 Ark 成本未验收，因此没有给租户写入任意额度，也没有开启准入或启动 Worker。
 
