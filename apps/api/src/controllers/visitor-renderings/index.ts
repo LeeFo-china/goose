@@ -1,12 +1,14 @@
-import type { FastifyRequest } from "fastify";
+import type { FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { RenderingListQuerySchema, RenderingUploadIntentRequestSchema, RenderingUploadCompleteRequestSchema } from "@gooes/domain";
+import { RenderingJobRequestSchema, RenderingListQuerySchema, RenderingUploadIntentRequestSchema, RenderingUploadCompleteRequestSchema } from "@gooes/domain";
 import { BaseController } from "@/controllers/BaseController";
 import { Errors } from "@/errors/error-factory";
 import { RenderingPhoneBindSchema } from "@/schema/customer-renderings";
 import {
   customerRenderingCatalogService,
   createCustomerRenderingInputsService,
+  createCustomerRenderingJobsService,
+  type CustomerRenderingJobsPort,
   type CustomerRenderingInputsPort,
   createCustomerRenderingQuotaService,
   type CustomerRenderingCatalogService,
@@ -25,6 +27,7 @@ export class VisitorRenderingsController extends BaseController {
     private readonly configuredService?: QuotaService,
     private readonly configuredCatalog?: CatalogService,
     private readonly configuredInputs?: CustomerRenderingInputsPort,
+    private readonly configuredJobs?: CustomerRenderingJobsPort,
   ) {
     super("customer_rendering_quota_accounts");
   }
@@ -86,6 +89,17 @@ export class VisitorRenderingsController extends BaseController {
     return ResponseHandler.success(await this.inputs.complete(request.user, "wechat", params.data.id));
   }
 
+  @Post("/visitor/renderings/jobs", { tenantServiceAccess: "session" })
+  async createJob(request: FastifyRequest, reply: FastifyReply) {
+    const parsed = RenderingJobRequestSchema.safeParse(request.body ?? {});
+    if (!parsed.success) throw Errors.fromZod(parsed.error);
+    const query = EmptyQuerySchema.safeParse(request.query ?? {});
+    if (!query.success) throw Errors.fromZod(query.error);
+    const result = await this.jobs.create(request.user, 'wechat', parsed.data);
+    reply.code(202);
+    return ResponseHandler.success(result);
+  }
+
   private get service(): QuotaService {
     return this.configuredService ?? createCustomerRenderingQuotaService();
   }
@@ -96,6 +110,10 @@ export class VisitorRenderingsController extends BaseController {
 
   private get catalog(): CatalogService {
     return this.configuredCatalog ?? customerRenderingCatalogService;
+  }
+
+  private get jobs(): CustomerRenderingJobsPort {
+    return this.configuredJobs ?? createCustomerRenderingJobsService();
   }
 }
 

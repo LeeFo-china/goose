@@ -1,5 +1,9 @@
 const renderingStyleIdSegment = /^[^/?#]+$/;
 
+export function isRenderingJobsCreateRoute(method: string, url: string, scope: 'visitor' | 'douyin-mini') {
+  return method === 'POST' && url === `/${scope}/renderings/jobs`;
+}
+
 export function isRenderingUploadsRoute(method: string, url: string, scope: "visitor" | "douyin-mini") {
   if (method !== "POST") return false;
   const collection = `/${scope}/renderings/uploads`;

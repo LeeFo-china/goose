@@ -57,6 +57,31 @@ test("private upload HTTP validates session, DTO and UUID and wraps success", as
   } finally { await app.close(); }
 });
 
+test('job HTTP accepts only session and strict shared DTO, returning 202', async () => {
+  const { default: authPlugin } = await import('@/plugins/auth/legacy-plugin');
+  const { default: errorHandler } = await import('@/plugins/error-handler');
+  const { signVisitorSessionToken } = await import('@/utils/jwt');
+  const jobId = '66666666-6666-4666-8666-666666666666';
+  const create = mock(async () => ({ job_id: jobId, status: 'queued' as const, quota: { remaining: 0 } }));
+  const app = Fastify({ logger: false }); errorHandler(app); authPlugin(app);
+  new Controller(undefined, undefined, undefined, { create } as never).registerExtraRoutes(app);
+  await app.ready();
+  const url = '/visitor/renderings/jobs';
+  const payload = { style_asset_id: '22222222-2222-4222-8222-222222222222',
+    room_file_id: '33333333-3333-4333-8333-333333333333', space: 'living_room',
+    mode: 'soft_furnishing', idempotency_key: '44444444-4444-4444-8444-444444444444' };
+  const headers = { authorization: `Bearer ${signVisitorSessionToken({ openid: 'openid', visitor_id: 'visitor' })}` };
+  try {
+    expect((await app.inject({ method: 'POST', url, payload })).statusCode).toBe(401);
+    expect((await app.inject({ method: 'POST', url, headers, payload: { ...payload, tenant_id: jobId } })).statusCode).toBe(400);
+    expect(create).not.toHaveBeenCalled();
+    const result = await app.inject({ method: 'POST', url, headers, payload });
+    expect(result.statusCode).toBe(202);
+    expect(result.json()).toMatchObject({ data: { job_id: jobId, status: 'queued' } });
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ token_type: 'visitor_session' }), 'wechat', payload);
+  } finally { await app.close(); }
+});
+
 describe("VisitorRenderingsController", () => {
   test("registers exactly the WeChat rendering routes as session surfaces", () => {
     const controller = new Controller({ getQuota: mock(), bindPhone: mock() } as never);
@@ -78,6 +103,7 @@ describe("VisitorRenderingsController", () => {
       { method: "GET", path: "/visitor/renderings/styles/:id", access: "session" },
       { method: "POST", path: "/visitor/renderings/uploads:intent", access: "session" },
       { method: "POST", path: "/visitor/renderings/uploads/:id/complete", access: "session" },
+      { method: "POST", path: "/visitor/renderings/jobs", access: "session" },
     ]);
   });
 

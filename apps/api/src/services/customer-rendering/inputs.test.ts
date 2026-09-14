@@ -37,6 +37,7 @@ function fixture() {
     normalized_size_bytes: null, width: null, height: null, checksum: null,
     status: 'issued', expires_at: new Date(Date.now() + 600_000).toISOString(),
     processing_lease_expires_at: null, raw_cleanup_after: new Date(Date.now() + 86_400_000).toISOString(), raw_deleted_at: null,
+    review_due_at: null, review_attempts: 0, review_decision: null, reviewed_at: null,
   };
   const repository = {
     createIssued: mock(async (..._args: Parameters<CustomerRenderingInputsRepositoryPort['createIssued']>) => {}),

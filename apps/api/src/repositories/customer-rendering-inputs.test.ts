@@ -27,7 +27,8 @@ function row(overrides: Partial<CustomerInputRow> = {}): CustomerInputRow {
     bucket: 'issued-bucket', region: 'ap-guangzhou', raw_object_key: 'private/raw',
     normalized_object_key: null, normalized_size_bytes: null, width: null, height: null,
     checksum: null, status: 'issued', expires_at: FUTURE, processing_lease_expires_at: null,
-    raw_cleanup_after: FUTURE, raw_deleted_at: null, ...overrides,
+    raw_cleanup_after: FUTURE, raw_deleted_at: null,
+    review_due_at: null, review_attempts: 0, review_decision: null, reviewed_at: null, ...overrides,
   };
 }
 
@@ -211,6 +212,22 @@ describe('CustomerRenderingInputsRepository', () => {
     expect(db.requests[0]?.url.searchParams.get('limit')).toBe('100');
     expect(db.requests[0]?.url.searchParams.get('order')).toBe('raw_cleanup_after.asc,id.asc');
     for (const limit of [0, -1, NaN, 1.5]) await expect(db.repository.listRawCleanupDue(NOW, limit)).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+  });
+
+  test('review queue is bounded and each decision requires the claimed due token', async () => {
+    const db = database([row({ status: 'pending_review', review_due_at: PAST,
+      normalized_object_key: normalized.objectKey, normalized_size_bytes: 100,
+      width: 20, height: 10, checksum: normalized.checksum })]);
+    expect(await db.repository.listReviewDue(NOW, 100)).toHaveLength(1);
+    expect(db.requests[0]?.url.searchParams.get('limit')).toBe('25');
+    expect(db.requests[0]?.url.searchParams.get('select')).toBe(
+      'id,tenant_id,bucket,region,normalized_object_key,review_due_at,review_attempts');
+    expect(await db.repository.claimReview(ID, ID, PAST, LEASE, 0, NOW)).toBe(true);
+    expect(await db.repository.claimReview(ID, ID, PAST, LEASE, 0, NOW)).toBe(false);
+    expect(await db.repository.markReviewed(ID, ID, PAST, 'approved')).toBe(false);
+    expect(await db.repository.markReviewed(ID, ID, LEASE, 'approved')).toBe(true);
+    expect(db.rows[0]?.status).toBe('approved');
+    expect(await db.repository.listReviewDue(FUTURE, 25)).toHaveLength(0);
   });
 
   test('cleanup claims compare due and status and fence expired uploads before deletion', async () => {

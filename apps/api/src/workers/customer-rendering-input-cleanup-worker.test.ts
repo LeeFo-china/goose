@@ -20,7 +20,8 @@ function row(status: CustomerInputRow['status'] = 'issued'): CustomerInputRow {
     bucket: 'old-bucket-123', region: 'ap-guangzhou', raw_object_key: 'private/raw',
     normalized_object_key: 'private/normalized.webp', normalized_size_bytes: 10, width: 1, height: 1,
     checksum: 'b'.repeat(64), status, expires_at: PAST, processing_lease_expires_at: PAST,
-    raw_cleanup_after: PAST, raw_deleted_at: null };
+    raw_cleanup_after: PAST, raw_deleted_at: null,
+    review_due_at: null, review_attempts: 0, review_decision: null, reviewed_at: null };
 }
 function fixture(rows: CustomerInputRow[]) {
   let now = NOW;

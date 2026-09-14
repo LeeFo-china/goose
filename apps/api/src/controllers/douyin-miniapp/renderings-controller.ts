@@ -1,11 +1,13 @@
-import type { FastifyInstance, FastifyRequest } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { RenderingListQuerySchema, RenderingUploadIntentRequestSchema, RenderingUploadCompleteRequestSchema } from "@gooes/domain";
+import { RenderingJobRequestSchema, RenderingListQuerySchema, RenderingUploadIntentRequestSchema, RenderingUploadCompleteRequestSchema } from "@gooes/domain";
 import { Errors } from "@/errors/error-factory";
 import { RenderingPhoneBindSchema } from "@/schema/customer-renderings";
 import {
   customerRenderingCatalogService,
   createCustomerRenderingInputsService,
+  createCustomerRenderingJobsService,
+  type CustomerRenderingJobsPort,
   type CustomerRenderingInputsPort,
   createCustomerRenderingQuotaService,
   type CustomerRenderingCatalogService,
@@ -24,6 +26,7 @@ export class DouyinRenderingsController {
     private readonly configuredService?: QuotaService,
     private readonly configuredCatalog?: CatalogService,
     private readonly configuredInputs?: CustomerRenderingInputsPort,
+    private readonly configuredJobs?: CustomerRenderingJobsPort,
   ) {}
 
   registerExtraRoutes(fastify: FastifyInstance) {
@@ -33,6 +36,7 @@ export class DouyinRenderingsController {
     fastify.get("/douyin-mini/renderings/styles/:id", routeOptions, this.getStyle);
     fastify.post("/douyin-mini/renderings/uploads:intent", routeOptions, this.createInputIntent);
     fastify.post("/douyin-mini/renderings/uploads/:id/complete", routeOptions, this.completeInput);
+    fastify.post("/douyin-mini/renderings/jobs", routeOptions, this.createJob);
   }
 
   getQuota = async (request: FastifyRequest) => ResponseHandler.success(
@@ -84,6 +88,16 @@ export class DouyinRenderingsController {
     return ResponseHandler.success(await this.inputs.complete(request.user, "douyin", params.data.id));
   };
 
+  createJob = async (request: FastifyRequest, reply: FastifyReply) => {
+    const parsed = RenderingJobRequestSchema.safeParse(request.body ?? {});
+    if (!parsed.success) throw Errors.fromZod(parsed.error);
+    const query = EmptyQuerySchema.safeParse(request.query ?? {});
+    if (!query.success) throw Errors.fromZod(query.error);
+    const result = await this.jobs.create(request.user, 'douyin', parsed.data);
+    reply.code(202);
+    return ResponseHandler.success(result);
+  };
+
   private get service(): QuotaService {
     return this.configuredService ?? createCustomerRenderingQuotaService();
   }
@@ -94,5 +108,9 @@ export class DouyinRenderingsController {
 
   private get catalog(): CatalogService {
     return this.configuredCatalog ?? customerRenderingCatalogService;
+  }
+
+  private get jobs(): CustomerRenderingJobsPort {
+    return this.configuredJobs ?? createCustomerRenderingJobsService();
   }
 }

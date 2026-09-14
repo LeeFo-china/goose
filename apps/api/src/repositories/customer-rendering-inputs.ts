@@ -18,6 +18,8 @@ const rowSchema = z.strictObject({
   status: z.enum(['issued', 'processing', 'pending_review', 'approved', 'rejected', 'failed', 'deleted']),
   expires_at: timestamp, processing_lease_expires_at: timestamp.nullable(),
   raw_cleanup_after: timestamp, raw_deleted_at: timestamp.nullable(),
+  review_due_at: timestamp.nullable(), review_attempts: z.number().int().min(0).max(3),
+  review_decision: z.enum(['approved', 'rejected', 'manual']).nullable(), reviewed_at: timestamp.nullable(),
 }).refine((row) => row.channel === 'wechat'
   ? row.application_id === null && row.installation_id === null
   : row.application_id !== null && row.installation_id !== null)
@@ -48,6 +50,12 @@ interface DatabaseClient {
 }
 
 export type CustomerInputRow = z.infer<typeof rowSchema>;
+const reviewCandidateSchema = z.strictObject({ id: rowSchema.shape.id, tenant_id: rowSchema.shape.tenant_id,
+  bucket: rowSchema.shape.bucket, region: rowSchema.shape.region,
+  normalized_object_key: rowSchema.shape.normalized_object_key,
+  review_due_at: rowSchema.shape.review_due_at, review_attempts: rowSchema.shape.review_attempts });
+export type CustomerInputReviewCandidate = z.infer<typeof reviewCandidateSchema>;
+const REVIEW_SELECT = Object.keys(reviewCandidateSchema.shape).join(',');
 export interface CustomerInputOwner {
   tenantId: string;
   channel: 'wechat' | 'douyin';
@@ -77,6 +85,9 @@ export interface CustomerRenderingInputsRepositoryPort {
   listRawCleanupDue(now: string, limit: number): Promise<CustomerInputRow[]>;
   claimRawCleanup(input: RawCleanupClaim): Promise<boolean>;
   markRawDeleted(tenantId: string, id: string, claimedDue: string, now: string): Promise<boolean>;
+  listReviewDue(now: string, limit: number): Promise<CustomerInputReviewCandidate[]>;
+  claimReview(tenantId: string, id: string, previousDue: string, nextDue: string, attempts: number, now: string): Promise<boolean>;
+  markReviewed(tenantId: string, id: string, claimedDue: string, decision: 'approved' | 'rejected' | 'manual'): Promise<boolean>;
 }
 
 export class CustomerRenderingInputsRepository implements CustomerRenderingInputsRepositoryPort {
@@ -122,6 +133,7 @@ export class CustomerRenderingInputsRepository implements CustomerRenderingInput
       normalized_object_key: result.objectKey, normalized_size_bytes: result.sizeBytes,
       width: result.width, height: result.height, checksum: result.checksum,
       status: 'pending_review', processing_lease_expires_at: null,
+      review_due_at: now, review_attempts: 0, review_decision: null, reviewed_at: null,
     }), owner).eq('id', id).eq('status', 'processing')
       .eq('processing_lease_expires_at', leaseUntil).gt('processing_lease_expires_at', now)
       .is('raw_deleted_at', null));
@@ -160,6 +172,32 @@ export class CustomerRenderingInputsRepository implements CustomerRenderingInput
   async markRawDeleted(tenantId: string, id: string, claimedDue: string, now: string): Promise<boolean> {
     return changed(this.table().update({ raw_deleted_at: now }).eq('tenant_id', tenantId).eq('id', id)
       .eq('raw_cleanup_after', claimedDue).gt('raw_cleanup_after', now).is('raw_deleted_at', null));
+  }
+
+  async listReviewDue(now: string, limit: number): Promise<CustomerInputReviewCandidate[]> {
+    if (!Number.isInteger(limit) || limit < 1) throw Errors.badRequest('审核批次大小无效');
+    const { data } = await execute(this.table().select(REVIEW_SELECT).eq('status', 'pending_review')
+      .is('review_decision', null).lte('review_due_at', now)
+      .order('review_due_at', { ascending: true }).order('id', { ascending: true })
+      .limit(Math.min(limit, 25)));
+    return parse(z.array(reviewCandidateSchema), data);
+  }
+
+  async claimReview(tenantId: string, id: string, previousDue: string, nextDue: string, attempts: number, now: string): Promise<boolean> {
+    assertFuture(nextDue, now);
+    if (!Number.isInteger(attempts) || attempts < 0 || attempts >= 3) throw Errors.badRequest('审核次数无效');
+    return changed(this.table().update({ review_due_at: nextDue, review_attempts: attempts + 1 })
+      .eq('tenant_id', tenantId).eq('id', id).eq('status', 'pending_review')
+      .eq('review_due_at', previousDue).eq('review_attempts', attempts)
+      .is('review_decision', null).lte('review_due_at', now));
+  }
+
+  async markReviewed(tenantId: string, id: string, claimedDue: string, decision: 'approved' | 'rejected' | 'manual'): Promise<boolean> {
+    return changed(this.table().update({
+      status: decision === 'manual' ? 'pending_review' : decision,
+      review_decision: decision, review_due_at: null, reviewed_at: new Date().toISOString(),
+    }).eq('tenant_id', tenantId).eq('id', id).eq('status', 'pending_review')
+      .eq('review_due_at', claimedDue).is('review_decision', null));
   }
 
   private table() { return this.client.from('customer_rendering_inputs'); }
