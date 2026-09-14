@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -32,6 +32,22 @@ export function TenantRenderingSettingsForm({ tenantId, tenantActive, settings }
   const [pending, setPending] = useState(false);
   const [conflict, setConflict] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [currentVersion, setCurrentVersion] = useState(settings.version);
+  const [seenServerVersion, setSeenServerVersion] = useState(settings.version);
+  const [lastSavedVersion, setLastSavedVersion] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (settings.version === seenServerVersion) return;
+    setSeenServerVersion(settings.version);
+    setCurrentVersion(settings.version);
+    if (settings.version === lastSavedVersion) {
+      setValues(initialValues(settings));
+      setSaveError(null);
+    } else {
+      setSaveError("已获取最新设置版本。请核对上方当前额度与保留的草稿，再重新提交。");
+    }
+    setConflict(false);
+  }, [settings, seenServerVersion, lastSavedVersion]);
 
   function change<K extends keyof SettingsFormValues>(key: K, value: SettingsFormValues[K]) {
     setValues((current) => ({ ...current, [key]: value }));
@@ -42,24 +58,28 @@ export function TenantRenderingSettingsForm({ tenantId, tenantActive, settings }
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (pending || conflict) return;
-    const result = buildSettingsCommand(values, settings.version);
+    const result = buildSettingsCommand(values, currentVersion);
     if (!result.ok) { setErrors(result.errors); return; }
     setErrors({});
     setPending(true);
     setSaveError(null);
     try {
-      await requestBackendJson<TenantRenderingSettings>(
+      const updated = await requestBackendJson<TenantRenderingSettings>(
         `/platform/customer-rendering-settings/${tenantId}`,
         { method: "PUT", body: JSON.stringify(result.command),
           fallbackMessage: "客户生图额度保存失败" },
       );
+      setCurrentVersion(updated.version);
+      setLastSavedVersion(updated.version);
+      setValues(initialValues(updated));
       toast.success("客户生图额度已保存");
       router.refresh();
     } catch (error) {
       const failure = error as { status?: number; code?: string };
       if (failure.status === 409 && failure.code === "RENDERING_SETTINGS_VERSION_STALE") {
         setConflict(true);
-        setSaveError("设置已被其他管理员修改。请刷新核对后重新提交，当前输入会保留到刷新前。");
+        setSaveError("设置已被其他管理员修改，正在获取最新设置；当前草稿会保留。");
+        router.refresh();
       } else if (failure.status === 409 && failure.code === "RENDERING_SETTINGS_TENANT_INACTIVE") {
         setSaveError("租户未启用，不能开放客户生图。请先核对租户状态。");
       } else {
@@ -133,7 +153,7 @@ export function TenantRenderingSettingsForm({ tenantId, tenantActive, settings }
             {values.enabled ? "保存并开启试点" : "保存并保持关闭"}
           </Button>
           {conflict ? <Button type="button" variant="outline" onClick={() => router.refresh()}>
-            刷新当前设置
+            重新获取最新设置
           </Button> : null}
           {errors.form ? <span className="text-sm text-destructive">{errors.form}</span> : null}
         </CardFooter>

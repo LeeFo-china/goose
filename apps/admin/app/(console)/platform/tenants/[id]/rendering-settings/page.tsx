@@ -7,8 +7,9 @@ import { TenantRenderingSettingsForm } from "@/components/platform-customer-rend
 import { TenantRenderingSettingsOverview } from "@/components/platform-customer-rendering-settings/settings-overview";
 import type { TenantRenderingAuditPage, TenantRenderingDailyUsage,
   TenantRenderingSettings } from "@/components/platform-customer-rendering-settings/settings-types";
-import type { PlatformTenantRecord } from "@/components/platform-tenants/platform-tenant-types";
+import { getPlatformTenantStatusMeta, type PlatformTenantRecord } from "@/components/platform-tenants/platform-tenant-types";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
@@ -60,7 +61,12 @@ export default async function TenantRenderingSettingsPage({ params }: { params: 
           <Link href={`/platform/tenants/${id}`}><ArrowLeft data-icon="inline-start" />返回租户详情</Link>
         </Button>
         <div>
-          <h1 className="text-2xl font-semibold tracking-normal">客户生图额度 · {tenant.name}</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-semibold tracking-normal">客户生图额度 · {tenant.name}</h1>
+            <Badge variant={getPlatformTenantStatusMeta(tenant.status).variant}>
+              {getPlatformTenantStatusMeta(tenant.status).label}
+            </Badge>
+          </div>
           <p className="mt-1 text-sm text-muted-foreground">管理该租户的试点开关、每日任务数和预算。</p>
         </div>
       </div>
@@ -70,7 +76,7 @@ export default async function TenantRenderingSettingsPage({ params }: { params: 
       {settingsResult.data ? (
         <>
           <TenantRenderingSettingsOverview settings={settingsResult.data} usage={usageResult.data} />
-          <TenantRenderingSettingsForm key={settingsResult.data.version} tenantId={id}
+          <TenantRenderingSettingsForm tenantId={id}
             tenantActive={tenant.status === "active"} settings={settingsResult.data} />
         </>
       ) : null}

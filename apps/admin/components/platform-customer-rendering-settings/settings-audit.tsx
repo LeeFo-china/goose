@@ -21,7 +21,9 @@ function summarizeSetting(value: unknown): string {
   const reserve = typeof setting.per_job_reserve_fen === "number"
     && Number.isSafeInteger(setting.per_job_reserve_fen) && setting.per_job_reserve_fen >= 0
     ? `¥${fenToYuan(setting.per_job_reserve_fen)}` : "未设置";
-  return `${enabled} · 每日 ${tasks} · 预算 ${budget} · 单任务预占 ${reserve}`;
+  const version = typeof setting.version === "number" && Number.isSafeInteger(setting.version)
+    ? `版本 ${setting.version} · ` : "";
+  return `${version}${enabled} · 每日 ${tasks} · 预算 ${budget} · 单任务预占 ${reserve}`;
 }
 
 export function TenantRenderingSettingsAudit({ data }: { data: TenantRenderingAuditPage }) {

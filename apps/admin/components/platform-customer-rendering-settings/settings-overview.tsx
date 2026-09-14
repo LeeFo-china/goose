@@ -22,7 +22,10 @@ export function TenantRenderingSettingsOverview({ settings, usage }: {
               {settings.enabled ? "已开启" : "未开启"}
             </Badge>
           </div>
-          <CardDescription>客户生图任务按北京时间自然日计算额度。</CardDescription>
+          <CardDescription>
+            客户生图任务按北京时间自然日计算额度。版本 {settings.version} · 最近修改：
+            {settings.updated_at ? new Date(settings.updated_at).toLocaleString("zh-CN") : "尚未配置"}
+          </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-3">
           <div className="rounded-md border bg-muted/30 p-3">
