@@ -83,6 +83,15 @@ jobs:
           stage=worker
           echo "worker_status=${worker_status:-absent}" >> "${GITHUB_STEP_SUMMARY}"
           if [ "${PHASE}" = live ]; then
+            docker exec gooes-api sh -ceu \
+              'grep -Fq "CUSTOMER_RENDERING_JOB_PILOT_CHANNEL" /app/apps/api/src/services/customer-rendering/jobs.ts'
+            for pair in \
+              'CUSTOMER_RENDERING_JOB_PILOT_TENANT_ID=3eebca47-961f-4899-b976-a3d3208d326b' \
+              'CUSTOMER_RENDERING_JOB_PILOT_CHANNEL=douyin'; do
+              grep -Fxq "${pair}" "${env_file}"
+              docker inspect gooes-api --format '{{json .Config.Env}}' |
+                jq -e --arg pair "${pair}" '[.[] | select(. == $pair)] | length == 1' >/dev/null
+            done
             test "${worker_status}" = running
             test "$(docker inspect -f '{{.State.Health.Status}}' gooes-customer-rendering-job-worker)" = healthy
             test "$(docker inspect -f '{{.Image}}' gooes-customer-rendering-job-worker)" = "$(docker inspect -f '{{.Image}}' gooes-api)"

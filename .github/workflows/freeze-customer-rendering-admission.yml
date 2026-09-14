@@ -2,6 +2,9 @@ name: Freeze Production Customer Rendering Admission
 run-name: Freeze production customer rendering admission
 
 on:
+  workflow_run:
+    workflows: [Enable Customer Rendering Production]
+    types: [completed]
   workflow_dispatch:
     inputs:
       confirm_text:
@@ -18,13 +21,14 @@ concurrency:
 
 jobs:
   freeze:
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion != 'success' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository) }}
     runs-on: [self-hosted, Linux, X64, gooes-prod-deploy]
     environment: production
     timeout-minutes: 10
     steps:
       - name: Freeze running API admission
         env:
-          CONFIRM_TEXT: ${{ inputs.confirm_text }}
+          CONFIRM_TEXT: ${{ github.event_name == 'workflow_run' && '确认关闭生产生图准入' || inputs.confirm_text }}
           OCR_RESULT_ENCRYPTION_KEY: ${{ secrets.OCR_RESULT_ENCRYPTION_KEY }}
           WECHAT_MINI_SESSION_ENCRYPTION_KEY_V1: ${{ secrets.WECHAT_MINI_SESSION_ENCRYPTION_KEY_V1 }}
           GOOES_WEB_PROXY_SHARED_SECRET: ${{ secrets.GOOES_WEB_PROXY_SHARED_SECRET }}
