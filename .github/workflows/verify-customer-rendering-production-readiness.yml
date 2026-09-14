@@ -61,9 +61,15 @@ jobs:
             if [ "${PHASE}" = preflight ] && [ "${key}" = CUSTOMER_RENDERING_JOB_ADMISSION_ENABLED ]; then
               expected=false
             fi
-            test "$(grep -Ec "^${key}=" "${env_file}")" = 1
-            value="$(grep -E "^${key}=" "${env_file}" | cut -d= -f2-)"
-            case "${value}" in true|false) ;; *) exit 1 ;; esac
+            occurrences="$(grep -Ec "^${key}=" "${env_file}" || true)"
+            if [ "${occurrences}" = 0 ] && [ "${PHASE}" = preflight ] \
+              && [ "${key}" = CUSTOMER_RENDERING_JOB_WORKER_ENABLED ]; then
+              value=unset
+            else
+              test "${occurrences}" = 1
+              value="$(grep -E "^${key}=" "${env_file}" | cut -d= -f2-)"
+              case "${value}" in true|false) ;; *) exit 1 ;; esac
+            fi
             echo "${key}=${value}" >> "${GITHUB_STEP_SUMMARY}"
             if [ -n "${expected}" ]; then test "${value}" = "${expected}"; fi
           done
@@ -72,6 +78,7 @@ jobs:
               jq -r --arg prefix "${key}=" '[.[] | select(startswith($prefix)) | split("=")[1]] |
                 if length == 0 then "unset" elif length == 1 then .[0] else "duplicate" end')"
             echo "running_api_${key}=${runtime}" >> "${GITHUB_STEP_SUMMARY}"
+            echo "${key}: env=${value}, runtime=${runtime}"
             test "${runtime}" = "${value}"
           done
           worker_status="$(docker inspect -f '{{.State.Status}}' gooes-customer-rendering-job-worker 2>/dev/null || true)"
