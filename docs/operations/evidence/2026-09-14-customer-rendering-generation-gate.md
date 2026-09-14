@@ -28,15 +28,16 @@ API 已运行 `bun run check`（typecheck、build、文件大小检查均通过�
 - 在腾讯云主账号下勾选并接受页面列出的腾讯云服务协议、数据万象服务等级协议和计费说明，点击“立即使用数据万象”；按控制台引导创建 `CI_QCSRole` 服务角色，关联 `QcloudCOSDataFullControl`、`QcloudAccessForCIRole`、`QcloudPartAccessForCIRole` 三项预设策略并完成主账号微信身份校验。返回 COS 内容审核页后不再显示开通门槛，目标桶的“功能体验”页经“立即使用数据万象”完成绑定并显示审核策略和“立即审核”入口。跳过资源包购买，没有创建全桶自动审核规则。
 - 使用功能体验页预置的腾讯云公开演示图片 URL 发起一次图片审核，页面返回“审核成功／正常”。这仅证明账号服务、桶绑定和控制台演示审核可用；未验证 Worker 使用的 CAM 身份、私有 COS 对象签名审核、审核请求 ID、拒绝/人工分支或生产账单。未使用河南晴天的客户照片，也未触发 Ark 生图。
 - 开发 API 容器上的无付费 Ark 预检返回 `ok=true`、`executed=false`、`storageReady=true`，路由为 `decoration_raw_drawing`、模型为 `doubao-seedream-5-0-pro-260628`；它没有调用 Ark。开发 API 的准入、输入审核 Worker、生图 Worker 三个开关均未设置为 `true`，两个 Worker 未运行。
-- 用 640×480 合成房间图在目标桶创建随机私有输入对象，COS `PUT` 与 `HEAD` 均成功；生产输入审核网关的同步 CI 调用失败，原始 COS 错误为 `AccessDenied`、HTTP 403，网关按设计返回 `RENDERING_INPUT_REVIEW_UNAVAILABLE`。两次诊断各清理了 2 个随机测试键，未触碰客户图片。生产结果存储与输出审核、匿名/签名读取因输入审核失败尚未执行到。
-- 开发 API 实际使用的 COS SecretId 尾号与 CAM 子账号 `goose-storebucket` 的已启用密钥匹配。该子账号通过 `store-bucket` 用户组具有 COS 权限，却没有 CI 图片审核权限；主账号的 `CI_QCSRole` 服务角色权限不会自动授权给 API 子账号。这解释了控制台主账号演示通过、Worker 凭据调用 403 的差异。腾讯云[图片单次审核授权说明](https://cloud.tencent.com/document/api/436/119478)要求子账号拥有 `ci:CreateAuditingPictureJob`；[CI 授权粒度](https://cloud.tencent.com/document/product/460/41741)支持限定存储桶资源。已在 CAM 创建尚未关联身份的自定义策略 `gooes-rendering-ci-picture-audit-nanjing`（ID `286348104`），仅允许该 action 访问 `qcs::ci:ap-nanjing:uid/1259348056:bucket/windwill-1259348056/*`，等待关联确认后再复测。
+- 用 640×480 合成房间图在目标桶创建随机私有输入对象，COS `PUT` 与 `HEAD` 均成功。首次生产输入审核网关的同步 CI 调用失败，原始 COS 错误为 `AccessDenied`、HTTP 403，网关按设计返回 `RENDERING_INPUT_REVIEW_UNAVAILABLE`；两次失败诊断各清理了 2 个随机测试键。随后独立的私有存储检查通过：结果写入与 `HEAD` 校验成功，匿名读取 403，600 秒签名读取 200，2 个临时对象已清理。
+- 开发 API 实际使用的 COS SecretId 尾号与 CAM 子账号 `goose-storebucket` 的已启用密钥匹配。该子账号通过 `store-bucket` 用户组具有 COS 权限，但当时缺少 CI 图片审核权限；主账号的 `CI_QCSRole` 服务角色权限不会自动授权给 API 子账号。这解释了控制台主账号演示通过、Worker 凭据调用 403 的差异。腾讯云[图片单次审核授权说明](https://cloud.tencent.com/document/api/436/119478)要求子账号拥有 `ci:CreateAuditingPictureJob`；[CI 授权粒度](https://cloud.tencent.com/document/product/460/41741)支持限定存储桶资源。CAM 自定义策略 `gooes-rendering-ci-picture-audit-nanjing`（ID `286348104`）仅允许该 action 访问 `qcs::ci:ap-nanjing:uid/1259348056:bucket/windwill-1259348056/*`；获得用户在关联步骤的确认后，该策略已关联 `goose-storebucket`，控制台显示关联时间 `2026-09-14 13:29:05`。
+- 关联后用相同开发 API 凭据再次运行完整合成图路径：输入对象 `HEAD` 通过、真实 CI 输入审核 `approved`，结果对象写入及 `HEAD` 通过、真实 CI 输出审核 `approved`（原始 Result `0` 且有请求 ID），匿名结果读取 403、签名读取 200，最后清理 2 个随机测试键。所有图片均由脚本合成，未读取或修改河南晴天客户图片、未触发 Ark 生图。该检查不覆盖 CI 拒绝/人工结果、签名到期后的读取、真实 Worker 运行或最终账单。
 
-本检查点使指定租户的**开发环境 API 和数据库**具备下一轮联调基础，并开通了腾讯云账号级数据万象、绑定目标桶。生产库仍停留在前述 620 版只读计划状态，生产服务/开关/试点设置未改。Worker CAM/私有对象读写、真实 COS CI 网关和 Ark 成本未验收，因此没有给租户写入任意额度，也没有开启准入或启动 Worker。
+本检查点使指定租户的**开发环境 API 和数据库**具备下一轮联调基础，并开通了腾讯云账号级数据万象、绑定目标桶，验证了开发 API 的 CAM 身份、私有对象读写和真实 COS CI 批准路径。生产库仍停留在前述 620 版只读计划状态，生产服务/开关/试点设置未改。真实 Worker 运行、拒绝/人工分支和 Ark 成本仍未验收，因此没有给租户写入任意额度，也没有开启准入或启动 Worker。
 
 ## 生产放行前必须补齐
 
 1. 在最终提交上重跑生产只读迁移计划，确认待执行版本、备份与回滚方案，按序由迁移流水线应用后再次核对生产历史；本地 `supabase migration list --linked` 需先安全建立项目链接。不要手工执行 DDL/DML。破坏性回滚只能通过新的补偿 migration；关停入口与 Worker 不应删除历史任务或预占。
-2. 数据万象账号与目标桶已开通/绑定；继续核对桶及对象的私有读策略、Worker CAM 的私有 GET/PUT/HEAD 与审核权限。用非客户测试图验证房间图签名读取、结果私有写入、HEAD/校验和、实际网关 CI 批准与拒绝、匿名读取失败及签名到期。
+2. 数据万象账号与目标桶已开通/绑定；开发 API 凭据的私有对象写入/HEAD、网关 CI 批准、匿名读取拒绝和签名读取已用合成图通过。继续验证真实 Worker 环境使用同一 CAM 身份、CI 拒绝/人工分支、签名到期和跨主体访问。
 3. 核对实际 Ark 模型、单次最高计费与日预算，并将 `decoration_raw_drawing` 的路由超时通过现有 AI 配置入口设置为 300000 ms。当前无法从可信提供方回执取得任务级实际费用：提交后的任务按预占金额保守占用日预算，提交前明确失败记 0。必须先确定结算与超额处置规则，并完成付费测试任务的账本核对。
 4. 先部署 API 和迁移且保持准入开关、`CUSTOMER_RENDERING_INPUT_REVIEW_ENABLED`、`CUSTOMER_RENDERING_JOB_WORKER_ENABLED` 关闭；验证 401/404、幂等、跨主体、审核和失败恢复。核对生产 Compose 实际使用的 API env 文件路径。然后分别显式部署输入审核 Worker 和生图 Worker，只对一个测试租户开放额度与准入，完成至少一次通过、一次拒绝、一次结果不明的人工对账演练，再考虑扩大范围。
 
