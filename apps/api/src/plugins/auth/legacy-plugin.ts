@@ -23,7 +23,7 @@ import {
   isVisitorSessionRoute,
   shouldBypassAuth,
 } from "./legacy/routes";
-import { isRenderingJobsCreateRoute, isRenderingStylesReadRoute, isRenderingUploadsRoute } from "./legacy/rendering-routes";
+import { isRenderingJobsCreateRoute, isRenderingJobsReadRoute, isRenderingStylesReadRoute, isRenderingUploadsRoute } from "./legacy/rendering-routes";
 import { logAuthStage } from "./legacy/timing";
 import {
   assertWechatIdentityBinding,
@@ -250,5 +250,6 @@ function isDouyinRenderingRoute(method: string, url: string) {
     || (method === "POST" && url === "/douyin-mini/renderings/phone:bind")
     || isRenderingStylesReadRoute(method, url, "douyin-mini")
     || isRenderingUploadsRoute(method, url, "douyin-mini")
-    || isRenderingJobsCreateRoute(method, url, "douyin-mini");
+    || isRenderingJobsCreateRoute(method, url, "douyin-mini")
+    || isRenderingJobsReadRoute(method, url, "douyin-mini");
 }

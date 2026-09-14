@@ -3,6 +3,7 @@ import { z } from "zod";
 import { RenderingJobRequestSchema, RenderingListQuerySchema, RenderingUploadIntentRequestSchema, RenderingUploadCompleteRequestSchema } from "@gooes/domain";
 import { Errors } from "@/errors/error-factory";
 import { RenderingPhoneBindSchema } from "@/schema/customer-renderings";
+import { createCustomerRenderingJobStatusService, type CustomerRenderingJobStatusPort } from '@/services/customer-rendering/job-status';
 import {
   customerRenderingCatalogService,
   createCustomerRenderingInputsService,
@@ -27,6 +28,7 @@ export class DouyinRenderingsController {
     private readonly configuredCatalog?: CatalogService,
     private readonly configuredInputs?: CustomerRenderingInputsPort,
     private readonly configuredJobs?: CustomerRenderingJobsPort,
+    private readonly configuredJobStatus?: CustomerRenderingJobStatusPort,
   ) {}
 
   registerExtraRoutes(fastify: FastifyInstance) {
@@ -36,7 +38,9 @@ export class DouyinRenderingsController {
     fastify.get("/douyin-mini/renderings/styles/:id", routeOptions, this.getStyle);
     fastify.post("/douyin-mini/renderings/uploads:intent", routeOptions, this.createInputIntent);
     fastify.post("/douyin-mini/renderings/uploads/:id/complete", routeOptions, this.completeInput);
+    fastify.get('/douyin-mini/renderings/uploads/:id', routeOptions, this.getInputStatus);
     fastify.post("/douyin-mini/renderings/jobs", routeOptions, this.createJob);
+    fastify.get('/douyin-mini/renderings/jobs/:id', routeOptions, this.getJobStatus);
   }
 
   getQuota = async (request: FastifyRequest) => ResponseHandler.success(
@@ -88,6 +92,14 @@ export class DouyinRenderingsController {
     return ResponseHandler.success(await this.inputs.complete(request.user, "douyin", params.data.id));
   };
 
+  getInputStatus = async (request: FastifyRequest) => {
+    const params = StyleParamsSchema.safeParse(request.params);
+    if (!params.success) throw Errors.fromZod(params.error);
+    const query = EmptyQuerySchema.safeParse(request.query ?? {});
+    if (!query.success) throw Errors.fromZod(query.error);
+    return ResponseHandler.success(await this.inputs.getStatus(request.user, 'douyin', params.data.id));
+  };
+
   createJob = async (request: FastifyRequest, reply: FastifyReply) => {
     const parsed = RenderingJobRequestSchema.safeParse(request.body ?? {});
     if (!parsed.success) throw Errors.fromZod(parsed.error);
@@ -96,6 +108,14 @@ export class DouyinRenderingsController {
     const result = await this.jobs.create(request.user, 'douyin', parsed.data);
     reply.code(202);
     return ResponseHandler.success(result);
+  };
+
+  getJobStatus = async (request: FastifyRequest) => {
+    const params = StyleParamsSchema.safeParse(request.params);
+    if (!params.success) throw Errors.fromZod(params.error);
+    const query = EmptyQuerySchema.safeParse(request.query ?? {});
+    if (!query.success) throw Errors.fromZod(query.error);
+    return ResponseHandler.success(await this.jobStatus.get(request.user, 'douyin', params.data.id));
   };
 
   private get service(): QuotaService {
@@ -112,5 +132,9 @@ export class DouyinRenderingsController {
 
   private get jobs(): CustomerRenderingJobsPort {
     return this.configuredJobs ?? createCustomerRenderingJobsService();
+  }
+
+  private get jobStatus(): CustomerRenderingJobStatusPort {
+    return this.configuredJobStatus ?? createCustomerRenderingJobStatusService();
   }
 }

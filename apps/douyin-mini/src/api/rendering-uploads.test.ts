@@ -1,6 +1,6 @@
 import { expect, mock, test } from "bun:test";
 import { ApiRequestError } from "./request";
-import { completeRenderingUpload, completeRenderingUploadWithRetry, createRenderingUploadIntent, putRenderingBytes } from "./rendering-uploads";
+import { completeRenderingUpload, completeRenderingUploadWithRetry, createRenderingUploadIntent, fetchRenderingUploadStatus, putRenderingBytes } from "./rendering-uploads";
 
 const ID = "11111111-1111-4111-8111-111111111111";
 const URL = "https://private-123.cos.ap-shanghai.myqcloud.com/raw?q-signature=opaque";
@@ -72,4 +72,19 @@ test("processing completion retries the same intent ID without issuing another i
     `/douyin-mini/renderings/uploads/${ID}/complete`,
     `/douyin-mini/renderings/uploads/${ID}/complete`,
   ]);
+});
+
+test("upload status reads owner-scoped review progress without creating another intent", async () => {
+  const request = mock(async () => ({ file_id: ID, status: "approved", mime_type: "image/webp",
+    width: 8, height: 8, size_bytes: 42, review_state: null }));
+  const result = await fetchRenderingUploadStatus({ request } as never, ID);
+  expect(result).toEqual({ fileId: ID, status: "approved", reviewState: null });
+  expect(request).toHaveBeenCalledWith({ method: "GET", path: `/douyin-mini/renderings/uploads/${ID}` });
+});
+
+test("upload status preserves manual-review state", async () => {
+  const request = mock(async () => ({ file_id: ID, status: "pending_review", mime_type: "image/webp",
+    width: 8, height: 8, size_bytes: 42, review_state: "manual" }));
+  expect(await fetchRenderingUploadStatus({ request } as never, ID))
+    .toEqual({ fileId: ID, status: "pending_review", reviewState: "manual" });
 });

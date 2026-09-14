@@ -11,6 +11,7 @@ import { CustomerRenderingInputStorage, type CustomerInputStoragePort } from '@/
 import { loadRenderingStorageConfig } from '@/gateways/rendering-library-storage/client';
 import { CustomerRenderingInputsRepository, type CustomerInputOwner,
   type CustomerInputRow, type CustomerRenderingInputsRepositoryPort } from '@/repositories/customer-rendering-inputs';
+import { RenderingUploadStatusResponseSchema, type RenderingUploadStatusResponse } from '@/schema/customer-renderings';
 import { normalizeRenderingSource } from '@/services/rendering-library-files/image';
 import { systemSettingsService } from '@/services/system-settings';
 import type { JwtPayload } from '@/utils/jwt';
@@ -22,10 +23,11 @@ type IntentRequest = z.infer<typeof RenderingUploadIntentRequestSchema>;
 type IntentResponse = z.infer<typeof RenderingUploadIntentResponseSchema>;
 type CompleteResponse = z.infer<typeof RenderingUploadCompleteResponseSchema>;
 type Repository = Pick<CustomerRenderingInputsRepositoryPort,
-  'createIssued' | 'findOwned' | 'countRecent' | 'claimProcessing' | 'markNormalized' | 'markFailed'>;
+  'createIssued' | 'findOwned' | 'findOwnedStatus' | 'countRecent' | 'claimProcessing' | 'markNormalized' | 'markFailed'>;
 export interface CustomerRenderingInputsPort {
   createIntent(user: JwtPayload | undefined, channel: Channel, request: IntentRequest): Promise<IntentResponse>;
   complete(user: JwtPayload | undefined, channel: Channel, intentId: string): Promise<CompleteResponse>;
+  getStatus(user: JwtPayload | undefined, channel: Channel, intentId: string): Promise<RenderingUploadStatusResponse>;
 }
 const INTENT_TTL_MS = 10 * 60_000;
 const PROCESSING_LEASE_MS = 2 * 60_000;
@@ -116,6 +118,23 @@ export class CustomerRenderingInputsService implements CustomerRenderingInputsPo
     const leaseUntil = new Date(now.getTime() + PROCESSING_LEASE_MS).toISOString();
     if (!await this.repository.claimProcessing(owner, row.id, leaseUntil, now.toISOString())) throw processing();
     return this.process(owner, row, leaseUntil, recovering);
+  }
+
+  async getStatus(user: JwtPayload | undefined, channel: Channel, intentId: string): Promise<RenderingUploadStatusResponse> {
+    const owner = await this.owner(user, channel);
+    const parsed = z.uuid('无效的上传意图 ID').safeParse(intentId);
+    if (!parsed.success) throw Errors.fromZod(parsed.error);
+    const row = await this.repository.findOwnedStatus(owner, parsed.data);
+    if (!row) throw Errors.business(404, '上传意图不存在', 'RENDERING_INPUT_NOT_FOUND');
+    const result = RenderingUploadStatusResponseSchema.safeParse({
+      file_id: row.id, status: row.status,
+      review_state: row.status === 'pending_review'
+        ? row.review_decision === 'manual' ? 'manual' : 'pending' : null,
+      mime_type: row.normalized_size_bytes === null ? null : 'image/webp',
+      width: row.width, height: row.height, size_bytes: row.normalized_size_bytes,
+    });
+    if (!result.success) throw Errors.dbError('私有输入状态无效');
+    return result.data;
   }
 
   private async process(owner: CustomerInputOwner, row: CustomerInputRow, leaseUntil: string, recovering: boolean): Promise<CompleteResponse> {

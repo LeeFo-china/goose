@@ -22,10 +22,12 @@ test("private upload HTTP validates session, DTO and UUID and wraps success", as
   const createIntent = mock(async () => ({ intent_id: id, method: "PUT" as const,
     upload_url: "https://example.com/signed", headers: {}, expires_at: "2026-09-13T12:00:00.000Z" }));
   const complete = mock(async () => result);
-  await expect(new Controller(undefined, undefined, { createIntent, complete })
+  const getStatus = mock(async () => ({ file_id: id, status: 'issued' as const,
+    review_state: null, mime_type: null, width: null, height: null, size_bytes: null }));
+  await expect(new Controller(undefined, undefined, { createIntent, complete, getStatus })
     .completeInput({ params: { id }, body: null } as never)).rejects.toMatchObject({ statusCode: 400 });
   const app = Fastify({ logger: false }); errorHandler(app); authPlugin(app);
-  new Controller(undefined, undefined, { createIntent, complete }).registerExtraRoutes(app);
+  new Controller(undefined, undefined, { createIntent, complete, getStatus }).registerExtraRoutes(app);
   await app.ready();
   const token = signVisitorSessionToken({ openid: "openid", visitor_id: "visitor" });
   const headers = { authorization: `Bearer ${token}` };
@@ -57,6 +59,35 @@ test("private upload HTTP validates session, DTO and UUID and wraps success", as
   } finally { await app.close(); }
 });
 
+test('private upload status GET validates session, UUID and empty query before dispatch', async () => {
+  const { default: authPlugin } = await import('@/plugins/auth/legacy-plugin');
+  const { default: errorHandler } = await import('@/plugins/error-handler');
+  const { signVisitorSessionToken, signDouyinMiniappToken } = await import('@/utils/jwt');
+  const id = '11111111-1111-4111-8111-111111111111';
+  const result = { file_id: id, status: 'approved', review_state: null, mime_type: 'image/webp', width: 16, height: 12, size_bytes: 100 } as const;
+  const getStatus = mock(async () => result);
+  const app = Fastify({ logger: false }); errorHandler(app); authPlugin(app);
+  new Controller(undefined, undefined, { getStatus } as never).registerExtraRoutes(app);
+  await app.ready();
+  const url = `/visitor/renderings/uploads/${id}`;
+  const headers = { authorization: `Bearer ${signVisitorSessionToken({ openid: 'openid', visitor_id: 'visitor' })}` };
+  try {
+    expect((await app.inject({ method: 'GET', url })).statusCode).toBe(401);
+    expect((await app.inject({ method: 'GET', url, headers: { authorization: `Bearer ${signDouyinMiniappToken({
+      tenant_id: id, douyin_installation_id: id, douyin_app_id: 'tt-app', subject_hash: 'a'.repeat(64),
+    })}` } })).statusCode).toBe(401);
+    expect((await app.inject({ method: 'GET', url: '/visitor/renderings/uploads/invalid', headers })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'GET', url: `${url}?tenant_id=${id}`, headers })).statusCode).toBe(400);
+    expect(getStatus).not.toHaveBeenCalled();
+    const response = await app.inject({ method: 'GET', url, headers });
+    expect(response.statusCode).toBe(200);
+    expect((await app.inject({ method: 'HEAD', url, headers })).statusCode).toBe(200);
+    const responseBody: unknown = response.json();
+    expect(responseBody).toEqual({ data: result, message: 'success' });
+    expect(getStatus).toHaveBeenCalledWith(expect.objectContaining({ token_type: 'visitor_session' }), 'wechat', id);
+  } finally { await app.close(); }
+});
+
 test('job HTTP accepts only session and strict shared DTO, returning 202', async () => {
   const { default: authPlugin } = await import('@/plugins/auth/legacy-plugin');
   const { default: errorHandler } = await import('@/plugins/error-handler');
@@ -82,6 +113,30 @@ test('job HTTP accepts only session and strict shared DTO, returning 202', async
   } finally { await app.close(); }
 });
 
+test('job status GET requires the WeChat session and rejects forged query scope', async () => {
+  const { default: authPlugin } = await import('@/plugins/auth/legacy-plugin');
+  const { default: errorHandler } = await import('@/plugins/error-handler');
+  const { signVisitorSessionToken } = await import('@/utils/jwt');
+  const id = '11111111-1111-4111-8111-111111111111';
+  const result = { job_id: id, status: 'processing' as const, created_at: '2026-09-14T00:00:00Z',
+    updated_at: '2026-09-14T00:00:00Z', finished_at: null, result: null };
+  const get = mock(async () => result);
+  const app = Fastify({ logger: false }); errorHandler(app); authPlugin(app);
+  new Controller(undefined, undefined, undefined, undefined, { get } as never).registerExtraRoutes(app);
+  await app.ready();
+  const url = `/visitor/renderings/jobs/${id}`;
+  const headers = { authorization: `Bearer ${signVisitorSessionToken({ openid: 'openid', visitor_id: 'visitor' })}` };
+  try {
+    expect((await app.inject({ method: 'GET', url })).statusCode).toBe(401);
+    expect((await app.inject({ method: 'GET', url: '/visitor/renderings/jobs/invalid', headers })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'GET', url: `${url}?tenant_id=${id}`, headers })).statusCode).toBe(400);
+    expect(get).not.toHaveBeenCalled();
+    const responseBody: unknown = (await app.inject({ method: 'GET', url, headers })).json();
+    expect(responseBody).toEqual({ data: result, message: 'success' });
+    expect(get).toHaveBeenCalledWith(expect.objectContaining({ token_type: 'visitor_session' }), 'wechat', id);
+  } finally { await app.close(); }
+});
+
 describe("VisitorRenderingsController", () => {
   test("registers exactly the WeChat rendering routes as session surfaces", () => {
     const controller = new Controller({ getQuota: mock(), bindPhone: mock() } as never);
@@ -103,7 +158,9 @@ describe("VisitorRenderingsController", () => {
       { method: "GET", path: "/visitor/renderings/styles/:id", access: "session" },
       { method: "POST", path: "/visitor/renderings/uploads:intent", access: "session" },
       { method: "POST", path: "/visitor/renderings/uploads/:id/complete", access: "session" },
+      { method: "GET", path: "/visitor/renderings/uploads/:id", access: "session" },
       { method: "POST", path: "/visitor/renderings/jobs", access: "session" },
+      { method: "GET", path: "/visitor/renderings/jobs/:id", access: "session" },
     ]);
   });
 

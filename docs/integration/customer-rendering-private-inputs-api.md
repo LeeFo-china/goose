@@ -1,26 +1,26 @@
 # 客户私有房间照片 / 户型图上传交接
 
-2026-09-13：本文是当前上传接口合同。生产 migration `20260913035110_create_customer_rendering_private_inputs.sql`、API 和复用镜像的 COS worker 已随 `aea829524365ae4862ff6b91601adeee9d6a0f53` 发布；发布成功不代表真实 COS 上传或双端真机已验收，也不代表 raw 清理开关已启用。gooes 抖音上传页面仍是本地未提交改动；只读核查发现 orange 已有微信上传 service/页面，但仍需微信团队处理 PUT 结果未知时的同 ID 恢复并自行发布。没有修改 orange，AI 生图仍未开放。生产配置和验收缺口见[最新证据](../operations/evidence/2026-09-13-private-input-upload-production-gate.md)。
+2026-09-13 建立上传合同，2026-09-14 补充查询审核状态。生产 migration `20260913035110_create_customer_rendering_private_inputs.sql`、API 和复用镜像的 COS worker 已随 `aea829524365ae4862ff6b91601adeee9d6a0f53` 发布；用户反馈抖音生产上传成功，具体审核和真机细项仍待补证。只读核查发现 orange 已有微信上传 service/页面，但微信团队仍需处理 PUT 结果未知时的同 ID 恢复并自行发布。本仓库未修改 orange；AI 生图准入与 Worker 仍默认关闭。生产配置和验收缺口见[上传证据](../operations/evidence/2026-09-13-private-input-upload-production-gate.md)与[生图门禁](../operations/evidence/2026-09-14-customer-rendering-generation-gate.md)。
 
-## 四条接口与身份
+## 上传与状态接口身份
 
-以下为 API origin 下完整路径，无额外 `/api` 前缀；均为 POST，返回单条结果，无列表/分页参数。
+以下为 API origin 下完整路径，无额外 `/api` 前缀；返回单条结果，无列表/分页参数。
 
-| 客户端 | 创建上传意图 | 确认上传 |
-| --- | --- | --- |
-| 微信 | `/visitor/renderings/uploads:intent` | `/visitor/renderings/uploads/:id/complete` |
-| 抖音 | `/douyin-mini/renderings/uploads:intent` | `/douyin-mini/renderings/uploads/:id/complete` |
+| 客户端 | 创建上传意图（POST） | 确认上传（POST） | 查询审核状态（GET） |
+| --- | --- | --- | --- |
+| 微信 | `/visitor/renderings/uploads:intent` | `/visitor/renderings/uploads/:id/complete` | `/visitor/renderings/uploads/:id` |
+| 抖音 | `/douyin-mini/renderings/uploads:intent` | `/douyin-mini/renderings/uploads/:id/complete` | `/douyin-mini/renderings/uploads/:id` |
 
-业务 API 传 `Authorization: Bearer <当前会话 token>`、`Content-Type: application/json`。四条接口均标记 `tenantServiceAccess=session`，不是匿名上传入口，也不要求将上传绑定到员工身份。
+业务 API 传 `Authorization: Bearer <当前会话 token>`；POST 另传 `Content-Type: application/json`。六条接口均标记 `tenantServiceAccess=session`，不是匿名上传入口，也不要求将上传绑定到员工身份。
 
 - 微信接受 `visitor_session`（可信 openid、visitor_id），通过服务器最近有效的选公司记录找租户；或者 `auth` + `login_channel=wechat`（可信 openid、tenant_id）。没有选公司返回 409，客户端进入既有选公司流程后重试。租户停用返回 403。
 - 抖音接受 `douyin_miniapp`，或者 `auth` + `login_channel=douyin`；使用 token 内 tenant_id、subject_hash、douyin_app_id、douyin_installation_id，miniapp 的 sub 必须匹配 subject_hash。安装必须有效且 app/tenant/scope 相符，停用安装返回 409。缺少完整可信身份返回 401，不能由 body 补齐公司信息。
 - 后端按 tenant + channel + HMAC 主体版本/摘要 + app/installation scope 绑定文件。不同主体访问同一 ID 与不存在统一 404。body 不接受 tenant_id、subject、openid、任意 URL、bucket 或 object key。
-- 微信 visitor 的精确 POST uploads 白名单已接入；抖音 token 仍限于既有抖音命名空间，不获得通用上传能力。旧 `/visitor/picture-library/*` 与本合同不兼容，不能复用旧图库的 401 匿名回退。
+- 微信 visitor 的精确 POST 上传及 GET/HEAD 状态白名单已接入；抖音 token 仍限于既有抖音命名空间，不获得通用上传能力。旧 `/visitor/picture-library/*` 与本合同不兼容，不能复用旧图库的 401 匿名回退。
 
 ## DTO 与调用顺序
 
-共享定义：`packages/domain/src/customer-rendering.ts`。成功包裹为 `{ "data": <以下 DTO>, "message": "success" }`；客户端若现有 request wrapper 已解包 data，不要二次解包。
+上传与确认的共享定义位于 `packages/domain/src/customer-rendering.ts`；状态响应定义位于 `apps/api/src/schema/customer-renderings.ts`。成功包裹为 `{ "data": <以下 DTO>, "message": "success" }`；客户端若现有 request wrapper 已解包 data，不要二次解包。
 
 1. 选择并检查真实静态 JPEG / PNG / WebP，读取最终待上传文件字节数。HEIC/HEIF 需真实转码，不能只改扩展名或 MIME。原文件要求 `1 <= size_bytes <= 10485760`（10 MiB）。
 2. intent body 为严格对象：`{ "purpose": "room", "mime_type": "image/jpeg", "size_bytes": 1024 }`。purpose 仅 `room | floor_plan`，mime_type 仅 `image/jpeg | image/png | image/webp`，size_bytes 是整数。额外字段返回 400。
@@ -29,9 +29,11 @@
 5. PUT 成功后，以 intent_id 替换 UUID 路径参数调用 complete，body 必须是 `{}`（允许无 body，不允许 null 或额外字段）。不传 URL、对象位置或图片字节。
 6. complete data 为 `{ file_id: UUID, status: "pending_review", mime_type: "image/webp", width: 正整数, height: 正整数, size_bytes: 正整数 }`。file_id 等于本意图 ID；大小和宽高属于服务器规范图，不是声明原图。响应没有任何原图/规范图公共 URL。
 
+随后可用相同 ID 调用 GET 状态接口查询审核结果。路径 ID 必须是 UUID，不接受任何 query 参数；响应为 `{ file_id, status, review_state, mime_type, width, height, size_bytes }`。status 可能为 `issued | processing | pending_review | approved | rejected | failed | deleted`；仅当 status 为 `pending_review` 时，`review_state` 是 `pending` 或 `manual`，其他状态为 `null`。`manual` 表示需人工处理，客户端应停止自动轮询并提示用户稍后查询。`mime_type` 仅在规范图存在时为 `image/webp`，否则为 `null`，宽、高、大小同样可能为 `null`。状态由服务端当前租户、渠道、主体及安装身份限定；他人文件与不存在文件都返回 404。该接口不返回审核原始响应、COS 地址或签名 URL，也不表示生成任务状态。
+
 服务器先验证 HEAD 的大小和 MIME，再限量读取并实际解码静态图，规范化为私有 WebP 并验证长度/MIME/SHA-256 元数据才提交 `pending_review`。已安装 COS SDK 2.15.4 **不签名 Content-Type**：它是必传头，但不是加密绑定的签名头。签名绑定 Content-Length、Host、ACL 与 forbid-overwrite；不能据此跳过 HEAD 和图片解码。
 
-`pending_review` 只表示上传及规范化完成，不代表内容审核通过，更不代表 AI 任务资格。两个客户端显示“待审核”，生图按钮保持关闭；审核、原子额度与预算、任务创建、生成和结果获取均属于后续计划。
+`pending_review` 只表示上传及规范化完成，不代表内容审核通过，更不代表 AI 任务资格。两个客户端显示“待审核”，生图按钮保持关闭；只有 `approved` 才可按[任务交接契约](customer-rendering-generation-handoff.md)提交生成任务。生产准入开关与 Worker 应继续关闭，直到生图门禁通过。
 
 ## 重放、并发与错误映射
 

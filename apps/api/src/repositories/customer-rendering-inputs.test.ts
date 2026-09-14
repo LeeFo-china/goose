@@ -95,6 +95,19 @@ describe('CustomerRenderingInputsRepository', () => {
     expect(db.requests[0]?.url.searchParams.get('select')).not.toContain('*');
   });
 
+  test('findOwnedStatus selects only safe status fields with the same owner boundary', async () => {
+    const db = database([row({ status: 'rejected', normalized_size_bytes: 100, width: 20, height: 10 })]);
+    expect(await db.repository.findOwnedStatus(owner, ID)).toEqual({
+      id: ID, status: 'rejected', review_decision: null,
+      normalized_size_bytes: 100, width: 20, height: 10,
+    });
+    const request = db.requests[0]!;
+    expect(request.url.searchParams.get('select')).toBe('id,status,review_decision,normalized_size_bytes,width,height');
+    expect(request.url.searchParams.get('limit')).toBe('1');
+    expect(request.url.searchParams.get('subject_digest')).toBe(`eq.${owner.subjectDigest}`);
+    expect(await db.repository.findOwnedStatus({ ...owner, subjectDigest: 'b'.repeat(64) }, ID)).toBeNull();
+  });
+
   test('conditional updates use primary-key bounds without PATCH limit while reads stay bounded', async () => {
     const db = database([]);
     await db.repository.findOwned(owner, ID);

@@ -43,6 +43,10 @@ function fixture() {
     createIssued: mock(async (..._args: Parameters<CustomerRenderingInputsRepositoryPort['createIssued']>) => {}),
     countRecent: mock(async (..._args: Parameters<CustomerRenderingInputsRepositoryPort['countRecent']>) => 0),
     findOwned: mock(async (..._args: Parameters<CustomerRenderingInputsRepositoryPort['findOwned']>) => row),
+    findOwnedStatus: mock(async (..._args: Parameters<CustomerRenderingInputsRepositoryPort['findOwnedStatus']>) => row && ({
+      id: row.id, status: row.status, width: row.width, height: row.height,
+      normalized_size_bytes: row.normalized_size_bytes, review_decision: row.review_decision,
+    })),
     claimProcessing: mock(async (...[_owner, _id, lease]: Parameters<CustomerRenderingInputsRepositoryPort['claimProcessing']>) => {
       if (row) { row.status = 'processing'; row.processing_lease_expires_at = lease; } return true;
     }),
@@ -52,7 +56,7 @@ function fixture() {
       return true;
     }),
     markFailed: mock(async (..._args: Parameters<CustomerRenderingInputsRepositoryPort['markFailed']>) => { if (row) row.status = 'failed'; return true; }),
-  } satisfies Pick<CustomerRenderingInputsRepositoryPort, 'createIssued' | 'countRecent' | 'findOwned' | 'claimProcessing' | 'markNormalized' | 'markFailed'>;
+  } satisfies Pick<CustomerRenderingInputsRepositoryPort, 'createIssued' | 'countRecent' | 'findOwned' | 'findOwnedStatus' | 'claimProcessing' | 'markNormalized' | 'markFailed'>;
   const storage = {
     rawObjectKey: (_tenant: string, fileId: string) => `private/customer-rendering-inputs/${tenantId}/${fileId}/raw`,
     normalizedObjectKey: () => rawKey.replace('/raw', '/normalized.webp'),
@@ -98,6 +102,52 @@ test('WeChat customer resolves the same owner as visitor; other subject cannot c
   f.repository.findOwned.mockImplementation(async (candidate) => candidate.subjectDigest === owner.subjectDigest ? f.row : null);
   await expect(f.service.complete({ ...user, openid: 'different' }, 'wechat', id)).rejects.toMatchObject({ statusCode: 404 });
   expect(f.storage.readRaw).not.toHaveBeenCalled();
+});
+
+test.each(['issued', 'processing', 'pending_review', 'approved', 'rejected', 'failed', 'deleted'] as const)(
+  'status reads owned %s input without storage access or leaking ledger fields', async (status) => {
+    const f = fixture(); f.row.status = status;
+    if (status === 'pending_review' || status === 'approved' || status === 'rejected') {
+      f.row.normalized_object_key = normalizedObjectKey;
+      f.row.normalized_size_bytes = 100;
+      f.row.width = 16; f.row.height = 12;
+    }
+    const result = await f.service.getStatus(user, 'wechat', id);
+    expect(result).toEqual({ file_id: id, status,
+      review_state: status === 'pending_review' ? 'pending' : null,
+      mime_type: f.row.normalized_object_key ? 'image/webp' : null,
+      width: f.row.width, height: f.row.height, size_bytes: f.row.normalized_size_bytes });
+    expect(f.repository.findOwnedStatus).toHaveBeenCalledWith(expect.objectContaining({ tenantId, channel: 'wechat' }), id);
+    expect(f.storage.readRaw).not.toHaveBeenCalled();
+  });
+
+test('status distinguishes manual review from ordinary pending review', async () => {
+  const f = fixture();
+  f.row.status = 'pending_review';
+  f.row.review_decision = 'manual';
+  f.row.normalized_object_key = normalizedObjectKey;
+  f.row.normalized_size_bytes = 100; f.row.width = 16; f.row.height = 12;
+  expect(await f.service.getStatus(user, 'wechat', id)).toMatchObject({
+    status: 'pending_review', review_state: 'manual',
+  });
+});
+
+const normalizedObjectKey = 'private/normalized.webp';
+
+test('status hides a missing or different owner and rejects invalid ID', async () => {
+  const f = fixture();
+  const owned = f.digestService.subject(await f.contextService.resolveWechat(user));
+  f.repository.findOwnedStatus.mockImplementation(async (candidate) => candidate.subjectDigest === owned.digest
+    ? { id: f.row.id, status: f.row.status, width: f.row.width, height: f.row.height,
+      normalized_size_bytes: f.row.normalized_size_bytes, review_decision: f.row.review_decision } : null);
+  await expect(f.service.getStatus({ ...user, openid: 'other' }, 'wechat', id))
+    .rejects.toMatchObject({ statusCode: 404, code: 'RENDERING_INPUT_NOT_FOUND' });
+  await expect(f.service.getStatus(user, 'wechat', 'invalid'))
+    .rejects.toMatchObject({ statusCode: 400 });
+  f.hide();
+  f.repository.findOwnedStatus.mockResolvedValue(null);
+  await expect(f.service.getStatus(user, 'wechat', id))
+    .rejects.toMatchObject({ statusCode: 404, code: 'RENDERING_INPUT_NOT_FOUND' });
 });
 
 test('Douyin miniapp and customer use installation-bound HMAC identity', async () => {

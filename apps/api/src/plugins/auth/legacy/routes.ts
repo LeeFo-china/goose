@@ -1,7 +1,7 @@
 import type { VerifiedJwtPayload } from "./types";
 import { isTenantOnboardingOcrRoute } from "./tenant-onboarding-routes";
 import { shouldBypassDouyinAuth } from "./douyin-routes";
-import { isRenderingJobsCreateRoute, isRenderingStylesReadRoute, isRenderingUploadsRoute } from "./rendering-routes";
+import { isRenderingJobsCreateRoute, isRenderingJobsReadRoute, isRenderingStylesReadRoute, isRenderingUploadsRoute } from "./rendering-routes";
 
 export { isDouyinMiniappRoute } from "./douyin-routes";
 
@@ -293,7 +293,7 @@ export function isVisitorSessionRoute(method: string, url: string) {
     || (method === "POST" && url === "/visitor/renderings/phone:bind")
     || isRenderingStylesReadRoute(method, url, "visitor")
     || isRenderingUploadsRoute(method, url, "visitor")
-    || isRenderingJobsCreateRoute(method, url, "visitor")) return true;
+    || isRenderingJobsCreateRoute(method, url, "visitor") || isRenderingJobsReadRoute(method, url, "visitor")) return true;
 
   if ((method === "GET" || method === "HEAD") && url.startsWith("/share-campaigns/") || method === "POST" && (url === "/share-campaigns/open" || url === "/share-campaigns/assist")) return true;
   if (

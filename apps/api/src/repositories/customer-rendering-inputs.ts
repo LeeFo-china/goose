@@ -50,6 +50,14 @@ interface DatabaseClient {
 }
 
 export type CustomerInputRow = z.infer<typeof rowSchema>;
+const statusRowSchema = z.strictObject({
+  id: rowSchema.shape.id, status: rowSchema.shape.status,
+  review_decision: rowSchema.shape.review_decision,
+  normalized_size_bytes: rowSchema.shape.normalized_size_bytes,
+  width: rowSchema.shape.width, height: rowSchema.shape.height,
+});
+export type CustomerInputStatusRow = z.infer<typeof statusRowSchema>;
+const STATUS_SELECT = Object.keys(statusRowSchema.shape).join(',');
 const reviewCandidateSchema = z.strictObject({ id: rowSchema.shape.id, tenant_id: rowSchema.shape.tenant_id,
   bucket: rowSchema.shape.bucket, region: rowSchema.shape.region,
   normalized_object_key: rowSchema.shape.normalized_object_key,
@@ -78,6 +86,7 @@ export interface RawCleanupClaim {
 export interface CustomerRenderingInputsRepositoryPort {
   createIssued(owner: CustomerInputOwner, input: CreateCustomerInput): Promise<void>;
   findOwned(owner: CustomerInputOwner, id: string): Promise<CustomerInputRow | null>;
+  findOwnedStatus(owner: CustomerInputOwner, id: string): Promise<CustomerInputStatusRow | null>;
   countRecent(owner: CustomerInputOwner, since: string): Promise<number>;
   claimProcessing(owner: CustomerInputOwner, id: string, leaseUntil: string, now: string): Promise<boolean>;
   markNormalized(owner: CustomerInputOwner, id: string, result: NormalizedCustomerInput, leaseUntil: string, now: string): Promise<boolean>;
@@ -110,6 +119,12 @@ export class CustomerRenderingInputsRepository implements CustomerRenderingInput
     const { data } = await execute(this.owned(this.table().select(ROW_SELECT), owner)
       .eq('id', id).limit(1).maybeSingle());
     return parse(rowSchema.nullable(), data);
+  }
+
+  async findOwnedStatus(owner: CustomerInputOwner, id: string): Promise<CustomerInputStatusRow | null> {
+    const { data } = await execute(this.owned(this.table().select(STATUS_SELECT), owner)
+      .eq('id', id).limit(1).maybeSingle());
+    return parse(statusRowSchema.nullable(), data);
   }
 
   async countRecent(owner: CustomerInputOwner, since: string): Promise<number> {

@@ -59,10 +59,16 @@ function createController() {
     })),
   };
   const promotionServiceProvider = mock(async () => promotionService);
+  const renderingReconciliationService = { reconcile: mock(async () => ({
+    tenant_id: '11111111-1111-4111-8111-111111111111',
+    job_id: '22222222-2222-4222-8222-222222222222',
+    decision: 'release' as const, status: 'failed' as const, idempotent: false,
+  })) };
   const controller = new PlatformDouyinMiniappsController(
     service as never,
     releaseServiceProvider as never,
     promotionServiceProvider as never,
+    renderingReconciliationService,
   );
   const authContext = { isPlatformAdmin: true, permissions: [] };
   (controller as unknown as Record<string, unknown>).getRequiredPlatformPermissionContext =
@@ -74,6 +80,7 @@ function createController() {
     releaseServiceProvider,
     promotionService,
     promotionServiceProvider,
+    renderingReconciliationService,
     authContext,
   };
 }
@@ -104,7 +111,55 @@ describe("PlatformDouyinMiniappsController", () => {
       { method: "POST", path: "/platform/douyin-miniapps/:id/disable" },
       { method: "POST", path: "/platform/douyin-miniapps/:id/enable" },
       { method: "GET", path: "/platform/douyin-miniapps/:id/releases" },
+      { method: "POST", path: "/platform/customer-rendering-jobs/:id/reconcile" },
     ]);
+  });
+  test('manual rendering reconciliation requires superadmin before parsing and rejects client operator', async () => {
+    const { controller, renderingReconciliationService } = createController();
+    const requireSuperAdmin = mock(async () => ({
+      employeeId: '33333333-3333-4333-8333-333333333333', isPlatformSuperAdmin: true,
+    }));
+    Reflect.set(controller, 'getRequiredPlatformSuperAdminContext', requireSuperAdmin);
+    const params = { id: '22222222-2222-4222-8222-222222222222' };
+    const body = { tenant_id: '11111111-1111-4111-8111-111111111111',
+      decision: 'release', evidence_ref: 'WO-2026-001' };
+    const request = { params, body } as never;
+    expect(await controller.reconcileCustomerRenderingJob(request)).toEqual({
+      data: { tenant_id: body.tenant_id, job_id: params.id,
+        decision: 'release', status: 'failed', idempotent: false }, message: 'success',
+    });
+    expect(requireSuperAdmin).toHaveBeenCalledWith(request);
+    expect(renderingReconciliationService.reconcile).toHaveBeenCalledWith(
+      { employeeId: '33333333-3333-4333-8333-333333333333', isPlatformSuperAdmin: true },
+      { jobId: params.id, tenantId: body.tenant_id,
+        decision: 'release', evidenceRef: body.evidence_ref },
+    );
+    for (const invalidBody of [
+      { ...body, operator_ref: 'employee:forged' },
+      { ...body, evidence_ref: '#123' },
+      { ...body, decision: 'consume' },
+    ]) {
+      await expect(controller.reconcileCustomerRenderingJob({ params, body: invalidBody } as never))
+        .rejects.toMatchObject({ statusCode: 400 });
+    }
+    await expect(controller.reconcileCustomerRenderingJob({ params, body,
+      query: { operator_ref: 'employee:forged' } } as never))
+      .rejects.toMatchObject({ statusCode: 400 });
+    expect(renderingReconciliationService.reconcile).toHaveBeenCalledTimes(1);
+    Reflect.set(controller, 'getRequiredPlatformSuperAdminContext', async () => {
+      throw { statusCode: 403, code: 'PLATFORM_SUPER_ADMIN_REQUIRED' };
+    });
+    await expect(controller.reconcileCustomerRenderingJob({ params, body } as never))
+      .rejects.toMatchObject({ statusCode: 403 });
+    expect(renderingReconciliationService.reconcile).toHaveBeenCalledTimes(1);
+  });
+  test('manual rendering reconciliation is not a legacy public, visitor, or auth-bypass route', async () => {
+    const { isPublicRoute, isVisitorSessionRoute, shouldBypassAuth } =
+      await import('@/plugins/auth/legacy/routes');
+    const path = '/platform/customer-rendering-jobs/22222222-2222-4222-8222-222222222222/reconcile';
+    expect(isPublicRoute('POST', path)).toBe(false);
+    expect(isVisitorSessionRoute('POST', path)).toBe(false);
+    expect(shouldBypassAuth('POST', path)).toBe(false);
   });
   test("parses list defaults and returns ResponseHandler.success", async () => {
     const { controller, service, authContext } = createController();
