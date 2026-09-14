@@ -11,5 +11,21 @@
   <view tt:if="{{style.source_type === 'ai_concept'}}" class="detail-concept-note">AI 概念图仅供风格参考，并非已落地实景。</view>
   <view class="detail-section"><view class="detail-section-title">配色说明</view><view class="detail-section-copy">{{style.color_notes || '暂无补充说明'}}</view></view>
   <view class="detail-section"><view class="detail-section-title">材质说明</view><view class="detail-section-copy">{{style.material_notes || '暂无补充说明'}}</view></view>
+  <view tt:if="{{status === 'ready'}}" class="detail-section private-inputs">
+    <view class="detail-section-title">上传我的空间</view>
+    <view class="private-inputs-note">房间照必传，户型图可选。每张最多 10 MiB，仅支持静态 JPEG、PNG、WebP；上传后先等待审核，暂不能发起 AI 生成。</view>
+    <view class="private-input-row">
+      <view class="private-input-copy"><view class="private-input-title">房间照（必传）</view><view class="private-input-message" role="status">{{roomUploadMessage}}</view></view>
+      <button tt:if="{{roomUploadStatus === 'retry_complete'}}" class="private-input-button ui-pressable" hover-class="ui-pressable--pressed" bindtap="onRetryRoomComplete">继续确认</button>
+      <view tt:elif="{{roomUploadStatus === 'pending_review'}}" class="private-input-pending">待审核</view>
+      <button tt:else class="private-input-button ui-pressable" hover-class="ui-pressable--pressed" disabled="{{roomUploadStatus === 'selecting' || roomUploadStatus === 'signing' || roomUploadStatus === 'uploading' || roomUploadStatus === 'confirming'}}" bindtap="onChooseRoom">选择照片</button>
+    </view>
+    <view class="private-input-row">
+      <view class="private-input-copy"><view class="private-input-title">户型图（可选）</view><view class="private-input-message" role="status">{{floorUploadMessage}}</view></view>
+      <button tt:if="{{floorUploadStatus === 'retry_complete'}}" class="private-input-button ui-pressable" hover-class="ui-pressable--pressed" bindtap="onRetryFloorComplete">继续确认</button>
+      <view tt:elif="{{floorUploadStatus === 'pending_review'}}" class="private-input-pending">待审核</view>
+      <button tt:else class="private-input-button ui-pressable" hover-class="ui-pressable--pressed" disabled="{{floorUploadStatus === 'selecting' || floorUploadStatus === 'signing' || floorUploadStatus === 'uploading' || floorUploadStatus === 'confirming'}}" bindtap="onChooseFloorPlan">选择图片</button>
+    </view>
+  </view>
   <view class="detail-published">发布于 {{publishedDate}}</view>
 </view>

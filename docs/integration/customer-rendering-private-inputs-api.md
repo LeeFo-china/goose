@@ -1,6 +1,6 @@
 # 客户私有房间照片 / 户型图上传交接
 
-2026-09-13：本文描述分支中的实现合同，不代表接口已发布。共享 DTO、账本仓储、COS 网关、双端 HTTP 与 raw 清理 worker 已有本地实现；`20260913035110_create_customer_rendering_private_inputs.sql` 尚未应用远端。没有发布路由、部署 worker、真实 COS/AI 调用，也没有修改 orange。客户端页面仍需各团队实施。
+2026-09-13：本文是当前上传接口合同。生产 migration `20260913035110_create_customer_rendering_private_inputs.sql`、API 和复用镜像的 COS worker 已随 `aea829524365ae4862ff6b91601adeee9d6a0f53` 发布；发布成功不代表真实 COS 上传或双端真机已验收，也不代表 raw 清理开关已启用。gooes 抖音上传页面仍是本地未提交改动；只读核查发现 orange 已有微信上传 service/页面，但仍需微信团队处理 PUT 结果未知时的同 ID 恢复并自行发布。没有修改 orange，AI 生图仍未开放。生产配置和验收缺口见[最新证据](../operations/evidence/2026-09-13-private-input-upload-production-gate.md)。
 
 ## 四条接口与身份
 
@@ -61,9 +61,11 @@ PUT 禁止覆盖；首次成功但客户端未收到响应时可尝试 complete�
 
 ## 双端实施边界
 
-已只读参考微信 `orange/src/services/visitor_rendering_styles.ts`、`orange/src/packageVisitor/pages/rendering-style-detail/index.tsx`：现有 service/详情页仅消费公开素材。微信团队应新增独立私有上传 service 与房间照片/可选户型图页面，接既有会话、选公司及错误 UI；不得将公共素材 image_url 规范化函数用于私有输入。同步独立 DTO 类型，核对 wrapper 解包与二进制 PUT 支持，清除上传凭据和本地预览生命周期数据。
+已只读参考微信 `orange/src/services/visitor_rendering_uploads.ts`、`orange/src/packageVisitor/pages/rendering-upload/index.tsx`：当前已有独立私有上传 service 与房间照片/可选户型图页面。微信团队仍需核对会话、选公司、二进制 PUT 的真机行为，并修复 PUT 结果未知时未沿用原 intent ID complete 核实、重新提交重复签发的问题；不得将公共素材 image_url 规范化函数用于私有输入。同步核对 wrapper 解包、清除上传凭据和本地预览生命周期数据。具体只读发现见[生产验收门禁](../operations/evidence/2026-09-13-private-input-upload-production-gate.md)。
 
-已参考 gooes `apps/douyin-mini/src/api/rendering-styles.ts`、`apps/douyin-mini/src/pages/rendering-style-detail/page.ts`：现有 API 只做目录/详情。抖音团队应新增私有上传 API 模块及页面，以现有 ApiClient 完成 intent/complete，以独立二进制请求完成 COS PUT；页面沿用 startup 会话和 requestEpoch 防陈旧响应机制。两端 UI 不在本次代码范围，orange 严格只读。
+gooes 抖音端已在 `apps/douyin-mini/src/pages/rendering-style-detail/` 增加房间照必传、户型图可选的上传区，并由 `src/api/rendering-uploads.ts` 和 `src/platform/private-image.ts` 负责双业务接口、独立 ArrayBuffer PUT 与真实字节检查。仍需在抖音开放平台配置签名 COS 主机的 **request 合法域名**，关闭开发者工具的跳过校验选项，用 iOS/Android 真机核对 `Content-Length`、全部 COS 头和上传结果；未完成前不得宣称可发布。orange 严格只读。
+
+抖音体验版反馈选图后显示通用上传失败；本地同参数调用 `tt.chooseImage` 复现 `api scope is not declared in the privacy agreement`，失败发生在 intent 之前。按[抖音隐私协议配置说明](https://developer.open-douyin.com/docs/resource/zh-CN/mini-app/open-capacity/basic-capacities/privacy-agreement)，应用所有者须在对应小程序「设置 → 基础设置 → 类目与配置 → 用户隐私保护协议」添加**相册**信息类型（该类型覆盖 `tt.chooseImage`），据实写明用途，例如“用户主动选择房间照片及可选户型图，私有上传供装修公司审核；审核前不用于 AI 生成”。由所有者预览并生成协议后，在体验版重新验证选图；不能通过关闭隐私校验绕过。客户端已将未声明与用户未授权分别识别，避免继续显示笼统上传失败。此平台配置与 COS request 域名白名单是两个独立门禁。
 
 ## 清理部署与运行门禁
 
@@ -71,10 +73,10 @@ raw_cleanup_after 默认创建后 24 小时。清理复用 `gooes-cos-reconcile-
 
 每轮只执行一次 indexed due 查询，`raw_deleted_at IS NULL AND raw_cleanup_after <= now`，按 due/id 排序且 limit=100。每条原子比较状态和原 due，推进 5 分钟租约；issued 只有过期、processing 只有处理租约过期才被关闭为 deleted，保护进行中的 complete。pending_review/approved 仅删除 raw，成品及状态不变。删除失败不填 raw_deleted_at，后续重试；成功写入也必须匹配本次尚有效的 due 租约。网关使用账本 bucket/region/raw key，旧位置凭据必须仍可访问。
 
-启用顺序（尚未执行）：
+raw 清理启用顺序（生产 migration/API/worker 发布已完成，以下配置与真实验收尚未完成）：
 
-1. 对目标库运行 migration plan，列出并审查**全部**待应用版本，确认 `20260913035110` 的顺序、依赖和目标环境；按批准流程 apply 后用 `supabase migration list` 核对 Local/Remote。本任务不 apply，不能假定目标库只有这一条待执行版本。
-2. 完成真实 COS 私有 bucket policy、CORS/平台必传头、禁止覆盖与旧位置访问 smoke；按既有镜像发布流程发布 API 和复用镜像的 COS worker。
+1. 生产目标库已按批准流程应用 `20260913035110` 并完成迁移历史对齐验证；其他目标环境或后续 migration 仍须各自 plan → apply → `supabase migration list`，不能沿用本次生产证据。
+2. API 和复用镜像的 COS worker 已发布；仍需完成真实 COS 私有 bucket policy、CORS/平台必传头、禁止覆盖与旧位置访问 smoke。
 3. 在对应 compose env_file 配置 `PROJECT_LOG_COMMENT_COS_RECONCILE_WORKER_ENABLED=true`、`CUSTOMER_RENDERING_INPUT_CLEANUP_ENABLED=true`、`PROJECT_LOG_COMMENT_COS_RECONCILE_APPLY=false`，先观察 bounded scanned 计数。apply=false 只读，既不领取也不删除；这也令原有 reconcile 为 dry-run，变更前需协调运营窗口。
 4. 具备上线授权后恢复 `PROJECT_LOG_COMMENT_COS_RECONCILE_APPLY=true`；观察 `private_inputs` 的 scanned/claimed/deleted/failed/lost。部署 healthcheck 仅判断进程存活，不保证清理进度，需对持续 failed/lost 和积压告警。
 
