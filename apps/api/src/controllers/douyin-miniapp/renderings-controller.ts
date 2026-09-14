@@ -39,6 +39,7 @@ export class DouyinRenderingsController {
     fastify.post("/douyin-mini/renderings/uploads:intent", routeOptions, this.createInputIntent);
     fastify.post("/douyin-mini/renderings/uploads/:id/complete", routeOptions, this.completeInput);
     fastify.get('/douyin-mini/renderings/uploads/:id', routeOptions, this.getInputStatus);
+    fastify.get('/douyin-mini/renderings/uploads/:id/preview', routeOptions, this.previewInput);
     fastify.post("/douyin-mini/renderings/jobs", routeOptions, this.createJob);
     fastify.get('/douyin-mini/renderings/jobs/:id', routeOptions, this.getJobStatus);
   }
@@ -98,6 +99,16 @@ export class DouyinRenderingsController {
     const query = EmptyQuerySchema.safeParse(request.query ?? {});
     if (!query.success) throw Errors.fromZod(query.error);
     return ResponseHandler.success(await this.inputs.getStatus(request.user, 'douyin', params.data.id));
+  };
+
+  previewInput = async (request: FastifyRequest, reply: FastifyReply) => {
+    const params = StyleParamsSchema.safeParse(request.params);
+    if (!params.success) throw Errors.fromZod(params.error);
+    const query = EmptyQuerySchema.safeParse(request.query ?? {});
+    if (!query.success) throw Errors.fromZod(query.error);
+    const preview = await this.inputs.preview(request.user, 'douyin', params.data.id);
+    reply.header('Cache-Control', 'private, no-store');
+    return ResponseHandler.success(preview);
   };
 
   createJob = async (request: FastifyRequest, reply: FastifyReply) => {

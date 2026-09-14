@@ -11,6 +11,10 @@
 | 微信 | `/visitor/renderings/uploads:intent` | `/visitor/renderings/uploads/:id/complete` | `/visitor/renderings/uploads/:id` |
 | 抖音 | `/douyin-mini/renderings/uploads:intent` | `/douyin-mini/renderings/uploads/:id/complete` | `/douyin-mini/renderings/uploads/:id` |
 
+抖音已就绪图片可通过 `GET /douyin-mini/renderings/uploads/:id/preview` 获取短时 COS 签名地址，响应为 `{ data: { file_id, url }, message: "success" }`，并带 `Cache-Control: private, no-store`。服务端先以当前抖音会话核验租户、安装和主体，再要求状态为 `ready`；不存在或跨主体统一返回 404，非就绪返回 409。每次查看都重新请求签名地址，不在本地恢复记录中保存 URL。
+
+抖音详情页的“移除本次”只清除当前生成草稿的文件引用，并非服务端物理删除。已经提交的任务保留原始文件引用；规范化私有对象的清理与保留期限仍需单独设计和实施，不能将此按钮描述为删除云端照片。
+
 业务 API 传 `Authorization: Bearer <当前会话 token>`；POST 另传 `Content-Type: application/json`。六条接口均标记 `tenantServiceAccess=session`，不是匿名上传入口，也不要求将上传绑定到员工身份。
 
 - 微信接受 `visitor_session`（可信 openid、visitor_id），通过服务器最近有效的选公司记录找租户；或者 `auth` + `login_channel=wechat`（可信 openid、tenant_id）。没有选公司返回 409，客户端进入既有选公司流程后重试。租户停用返回 403。

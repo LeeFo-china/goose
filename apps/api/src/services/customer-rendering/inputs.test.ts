@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import sharp from 'sharp';
 import { Errors } from '@/errors/error-factory';
 import type { CustomerInputRow, CustomerRenderingInputsRepositoryPort } from '@/repositories/customer-rendering-inputs';
-import type { CustomerInputStoragePort } from '@/gateways/customer-rendering-input-storage/client';
+import type { CustomerInputStoragePort, CustomerInputNormalizedReadPort } from '@/gateways/customer-rendering-input-storage/client';
 import type { JwtPayload } from '@/utils/jwt';
 
 process.env.SUPABASE_URL ??= 'http://127.0.0.1:54321';
@@ -48,6 +48,12 @@ function fixture() {
       normalized_object_key: row.normalized_object_key, checksum: row.checksum,
       normalized_size_bytes: row.normalized_size_bytes, review_decision: row.review_decision,
     })),
+    findOwnedPreview: mock(async (..._args: Parameters<CustomerRenderingInputsRepositoryPort['findOwnedPreview']>) => row && ({
+      id: row.id, status: row.status, width: row.width, height: row.height,
+      normalized_object_key: row.normalized_object_key, checksum: row.checksum,
+      normalized_size_bytes: row.normalized_size_bytes, review_decision: row.review_decision,
+      bucket: row.bucket, region: row.region,
+    })),
     promoteLegacyReady: mock(async (...[_owner, _id, status]: Parameters<CustomerRenderingInputsRepositoryPort['promoteLegacyReady']>) => {
       if (!row || row.status !== status) return false;
       row.status = 'ready'; row.review_due_at = null;
@@ -62,7 +68,7 @@ function fixture() {
       return true;
     }),
     markFailed: mock(async (..._args: Parameters<CustomerRenderingInputsRepositoryPort['markFailed']>) => { if (row) row.status = 'failed'; return true; }),
-  } satisfies Pick<CustomerRenderingInputsRepositoryPort, 'createIssued' | 'countRecent' | 'findOwned' | 'findOwnedStatus' | 'promoteLegacyReady' | 'claimProcessing' | 'markNormalized' | 'markFailed'>;
+  } satisfies Pick<CustomerRenderingInputsRepositoryPort, 'createIssued' | 'countRecent' | 'findOwned' | 'findOwnedStatus' | 'findOwnedPreview' | 'promoteLegacyReady' | 'claimProcessing' | 'markNormalized' | 'markFailed'>;
   const storage = {
     rawObjectKey: (_tenant: string, fileId: string) => `private/customer-rendering-inputs/${tenantId}/${fileId}/raw`,
     normalizedObjectKey: () => rawKey.replace('/raw', '/normalized.webp'),
@@ -73,11 +79,31 @@ function fixture() {
     readRaw: mock(async () => sharp({ create: { width: 16, height: 12, channels: 3, background: 'red' } }).png().toBuffer()),
     putNormalized: mock(async (..._args: Parameters<CustomerInputStoragePort['putNormalized']>) => {}),
     hasNormalized: mock(async () => false), removeRaw: mock(async () => {}),
-  } satisfies CustomerInputStoragePort;
+    signNormalizedRead: mock(async () => 'https://old-bucket-123.cos.ap-guangzhou.myqcloud.com/signed?q-signature=opaque'),
+  } satisfies CustomerInputStoragePort & CustomerInputNormalizedReadPort;
   const service = new Service({ contextService, digestService, repository, storage });
   return { service, repository, storage, contextService, digestService,
     get row() { return row!; }, hide: () => { row = null; } };
 }
+
+test('preview signs only an owner-scoped ready normalized image', async () => {
+  const f = fixture();
+  f.row.status = 'ready';
+  f.row.normalized_object_key = f.storage.normalizedObjectKey();
+  f.row.normalized_size_bytes = 42;
+  f.row.width = 16; f.row.height = 12; f.row.checksum = 'a'.repeat(64);
+  const result = await f.service.preview(user, 'wechat', id);
+  expect(result).toEqual({ file_id: id,
+    url: 'https://old-bucket-123.cos.ap-guangzhou.myqcloud.com/signed?q-signature=opaque' });
+  expect(f.storage.signNormalizedRead).toHaveBeenCalledWith(tenantId, id, {
+    bucket: f.row.bucket, region: f.row.region, object_key: f.row.normalized_object_key,
+  });
+  f.row.status = 'deleted';
+  await expect(f.service.preview(user, 'wechat', id)).rejects.toMatchObject({ statusCode: 409 });
+  f.row.status = 'ready'; f.hide();
+  await expect(f.service.preview(user, 'wechat', id)).rejects.toMatchObject({ statusCode: 404 });
+  expect(f.storage.signNormalizedRead).toHaveBeenCalledTimes(1);
+});
 
 test('intent resolves trusted context and digest, persists location before signing', async () => {
   const f = fixture();
