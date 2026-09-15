@@ -52,7 +52,7 @@ describe("DouyinCustomerAuthController", () => {
       input: { douyin_phone_code: "official-phone-code" },
     }));
 
-    await routes["POST /douyin-mini/renderings/phone:authorize"]!({
+    await routes["POST /douyin-mini/renderings/authorize-phone"]!({
       user, body: { douyin_phone_code: "official-phone-code" },
     });
     expect(authorizeRenderingPhone).toHaveBeenCalledWith(expect.objectContaining({

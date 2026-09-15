@@ -26,7 +26,7 @@ export class DouyinCustomerAuthController {
       this.authorizePhone,
     );
     fastify.post(
-      "/douyin-mini/renderings/phone:authorize",
+      "/douyin-mini/renderings/authorize-phone",
       this.authorizeRenderingPhone,
     );
     fastify.post(

@@ -30,7 +30,7 @@ export async function authorizeRenderingPhone(client: ApiClient, code: string): 
 }> {
   if (!code.trim() || code.length > 512) throw new ApiRequestError(0, 'INVALID_DOUYIN_PHONE_CODE', '手机号授权无效');
   const value = await client.request<unknown>({ method: 'POST',
-    path: '/douyin-mini/renderings/phone:authorize', data: { douyin_phone_code: code } });
+    path: '/douyin-mini/renderings/authorize-phone', data: { douyin_phone_code: code } });
   if (!isRecord(value) || typeof value.access_token !== 'string' || value.access_token.length < 20
     || !Number.isInteger(value.expires_in) || (value.expires_in as number) < 1
     || (value.expires_in as number) > 86400) throw invalidResponse();

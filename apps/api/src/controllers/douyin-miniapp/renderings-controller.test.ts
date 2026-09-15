@@ -12,6 +12,20 @@ beforeAll(async () => {
   ({ DouyinRenderingsController: Controller } = await import("./renderings-controller"));
 });
 
+test("official phone authorization and quota binding coexist in the real Fastify router", async () => {
+  const { DouyinCustomerAuthController } = await import("./customer-auth-controller");
+  const app = Fastify({ logger: false });
+  try {
+    new DouyinCustomerAuthController().registerExtraRoutes(app);
+    new Controller().registerExtraRoutes(app);
+    await app.ready();
+    expect(app.hasRoute({ method: "POST", url: "/douyin-mini/renderings/authorize-phone" })).toBe(true);
+    expect(app.hasRoute({ method: "POST", url: "/douyin-mini/renderings/phone:bind" })).toBe(true);
+  } finally {
+    await app.close();
+  }
+});
+
 test("private upload HTTP validates session, DTO and UUID and wraps success", async () => {
   const { default: authPlugin } = await import("@/plugins/auth/legacy-plugin");
   const { default: errorHandler } = await import("@/plugins/error-handler");
