@@ -29,7 +29,7 @@ If exact TDesign colors are needed for a new admin theme proposal, prefer adding
 
 ## Page Shell
 
-Preferred structure:
+For a list or KPI dashboard, a grid shell can be useful:
 
 ```tsx
 <div className="space-y-4 p-6">
@@ -44,26 +44,28 @@ Keep pages dense but breathable:
 - `gap-4` for dashboard grids.
 - `p-6` for page padding or card content where local patterns allow.
 - Avoid full-screen marketing sections.
+- For pages driven by current state and next action, use `operational-workspace.md` instead of this grid shell and its Card examples.
 
 ## Cards
 
 Use cards for:
 
-- KPI items.
+- Comparable KPI items on dashboards.
 - Repeated list items.
 - Dashboard chart panels.
-- Forms or tool panels.
-- Modals/dialog content.
+- Standalone forms or repeated tool panels on non-workspace pages.
+- Modal/dialog content.
 
 Avoid:
 
 - Cards wrapping page sections that already contain cards.
 - Decorative nested cards.
 - Oversized rounded corners.
+- Cards for simple counts, inline switches, QR codes, blockers, or the page's current action.
 
 ## Forms
 
-Recommended layout:
+Recommended layout for a standalone form page:
 
 ```tsx
 <Card>
@@ -82,6 +84,7 @@ Rules:
 - Use 2 columns on desktop for related fields; full width for textareas and long descriptions.
 - Keep action rows compact with primary first.
 - Use loading/disabled states during submit.
+- For an inline setting within a status-and-action workspace, keep the control and save action in its flat section without this Card wrapper. Move a self-contained multi-step form to a separate page or Dialog.
 
 ## Tables
 
@@ -123,3 +126,4 @@ Translate TDesign Starter dashboard into local primitives:
 - Does text fit on mobile and desktop?
 - Are loading, empty, disabled, and error states present where needed?
 - Does the implementation reuse local components and patterns?
+- If the page is a status-and-action workspace, are current state, permitted action, and blockers visible before secondary data without nested cards?

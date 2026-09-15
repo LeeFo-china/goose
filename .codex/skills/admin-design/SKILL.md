@@ -22,7 +22,7 @@ This is a design-language skill, not a request to install or migrate to TDesign 
 
 1. Inspect nearby admin pages/components before editing.
 2. Use existing `components/ui/*` and local admin patterns first.
-3. Apply the middle/back-office rules below.
+3. Identify the page type: status-and-action workspace, list, dashboard, detail, or standalone form. Apply the matching rules below.
 4. Verify responsive layout, text fit, empty/loading/error states, and no card nesting.
 5. For substantial UI changes, run `pnpm --dir apps/admin check` and inspect in browser when feasible.
 
@@ -31,7 +31,7 @@ This is a design-language skill, not a request to install or migrate to TDesign 
 - Layout: left navigation + top bar + content area; content uses restrained page padding and predictable section spacing.
 - Color: prefer neutral surfaces and TDesign-like token roles: brand blue, semantic success/warning/error, layered text colors.
 - Typography: system font stack, 14px body, compact headings, no hero-scale text inside admin panels.
-- Cards: use cards for repeated items, tool panels, dashboards, and modals; avoid cards inside cards.
+- Cards: use cards for repeated records, comparable KPI/chart panels, and standalone forms or dialogs. Status-and-action workspaces use one plain page surface and separated sections; simple counts and inline tools do not become cards. Never nest cards.
 - Forms: group fields, align labels consistently, use select/search/selectors for structured choices, keep primary actions obvious.
 - Tables: provide toolbar, filters/search, selection feedback, status tags, fixed action column when useful.
 - Dashboard: KPI cards, charts, rank/list tables, and summaries should optimize scanning over decoration.
@@ -40,7 +40,8 @@ This is a design-language skill, not a request to install or migrate to TDesign 
 
 ## References
 
-Read only the relevant reference for the task:
+Read only the relevant reference for the task. For a status-and-action workspace, start with the workspace reference; its container and order rules replace generic Card, form, and dashboard examples:
 
+- `references/operational-workspace.md`: **current standard** for tenant/project/process pages driven by status, blockers, and the next valid action.
 - `references/tdesign-admin-principles.md`: visual language, tokens, layout, dashboard/form/table patterns.
 - `references/shadcn-mapping.md`: how to translate those principles to this repository's shadcn/Tailwind admin stack.
