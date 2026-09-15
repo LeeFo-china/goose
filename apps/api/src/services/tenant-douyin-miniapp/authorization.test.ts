@@ -305,7 +305,6 @@ describe("TenantDouyinMiniappAuthorizationService", () => {
         sms_lead: true as const,
         douyin_phone: true as const,
         phone_capture_mode: "douyin_phone" as const,
-        clue_component_id: "old-app-component-id",
       },
     };
     const { service, intents, workspace } = createService({

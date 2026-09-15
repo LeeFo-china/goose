@@ -72,7 +72,6 @@ export class TenantDouyinMiniappLeadCaptureConfigService {
       authorizerAppId: input.authorizer_appid,
       expectedUpdatedAt: input.expected_updated_at,
       enabled: input.enabled,
-      clueComponentId: input.clue_component_id,
     });
   }
 }

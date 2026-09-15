@@ -82,12 +82,10 @@ const DouyinSmsLeadFeaturesSchema = DouyinLeadFeatureBaseSchema.extend({
   phone_capture_mode: z.literal('sms'),
 }).strict();
 
-const DouyinClueLeadFeaturesSchema = DouyinLeadFeatureBaseSchema.extend({
+const DouyinPhoneLeadFeaturesSchema = DouyinLeadFeatureBaseSchema.extend({
   sms_lead: z.literal(true),
   douyin_phone: z.literal(true),
   phone_capture_mode: z.literal('douyin_phone'),
-  clue_component_id: z.string().trim()
-    .regex(/^[A-Za-z0-9_-]{1,128}$/),
 }).strict();
 
 export const DouyinRuntimeConfigSchema = z
@@ -115,7 +113,7 @@ export const DouyinRuntimeConfigSchema = z
       .strict(),
     features: z.union([
       DouyinSmsLeadFeaturesSchema,
-      DouyinClueLeadFeaturesSchema,
+      DouyinPhoneLeadFeaturesSchema,
     ]),
     home_banners: z
       .array(

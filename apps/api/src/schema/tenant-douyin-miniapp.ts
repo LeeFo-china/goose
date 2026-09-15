@@ -23,38 +23,17 @@ const HttpsUrlSchema = z.string().url().max(2048).refine((value) => {
 
 export const TenantDouyinAuthorizationLinkSchema = z.strictObject({});
 
-const DouyinClueComponentIdSchema = z.string().trim()
-  .regex(/^[A-Za-z0-9_-]{1,128}$/, "线索组件 ID 格式无效");
-
 export const TenantDouyinLeadCaptureConfigUpdateSchema = z.strictObject({
   authorizer_appid: z.string().trim().min(1).max(128),
   enabled: z.boolean(),
-  clue_component_id: DouyinClueComponentIdSchema.nullable(),
   expected_updated_at: DateTimeSchema,
-}).superRefine((value, context) => {
-  if (value.enabled && value.clue_component_id === null) {
-    context.addIssue({
-      code: "custom",
-      path: ["clue_component_id"],
-      message: "启用抖音官方手机号时必须填写线索组件 ID",
-    });
-  }
 });
 
 export const TenantDouyinLeadCaptureConfigResponseSchema = z.strictObject({
   installation_id: z.string().uuid(),
   authorizer_appid: z.string().trim().min(1).max(128),
   enabled: z.boolean(),
-  clue_component_id: DouyinClueComponentIdSchema.nullable(),
   updated_at: DateTimeSchema,
-}).superRefine((value, context) => {
-  if (value.enabled && value.clue_component_id === null) {
-    context.addIssue({
-      code: "custom",
-      path: ["clue_component_id"],
-      message: "启用抖音官方手机号时线索组件 ID 不能为空",
-    });
-  }
 });
 
 export const TenantDouyinAuthorizationCallbackSchema = z.strictObject({
@@ -107,7 +86,6 @@ export const TenantDouyinWorkspaceSchema = z.strictObject({
     authorizer_appid: z.string().trim().min(1).max(128),
     installation_kind: z.literal("merchant"),
     authorization_status: z.enum(["active", "disabled", "revoked"]),
-    clue_component_id: DouyinClueComponentIdSchema.nullable(),
     permission_snapshot: z.array(z.unknown()),
     runtime_config: DouyinRuntimeConfigSchema,
     template_version: NullableStringSchema,

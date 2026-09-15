@@ -80,7 +80,6 @@ function createController() {
       installation_id: "22222222-2222-4222-8222-222222222222",
       authorizer_appid: "ttd033a68e4e56ccd301",
       enabled: true,
-      clue_component_id: "5785490b6443ad9def6f88e69c57920c",
       updated_at: "2026-09-06T00:00:01.000Z",
     })),
   };
@@ -174,7 +173,6 @@ describe("TenantDouyinMiniappController", () => {
     const body = {
       authorizer_appid: "ttd033a68e4e56ccd301",
       enabled: true,
-      clue_component_id: "5785490b6443ad9def6f88e69c57920c",
       expected_updated_at: "2026-09-06T00:00:00.000Z",
     };
 
@@ -184,7 +182,6 @@ describe("TenantDouyinMiniappController", () => {
           installation_id: "22222222-2222-4222-8222-222222222222",
           authorizer_appid: "ttd033a68e4e56ccd301",
           enabled: true,
-          clue_component_id: "5785490b6443ad9def6f88e69c57920c",
           updated_at: "2026-09-06T00:00:01.000Z",
         },
         message: "success",
@@ -193,7 +190,7 @@ describe("TenantDouyinMiniappController", () => {
 
     requiredContext.mockClear();
     await expect(controller.updateLeadCaptureConfig({
-      body: { ...body, clue_component_id: null },
+      body: { ...body, clue_component_id: "legacy-component-id" },
     } as never)).rejects.toMatchObject({ statusCode: 400 });
     expect(requiredContext).not.toHaveBeenCalled();
   });

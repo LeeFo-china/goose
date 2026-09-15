@@ -52,7 +52,6 @@ const installation = {
   authorizer_appid: "tt-authorizer",
   installation_kind: "merchant" as const,
   authorization_status: "active" as const,
-  clue_component_id: null as string | null,
   permission_snapshot: [],
   runtime_config: runtimeConfig,
   template_version: "0.1.2",
@@ -192,23 +191,8 @@ describe("TenantDouyinMiniappWorkspaceService", () => {
     expect(repository.findCurrentInstallation).toHaveBeenCalledWith(TENANT_ID);
     expect(repository.findTenantSummary).toHaveBeenCalledWith(TENANT_ID);
     expect(JSON.stringify(result)).not.toMatch(
-      /deployment_key|access_token|refresh_token|component_app_secret/,
+      /deployment_key|access_token|refresh_token|component_app_secret|clue_component_id/,
     );
-  });
-
-  test("exposes a retained component ID while SMS fallback remains active", async () => {
-    const currentInstallation = {
-      ...installation,
-      clue_component_id: "5785490b6443ad9def6f88e69c57920c",
-    };
-    const { service } = createService({ currentInstallation });
-
-    await expect(service.getWorkspace(tenantContext())).resolves.toMatchObject({
-      installation: {
-        clue_component_id: currentInstallation.clue_component_id,
-        runtime_config: { features: { phone_capture_mode: "sms" } },
-      },
-    });
   });
 
   test("returns an explicit unbound workspace", async () => {

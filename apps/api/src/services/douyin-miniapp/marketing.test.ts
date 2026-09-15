@@ -69,7 +69,6 @@ function harness(features: Partial<{
   sms_lead: boolean;
   douyin_phone: boolean;
   phone_capture_mode: "sms" | "douyin_phone";
-  clue_component_id: string;
 }> = {}) {
   const normalizedFeatures = {
     sms_lead: true,

@@ -31142,7 +31142,6 @@ export type Database = {
       update_douyin_miniapp_lead_capture_config: {
         Args: {
           p_authorizer_appid: string
-          p_clue_component_id: string
           p_enabled: boolean
           p_expected_updated_at: string
           p_installation_id: string

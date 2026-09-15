@@ -19,13 +19,11 @@ const input = {
   authorizerAppId: "ttd033a68e4e56ccd301",
   expectedUpdatedAt: "2026-09-06T00:00:00.000Z",
   enabled: true,
-  clueComponentId: "5785490b6443ad9def6f88e69c57920c",
 };
 const data = {
   installation_id: input.installationId,
   authorizer_appid: input.authorizerAppId,
   enabled: true,
-  clue_component_id: input.clueComponentId,
   updated_at: "2026-09-06T00:00:01.000Z",
 };
 
@@ -48,7 +46,6 @@ describe("TenantDouyinMiniappLeadCaptureRepository", () => {
         p_authorizer_appid: input.authorizerAppId,
         p_expected_updated_at: input.expectedUpdatedAt,
         p_enabled: true,
-        p_clue_component_id: input.clueComponentId,
       },
     );
   });

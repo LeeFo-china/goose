@@ -47,7 +47,6 @@ export type DouyinRuntimeConfig = {
         sms_lead: true;
         douyin_phone: true;
         phone_capture_mode: "douyin_phone";
-        clue_component_id: string;
       };
   home_banners: Array<{
     image_url: string;
@@ -73,7 +72,6 @@ export type TenantDouyinWorkspace = {
     authorizer_appid: string;
     installation_kind: "merchant";
     authorization_status: Exclude<DouyinAuthorizationState, "unbound">;
-    clue_component_id: string | null;
     permission_snapshot: unknown[];
     runtime_config: DouyinRuntimeConfig;
     template_version: string | null;

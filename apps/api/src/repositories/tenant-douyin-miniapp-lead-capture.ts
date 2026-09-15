@@ -9,8 +9,6 @@ const RpcErrorSchema = z.strictObject({
   error: z.discriminatedUnion("code", [
     z.strictObject({ status_code: z.literal(400), code: z.enum([
       "DOUYIN_LEAD_CAPTURE_CONFIG_INVALID",
-      "DOUYIN_CLUE_COMPONENT_ID_INVALID",
-      "DOUYIN_CLUE_COMPONENT_ID_REQUIRED",
     ]) }),
     z.strictObject({ status_code: z.literal(404), code: z.literal(
       "DOUYIN_ACTIVE_INSTALLATION_NOT_FOUND",
@@ -32,7 +30,6 @@ export type TenantDouyinLeadCaptureUpdateInput = {
   readonly authorizerAppId: string;
   readonly expectedUpdatedAt: string;
   readonly enabled: boolean;
-  readonly clueComponentId: string | null;
 };
 
 export type TenantDouyinLeadCaptureDatabaseClient = {
@@ -42,7 +39,6 @@ export type TenantDouyinLeadCaptureDatabaseClient = {
     readonly p_authorizer_appid: string;
     readonly p_expected_updated_at: string;
     readonly p_enabled: boolean;
-    readonly p_clue_component_id: string | null;
   }): Promise<{ readonly data: unknown; readonly error: unknown }>;
 };
 
@@ -64,7 +60,6 @@ export class TenantDouyinMiniappLeadCaptureRepository {
           p_authorizer_appid: input.authorizerAppId,
           p_expected_updated_at: input.expectedUpdatedAt,
           p_enabled: input.enabled,
-          p_clue_component_id: input.clueComponentId,
         },
       );
     } catch {
@@ -88,8 +83,6 @@ export class TenantDouyinMiniappLeadCaptureRepository {
 function businessError(error: z.infer<typeof RpcErrorSchema>["error"]) {
   const messages: Record<typeof error.code, string> = {
     DOUYIN_LEAD_CAPTURE_CONFIG_INVALID: "手机号留资配置参数无效",
-    DOUYIN_CLUE_COMPONENT_ID_INVALID: "线索组件 ID 格式无效",
-    DOUYIN_CLUE_COMPONENT_ID_REQUIRED: "请填写当前小程序的线索组件 ID",
     DOUYIN_ACTIVE_INSTALLATION_NOT_FOUND: "当前已授权小程序不存在",
     DOUYIN_LEAD_CAPTURE_CONFIG_STALE: "配置已更新，请刷新后重试",
     DOUYIN_RUNTIME_CONFIG_INVALID: "当前小程序运行配置无效",

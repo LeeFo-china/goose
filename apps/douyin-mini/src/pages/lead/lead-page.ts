@@ -90,8 +90,7 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
     fieldErrors: {} as LeadFieldErrors,
     focusedField: "",
     optionalDetailsExpanded: false,
-    douyinClueEnabled: false,
-    douyinClueComponentId: "",
+    douyinPhoneEnabled: false,
     smsFallbackExpanded: false,
   },
   onLoad() {
@@ -164,10 +163,7 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
       primaryColor: theme.primaryColor,
       primaryTextColor: theme.primaryTextColor,
       privacyPolicyVersion: bootstrap.privacy_policy_version,
-      douyinClueEnabled: bootstrap.features.douyin_phone,
-      douyinClueComponentId: bootstrap.features.douyin_phone
-        ? bootstrap.features.clue_component_id
-        : "",
+      douyinPhoneEnabled: bootstrap.features.douyin_phone,
       smsFallbackExpanded: false,
     });
     dependencies.getApp().recordAnalytics("page_view");
@@ -285,7 +281,7 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
     });
   },
   onTogglePhoneCapture() {
-    if (!this.data.douyinClueEnabled || this.data.submitting || this.data.smsSending) return;
+    if (!this.data.douyinPhoneEnabled || this.data.submitting || this.data.smsSending) return;
     const smsFallbackExpanded = !this.data.smsFallbackExpanded;
     const withoutPhoneError = clearLeadFieldError(this.data.fieldErrors, "phone");
     this.setData({
@@ -296,7 +292,7 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
     });
   },
   async onSubmit(event?: { detail?: { douyin_phone_code?: string } }) {
-    const phoneCaptureMode = this.data.douyinClueEnabled
+    const phoneCaptureMode = this.data.douyinPhoneEnabled
         && !this.data.smsFallbackExpanded
       ? "douyin_phone"
       : "sms";

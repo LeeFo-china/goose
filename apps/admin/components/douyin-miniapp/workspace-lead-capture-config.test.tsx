@@ -14,7 +14,6 @@ const installation: NonNullable<TenantDouyinWorkspace["installation"]> = {
   authorizer_appid: "ttd033a68e4e56ccd301",
   installation_kind: "merchant",
   authorization_status: "active",
-  clue_component_id: "5785490b6443ad9def6f88e69c57920c",
   permission_snapshot: [],
   runtime_config: {
     brand: { logo_url: null, qualifications: [] },
@@ -37,20 +36,22 @@ const installation: NonNullable<TenantDouyinWorkspace["installation"]> = {
 };
 
 describe("TenantDouyinLeadCaptureConfig", () => {
-  test("builds exact requests, retaining the component ID when disabled", () => {
-    expect(buildLeadCaptureConfigRequest(installation, false,
-      " 5785490b6443ad9def6f88e69c57920c ")).toEqual({
+  test("builds exact requests without a clue component ID", () => {
+    expect(buildLeadCaptureConfigRequest(installation, false)).toEqual({
       data: {
         authorizer_appid: installation.authorizer_appid,
         enabled: false,
-        clue_component_id: "5785490b6443ad9def6f88e69c57920c",
         expected_updated_at: installation.updated_at,
       },
       error: null,
     });
-    expect(buildLeadCaptureConfigRequest(installation, true, "")).toEqual({
-      data: null,
-      error: "启用抖音官方手机号时必须填写线索组件 ID",
+    expect(buildLeadCaptureConfigRequest(installation, true)).toEqual({
+      data: {
+        authorizer_appid: installation.authorizer_appid,
+        enabled: true,
+        expected_updated_at: installation.updated_at,
+      },
+      error: null,
     });
   });
 
@@ -59,7 +60,6 @@ describe("TenantDouyinLeadCaptureConfig", () => {
       installation_id: installation.id,
       authorizer_appid: installation.authorizer_appid,
       enabled: true,
-      clue_component_id: installation.clue_component_id,
       updated_at: "2026-09-06T00:00:02.000Z",
     };
     expect(parseLeadCaptureConfigResponse(response)).toEqual(response);
@@ -67,18 +67,19 @@ describe("TenantDouyinLeadCaptureConfig", () => {
       .toThrow("手机号留资配置响应格式无效");
     expect(() => parseLeadCaptureConfigResponse({
       ...response,
-      clue_component_id: null,
+      clue_component_id: "legacy-component-id",
     })).toThrow("手机号留资配置响应格式无效");
   });
 
-  test("renders current AppID, retained ID and a permission-aware form", () => {
+  test("renders current AppID and a permission-aware switch without component ID", () => {
     const editable = renderToStaticMarkup(createElement(
       TenantDouyinLeadCaptureConfig,
       { canManage: true, installation },
     ));
     expect(editable).toContain("手机号留资");
     expect(editable).toContain(installation.authorizer_appid);
-    expect(editable).toContain(installation.clue_component_id!);
+    expect(editable).not.toContain("legacy-component-id");
+    expect(editable).not.toContain("线索组件 ID");
     expect(editable).toContain("抖音官方手机号快捷留资");
     expect(editable).toContain("保存留资配置");
 

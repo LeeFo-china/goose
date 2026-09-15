@@ -15,12 +15,10 @@ beforeAll(async () => {
 const TENANT_ID = "33333333-3333-4333-8333-333333333333";
 const INSTALLATION_ID = "22222222-2222-4222-8222-222222222222";
 const APP_ID = "ttd033a68e4e56ccd301";
-const COMPONENT_ID = "5785490b6443ad9def6f88e69c57920c";
 const UPDATED_AT = "2026-09-06T00:00:00.000Z";
 const input = {
   authorizer_appid: APP_ID,
   enabled: true,
-  clue_component_id: COMPONENT_ID,
   expected_updated_at: UPDATED_AT,
 };
 const installation = {
@@ -61,7 +59,6 @@ function createService(options: {
     installation_id: INSTALLATION_ID,
     authorizer_appid: APP_ID,
     enabled: true,
-    clue_component_id: COMPONENT_ID,
     updated_at: "2026-09-06T00:00:01.000Z",
   })) };
   const workspace = { findCurrentInstallation: mock(async () =>
@@ -103,7 +100,6 @@ describe("TenantDouyinMiniappLeadCaptureConfigService", () => {
       authorizerAppId: APP_ID,
       expectedUpdatedAt: UPDATED_AT,
       enabled: true,
-      clueComponentId: COMPONENT_ID,
     });
   });
 

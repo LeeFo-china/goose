@@ -63,20 +63,18 @@ describe("Douyin bootstrap response validation", () => {
     });
   });
 
-  test("accepts official Douyin clue phone capture configuration", async () => {
+  test("accepts official Douyin phone capture without a clue component", async () => {
     await expect(fetchBootstrap(clientWith({
       ...bootstrap,
       features: {
         ...bootstrap.features,
         douyin_phone: true,
         phone_capture_mode: "douyin_phone",
-        clue_component_id: "clue_1234567890",
       },
     }))).resolves.toMatchObject({
       features: {
         douyin_phone: true,
         phone_capture_mode: "douyin_phone",
-        clue_component_id: "clue_1234567890",
       },
     });
   });

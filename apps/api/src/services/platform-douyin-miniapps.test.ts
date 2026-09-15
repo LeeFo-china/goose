@@ -218,7 +218,6 @@ describe("PlatformDouyinMiniappsService", () => {
         sms_lead: true as const,
         douyin_phone: true as const,
         phone_capture_mode: "douyin_phone" as const,
-        clue_component_id: "old-component-id",
       },
     };
     await service.bind(authContext, INSTALLATION_ID, {
@@ -401,7 +400,6 @@ describe("PlatformDouyinMiniappsService", () => {
       sms_lead: true as const,
       douyin_phone: true as const,
       phone_capture_mode: "douyin_phone" as const,
-      clue_component_id: "5785490b6443ad9def6f88e69c57920c",
     };
     const deps = dependencies({
       findById: mock(async () => ({

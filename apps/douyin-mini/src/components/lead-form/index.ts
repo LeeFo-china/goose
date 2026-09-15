@@ -16,8 +16,7 @@ Component({
     hasLinkedEstimate: { type: Boolean, value: false },
     estimateNo: { type: String, value: "" },
     estimateRange: { type: String, value: "" },
-    douyinClueEnabled: { type: Boolean, value: false },
-    douyinClueComponentId: { type: String, value: "" },
+    douyinPhoneEnabled: { type: Boolean, value: false },
     smsFallbackExpanded: { type: Boolean, value: false },
   },
   methods: {

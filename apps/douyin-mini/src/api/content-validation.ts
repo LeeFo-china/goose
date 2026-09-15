@@ -86,8 +86,6 @@ function parseFeatures(value: unknown): BootstrapData["features"] | null {
   if (value.douyin_phone === true
     && value.phone_capture_mode === "douyin_phone"
     && value.sms_lead === true
-    && isBoundedString(value.clue_component_id, 1, 128)
-    && /^[A-Za-z0-9_-]+$/.test(value.clue_component_id)
     && !Object.keys(value).some((key) =>
       ![
         "cases",
@@ -95,7 +93,6 @@ function parseFeatures(value: unknown): BootstrapData["features"] | null {
         "sms_lead",
         "douyin_phone",
         "phone_capture_mode",
-        "clue_component_id",
       ].includes(key)
     )) {
     return {
@@ -104,7 +101,6 @@ function parseFeatures(value: unknown): BootstrapData["features"] | null {
       sms_lead: true,
       douyin_phone: true,
       phone_capture_mode: "douyin_phone",
-      clue_component_id: value.clue_component_id.trim(),
     };
   }
   return null;

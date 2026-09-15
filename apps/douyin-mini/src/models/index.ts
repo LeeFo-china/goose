@@ -86,7 +86,6 @@ export type BootstrapData = {
   } | {
     douyin_phone: true;
     phone_capture_mode: "douyin_phone";
-    clue_component_id: string;
   });
   content: {
     home_banners: HomeBanner[];
