@@ -74,6 +74,13 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
     jobEpoch: 0,
     jobPolls: 0,
     phoneStateEpoch: 0,
+    phoneFlowEpoch: 0,
+    pendingPhoneCode: "",
+    // A native phone prompt can hide this page before bindgetphonenumber fires.
+    pendingPhoneScope: null as string | null,
+    pendingPhoneError: "",
+    resumeGenerationAfterPhone: false,
+    authorizingPhone: false,
     jobTimer: undefined as ReturnType<typeof setTimeout> | undefined,
     submittingJob: false,
     uploading: false,
@@ -118,6 +125,7 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
       jobSubmitting: false,
       phoneAuthorizing: false,
       phoneAuthorizationRequired: false,
+      quotaRemaining: null as number | null,
       jobConfirmationPending: false,
       jobDraftLocked: false,
       resultUrl: "",
@@ -138,6 +146,12 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
       const scope = identityKey(identity);
       const sameScope = scope !== null && scope === this.recoveryScope;
       if (!sameScope) {
+        this.phoneFlowEpoch++;
+        this.pendingPhoneCode = "";
+        this.pendingPhoneScope = null;
+        this.pendingPhoneError = "";
+        this.resumeGenerationAfterPhone = false;
+        this.authorizingPhone = false;
         this.phoneStateEpoch++;
         this.jobEpoch++; this.stopJobPolling();
         this.uploadEpoch++; this.uploading = false;
@@ -151,6 +165,7 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
           jobStatus: "", jobMessage: "", jobRefreshAvailable: false,
           jobDraftLocked: false, jobSubmitting: false, jobConfirmationPending: false,
           phoneAuthorizing: false, phoneAuthorizationRequired: false,
+          quotaRemaining: null,
           resultUrl: "", resultImageFailed: false });
       }
       this.recoveryIdentity = scope ? identity : null;
@@ -200,6 +215,7 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
         jobStatus: "", jobMessage: "", jobRefreshAvailable: false,
         jobSubmitting: false, jobConfirmationPending: false, jobDraftLocked: false,
         phoneAuthorizing: false, phoneAuthorizationRequired: false,
+        quotaRemaining: null,
         resultUrl: "", resultImageFailed: false });
     },
     onShow() {
@@ -230,6 +246,12 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
     },
     onUnload() {
       this.wasHidden = false; this.visible = false; this.requestEpoch++;
+      this.phoneFlowEpoch++;
+      this.pendingPhoneCode = "";
+      this.pendingPhoneScope = null;
+      this.pendingPhoneError = "";
+      this.resumeGenerationAfterPhone = false;
+      this.authorizingPhone = false;
       this.phoneStateEpoch++;
       this.jobEpoch++; this.stopJobPolling();
       this.uploadEpoch++; this.uploading = false; this.selectingImage = false;
@@ -270,10 +292,38 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
           primaryTextColor: theme.primaryTextColor,
         });
         app.recordAnalytics("page_view");
-        void this.refreshUploads();
-        void this.refreshPhoneState();
+        const resumingPhoneFlow = Boolean(this.pendingPhoneCode || this.resumeGenerationAfterPhone);
+        if (resumingPhoneFlow) {
+          await this.refreshUploads();
+          if (!this.visible || epoch !== this.requestEpoch) return;
+          if (this.pendingPhoneScope && this.pendingPhoneScope !== this.recoveryScope) {
+            this.pendingPhoneCode = "";
+            this.pendingPhoneScope = null;
+            this.setData({ jobMessage: "登录身份已变化，请重新授权手机号" });
+          } else if (this.pendingPhoneCode) {
+            const code = this.pendingPhoneCode;
+            this.pendingPhoneCode = "";
+            this.pendingPhoneScope = null;
+            await this.onDouyinPhoneForRendering({ detail: { code } });
+          } else if (this.resumeGenerationAfterPhone) {
+            await this.refreshPhoneState();
+            if (this.data.canGenerate) {
+              await this.submitJob();
+              this.resumeGenerationAfterPhone = false;
+            }
+          }
+        } else void this.refreshUploads();
+        if (this.pendingPhoneError) {
+          this.setData({ jobMessage: this.pendingPhoneError });
+          this.pendingPhoneError = "";
+        }
+        await this.refreshPhoneState();
         if (this.recovery.jobId) void this.refreshJob();
-        else if (this.recovery.jobRequest) void this.submitJob();
+        else if (this.recovery.jobRequest && !this.data.phoneAuthorizationRequired
+          && !resumingPhoneFlow && !this.pendingPhoneCode && !this.resumeGenerationAfterPhone
+          && !this.authorizingPhone
+          && (!dependencies.fetchRenderingPhoneState || this.data.quotaRemaining !== null))
+          void this.submitJob();
       } catch (error) {
         if (!this.visible || epoch !== this.requestEpoch) return;
         if (error instanceof ApiRequestError) {
@@ -339,34 +389,52 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
     },
     onGenerate() { void this.submitJob(); },
     async onDouyinPhoneForRendering(event: { detail?: { code?: string } }) {
-      if (!this.visible || !this.scopeReady || this.data.status !== "ready"
-        || this.data.phoneAuthorizing || this.submittingJob || this.recovery.jobId
-        || !this.recoveryIdentity || !dependencies.authorizeRenderingPhone) return;
       const code = event.detail?.code;
       if (!code) {
-        this.setData({ jobMessage: "未授权手机号，暂不能生成效果图" });
+        if (this.visible) this.setData({ jobMessage: "未授权手机号，暂不能生成效果图" });
+        else this.pendingPhoneError = "未授权手机号，暂不能生成效果图";
         return;
       }
-      const epoch = this.requestEpoch;
+      if (!this.visible || !this.scopeReady || this.data.status !== "ready") {
+        this.pendingPhoneCode = code;
+        this.pendingPhoneScope = this.recoveryScope;
+        return;
+      }
+      if (this.authorizingPhone || this.submittingJob || this.recovery.jobId
+        || !this.recoveryIdentity || !dependencies.authorizeRenderingPhone) {
+        this.setData({ jobMessage: "当前状态暂不能授权手机号，请稍后重试" });
+        return;
+      }
+      const flowEpoch = ++this.phoneFlowEpoch;
       const scope = this.recoveryScope;
       const identity = this.recoveryIdentity;
       this.phoneStateEpoch++;
+      this.authorizingPhone = true;
       this.setData({ phoneAuthorizing: true, jobMessage: "正在验证抖音手机号…" });
       try {
         const app = dependencies.getApp();
         const authorized = await dependencies.authorizeRenderingPhone(app.api, code);
-        if (!this.visible || epoch !== this.requestEpoch || scope !== this.recoveryScope) return;
+        if (flowEpoch !== this.phoneFlowEpoch || scope !== this.recoveryScope) return;
         app.session.acceptVerifiedSession(authorized, identity);
+        this.resumeGenerationAfterPhone = true;
+        if (!this.visible || !this.scopeReady) return;
         this.setData({ phoneAuthorizationRequired: false, phoneAuthorizing: false,
           jobMessage: "手机号已验证，正在提交生成任务…" });
-        await this.submitJob();
+        await this.refreshPhoneState();
+        if (!this.data.canGenerate) await this.refreshUploads();
+        if (this.data.canGenerate) {
+          await this.submitJob();
+          if (this.visible && this.scopeReady) this.resumeGenerationAfterPhone = false;
+        }
       } catch (error) {
-        if (this.visible && epoch === this.requestEpoch && scope === this.recoveryScope) {
+        if (flowEpoch === this.phoneFlowEpoch && scope === this.recoveryScope && this.visible) {
           this.setData({ phoneAuthorizationRequired: true,
             jobMessage: phoneAuthorizationErrorMessage(error) });
-        }
+        } else if (flowEpoch === this.phoneFlowEpoch && scope === this.recoveryScope)
+          this.pendingPhoneError = phoneAuthorizationErrorMessage(error);
       } finally {
-        if (this.visible && epoch === this.requestEpoch && scope === this.recoveryScope) {
+        if (flowEpoch === this.phoneFlowEpoch) this.authorizingPhone = false;
+        if (this.visible && flowEpoch === this.phoneFlowEpoch && scope === this.recoveryScope) {
           this.setData({ phoneAuthorizing: false });
         }
       }
@@ -506,7 +574,8 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
         const state = await dependencies.fetchRenderingPhoneState(dependencies.getApp().api);
         if (!this.visible || epoch !== this.requestEpoch || phoneEpoch !== this.phoneStateEpoch
           || scope !== this.recoveryScope) return;
-        this.setData({ phoneAuthorizationRequired: !state.phoneVerified });
+        this.setData({ phoneAuthorizationRequired: !state.phoneVerified,
+          quotaRemaining: state.remaining });
       } catch {
         // Job admission remains authoritative if the quota read is temporarily unavailable.
       }
@@ -614,6 +683,7 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
         this.setData({ jobId: created.jobId, jobStatus: created.status,
           jobMessage: "任务已提交，正在查询进度…", jobConfirmationPending: false,
           jobRefreshAvailable: false });
+        void this.refreshPhoneState();
         await this.refreshJob();
       } catch (error) {
         if (!currentScope()) return;
@@ -668,6 +738,8 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
         this.setData({ jobStatus: progress.status, resultUrl: progress.result?.url ?? "",
           resultImageFailed: false, jobMessage: jobProgressMessage(progress.status, progress.failureReason),
           jobRefreshAvailable: progress.status === "review_required" });
+        if (progress.status === "succeeded" || progress.status === "failed")
+          void this.refreshPhoneState();
         this.stopJobPolling();
         if ((progress.status === "queued" || progress.status === "processing") && this.jobPolls < 24) {
           this.jobPolls++;

@@ -839,8 +839,11 @@ test("known admission rejection explains the reason and unlocks the image draft"
 
 test("Douyin phone authorization continues the same tap into rendering progress", async () => {
   const accepted: unknown[] = [];
+  let phoneVerified = false;
   const definition = createRenderingStyleDetailPageDefinition({
-    getApp: () => ({ api: {}, session: { acceptVerifiedSession: (...args: unknown[]) => accepted.push(args) },
+    getApp: () => ({ api: {}, session: { acceptVerifiedSession: (...args: unknown[]) => {
+      accepted.push(args); phoneVerified = true;
+    } },
       startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
       recordAnalytics: () => undefined }) as never,
     fetchPublishedStyleDetail: async () => STYLE,
@@ -854,7 +857,7 @@ test("Douyin phone authorization continues the same tap into rendering progress"
       roomFileId: STYLE.id, floorFileId: null, jobRequest: null, jobId: null, savedAt: Date.now() }),
     writeRenderingRecovery: () => true,
     fetchRenderingUploadStatus: async () => ({ fileId: STYLE.id, status: "ready", reviewState: null }),
-    fetchRenderingPhoneState: async () => ({ phoneVerified: false }),
+    fetchRenderingPhoneState: async () => ({ phoneVerified, remaining: phoneVerified ? 5 : 1 }),
     authorizeRenderingPhone: async () => ({ accessToken: "verified-server-token", expiresIn: 7200 }),
     createRenderingJob: async () => ({ jobId: STYLE.id, status: "queued" }),
     fetchRenderingJobStatus: async () => ({ jobId: STYLE.id, status: "queued", result: null }),
@@ -862,14 +865,129 @@ test("Douyin phone authorization continues the same tap into rendering progress"
   const view = Object.assign(definition, { setData(patch: Record<string, unknown>) { Object.assign(definition.data, patch); } });
   view.onLoad({ id: STYLE.id }); await flush();
   expect(view.data.phoneAuthorizationRequired).toBe(true);
+  expect(view.data.quotaRemaining).toBe(1);
   await view.onDouyinPhoneForRendering({ detail: {} });
   expect(accepted).toHaveLength(0);
   expect(view.data.jobId).toBe("");
   await view.onDouyinPhoneForRendering({ detail: { code: "official-phone-code" } });
   expect(accepted).toHaveLength(1);
   expect(view.data.phoneAuthorizationRequired).toBe(false);
+  expect(view.data.quotaRemaining).toBe(5);
   expect(view.data.jobStatus).toBe("queued");
   expect(view.data.jobMessage).toContain("排队中");
+  view.onUnload();
+});
+
+test("phone authorization callback survives the native popup hiding the detail page", async () => {
+  const calls: string[] = [];
+  const definition = createRenderingStyleDetailPageDefinition({
+    getApp: () => ({ api: {}, session: { acceptVerifiedSession: () => calls.push("session") },
+      startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
+      recordAnalytics: () => undefined }) as never,
+    fetchPublishedStyleDetail: async () => STYLE,
+    navigateToList: async () => undefined, showToast: () => undefined,
+    choosePrivateImage: async () => { throw new Error("unused"); },
+    createRenderingUploadIntent: async () => { throw new Error("unused"); },
+    putRenderingBytes: async () => undefined,
+    completeRenderingUploadWithRetry: async () => { throw new Error("unused"); },
+    resolveRecoveryIdentity: async () => OWNER,
+    readRenderingRecovery: () => ({ styleId: STYLE.id, roomIntentId: null, floorIntentId: null,
+      roomFileId: STYLE.id, floorFileId: null, jobRequest: null, jobId: null, savedAt: Date.now() }),
+    writeRenderingRecovery: () => true,
+    fetchRenderingUploadStatus: async () => ({ fileId: STYLE.id, status: "ready", reviewState: null }),
+    fetchRenderingPhoneState: async () => ({ phoneVerified: false, remaining: 1 }),
+    authorizeRenderingPhone: async (_client, code) => { calls.push(`authorize:${code}`);
+      return { accessToken: "verified-server-token", expiresIn: 7200 }; },
+    createRenderingJob: async () => { calls.push("job"); return { jobId: STYLE.id, status: "queued" }; },
+    fetchRenderingJobStatus: async () => ({ jobId: STYLE.id, status: "queued", result: null }),
+  });
+  const view = Object.assign(definition, { setData(patch: Record<string, unknown>) {
+    Object.assign(definition.data, patch);
+  } });
+  view.onLoad({ id: STYLE.id }); await flush();
+  view.onHide();
+  await view.onDouyinPhoneForRendering({ detail: { code: "popup-phone-code" } });
+  expect(calls).toEqual([]);
+  view.onShow(); await flush(); await flush();
+  expect(calls).toEqual(["authorize:popup-phone-code", "session", "job"]);
+  expect(view.data.jobStatus).toBe("queued");
+  view.onUnload();
+});
+
+test("phone verification finishing while hidden submits once after the page resumes", async () => {
+  let resolvePhone!: (value: { accessToken: string; expiresIn: number }) => void;
+  const phone = new Promise<{ accessToken: string; expiresIn: number }>((resolve) => {
+    resolvePhone = resolve;
+  });
+  let verified = false;
+  let jobs = 0;
+  const definition = createRenderingStyleDetailPageDefinition({
+    getApp: () => ({ api: {}, session: { acceptVerifiedSession: () => { verified = true; } },
+      startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
+      recordAnalytics: () => undefined }) as never,
+    fetchPublishedStyleDetail: async () => STYLE,
+    navigateToList: async () => undefined, showToast: () => undefined,
+    choosePrivateImage: async () => { throw new Error("unused"); },
+    createRenderingUploadIntent: async () => { throw new Error("unused"); },
+    putRenderingBytes: async () => undefined,
+    completeRenderingUploadWithRetry: async () => { throw new Error("unused"); },
+    resolveRecoveryIdentity: async () => OWNER,
+    readRenderingRecovery: () => ({ styleId: STYLE.id, roomIntentId: null, floorIntentId: null,
+      roomFileId: STYLE.id, floorFileId: null, jobRequest: null, jobId: null, savedAt: Date.now() }),
+    writeRenderingRecovery: () => true,
+    fetchRenderingUploadStatus: async () => ({ fileId: STYLE.id, status: "ready", reviewState: null }),
+    fetchRenderingPhoneState: async () => ({ phoneVerified: verified, remaining: verified ? 5 : 1 }),
+    authorizeRenderingPhone: async () => phone,
+    createRenderingJob: async () => { jobs++; return { jobId: STYLE.id, status: "queued" }; },
+    fetchRenderingJobStatus: async () => ({ jobId: STYLE.id, status: "queued", result: null }),
+  });
+  const view = Object.assign(definition, { setData(patch: Record<string, unknown>) {
+    Object.assign(definition.data, patch);
+  } });
+  view.onLoad({ id: STYLE.id }); await flush();
+  const authorization = view.onDouyinPhoneForRendering({ detail: { code: "phone-code" } });
+  view.onHide();
+  resolvePhone({ accessToken: "verified-server-token", expiresIn: 7200 });
+  await authorization;
+  expect(jobs).toBe(0);
+  view.onShow(); await flush(); await flush();
+  expect(jobs).toBe(1);
+  expect(view.data.jobStatus).toBe("queued");
+  view.onUnload();
+});
+
+test("returning to an unverified saved draft does not repeatedly submit a paid job", async () => {
+  const request = { style_asset_id: STYLE.id, room_file_id: STYLE.id,
+    space: "living_room" as const, mode: "soft_furnishing" as const,
+    idempotency_key: "33333333-3333-4333-8333-333333333333" };
+  let jobs = 0;
+  const definition = createRenderingStyleDetailPageDefinition({
+    getApp: () => ({ api: {}, startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
+      recordAnalytics: () => undefined }) as never,
+    fetchPublishedStyleDetail: async () => STYLE,
+    navigateToList: async () => undefined, showToast: () => undefined,
+    choosePrivateImage: async () => { throw new Error("unused"); },
+    createRenderingUploadIntent: async () => { throw new Error("unused"); },
+    putRenderingBytes: async () => undefined,
+    completeRenderingUploadWithRetry: async () => { throw new Error("unused"); },
+    resolveRecoveryIdentity: async () => OWNER,
+    readRenderingRecovery: () => ({ styleId: STYLE.id, roomIntentId: null, floorIntentId: null,
+      roomFileId: STYLE.id, floorFileId: null, jobRequest: request, jobId: null, savedAt: Date.now() }),
+    writeRenderingRecovery: () => true,
+    fetchRenderingUploadStatus: async () => ({ fileId: STYLE.id, status: "ready", reviewState: null }),
+    fetchRenderingPhoneState: async () => ({ phoneVerified: false, remaining: 0 }),
+    createRenderingJob: async () => { jobs++;
+      throw new ApiRequestError(409, "RENDERING_PHONE_REQUIRED", "phone"); },
+  });
+  const view = Object.assign(definition, { setData(patch: Record<string, unknown>) {
+    Object.assign(definition.data, patch);
+  } });
+  view.onLoad({ id: STYLE.id }); await flush();
+  view.onHide(); view.onShow(); await flush(); await flush();
+  view.onHide(); view.onShow(); await flush(); await flush();
+  expect(jobs).toBe(0);
+  expect(view.data.phoneAuthorizationRequired).toBe(true);
+  expect(view.data.quotaRemaining).toBe(0);
   view.onUnload();
 });
 

@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'bun:test';
-import { createRenderingJob, fetchRenderingJobStatus } from './rendering-jobs';
+import { createRenderingJob, fetchRenderingJobStatus, fetchRenderingPhoneState } from './rendering-jobs';
 
 const ID = '11111111-1111-4111-8111-111111111111';
 const ROOM = '22222222-2222-4222-8222-222222222222';
@@ -7,6 +7,14 @@ const KEY = '33333333-3333-4333-8333-333333333333';
 const ATTEMPT = '44444444-4444-4444-8444-444444444444';
 const TENANT = '55555555-5555-4555-8555-555555555555';
 const RESULT_URL = `https://rendering-123456.cos.ap-guangzhou.myqcloud.com/private/customer-rendering-results/${TENANT}/${ID}/${ATTEMPT}/result.webp?q-signature=${'a'.repeat(40)}`;
+
+test('rendering quota exposes the server remaining count and rejects invalid counts', async () => {
+  const request = mock(async () => ({ phone_verified: false, remaining: 0 }));
+  expect(await fetchRenderingPhoneState({ request } as never)).toEqual({ phoneVerified: false, remaining: 0 });
+  expect(request).toHaveBeenCalledWith({ method: 'GET', path: '/douyin-mini/renderings/quota' });
+  request.mockImplementation(async () => ({ phone_verified: true, remaining: -1 }));
+  await expect(fetchRenderingPhoneState({ request } as never)).rejects.toMatchObject({ code: 'INVALID_API_RESPONSE' });
+});
 
 test('job creation sends the exact validated idempotent request', async () => {
   const request = mock(async () => ({ job_id: ID, status: 'queued' }));

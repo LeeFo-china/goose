@@ -56,6 +56,7 @@
   </view>
   <view tt:if="{{status === 'ready' && showGeneration}}" class="detail-section generation-section">
     <view class="detail-section-title">生成我的空间参考图</view>
+    <view tt:if="{{quotaRemaining !== null}}" class="generation-quota" role="status">可用生成次数：{{quotaRemaining}} 次{{phoneAuthorizationRequired ? '；授权手机号后重新计算额度' : ''}}</view>
     <view class="private-inputs-note">使用已就绪图片生成 AI 参考效果图。生成结果仅供装修参考。</view>
     <view class="generation-mode-row">
       <button class="generation-mode {{mode === 'soft_furnishing' ? 'generation-mode--active' : ''}}" data-value="soft_furnishing" disabled="{{jobDraftLocked || jobSubmitting}}" bindtap="onSelectMode">软装搭配</button>
