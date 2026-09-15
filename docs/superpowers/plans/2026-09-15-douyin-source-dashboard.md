@@ -21,7 +21,7 @@
 
 ### Task 2: 租户来源聚合
 
-**Files:** 新增 `supabase/migrations/20260915180000_douyin_source_dashboard_stats.sql`, `apps/api/src/repositories/douyin-source-stats.ts`, `apps/api/src/services/tenant-douyin-source-stats.ts`, `apps/api/src/schema/tenant-douyin-source-stats.ts`, `apps/api/src/controllers/tenant-douyin-source-stats/index.ts`, route registry and adjacent tests.
+**Files:** 新增 `supabase/migrations/20260915092804_douyin_source_dashboard_stats.sql`, `apps/api/src/repositories/douyin-source-stats.ts`, `apps/api/src/services/tenant-douyin-source-stats.ts`, `apps/api/src/schema/tenant-douyin-source-stats.ts`, `apps/api/src/controllers/tenant-douyin-source-stats/index.ts`, route registry and adjacent tests.
 
 - [ ] 测试：近 7/30/90 天边界、分页 `page=1&pageSize=20` 与最多 100、无权限和外租户拒绝、旧无标记入口不计数、官方优先于手工标记、重复预约 ID 去重。
 - [ ] 运行定向测试，确认缺失聚合/接口造成预期失败。

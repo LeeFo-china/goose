@@ -100,6 +100,7 @@ import TenantDouyinBudgetController from "@/controllers/tenant-douyin-budget";
 import TenantDouyinMiniappController from "@/controllers/tenant-douyin-miniapp";
 import TenantDouyinProjectsController from "@/controllers/tenant-douyin-projects";
 import TenantDouyinLeadsController from "@/controllers/tenant-douyin-leads";
+import TenantDouyinSourceStatsController from "@/controllers/tenant-douyin-source-stats";
 import TenantCustomerLeadsController from "@/controllers/tenant-customer-leads";
 import TenantRenderingLibraryController from "@/controllers/tenant-rendering-library";
 import TenantRenderingLibraryFilesController from "@/controllers/tenant-rendering-library/files";
@@ -239,6 +240,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   TenantDouyinMiniappController.registerExtraRoutes(app);
   TenantDouyinProjectsController.registerExtraRoutes(app);
   TenantDouyinLeadsController.registerExtraRoutes(app);
+  TenantDouyinSourceStatsController.registerExtraRoutes(app);
   TenantCustomerLeadsController.registerExtraRoutes(app);
   TenantRenderingLibraryController.registerExtraRoutes(app);
   TenantRenderingLibraryFilesController.registerExtraRoutes(app);
