@@ -39,6 +39,7 @@ export type AnalyticsEventInput = {
   event_id: string;
   event_name: ClientAnalyticsEventName;
   attribution: LaunchContext;
+  capture_version?: 2;
   entity_id?: string;
 };
 
@@ -304,6 +305,7 @@ function toRequestEvent(event: StoredAnalyticsEvent): AnalyticsRequestEvent {
     event_name: event.event_name,
     occurred_at: event.occurred_at,
     attribution: event.attribution,
+    ...(event.capture_version === 2 ? { capture_version: 2 as const } : {}),
     ...(event.entity_id ? { entity_id: event.entity_id } : {}),
   };
 }
@@ -328,9 +330,10 @@ const timeoutScheduler: AnalyticsScheduler = {
 function parseEventInput(value: unknown, now: number): StoredAnalyticsEvent | null {
   if (!isRecord(value) || !hasOnlyKeys(
     value,
-    ["event_id", "event_name", "attribution", "entity_id"],
+    ["event_id", "event_name", "attribution", "entity_id", "capture_version"],
   )) return null;
   if (!isEventId(value.event_id) || !isClientEventName(value.event_name)) return null;
+  if (value.capture_version !== undefined && value.capture_version !== 2) return null;
   const parsedAttribution = parseAttribution(value.attribution);
   if (!parsedAttribution) return null;
   const isMaterialEvent = CLIENT_MATERIAL_ANALYTICS_EVENT_NAMES.has(value.event_name);
@@ -344,6 +347,7 @@ function parseEventInput(value: unknown, now: number): StoredAnalyticsEvent | nu
     event_name: value.event_name,
     occurred_at: new Date(now).toISOString(),
     attribution: parsedAttribution,
+    ...(value.capture_version === 2 ? { capture_version: 2 as const } : {}),
     ...(typeof value.entity_id === "string" ? { entity_id: value.entity_id } : {}),
   };
 }
@@ -360,12 +364,13 @@ function parseSnapshot(value: unknown): AnalyticsSnapshot | null {
 function parseStoredEvent(value: unknown): StoredAnalyticsEvent | null {
   if (!isRecord(value) || !hasOnlyKeys(
     value,
-    ["event_id", "event_name", "occurred_at", "attribution", "entity_id"],
+    ["event_id", "event_name", "occurred_at", "attribution", "entity_id", "capture_version"],
   )) return null;
   const base = parseEventInput({
     event_id: value.event_id,
     event_name: value.event_name,
     attribution: value.attribution,
+    ...(value.capture_version === 2 ? { capture_version: 2 as const } : {}),
     ...(value.entity_id === undefined ? {} : { entity_id: value.entity_id }),
   }, 0);
   if (!base || typeof value.occurred_at !== "string") return null;

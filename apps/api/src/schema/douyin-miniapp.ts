@@ -135,6 +135,7 @@ export const DouyinAnalyticsRequestSchema = z.strictObject({
     event_name: z.enum(DOUYIN_CLIENT_EVENT_VALUES),
     occurred_at: z.iso.datetime({ offset: true }),
     attribution: DouyinLaunchContextSchema,
+    capture_version: z.literal(2).optional(),
     entity_id: z.uuid("事件实体 ID 格式无效").optional(),
   }).superRefine((event, context) => {
     if (DOUYIN_CLIENT_MATERIAL_EVENTS.has(event.event_name) && !event.entity_id) {

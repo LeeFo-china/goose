@@ -15,6 +15,30 @@ function deferred<T>() {
 }
 
 describe("official entry attribution", () => {
+  test("records an entry after official attribution and drops a superseded entry", async () => {
+    const first = deferred<ReturnType<typeof parseAnalysisInfo>>();
+    const second = deferred<ReturnType<typeof parseAnalysisInfo>>();
+    const reads = [first.promise, second.promise];
+    const capture = new EntryAttribution(() => reads.shift()!);
+    const recorded: LaunchContext[] = [];
+    const recordLaunch = (capture as EntryAttribution & {
+      recordLaunch?: (version: number, record: (value: LaunchContext) => void)
+        => Promise<void>;
+    }).recordLaunch;
+    capture.start(base);
+    const old = recordLaunch?.call(capture, capture.version,
+      (value) => recorded.push(value)) ?? Promise.resolve();
+    capture.start({ ...base, campaign_code: undefined });
+    const current = recordLaunch?.call(capture, capture.version,
+      (value) => recorded.push(value)) ?? Promise.resolve();
+    first.resolve({ type: 1, video_item_id: "old-video" });
+    second.resolve({ type: 1, video_item_id: "current-video" });
+    await Promise.all([old, current]);
+    expect(recorded).toEqual([{ ...base, campaign_code: undefined,
+      source_type: "short_video", analysis_info: {
+        type: 1, video_item_id: "current-video",
+      } }]);
+  });
   test("keeps only bounded official video, live and profile identifiers", () => {
     expect(parseAnalysisInfo({ type: 1, uniqueId: "brand_01", postId: "author-1",
       itemId: "encrypted-video-1", token: "secret" })).toEqual({

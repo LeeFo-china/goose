@@ -111,6 +111,7 @@ export type InsertDouyinMiniappEventsInput = {
     readonly eventName: DouyinMarketingEventName;
     readonly occurredAt: string;
     readonly attribution: DouyinMarketingAttribution;
+    readonly captureVersion?: 2;
     readonly entityId?: string | null;
   }>;
 };
@@ -218,6 +219,7 @@ export class DouyinMiniappMarketingRepository {
         event_name: event.eventName,
         payload: {
           ...copyAttribution(event.attribution),
+          ...(event.captureVersion === 2 ? { capture_version: 2 } : {}),
           ...(event.entityId ? { entity_id: event.entityId } : {}),
           occurred_at: event.occurredAt,
         },

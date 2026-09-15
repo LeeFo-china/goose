@@ -96,11 +96,7 @@ App({
     this.launchContext = captureLaunchContext(options);
     entryAttribution.start(this.launchContext);
     this.attributionEntryVersion = entryAttribution.version;
-    this.analytics.record({
-      event_id: createUuidV4IdempotencyKey(),
-      event_name: "app_launch",
-      attribution: this.launchContext,
-    });
+    recordEntryEvent(this.analytics, this.attributionEntryVersion, "app_launch");
     this.startup = startApplication(this.launchContext);
   },
   onShow(options) {
@@ -110,6 +106,7 @@ App({
     this.launchContext = next;
     entryAttribution.start(next);
     this.attributionEntryVersion = entryAttribution.version;
+    recordEntryEvent(this.analytics, this.attributionEntryVersion, "app_launch");
   },
   onHide() { void this.analytics.handleAppHide(); },
   async getRenderingRecoveryIdentity() {
@@ -119,14 +116,22 @@ App({
   },
   getLeadAttribution() { return entryAttribution.ready(); },
   recordAnalytics(eventName: ClientAnalyticsEventName, entityId?: string) {
-    this.analytics.record({
-      event_id: createUuidV4IdempotencyKey(),
-      event_name: eventName,
-      attribution: entryAttribution.current,
-      ...(entityId ? { entity_id: entityId } : {}),
-    });
+    recordEntryEvent(this.analytics, entryAttribution.version, eventName, entityId);
   },
 });
+
+function recordEntryEvent(analyticsQueue: AnalyticsQueue, version: number,
+  eventName: ClientAnalyticsEventName, entityId?: string): void {
+  void entryAttribution.recordLaunch(version, (attribution) => {
+    analyticsQueue.record({
+      event_id: createUuidV4IdempotencyKey(),
+      event_name: eventName,
+      attribution,
+      capture_version: 2,
+      ...(entityId ? { entity_id: entityId } : {}),
+    });
+  });
+}
 
 function sameEntry(left: LaunchContext, right: LaunchContext): boolean {
   return left.entry_path === right.entry_path && left.scene === right.scene

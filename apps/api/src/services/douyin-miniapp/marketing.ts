@@ -263,6 +263,7 @@ export class DouyinMiniappMarketingService {
         eventName: event.event_name,
         occurredAt: new Date(occurredAt).toISOString(),
         attribution: event.attribution,
+        captureVersion: event.capture_version,
         entityId: event.entity_id,
       };
     });

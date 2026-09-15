@@ -45,6 +45,19 @@ function harness(initialValue: unknown = null) {
 }
 
 describe("AnalyticsQueue", () => {
+  test("sends the new source capture version while keeping legacy queued events", async () => {
+    const { analytics, request } = harness();
+    expect(analytics.record({ event_id: EVENT_ID, event_name: "app_launch",
+      attribution, capture_version: 2 } as Parameters<AnalyticsQueue["record"]>[0]).status)
+      .toBe("queued");
+    expect(analytics.record({ event_id: eventId(2), event_name: "page_view",
+      attribution }).status).toBe("queued");
+    await analytics.flush();
+    const sent = request.mock.calls[0]?.[0]?.data?.events as Array<{
+      capture_version?: number;
+    }>;
+    expect(sent.map((event) => event.capture_version)).toEqual([2, undefined]);
+  });
   test("retains bounded official attribution through the analytics queue", () => {
     const { analytics, getStored } = harness();
     expect(analytics.record({ event_id: EVENT_ID, event_name: "page_view",

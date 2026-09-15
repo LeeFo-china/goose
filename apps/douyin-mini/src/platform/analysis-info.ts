@@ -75,6 +75,11 @@ export class EntryAttribution {
       if (timer) clearTimeout(timer);
     }
   }
+
+  async recordLaunch(version: number, record: (context: LaunchContext) => void): Promise<void> {
+    const context = await this.ready();
+    if (version === this.generation) record(context);
+  }
 }
 
 function sourceType(info: OfficialAnalysisInfo): LaunchContext["source_type"] {
