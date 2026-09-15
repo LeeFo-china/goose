@@ -93,6 +93,7 @@ describe("DouyinMiniappController", () => {
       "POST /douyin-mini/auth/session",
       "POST /douyin-mini/customer-auth/authorize-phone",
       "POST /douyin-mini/renderings/authorize-phone",
+      "POST /douyin-mini/renderings/verify-sms",
       "POST /douyin-mini/customer-auth/sms/send-code",
       "POST /douyin-mini/customer-auth/sms/verify",
       "POST /douyin-mini/customer-auth/select",

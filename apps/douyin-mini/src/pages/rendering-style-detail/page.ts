@@ -5,6 +5,7 @@ import { ApiRequestError } from "../../api/request";
 import { type RenderingJobRequest, type RenderingJobStatus, type createRenderingJob,
   type fetchRenderingJobStatus, type fetchRenderingPhoneState,
   type authorizeRenderingPhone } from "../../api/rendering-jobs";
+import { type sendRenderingSmsCode, type verifyRenderingSms } from "../../api/rendering-jobs";
 import {
   type RenderingUploadPurpose,
   type createRenderingUploadIntent,
@@ -56,6 +57,8 @@ export type RenderingStyleDetailDependencies = {
   fetchRenderingJobStatus?: typeof fetchRenderingJobStatus;
   fetchRenderingPhoneState?: typeof fetchRenderingPhoneState;
   authorizeRenderingPhone?: typeof authorizeRenderingPhone;
+  sendRenderingSmsCode?: typeof sendRenderingSmsCode;
+  verifyRenderingSms?: typeof verifyRenderingSms;
   readRenderingRecovery?: typeof readRenderingRecovery;
   writeRenderingRecovery?: typeof writeRenderingRecovery;
   clearRenderingRecovery?: typeof clearRenderingRecovery;
@@ -82,6 +85,8 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
     pendingPhoneError: "",
     resumeGenerationAfterPhone: false,
     authorizingPhone: false,
+    smsCooldownUntil: 0,
+    smsCooldownTimer: undefined as ReturnType<typeof setInterval> | undefined,
     jobTimer: undefined as ReturnType<typeof setTimeout> | undefined,
     submittingJob: false,
     uploading: false,
@@ -126,6 +131,11 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
       jobSubmitting: false,
       phoneAuthorizing: false,
       phoneAuthorizationRequired: false,
+      smsExpanded: false,
+      smsPhone: "",
+      smsCode: "",
+      smsSending: false,
+      smsCooldown: 0,
       quotaRemaining: null as number | null,
       jobConfirmationPending: false,
       jobDraftLocked: false,
@@ -147,6 +157,8 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
       const scope = identityKey(identity);
       const sameScope = scope !== null && scope === this.recoveryScope;
       if (!sameScope) {
+        this.stopSmsCooldown();
+        this.smsCooldownUntil = 0;
         this.phoneFlowEpoch++;
         this.pendingPhoneCode = "";
         this.pendingPhoneScope = null;
@@ -166,6 +178,7 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
           jobStatus: "", jobMessage: "", jobRefreshAvailable: false,
           jobDraftLocked: false, jobSubmitting: false, jobConfirmationPending: false,
           phoneAuthorizing: false, phoneAuthorizationRequired: false,
+          smsExpanded: false, smsPhone: "", smsCode: "", smsSending: false, smsCooldown: 0,
           quotaRemaining: null,
           resultUrl: "", resultImageFailed: false });
       }
@@ -220,6 +233,7 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
         resultUrl: "", resultImageFailed: false });
     },
     onShow() {
+      this.resumeSmsCooldown();
       if (!this.wasHidden) return;
       this.wasHidden = false;
       this.visible = true;
@@ -229,6 +243,8 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
       if (this.styleId) void this.load();
     },
     onHide() {
+      this.stopSmsCooldown();
+      this.setData({ smsSending: false });
       this.wasHidden = true; this.visible = false; this.requestEpoch++;
       this.phoneStateEpoch++;
       this.hiddenDraft = this.recoveryScope ? { scope: this.recoveryScope,
@@ -246,6 +262,7 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
       this.maskPrivateDisplay();
     },
     onUnload() {
+      this.stopSmsCooldown();
       this.wasHidden = false; this.visible = false; this.requestEpoch++;
       this.phoneFlowEpoch++;
       this.pendingPhoneCode = "";
@@ -319,7 +336,7 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
           }
         } else void this.refreshUploads();
         if (this.pendingPhoneError) {
-          this.setData({ jobMessage: this.pendingPhoneError });
+          this.setData({ jobMessage: this.pendingPhoneError, smsExpanded: true });
           this.pendingPhoneError = "";
         }
         await this.refreshPhoneState();
@@ -393,12 +410,68 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
       this.invalidateJobDraft();
     },
     onGenerate() { void this.submitJob(); },
+    onToggleRenderingSms() {
+      if (this.authorizingPhone || this.data.smsSending) return;
+      this.setData({ smsExpanded: !this.data.smsExpanded, jobMessage: "" });
+    },
+    onSmsPhoneInput(event: { detail: { value?: string } }) {
+      this.setData({ smsPhone: (event.detail.value ?? "").trim().slice(0, 11), jobMessage: "" });
+    },
+    onSmsCodeInput(event: { detail: { value?: string } }) {
+      this.setData({ smsCode: (event.detail.value ?? "").trim().slice(0, 6), jobMessage: "" });
+    },
+    async onSendRenderingSms() {
+      if (!this.visible || !this.scopeReady || this.data.smsSending || this.data.smsCooldown > 0
+        || !dependencies.sendRenderingSmsCode) return;
+      if (!/^1[3-9]\d{9}$/.test(this.data.smsPhone)) {
+        this.setData({ jobMessage: "请输入正确的手机号" }); return;
+      }
+      this.setData({ smsSending: true, jobMessage: "正在发送验证码…" });
+      const scope = this.recoveryScope;
+      const phone = this.data.smsPhone;
+      try {
+        const seconds = await dependencies.sendRenderingSmsCode(dependencies.getApp().api, phone);
+        if (scope !== this.recoveryScope) return;
+        this.smsCooldownUntil = Date.now() + seconds * 1000;
+        if (!this.visible || !this.scopeReady) return;
+        this.resumeSmsCooldown();
+        this.setData({ jobMessage: "验证码已发送，请注意查收" });
+      } catch (error) {
+        if (this.visible && scope === this.recoveryScope)
+          this.setData({ jobMessage: phoneAuthorizationErrorMessage(error) });
+      } finally {
+        if (scope === this.recoveryScope) this.setData({ smsSending: false });
+      }
+    },
+    async onVerifyRenderingSms() {
+      if (!this.visible || !this.scopeReady || this.authorizingPhone || !dependencies.verifyRenderingSms) return;
+      if (!/^1[3-9]\d{9}$/.test(this.data.smsPhone) || !/^\d{4,6}$/.test(this.data.smsCode)) {
+        this.setData({ jobMessage: "请填写正确的手机号和验证码" }); return;
+      }
+      const { smsPhone: phone, smsCode: code } = this.data;
+      await this.completeRenderingPhoneAuthorization(() =>
+        dependencies.verifyRenderingSms!(dependencies.getApp().api, { phone, code }));
+    },
+    stopSmsCooldown() {
+      if (this.smsCooldownTimer) clearInterval(this.smsCooldownTimer);
+      this.smsCooldownTimer = undefined;
+    },
+    resumeSmsCooldown() {
+      this.stopSmsCooldown();
+      const update = () => {
+        const remaining = Math.max(0, Math.ceil((this.smsCooldownUntil - Date.now()) / 1000));
+        this.setData({ smsCooldown: remaining });
+        if (!remaining) this.stopSmsCooldown();
+      };
+      update();
+      if (this.data.smsCooldown > 0) this.smsCooldownTimer = setInterval(update, 1_000);
+    },
     async onDouyinPhoneForRendering(event: PhoneNumberCallbackEvent) {
       const result = resolvePhoneNumberCallback(event);
       const code = result.code;
       if (!code) {
-        if (this.visible) this.setData({ jobMessage: result.error ?? "抖音未返回手机号令牌" });
-        else this.pendingPhoneError = result.error ?? "抖音未返回手机号令牌";
+        if (this.visible) this.setData({ jobMessage: result.error ?? "抖音未返回手机号令牌；请使用短信验证码验证手机号", smsExpanded: true });
+        else this.pendingPhoneError = result.error ?? "抖音未返回手机号令牌；请使用短信验证码验证手机号";
         return;
       }
       if (!this.visible || !this.scopeReady || this.data.status !== "ready") {
@@ -411,17 +484,26 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
         this.setData({ jobMessage: "当前状态暂不能授权手机号，请稍后重试" });
         return;
       }
+      await this.completeRenderingPhoneAuthorization(() =>
+        dependencies.authorizeRenderingPhone!(dependencies.getApp().api, code));
+    },
+    async completeRenderingPhoneAuthorization(authorize: () => Promise<{
+      accessToken: string; expiresIn: number;
+    }>) {
+      if (!this.recoveryIdentity || !this.recoveryScope || this.authorizingPhone
+        || this.submittingJob || this.recovery.jobId) return;
       const flowEpoch = ++this.phoneFlowEpoch;
       const scope = this.recoveryScope;
       const identity = this.recoveryIdentity;
       this.phoneStateEpoch++;
       this.authorizingPhone = true;
-      this.setData({ phoneAuthorizing: true, jobMessage: "正在验证抖音手机号…" });
+      this.setData({ phoneAuthorizing: true, jobMessage: "正在验证手机号…" });
       try {
         const app = dependencies.getApp();
-        const authorized = await dependencies.authorizeRenderingPhone(app.api, code);
+        const authorized = await authorize();
         if (flowEpoch !== this.phoneFlowEpoch || scope !== this.recoveryScope) return;
         app.session.acceptVerifiedSession(authorized, identity);
+        this.setData({ smsCode: "" });
         this.resumeGenerationAfterPhone = true;
         if (!this.visible || !this.scopeReady) return;
         this.setData({ phoneAuthorizationRequired: false, phoneAuthorizing: false,
@@ -948,6 +1030,8 @@ function jobErrorMessage(error: unknown): string {
 }
 
 function phoneAuthorizationErrorMessage(error: unknown): string {
+  if (error instanceof ApiRequestError && error.code === "SMS_CODE_INVALID") return "验证码错误或已过期，请检查后重试";
+  if (error instanceof ApiRequestError && error.code === "SMS_CODE_RATE_LIMITED") return "验证码发送过于频繁，请稍后再试";
   if (error instanceof ApiRequestError && error.code === "DOUYIN_PHONE_NUMBER_CONFIG_INVALID") {
     return "抖音手机号授权暂不可用，请稍后重试";
   }

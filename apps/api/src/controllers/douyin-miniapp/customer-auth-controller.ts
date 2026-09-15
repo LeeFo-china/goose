@@ -15,6 +15,7 @@ import { resolveTrustedClientIp } from "@/utils/trusted-proxy-client-ip";
 type CustomerAuthService = Pick<
   ReturnType<typeof getDouyinCustomerAuthService>,
   "sendCode" | "verifySms" | "authorizePhone" | "authorizeRenderingPhone" | "select"
+  | "verifyRenderingSms"
 >;
 
 export class DouyinCustomerAuthController {
@@ -28,6 +29,10 @@ export class DouyinCustomerAuthController {
     fastify.post(
       "/douyin-mini/renderings/authorize-phone",
       this.authorizeRenderingPhone,
+    );
+    fastify.post(
+      "/douyin-mini/renderings/verify-sms",
+      this.verifyRenderingSms,
     );
     fastify.post(
       "/douyin-mini/customer-auth/sms/send-code",
@@ -51,6 +56,11 @@ export class DouyinCustomerAuthController {
   authorizeRenderingPhone = async (request: FastifyRequest) => {
     const input = parse(DouyinCustomerAuthAuthorizeSchema, request.body || {});
     return ResponseHandler.success(await this.service().authorizeRenderingPhone({ request, input }));
+  };
+
+  verifyRenderingSms = async (request: FastifyRequest) => {
+    const input = parse(DouyinCustomerAuthVerifySchema, request.body || {});
+    return ResponseHandler.success(await this.service().verifyRenderingSms({ request, input }));
   };
 
   sendCode = async (request: FastifyRequest) => {

@@ -34,7 +34,7 @@ export function resolvePhoneNumberCallback(
   if (message.includes("internal error")) {
     const sdkVersion = readSdkVersion();
     const errorCode = Number.isInteger(detail?.errno) ? `，错误码 ${detail?.errno}` : "";
-    return { error: `抖音手机号服务暂时异常${versionSuffix(sdkVersion)}${errorCode}，请稍后重试` };
+    return { error: `抖音手机号授权未能完成${versionSuffix(sdkVersion)}${errorCode}，请使用短信验证码验证手机号` };
   }
 
   const sdkVersion = readSdkVersion();

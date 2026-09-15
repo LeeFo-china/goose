@@ -63,8 +63,21 @@
       <button class="generation-mode {{mode === 'renovation' ? 'generation-mode--active' : ''}}" data-value="renovation" disabled="{{jobDraftLocked || jobSubmitting}}" bindtap="onSelectMode">装修改造</button>
     </view>
     <textarea class="generation-notes ui-control" value="{{keepNotes}}" maxlength="300" placeholder="希望保留的元素或其他要求（选填）" disabled="{{jobDraftLocked || jobSubmitting}}" bindinput="onKeepNotesInput" />
-    <view tt:if="{{phoneAuthorizationRequired && !jobId}}" class="private-inputs-note">{{jobDraftLocked ? '请授权手机号，以继续查询并生成当前任务。' : '首次生成需授权手机号，验证后会直接提交任务。'}}</view>
+    <view tt:if="{{phoneAuthorizationRequired && !jobId}}" class="private-inputs-note">{{jobDraftLocked ? '请验证手机号，以继续查询并生成当前任务。' : '首次生成需验证手机号，验证后会直接提交任务。'}}</view>
     <button tt:if="{{!jobId && phoneAuthorizationRequired}}" class="generation-button ui-pressable" hover-class="ui-pressable--pressed" open-type="getPhoneNumber" loading="{{phoneAuthorizing}}" disabled="{{!canGenerate || jobSubmitting || phoneAuthorizing}}" bindgetphonenumber="onDouyinPhoneForRendering">{{phoneAuthorizing ? '正在验证手机号…' : '授权手机号并生成效果图'}}</button>
+    <view tt:if="{{!jobId && phoneAuthorizationRequired}}" class="generation-sms-option">
+      <button class="generation-sms-toggle ui-pressable" hover-class="ui-pressable--pressed" bindtap="onToggleRenderingSms">{{smsExpanded ? '收起短信验证' : '企业号或无法授权？使用短信验证码'}}</button>
+      <view tt:if="{{smsExpanded}}" class="generation-sms-form">
+        <view class="generation-sms-title">短信验证手机号</view>
+        <view class="generation-sms-copy">企业号可能无法通过抖音原生授权获取绑定手机号。验证后会继续生成当前效果图。</view>
+        <input class="generation-sms-input ui-control" type="number" maxlength="11" value="{{smsPhone}}" placeholder="输入接收验证码的手机号" bindinput="onSmsPhoneInput" />
+        <view class="generation-sms-code-row">
+          <input class="generation-sms-input ui-control" type="number" maxlength="6" value="{{smsCode}}" placeholder="输入短信验证码" bindinput="onSmsCodeInput" />
+          <button class="generation-sms-send ui-pressable" hover-class="ui-pressable--pressed" disabled="{{smsSending || smsCooldown > 0 || phoneAuthorizing}}" loading="{{smsSending}}" bindtap="onSendRenderingSms">{{smsCooldown > 0 ? smsCooldown + '秒后重发' : '获取验证码'}}</button>
+        </view>
+        <button class="generation-sms-verify ui-pressable" hover-class="ui-pressable--pressed" loading="{{phoneAuthorizing}}" disabled="{{!canGenerate || phoneAuthorizing || jobSubmitting}}" bindtap="onVerifyRenderingSms">验证并生成效果图</button>
+      </view>
+    </view>
     <button tt:elif="{{!jobId && !jobConfirmationPending}}" class="generation-button ui-pressable" hover-class="ui-pressable--pressed" loading="{{jobSubmitting}}" disabled="{{!canGenerate || jobSubmitting || phoneAuthorizing}}" bindtap="onGenerate">{{generateButtonLabel}}</button>
     <view tt:if="{{phoneAuthorizing || jobSubmitting || jobStatus === 'queued' || jobStatus === 'processing'}}" class="generation-progress" role="status" aria-live="polite">
       <view class="generation-activity-track"><view class="generation-activity-bar" style="background-color: {{primaryColor}}"></view></view>

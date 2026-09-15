@@ -35,6 +35,26 @@ export async function authorizeRenderingPhone(client: ApiClient, code: string): 
   if (!code.trim() || code.length > 512) throw new ApiRequestError(0, 'INVALID_DOUYIN_PHONE_CODE', '手机号授权无效');
   const value = await client.request<unknown>({ method: 'POST',
     path: '/douyin-mini/renderings/authorize-phone', data: { douyin_phone_code: code } });
+  return parseVerifiedSession(value);
+}
+
+export async function sendRenderingSmsCode(client: ApiClient, phone: string): Promise<number> {
+  const value = await client.request<unknown>({ method: 'POST',
+    path: '/douyin-mini/customer-auth/sms/send-code', data: { phone } });
+  if (!isRecord(value) || value.success !== true || !Number.isInteger(value.cooldown_seconds)
+    || (value.cooldown_seconds as number) < 1) throw invalidResponse();
+  return value.cooldown_seconds as number;
+}
+
+export async function verifyRenderingSms(client: ApiClient, input: { phone: string; code: string }): Promise<{
+  accessToken: string; expiresIn: number;
+}> {
+  const value = await client.request<unknown>({ method: 'POST',
+    path: '/douyin-mini/renderings/verify-sms', data: input });
+  return parseVerifiedSession(value);
+}
+
+function parseVerifiedSession(value: unknown): { accessToken: string; expiresIn: number } {
   if (!isRecord(value) || typeof value.access_token !== 'string' || value.access_token.length < 20
     || !Number.isInteger(value.expires_in) || (value.expires_in as number) < 1
     || (value.expires_in as number) > 86400) throw invalidResponse();

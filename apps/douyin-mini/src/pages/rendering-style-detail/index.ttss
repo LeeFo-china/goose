@@ -45,6 +45,18 @@
 .generation-notes { box-sizing: border-box; width: 100%; min-height: 160rpx; margin-top: 20rpx; padding: 18rpx; border: 1rpx solid #dddad5; border-radius: 12rpx; background: #fff; color: #191817; font-size: 24rpx; line-height: 1.5; }
 .generation-button { min-height: 82rpx; margin: 22rpx 0 0; border-radius: 12rpx; background: #191817; color: #fff; font-size: 26rpx; line-height: 82rpx; }
 .generation-button[disabled] { background: #dddad5; color: #625f5b; }
+.generation-sms-option { margin-top: 14rpx; }
+.generation-sms-toggle { width: 100%; min-height: 66rpx; margin: 0; padding: 0 12rpx; background: transparent; color: #403d39; font-size: 23rpx; line-height: 1.5; text-align: center; }
+.generation-sms-form { margin-top: 12rpx; padding: 22rpx; border: 1rpx solid #dddad5; border-radius: 14rpx; background: #f5f3ee; }
+.generation-sms-title { color: #191817; font-size: 26rpx; font-weight: 650; line-height: 1.4; }
+.generation-sms-copy { margin: 8rpx 0 18rpx; color: #625f5b; font-size: 22rpx; line-height: 1.55; }
+.generation-sms-input { box-sizing: border-box; width: 100%; height: 76rpx; padding: 0 18rpx; border: 1rpx solid #dddad5; border-radius: 10rpx; background: #fff; color: #191817; font-size: 24rpx; }
+.generation-sms-code-row { display: flex; gap: 12rpx; margin-top: 12rpx; }
+.generation-sms-code-row .generation-sms-input { min-width: 0; flex: 1; }
+.generation-sms-send { width: 210rpx; height: 76rpx; margin: 0; padding: 0 8rpx; border: 1rpx solid #7d7770; border-radius: 10rpx; background: #fff; color: #403d39; font-size: 21rpx; line-height: 74rpx; }
+.generation-sms-send[disabled] { color: #85817c; border-color: #dedbd6; background: #f0eeeb; }
+.generation-sms-verify { width: 100%; min-height: 76rpx; margin-top: 16rpx; border-radius: 10rpx; background: #191817; color: #fff; font-size: 24rpx; line-height: 76rpx; }
+.generation-sms-verify[disabled] { background: #dddad5; color: #625f5b; }
 .generation-message { margin-top: 18rpx; color: #403d39; font-size: 23rpx; line-height: 1.55; }
 .generation-progress { position: relative; margin-top: 20rpx; overflow: hidden; padding: 26rpx 22rpx 22rpx; border: 1rpx solid #dddad5; border-radius: 14rpx; background: #f5f3ee; }
 .generation-activity-track { position: absolute; top: 0; right: 0; left: 0; height: 4rpx; overflow: hidden; pointer-events: none; }

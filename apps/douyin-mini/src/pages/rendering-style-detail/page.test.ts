@@ -878,6 +878,43 @@ test("Douyin phone authorization continues the same tap into rendering progress"
   view.onUnload();
 });
 
+test("enterprise account can use SMS to verify the same rendering session and submit the pending task", async () => {
+  const calls: string[] = [];
+  let verified = false;
+  const definition = createRenderingStyleDetailPageDefinition({
+    getApp: () => ({ api: {}, session: { acceptVerifiedSession: () => { verified = true; calls.push("session"); } },
+      startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
+      recordAnalytics: () => undefined }) as never,
+    fetchPublishedStyleDetail: async () => STYLE,
+    navigateToList: async () => undefined, showToast: () => undefined,
+    choosePrivateImage: async () => { throw new Error("unused"); },
+    createRenderingUploadIntent: async () => { throw new Error("unused"); },
+    putRenderingBytes: async () => undefined,
+    completeRenderingUploadWithRetry: async () => { throw new Error("unused"); },
+    resolveRecoveryIdentity: async () => OWNER,
+    readRenderingRecovery: () => ({ styleId: STYLE.id, roomIntentId: null, floorIntentId: null,
+      roomFileId: STYLE.id, floorFileId: null, jobRequest: null, jobId: null, savedAt: Date.now() }),
+    writeRenderingRecovery: () => true,
+    fetchRenderingUploadStatus: async () => ({ fileId: STYLE.id, status: "ready", reviewState: null }),
+    fetchRenderingPhoneState: async () => ({ phoneVerified: verified, remaining: verified ? 5 : 1 }),
+    sendRenderingSmsCode: async () => { calls.push("send"); return 60; },
+    verifyRenderingSms: async () => { calls.push("verify"); return { accessToken: "verified-server-token", expiresIn: 7200 }; },
+    createRenderingJob: async () => { calls.push("job"); return { jobId: STYLE.id, status: "queued" }; },
+    fetchRenderingJobStatus: async () => ({ jobId: STYLE.id, status: "queued", result: null }),
+  });
+  const view = Object.assign(definition, { setData(patch: Record<string, unknown>) { Object.assign(definition.data, patch); } });
+  view.onLoad({ id: STYLE.id }); await flush();
+  await view.onDouyinPhoneForRendering({ detail: { errMsg: "getPhoneNumber:fail internal error" } });
+  expect(view.data.smsExpanded).toBe(true);
+  view.onSmsPhoneInput({ detail: { value: "13800138000" } });
+  await view.onSendRenderingSms();
+  view.onSmsCodeInput({ detail: { value: "123456" } });
+  await view.onVerifyRenderingSms();
+  expect(calls).toEqual(["send", "verify", "session", "job"]);
+  expect(view.data.jobStatus).toBe("queued");
+  view.onUnload();
+});
+
 test("phone authorization callback survives the native popup hiding the detail page", async () => {
   const calls: string[] = [];
   let verified = false;

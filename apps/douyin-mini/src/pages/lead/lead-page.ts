@@ -305,7 +305,7 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
         douyinPhoneAuthorized: false,
         fieldErrors: clearLeadFieldError(withoutPhoneError, "sms_code"),
         focusedField: "phone",
-        formError: event.detail?.authorization_error || "抖音未返回手机号令牌，也可以手动输入手机号",
+        formError: `${event.detail?.authorization_error || "抖音未返回手机号令牌"}；请手动输入手机号并使用短信验证码`,
       });
       return;
     }

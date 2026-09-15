@@ -101,7 +101,7 @@ export function createCustomerLoginPageDefinition(dependencies: CustomerLoginPag
       const result = resolvePhoneNumberCallback(event);
       const code = result.code;
       if (!code) {
-        this.setData({ loginError: result.error });
+        this.setData({ loginError: result.error, smsExpanded: true });
         return;
       }
       await this.runAuth(

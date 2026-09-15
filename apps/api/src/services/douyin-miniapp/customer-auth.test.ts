@@ -34,6 +34,8 @@ describe("DouyinCustomerAuthService", () => {
       smsService: {
         sendCode,
         reserveBypassCode: mock(async () => ({ code: "123456" })),
+        findValidPending: mock(async () => null),
+        markVerified: mock(async () => undefined),
       },
     });
 
@@ -99,6 +101,47 @@ describe("DouyinCustomerAuthService", () => {
       subject_hash: douyinUser.subject_hash,
       verified_phone: "13800138000",
     });
+  });
+
+  test("rendering SMS verification consumes a valid one-use code before issuing a verified miniapp session", async () => {
+    const findValidPending = mock(async () => ({ id: "88888888-8888-4888-8888-888888888888",
+      phone: "13800138000", scene: "login_identity" as const, code: "123456",
+      status: "pending" as const, expired_at: "2026-09-10T00:05:00.000Z",
+      verified_at: null, created_at: "2026-09-10T00:00:00.000Z",
+      request_ip: null, request_device: null }));
+    const markVerified = mock(async () => undefined);
+    const renderingTokenSigner = mock(() => "rendering-miniapp-token");
+    const service = makeService({
+      smsService: { sendCode: mock(async () => ({ success: true as const, cooldown_seconds: 60 })),
+        reserveBypassCode: mock(async () => ({ code: "123456" })), findValidPending, markVerified },
+      renderingTokenSigner,
+    });
+    const result = await service.verifyRenderingSms({
+      request: { user: douyinUser }, input: { phone: "13800138000", code: "123456" },
+    });
+    expect(findValidPending).toHaveBeenCalledWith({
+      phone: "13800138000", code: "123456", scene: "login_identity",
+    });
+    expect(markVerified).toHaveBeenCalledWith("88888888-8888-4888-8888-888888888888");
+    expect(result).toEqual({ access_token: "rendering-miniapp-token", expires_in: 7200 });
+    expect(renderingTokenSigner).toHaveBeenCalledWith(expect.objectContaining({
+      subject_hash: douyinUser.subject_hash, verified_phone: "13800138000",
+    }));
+  });
+
+  test("rendering SMS verification never signs a session for an invalid code", async () => {
+    const markVerified = mock(async () => undefined);
+    const renderingTokenSigner = mock(() => "rendering-miniapp-token");
+    const service = makeService({ smsService: {
+      sendCode: mock(async () => ({ success: true as const, cooldown_seconds: 60 })),
+      reserveBypassCode: mock(async () => ({ code: "123456" })),
+      findValidPending: mock(async () => null), markVerified,
+    }, renderingTokenSigner });
+    await expect(service.verifyRenderingSms({
+      request: { user: douyinUser }, input: { phone: "13800138000", code: "000000" },
+    })).rejects.toMatchObject({ code: ErrorCodes.SMS_CODE_INVALID });
+    expect(markVerified).not.toHaveBeenCalled();
+    expect(renderingTokenSigner).not.toHaveBeenCalled();
   });
 
   test("multiple customer candidates return selection_required without employee candidates", async () => {
@@ -172,6 +215,8 @@ function makeService(
     smsService: {
       sendCode: mock(async () => ({ success: true as const, cooldown_seconds: 60 })),
       reserveBypassCode: mock(async () => ({ code: "123456" })),
+      findValidPending: mock(async () => null),
+      markVerified: mock(async () => undefined),
     },
     sessionRepository: {
       claimVerification: mock(async () => ({

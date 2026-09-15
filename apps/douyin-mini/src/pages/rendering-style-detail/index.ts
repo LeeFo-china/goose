@@ -3,7 +3,7 @@ import { fetchPublishedStyleDetail } from "../../api/rendering-styles";
 import { completeRenderingUploadWithRetry, createRenderingUploadIntent, putRenderingBytes } from "../../api/rendering-uploads";
 import { fetchRenderingUploadStatus, fetchRenderingUploadPreview } from "../../api/rendering-uploads";
 import { authorizeRenderingPhone, createRenderingJob, fetchRenderingJobStatus,
-  fetchRenderingPhoneState } from "../../api/rendering-jobs";
+  fetchRenderingPhoneState, sendRenderingSmsCode, verifyRenderingSms } from "../../api/rendering-jobs";
 import { choosePrivateImage } from "../../platform/private-image";
 import { clearRenderingRecovery, readRenderingRecovery, writeRenderingRecovery } from "../../platform/rendering-recovery";
 import { replacePage } from "../../platform/navigation";
@@ -23,6 +23,8 @@ Page(createRenderingStyleDetailPageDefinition({
   fetchRenderingJobStatus,
   fetchRenderingPhoneState,
   authorizeRenderingPhone,
+  sendRenderingSmsCode,
+  verifyRenderingSms,
   readRenderingRecovery,
   writeRenderingRecovery,
   clearRenderingRecovery,

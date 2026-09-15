@@ -14,8 +14,7 @@ import type {
   DouyinCustomerAuthVerifyInput,
 } from "@/schema/douyin-customer-auth";
 import { isPhoneLoginWithoutCodeEnabled } from "@/utils/auth/test-login";
-import { getDouyinMiniappTokenExpiresInSeconds, signDouyinMiniappToken,
-  signToken, type JwtPayload } from "@/utils/jwt";
+import { signToken, type JwtPayload } from "@/utils/jwt";
 import {
   buildPhoneIdentityCandidates,
 } from "@/services/phone-identity-login/candidates";
@@ -34,6 +33,7 @@ import type {
   PhoneGateway,
   TokenSigner,
 } from "./customer-auth-ports";
+import { signRenderingPhone, verifyRenderingSmsCode } from "./rendering-phone";
 
 const SELECTION_TTL_SECONDS = 5 * 60;
 
@@ -87,18 +87,16 @@ export class DouyinCustomerAuthService {
   }) {
     const actor = this.requireDouyinActor(params.request);
     const phone = await this.resolveAuthorizedPhone(actor, params.input);
-    const sign = this.dependencies.renderingTokenSigner ?? signDouyinMiniappToken;
-    return {
-      access_token: sign({
-        tenant_id: actor.tenantId,
-        douyin_installation_id: actor.installationId,
-        douyin_app_id: actor.appId,
-        subject_hash: actor.subjectHash,
-        verified_phone: phone,
-      }),
-      expires_in: (this.dependencies.renderingTokenExpiresInSeconds
-        ?? getDouyinMiniappTokenExpiresInSeconds)(),
-    };
+    return signRenderingPhone(actor, phone, this.dependencies);
+  }
+
+  async verifyRenderingSms(params: {
+    input: DouyinCustomerAuthVerifyInput;
+    request: RequestLike;
+  }) {
+    const actor = this.requireDouyinActor(params.request);
+    const phone = await verifyRenderingSmsCode(this.dependencies.smsService, params.input);
+    return signRenderingPhone(actor, phone, this.dependencies);
   }
 
   async verifySms(params: {

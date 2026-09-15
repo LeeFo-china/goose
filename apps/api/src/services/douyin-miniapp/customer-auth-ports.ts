@@ -23,7 +23,8 @@ export type DouyinCustomerAuthRequestLike = {
   user?: JwtPayload;
   log?: RequestLogger;
 };
-type SmsService = Pick<SmsVerificationCodeService, "sendCode" | "reserveBypassCode">;
+type SmsService = Pick<SmsVerificationCodeService,
+  "sendCode" | "reserveBypassCode" | "findValidPending" | "markVerified">;
 type CandidateRepository = {
   listCustomersByPhone: (phone: string) => Promise<PhoneCustomerRecord[]>;
   listEmployeesByPhone: (phone: string) => Promise<PhoneEmployeeRecord[]>;
