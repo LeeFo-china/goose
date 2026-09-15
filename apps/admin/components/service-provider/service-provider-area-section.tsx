@@ -56,8 +56,12 @@ export function ServiceProviderAreaSection({
   }
 
   return (
-    <section className="flex flex-col gap-4" aria-label="服务区域">
-      <div className="flex justify-end">
+    <section className="flex flex-col gap-4 py-6" aria-labelledby="service-provider-service-area-heading">
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+        <div>
+          <h2 id="service-provider-service-area-heading" className="text-base font-semibold">服务区域</h2>
+          <p className="mt-1 text-sm text-muted-foreground">选择可服务的城市或区县。区域需经平台发布后才会展示。</p>
+        </div>
         <Button type="button" disabled={!canManage || pending || !profileVersion} onClick={() => openDialog(null)}>
           <Plus data-icon="inline-start" />
           新增区域

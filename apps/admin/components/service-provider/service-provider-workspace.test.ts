@@ -8,7 +8,7 @@ function readSource(path: string) {
 }
 
 describe("tenant service provider settings workspace", () => {
-  test("exposes publication gates and tenant navigation contract without visible section copy", () => {
+  test("keeps publication actions, profile fields and area navigation visible", () => {
     const pageSource = readSource(
       "../../app/(console)/settings/service-provider/page.tsx",
     );
@@ -29,7 +29,7 @@ describe("tenant service provider settings workspace", () => {
     expect(pageSource).not.toContain("仅可查看");
     expect(pageSource).not.toContain("无访问权限");
     expect(loadingSource).toContain("ServiceProviderSettingsLoading");
-    expect(loadingSource).toContain("lg:grid-cols-[minmax(0,1fr)_minmax(340px,420px)]");
+    expect(loadingSource).toContain("服务商资料加载中");
     expect(loadingSource).toContain("h-64 lg:h-[360px]");
     expect(loadingSource).not.toContain("SlidersHorizontal");
     expect(loadingSource).not.toContain("lg:grid-cols-[14rem_minmax(0,1fr)]");
@@ -39,9 +39,13 @@ describe("tenant service provider settings workspace", () => {
     expect(workspaceSource).not.toContain("FieldDescription");
     expect(workspaceSource).not.toContain("修改公开简介后");
     expect(workspaceSource).not.toContain("建议说明服务范围");
-    expect(workspaceSource).not.toContain("公开资料</h2>");
-    expect(workspaceSource).not.toContain("服务区域</h2>");
-    expect(workspaceSource.indexOf("保存资料")).toBeLessThan(workspaceSource.indexOf("刷新资料"));
+    expect(workspaceSource).toContain('aria-labelledby="service-provider-public-profile-heading"');
+    expect(areaSectionSource).toContain('aria-labelledby="service-provider-service-area-heading"');
+    expect(workspaceSource).toContain("请先保存资料，再提交审核");
+    expect(workspaceSource).not.toContain("<CardHeader");
+    const publicationSection = workspaceSource.slice(workspaceSource.indexOf('aria-labelledby="service-provider-publication-heading"'));
+    const actionButtons = publicationSection.slice(publicationSection.indexOf("onClick={saveProfile}"));
+    expect(actionButtons.indexOf("保存资料")).toBeLessThan(actionButtons.indexOf("刷新资料"));
     expect(workspaceSource).not.toContain("onSave={saveProfile}");
     expect(workspaceSource).not.toContain("onSave: () => void");
     expect(areaSectionSource).not.toContain("未发布区域前");
@@ -52,7 +56,7 @@ describe("tenant service provider settings workspace", () => {
     expect(workspaceSource).toContain("ServiceProviderAddressPicker");
     expect(workspaceSource).toContain("ServiceProviderAddressMap");
     expect(workspaceSource).toContain("lg:grid-cols-[minmax(0,1fr)_minmax(340px,420px)]");
-    expect(workspaceSource).toContain("lg:sticky lg:top-0");
+    expect(workspaceSource).toContain("lg:sticky lg:top-5");
     expect(addressPickerSource).toContain("export function ServiceProviderAddressMap");
     expect(addressPickerSource).toContain('previewClassName="h-64 lg:h-[360px]"');
     expect(addressPickerSource).toContain('query.set("province", value.address_province)');
@@ -61,9 +65,7 @@ describe("tenant service provider settings workspace", () => {
     expect(addressPickerSource).toContain('query.set("adcode", value.address_region_code)');
     expect(addressPickerSource).toContain("function updateAddress(nextAddress: string)");
     expect(addressPickerSource).not.toContain('address_latitude: "",\n      address_longitude: "",');
-    expect(workspaceSource).toContain("address_region_code: nullableText(form.address_region_code)");
-    expect(workspaceSource).toContain("address_latitude: nullableNumber(form.address_latitude)");
-    expect(workspaceSource).toContain("address_longitude: nullableNumber(form.address_longitude)");
+    expect(workspaceSource).toContain("toProfilePatch(form, currentProfile)");
     expect(regionPickerSource).toContain("/tenant/location/geocode");
     expect(regionPickerSource).toContain("address_latitude");
     expect(regionPickerSource).toContain("address_longitude");

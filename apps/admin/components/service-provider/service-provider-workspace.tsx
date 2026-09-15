@@ -7,10 +7,8 @@ import { Loader2, RefreshCw, Save, Send } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import {
   ServiceProviderAddressMap,
@@ -29,6 +27,14 @@ import {
   updateServiceProviderProfile,
 } from "./service-provider-actions";
 import {
+  hasUnsavedProfileChanges,
+  reconcileProfileFormAfterRefresh,
+  toProfileForm,
+  toProfilePatch,
+  type ProfileForm,
+} from "./service-provider-profile-form";
+import {
+  formatDateTime,
   profileStatusMeta,
   type ListData,
   type ServiceProviderArea,
@@ -36,61 +42,7 @@ import {
   type ServiceProviderProfile,
 } from "./service-provider-types";
 
-type ProfileForm = {
-  public_name: string;
-  public_phone: string;
-  introduction: string;
-  address_province: string;
-  address_city: string;
-  address_district: string;
-  address_region_code: string;
-  address: string;
-  address_latitude: string;
-  address_longitude: string;
-};
-
 type RequestError = Error & { code?: string; status?: number };
-
-const emptyProfileForm: ProfileForm = {
-  public_name: "",
-  public_phone: "",
-  introduction: "",
-  address_province: "",
-  address_city: "",
-  address_district: "",
-  address_region_code: "",
-  address: "",
-  address_latitude: "",
-  address_longitude: "",
-};
-
-function toProfileForm(profile: ServiceProviderProfile | null): ProfileForm {
-  if (!profile) return emptyProfileForm;
-  return {
-    public_name: profile.public_name || "",
-    public_phone: profile.public_phone || "",
-    introduction: profile.introduction || "",
-    address_province: profile.address_province || "",
-    address_city: profile.address_city || "",
-    address_district: profile.address_district || "",
-    address_region_code: profile.address_region_code || "",
-    address: profile.address || "",
-    address_latitude: profile.address_latitude == null ? "" : String(profile.address_latitude),
-    address_longitude: profile.address_longitude == null ? "" : String(profile.address_longitude),
-  };
-}
-
-function nullableText(value: string) {
-  const trimmed = value.trim();
-  return trimmed ? trimmed : null;
-}
-
-function nullableNumber(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const next = Number(trimmed);
-  return Number.isFinite(next) ? next : null;
-}
 
 function toRequestError(error: unknown, fallback: string): RequestError {
   return error instanceof Error ? error as RequestError : new Error(fallback) as RequestError;
@@ -125,6 +77,8 @@ export function ServiceProviderWorkspace({
   const status = currentProfile?.status || "draft";
   const statusMeta = profileStatusMeta[status];
   const version = currentProfile?.version || 0;
+  const hasUnsavedChanges = currentProfile ? hasUnsavedProfileChanges(form, currentProfile) : false;
+  const canSubmitReview = Boolean(currentProfile && canManage && !pending && status === "draft" && !hasUnsavedChanges);
 
   function updateForm(field: keyof ProfileForm, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -150,26 +104,14 @@ export function ServiceProviderWorkspace({
   }
 
   function saveProfile() {
-    if (!currentProfile || !canManage || pending) return;
+    if (!currentProfile || !canManage || pending || !hasUnsavedChanges) return;
     setError(null);
     setMessage("");
     startTransition(async () => {
       try {
-        const result = await updateServiceProviderProfile({
-          version,
-          public_name: nullableText(form.public_name),
-          public_phone: nullableText(form.public_phone),
-          introduction: nullableText(form.introduction),
-          address_province: nullableText(form.address_province),
-          address_city: nullableText(form.address_city),
-          address_district: nullableText(form.address_district),
-          address_region_code: nullableText(form.address_region_code),
-          address: nullableText(form.address),
-          address_latitude: nullableNumber(form.address_latitude),
-          address_longitude: nullableNumber(form.address_longitude),
-        });
+        const result = await updateServiceProviderProfile(toProfilePatch(form, currentProfile));
         applyMutation(result);
-        setMessage("服务商资料已保存，公开展示仍需平台发布审核。");
+        setMessage("服务商资料已保存。");
       } catch (caught) {
         setError(toRequestError(caught, "保存服务商资料失败"));
       }
@@ -177,7 +119,7 @@ export function ServiceProviderWorkspace({
   }
 
   function submitReview() {
-    if (!currentProfile || !canManage || pending) return;
+    if (!canSubmitReview) return;
     setError(null);
     setMessage("");
     startTransition(async () => {
@@ -201,7 +143,8 @@ export function ServiceProviderWorkspace({
       ]);
       setCurrentProfile(nextProfile);
       setCurrentAreas(nextAreas);
-      setMessage("已刷新当前版本，未覆盖正在编辑的表单内容。");
+      setForm((current) => reconcileProfileFormAfterRefresh(current, currentProfile, nextProfile));
+      setMessage(hasUnsavedChanges ? "已刷新当前版本，未覆盖正在编辑的表单内容。" : "已刷新最新资料。");
       router.refresh();
     } catch (caught) {
       setError(toRequestError(caught, "刷新服务商资料失败"));
@@ -221,41 +164,67 @@ export function ServiceProviderWorkspace({
 
   if (!canRead) {
     return (
-      <Card className="shadow-none">
-        <CardHeader>
-          <CardTitle>无权访问服务商资料</CardTitle>
-          <CardDescription>当前账号缺少服务商资料查看权限。</CardDescription>
-        </CardHeader>
-      </Card>
+      <main className="h-full overflow-y-auto p-5 lg:p-6">
+        <div className="mx-auto max-w-6xl rounded-md bg-card px-5 py-8 sm:px-7">
+          <h1 className="text-xl font-semibold">无权访问服务商资料</h1>
+          <p className="mt-2 text-sm text-muted-foreground">当前账号缺少服务商资料查看权限。</p>
+        </div>
+      </main>
     );
   }
 
   return (
-    <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
-      <CardHeader className="shrink-0 border-b">
-        <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>
-            <Badge variant="outline" className="tabular-nums">版本 {version || "-"}</Badge>
+    <main className="h-full overflow-y-auto p-5 [scrollbar-gutter:stable] lg:p-6">
+      <header className="mx-auto mb-5 flex w-full max-w-6xl flex-col gap-1">
+        <h1 className="text-xl font-semibold tracking-tight">服务商资料</h1>
+        <p className="text-sm text-muted-foreground">维护访客可见的公司信息，并申请平台发布。</p>
+      </header>
+      <div className="mx-auto w-full max-w-6xl rounded-md bg-card px-5 sm:px-7">
+        <section aria-labelledby="service-provider-publication-heading" className="border-b py-6">
+          <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-start">
+            <div className="min-w-0 max-w-2xl">
+              <h2 id="service-provider-publication-heading" className="text-base font-semibold">发布状态</h2>
+              {currentProfile ? (
+                <>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>
+                    <span className="text-sm text-muted-foreground tabular-nums">版本 {version}</span>
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">{profileStatusDescription[status]}</p>
+                </>
+              ) : <p className="mt-2 text-sm text-muted-foreground">当前状态暂不可用，请刷新资料。</p>}
+              {currentProfile?.review_remark ? (
+                <p className="mt-2 break-words text-sm leading-6 text-foreground">平台意见：{currentProfile.review_remark}</p>
+              ) : null}
+              {currentProfile?.submitted_at || currentProfile?.published_at ? (
+                <dl className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
+                  {currentProfile.submitted_at ? <div><dt className="inline">提交时间：</dt><dd className="inline tabular-nums">{formatDateTime(currentProfile.submitted_at)}</dd></div> : null}
+                  {currentProfile.published_at ? <div><dt className="inline">发布时间：</dt><dd className="inline tabular-nums">{formatDateTime(currentProfile.published_at)}</dd></div> : null}
+                </dl>
+              ) : null}
+            </div>
+            <div className="flex flex-col gap-2 lg:items-end">
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" disabled={!canManage || pending || !currentProfile || !hasUnsavedChanges} onClick={saveProfile}>
+                  {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <Save data-icon="inline-start" />}
+                  保存资料
+                </Button>
+                <Button type="button" disabled={!canSubmitReview} onClick={submitReview}>
+                  <Send data-icon="inline-start" />
+                  提交平台发布审核
+                </Button>
+                <Button type="button" variant="ghost" disabled={pending} onClick={() => void refreshCurrent()}>
+                  <RefreshCw data-icon="inline-start" />
+                  刷新资料
+                </Button>
+              </div>
+              {!canManage ? <p className="text-sm text-muted-foreground">当前账号只能查看资料。</p> : null}
+              {canManage && hasUnsavedChanges && status === "draft" ? <p className="text-sm text-muted-foreground">请先保存资料，再提交审核。</p> : null}
+              {canManage && status !== "draft" ? <p className="text-sm text-muted-foreground">当前状态不能重复提交审核。</p> : null}
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" disabled={!canManage || pending || !currentProfile} onClick={saveProfile}>
-              <Save data-icon="inline-start" />
-              保存资料
-            </Button>
-            <Button type="button" variant="outline" disabled={pending} onClick={() => void refreshCurrent()}>
-              <RefreshCw data-icon="inline-start" />
-              刷新资料
-            </Button>
-            <Button type="button" disabled={!canManage || pending || !currentProfile} onClick={submitReview}>
-              {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <Send data-icon="inline-start" />}
-              提交平台发布审核
-            </Button>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
-        <div className="flex flex-col gap-5">
+        </section>
+        <div className="space-y-4 pt-5">
           {loadError ? <StatusAlert>{loadError}</StatusAlert> : null}
           {message ? <StatusAlert tone="success">{message}</StatusAlert> : null}
           {error ? (
@@ -269,34 +238,40 @@ export function ServiceProviderWorkspace({
               ) : null}
             </StatusAlert>
           ) : null}
-          {!currentProfile ? (
-            <StatusAlert>未加载到服务商资料，请确认租户已通过入驻审核。</StatusAlert>
-          ) : (
-            <>
-              <ProfileFormSection
-                form={form}
-                disabled={!canManage || pending}
-                onChange={updateForm}
-                onPatch={patchForm}
-              />
-              <Separator />
-              <ServiceProviderAreaSection
-                areas={currentAreas}
-                profileVersion={version}
-                canManage={canManage}
-                pending={pending}
-                onMutated={applyMutation}
-                onError={setError}
-                onMessage={setMessage}
-                onLoadPage={loadAreaPage}
-              />
-            </>
-          )}
         </div>
-      </CardContent>
-    </Card>
+        {!currentProfile ? (
+          <div className="py-6"><StatusAlert>未加载到服务商资料，请确认租户已通过入驻审核。</StatusAlert></div>
+        ) : (
+          <>
+            <ProfileFormSection
+              form={form}
+              disabled={!canManage || pending}
+              onChange={updateForm}
+              onPatch={patchForm}
+            />
+            <ServiceProviderAreaSection
+              areas={currentAreas}
+              profileVersion={version}
+              canManage={canManage}
+              pending={pending}
+              onMutated={applyMutation}
+              onError={setError}
+              onMessage={setMessage}
+              onLoadPage={loadAreaPage}
+            />
+          </>
+        )}
+      </div>
+    </main>
   );
 }
+
+const profileStatusDescription = {
+  draft: "填好公开名称、11 位手机号、详细地址、地图坐标及至少一个服务区域后，可提交平台审核。",
+  pending_review: "资料正在等待平台审核，发布前不会出现在访客结果中。修改资料会回到草稿。",
+  published: "资料已公开展示。修改名称、电话或地址等关键字段后，需要平台重新审核。",
+  suspended: "平台已暂停公开展示。修改关键字段后需要平台重新审核。",
+} satisfies Record<ServiceProviderProfile["status"], string>;
 
 function ProfileFormSection({
   form,
@@ -326,34 +301,39 @@ function ProfileFormSection({
   };
 
   return (
-    <section className="flex flex-col gap-4" aria-label="服务商公开资料">
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(340px,420px)] lg:items-start">
-        <FieldGroup className="grid gap-4 md:grid-cols-2">
-          <TextField id="service-provider-public-name" label="公开名称" value={form.public_name} disabled={disabled} onChange={(value) => onChange("public_name", value)} />
-          <TextField id="service-provider-public-phone" label="公开电话" value={form.public_phone} disabled={disabled} onChange={(value) => onChange("public_phone", value)} />
-          <ServiceProviderRegionPicker
-            value={regionValue}
-            disabled={disabled}
-            onChange={onPatch}
-          />
-          <ServiceProviderAddressPicker
-            value={addressValue}
-            disabled={disabled}
-            onChange={onPatch}
-          />
-          <Field className="md:col-span-2">
-            <FieldLabel htmlFor="service-provider-introduction">公司简介</FieldLabel>
-            <Textarea
-              id="service-provider-introduction"
-              rows={5}
-              maxLength={2000}
-              value={form.introduction}
-              disabled={disabled}
-              onChange={(event) => onChange("introduction", event.target.value)}
-            />
-          </Field>
-        </FieldGroup>
-        <div className="lg:sticky lg:top-0">
+    <section className="border-b py-6" aria-labelledby="service-provider-public-profile-heading">
+      <h2 id="service-provider-public-profile-heading" className="text-base font-semibold">公开资料</h2>
+      <p className="mt-1 text-sm text-muted-foreground">名称、电话和地址将用于访客查看与联系。</p>
+      <div className="mt-5 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(340px,420px)] lg:items-start">
+        <div className="space-y-6">
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold">公司信息</h3>
+            <FieldGroup className="grid gap-4 md:grid-cols-2">
+              <TextField id="service-provider-public-name" label="公开名称" value={form.public_name} disabled={disabled} onChange={(value) => onChange("public_name", value)} />
+              <TextField id="service-provider-public-phone" label="公开电话" value={form.public_phone} disabled={disabled} onChange={(value) => onChange("public_phone", value)} />
+              <Field className="md:col-span-2">
+                <FieldLabel htmlFor="service-provider-introduction">公司简介</FieldLabel>
+                <Textarea
+                  id="service-provider-introduction"
+                  rows={5}
+                  maxLength={2000}
+                  value={form.introduction}
+                  disabled={disabled}
+                  onChange={(event) => onChange("introduction", event.target.value)}
+                />
+              </Field>
+            </FieldGroup>
+          </div>
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold">公司地址</h3>
+            <FieldGroup className="grid gap-4 md:grid-cols-2">
+              <ServiceProviderRegionPicker value={regionValue} disabled={disabled} onChange={onPatch} />
+              <ServiceProviderAddressPicker value={addressValue} disabled={disabled} onChange={onPatch} />
+            </FieldGroup>
+          </div>
+        </div>
+        <div className="lg:sticky lg:top-5">
+          <h3 className="mb-3 text-sm font-semibold">地图位置</h3>
           <ServiceProviderAddressMap
             value={addressValue}
             disabled={disabled}

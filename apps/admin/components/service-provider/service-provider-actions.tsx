@@ -11,7 +11,7 @@ export const SERVICE_PROVIDER_READ_PERMISSION = "service_provider.profile.read";
 export const SERVICE_PROVIDER_MANAGE_PERMISSION = "service_provider.profile.manage";
 export const SERVICE_PROVIDER_AREA_PAGE_SIZE = 20;
 
-type ProfilePatch = {
+export type ProfilePatch = {
   version: number;
   public_name?: string | null;
   introduction?: string | null;
