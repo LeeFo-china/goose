@@ -26,3 +26,9 @@
 - main 小程序代码已加入 `capture_version=2`。用户此前报告体验版为 `0.1.36`；本轮没有上传新模板或替换体验版。当前看板不应按真实来源统计解读。
 - 本机抖音开发者工具无可操作窗口；官方 `tt-ide-cli` 无登录 Cookie，上传需要开发者工具登录态或为模板 AppID 配置 CLI token。不得在聊天传 token。下一版上传、确认最新模板、生成商户体验版及真机来源验收仍待完成。
 - 未使用租户员工会话做登录后页面 smoke，也未制造生产测试预约。上线后应从抖音官方视频/账号/直播入口和手工标记入口分别真机进入，核对看板来源依据、事件趋势与预约详情创建时间。
+
+## Admin 图表修正
+
+- 发布后检查发现趋势图直接使用 `var(--primary)` / `var(--success)` 作为 SVG stroke；本项目令牌存的是 HSL 通道值，浏览器可能无法绘制线条。修正为仓库其他图表使用的 `hsl(var(--...))`。相关页面测试、Admin 类型检查与生产构建通过。
+- 修正 main 提交 `fd8811c0a48b99656bb8609e283bfb0bd29f1d9e`，Tag `v2026.09.15.11`。[Admin 单服务候选](https://github.com/LeeFo-china/goose/actions/runs/34955691017) 和[部署](https://github.com/LeeFo-china/goose/actions/runs/34957119624)均成功；回执服务只有 `admin`，完成于 `2026-09-15T10:21:12Z`。
+- 最终 SSH 实际容器：API `2be744ca2fcb5a0be96a3893b57a8ad539ec5c3e`、Admin `fd8811c0a48b99656bb8609e283bfb0bd29f1d9e`，都为 `running/healthy`。公网 Admin 看板未登录仍 307 至登录页，API 首页及 Admin 登录页 200。
