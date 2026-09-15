@@ -765,15 +765,153 @@ test("unknown job submission keeps the persisted request and retries with its or
   await flush();
   expect(first.data.canGenerate).toBe(true);
   await first.submitJob();
-  expect(first.data.jobMessage).toContain("继续提交同一任务");
+  expect(first.data.jobStatus).toBe("succeeded");
+  expect(first.data.jobConfirmationPending).toBe(false);
+  expect(requests).toHaveLength(2);
+  expect(requests[1]).toEqual(requests[0]);
   first.onUnload();
   const reopened = makeIntegratedPage();
   reopened.onLoad({ id: STYLE.id });
   await flush();
   expect(reopened.data.jobDraftLocked).toBe(true);
-  await reopened.submitJob();
   expect(requests).toHaveLength(2);
-  expect(requests[1]).toEqual(requests[0]);
+});
+
+test("repeated uncertain submission offers a clear status query and keeps the original request", async () => {
+  const requests: unknown[] = [];
+  const definition = createRenderingStyleDetailPageDefinition({
+    getApp: () => ({ api: {}, startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
+      recordAnalytics: () => undefined }) as never,
+    fetchPublishedStyleDetail: async () => STYLE,
+    navigateToList: async () => undefined, showToast: () => undefined,
+    choosePrivateImage: async () => { throw new Error("unused"); },
+    createRenderingUploadIntent: async () => { throw new Error("unused"); },
+    putRenderingBytes: async () => undefined,
+    completeRenderingUploadWithRetry: async () => { throw new Error("unused"); },
+    resolveRecoveryIdentity: async () => OWNER,
+    readRenderingRecovery: () => ({ styleId: STYLE.id, roomIntentId: null, floorIntentId: null,
+      roomFileId: STYLE.id, floorFileId: null, jobRequest: null, jobId: null, savedAt: Date.now() }),
+    writeRenderingRecovery: () => true,
+    fetchRenderingUploadStatus: async () => ({ fileId: STYLE.id, status: "ready", reviewState: null }),
+    createIdempotencyKey: () => "33333333-3333-4333-8333-333333333333",
+    createRenderingJob: async (_client, input) => {
+      requests.push(input);
+      throw new ApiRequestError(0, "NETWORK_ERROR", "unknown");
+    },
+  });
+  const view = Object.assign(definition, { setData(patch: Record<string, unknown>) { Object.assign(definition.data, patch); } });
+  view.onLoad({ id: STYLE.id }); await flush();
+  await view.submitJob();
+  expect(view.data.jobConfirmationPending).toBe(true);
+  expect(view.data.jobMessage).toContain("暂时无法确认");
+  expect(view.data.generateButtonLabel).toBe("查询任务状态");
+  expect(requests).toHaveLength(2);
+  await view.submitJob();
+  expect(requests).toHaveLength(3);
+  expect(requests[2]).toEqual(requests[0]);
+});
+
+test("known admission rejection explains the reason and unlocks the image draft", async () => {
+  const definition = createRenderingStyleDetailPageDefinition({
+    getApp: () => ({ api: {}, startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
+      recordAnalytics: () => undefined }) as never,
+    fetchPublishedStyleDetail: async () => STYLE,
+    navigateToList: async () => undefined, showToast: () => undefined,
+    choosePrivateImage: async () => { throw new Error("unused"); },
+    createRenderingUploadIntent: async () => { throw new Error("unused"); },
+    putRenderingBytes: async () => undefined,
+    completeRenderingUploadWithRetry: async () => { throw new Error("unused"); },
+    resolveRecoveryIdentity: async () => OWNER,
+    readRenderingRecovery: () => ({ styleId: STYLE.id, roomIntentId: null, floorIntentId: null,
+      roomFileId: STYLE.id, floorFileId: null, jobRequest: null, jobId: null, savedAt: Date.now() }),
+    writeRenderingRecovery: () => true,
+    fetchRenderingUploadStatus: async () => ({ fileId: STYLE.id, status: "ready", reviewState: null }),
+    createRenderingJob: async () => { throw new ApiRequestError(409, "RENDERING_PHONE_REQUIRED", "phone"); },
+  });
+  const view = Object.assign(definition, { setData(patch: Record<string, unknown>) { Object.assign(definition.data, patch); } });
+  view.onLoad({ id: STYLE.id }); await flush();
+  await view.submitJob();
+  expect(view.data.jobMessage).toContain("手机号");
+  expect(view.data.jobDraftLocked).toBe(false);
+  expect(view.data.jobConfirmationPending).toBe(false);
+  expect(view.data.generateButtonLabel).toBe("生成 AI 参考效果图");
+});
+
+test("Douyin phone authorization continues the same tap into rendering progress", async () => {
+  const accepted: unknown[] = [];
+  const definition = createRenderingStyleDetailPageDefinition({
+    getApp: () => ({ api: {}, session: { acceptVerifiedSession: (...args: unknown[]) => accepted.push(args) },
+      startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
+      recordAnalytics: () => undefined }) as never,
+    fetchPublishedStyleDetail: async () => STYLE,
+    navigateToList: async () => undefined, showToast: () => undefined,
+    choosePrivateImage: async () => { throw new Error("unused"); },
+    createRenderingUploadIntent: async () => { throw new Error("unused"); },
+    putRenderingBytes: async () => undefined,
+    completeRenderingUploadWithRetry: async () => { throw new Error("unused"); },
+    resolveRecoveryIdentity: async () => OWNER,
+    readRenderingRecovery: () => ({ styleId: STYLE.id, roomIntentId: null, floorIntentId: null,
+      roomFileId: STYLE.id, floorFileId: null, jobRequest: null, jobId: null, savedAt: Date.now() }),
+    writeRenderingRecovery: () => true,
+    fetchRenderingUploadStatus: async () => ({ fileId: STYLE.id, status: "ready", reviewState: null }),
+    fetchRenderingPhoneState: async () => ({ phoneVerified: false }),
+    authorizeRenderingPhone: async () => ({ accessToken: "verified-server-token", expiresIn: 7200 }),
+    createRenderingJob: async () => ({ jobId: STYLE.id, status: "queued" }),
+    fetchRenderingJobStatus: async () => ({ jobId: STYLE.id, status: "queued", result: null }),
+  });
+  const view = Object.assign(definition, { setData(patch: Record<string, unknown>) { Object.assign(definition.data, patch); } });
+  view.onLoad({ id: STYLE.id }); await flush();
+  expect(view.data.phoneAuthorizationRequired).toBe(true);
+  await view.onDouyinPhoneForRendering({ detail: {} });
+  expect(accepted).toHaveLength(0);
+  expect(view.data.jobId).toBe("");
+  await view.onDouyinPhoneForRendering({ detail: { code: "official-phone-code" } });
+  expect(accepted).toHaveLength(1);
+  expect(view.data.phoneAuthorizationRequired).toBe(false);
+  expect(view.data.jobStatus).toBe("queued");
+  expect(view.data.jobMessage).toContain("排队中");
+  view.onUnload();
+});
+
+test("an expired phone session keeps an uncertain task key until reauthorization", async () => {
+  const request = { style_asset_id: STYLE.id, room_file_id: STYLE.id,
+    space: "living_room" as const, mode: "soft_furnishing" as const,
+    idempotency_key: "33333333-3333-4333-8333-333333333333" };
+  const submitted: unknown[] = [];
+  let authorized = false;
+  const definition = createRenderingStyleDetailPageDefinition({
+    getApp: () => ({ api: {}, session: { acceptVerifiedSession: () => { authorized = true; } },
+      startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
+      recordAnalytics: () => undefined }) as never,
+    fetchPublishedStyleDetail: async () => STYLE,
+    navigateToList: async () => undefined, showToast: () => undefined,
+    choosePrivateImage: async () => { throw new Error("unused"); },
+    createRenderingUploadIntent: async () => { throw new Error("unused"); },
+    putRenderingBytes: async () => undefined,
+    completeRenderingUploadWithRetry: async () => { throw new Error("unused"); },
+    resolveRecoveryIdentity: async () => OWNER,
+    readRenderingRecovery: () => ({ styleId: STYLE.id, roomIntentId: null, floorIntentId: null,
+      roomFileId: STYLE.id, floorFileId: null, jobRequest: request, jobId: null, savedAt: Date.now() }),
+    writeRenderingRecovery: () => true,
+    fetchRenderingUploadStatus: async () => ({ fileId: STYLE.id, status: "ready", reviewState: null }),
+    authorizeRenderingPhone: async () => ({ accessToken: "verified-server-token", expiresIn: 7200 }),
+    createRenderingJob: async (_client, input) => {
+      submitted.push(input);
+      if (!authorized) throw new ApiRequestError(409, "RENDERING_PHONE_REQUIRED", "phone");
+      return { jobId: STYLE.id, status: "queued" };
+    },
+    fetchRenderingJobStatus: async () => ({ jobId: STYLE.id, status: "queued", result: null }),
+  });
+  const view = Object.assign(definition, { setData(patch: Record<string, unknown>) { Object.assign(definition.data, patch); } });
+  view.onLoad({ id: STYLE.id }); await flush();
+  expect(view.data.phoneAuthorizationRequired).toBe(true);
+  expect(view.data.jobConfirmationPending).toBe(false);
+  expect(view.data.jobDraftLocked).toBe(true);
+  await view.onDouyinPhoneForRendering({ detail: { code: "official-phone-code" } });
+  expect(view.data.jobStatus).toBe("queued");
+  expect(submitted).toHaveLength(2);
+  expect(submitted[1]).toEqual(request);
+  view.onUnload();
 });
 
 test("account switch clears the prior result and draft, then loads only the new owner's recovery", async () => {

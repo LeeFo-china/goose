@@ -2,7 +2,8 @@ import type { DouyinAppContext } from "../../app";
 import { fetchPublishedStyleDetail } from "../../api/rendering-styles";
 import { completeRenderingUploadWithRetry, createRenderingUploadIntent, putRenderingBytes } from "../../api/rendering-uploads";
 import { fetchRenderingUploadStatus, fetchRenderingUploadPreview } from "../../api/rendering-uploads";
-import { createRenderingJob, fetchRenderingJobStatus } from "../../api/rendering-jobs";
+import { authorizeRenderingPhone, createRenderingJob, fetchRenderingJobStatus,
+  fetchRenderingPhoneState } from "../../api/rendering-jobs";
 import { choosePrivateImage } from "../../platform/private-image";
 import { clearRenderingRecovery, readRenderingRecovery, writeRenderingRecovery } from "../../platform/rendering-recovery";
 import { replacePage } from "../../platform/navigation";
@@ -20,6 +21,8 @@ Page(createRenderingStyleDetailPageDefinition({
   previewImage: (options) => { tt.previewImage(options); },
   createRenderingJob,
   fetchRenderingJobStatus,
+  fetchRenderingPhoneState,
+  authorizeRenderingPhone,
   readRenderingRecovery,
   writeRenderingRecovery,
   clearRenderingRecovery,

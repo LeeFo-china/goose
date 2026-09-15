@@ -7,6 +7,8 @@ import type {
   StoredSession,
 } from "../models";
 import { ApiRequestError, type SessionTokenProvider } from "../api/request";
+import { identityKey, recoveryIdentityFromToken,
+  type RenderingRecoveryIdentity } from "../platform/rendering-recovery";
 
 const EXPIRY_SAFETY_WINDOW_MS = 30_000;
 
@@ -52,6 +54,20 @@ export class SessionManager implements SessionTokenProvider {
     this.currentSession = null;
     this.dependencies.clearStoredSession();
     return (await this.refresh()).accessToken;
+  }
+
+  acceptVerifiedSession(input: { accessToken: string; expiresIn: number },
+    expectedIdentity: RenderingRecoveryIdentity): void {
+    if (!Number.isInteger(input.expiresIn) || input.expiresIn < 1 || input.expiresIn > 86400
+      || !identityKey(expectedIdentity)
+      || identityKey(recoveryIdentityFromToken(input.accessToken)) !== identityKey(expectedIdentity)) {
+      throw new ApiRequestError(0, "DOUYIN_PHONE_SESSION_INVALID", "手机号会话身份不匹配");
+    }
+    const stored = { accessToken: input.accessToken,
+      expiresAt: this.dependencies.now() + input.expiresIn * 1000 };
+    this.currentSession = stored;
+    this.hydrated = true;
+    this.dependencies.writeStoredSession(stored);
   }
 
   private getCurrentSession(): StoredSession | null {

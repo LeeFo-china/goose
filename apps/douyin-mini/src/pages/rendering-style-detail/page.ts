@@ -3,7 +3,8 @@ import { type PublishedRenderingStyle, type fetchPublishedStyleDetail } from "..
 import { normalizeMaterialUuid } from "../../api/material-uuid";
 import { ApiRequestError } from "../../api/request";
 import { type RenderingJobRequest, type RenderingJobStatus, type createRenderingJob,
-  type fetchRenderingJobStatus } from "../../api/rendering-jobs";
+  type fetchRenderingJobStatus, type fetchRenderingPhoneState,
+  type authorizeRenderingPhone } from "../../api/rendering-jobs";
 import {
   type RenderingUploadPurpose,
   type createRenderingUploadIntent,
@@ -52,6 +53,8 @@ export type RenderingStyleDetailDependencies = {
   previewImage?: (options: Parameters<typeof tt.previewImage>[0]) => void;
   createRenderingJob?: typeof createRenderingJob;
   fetchRenderingJobStatus?: typeof fetchRenderingJobStatus;
+  fetchRenderingPhoneState?: typeof fetchRenderingPhoneState;
+  authorizeRenderingPhone?: typeof authorizeRenderingPhone;
   readRenderingRecovery?: typeof readRenderingRecovery;
   writeRenderingRecovery?: typeof writeRenderingRecovery;
   clearRenderingRecovery?: typeof clearRenderingRecovery;
@@ -70,6 +73,7 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
     uploadEpoch: 0,
     jobEpoch: 0,
     jobPolls: 0,
+    phoneStateEpoch: 0,
     jobTimer: undefined as ReturnType<typeof setTimeout> | undefined,
     submittingJob: false,
     uploading: false,
@@ -112,6 +116,9 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
       jobMessage: "",
       jobRefreshAvailable: false,
       jobSubmitting: false,
+      phoneAuthorizing: false,
+      phoneAuthorizationRequired: false,
+      jobConfirmationPending: false,
       jobDraftLocked: false,
       resultUrl: "",
       resultImageFailed: false,
@@ -131,6 +138,7 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
       const scope = identityKey(identity);
       const sameScope = scope !== null && scope === this.recoveryScope;
       if (!sameScope) {
+        this.phoneStateEpoch++;
         this.jobEpoch++; this.stopJobPolling();
         this.uploadEpoch++; this.uploading = false;
         this.submittingJob = false;
@@ -141,7 +149,8 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
           roomPreviewFailed: false, floorPreviewFailed: false,
           mode: "soft_furnishing", keepNotes: "", jobId: "",
           jobStatus: "", jobMessage: "", jobRefreshAvailable: false,
-          jobDraftLocked: false, jobSubmitting: false,
+          jobDraftLocked: false, jobSubmitting: false, jobConfirmationPending: false,
+          phoneAuthorizing: false, phoneAuthorizationRequired: false,
           resultUrl: "", resultImageFailed: false });
       }
       this.recoveryIdentity = scope ? identity : null;
@@ -170,8 +179,9 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
       if (this.recovery.jobRequest) this.setData({
         mode: this.recovery.jobRequest.mode,
         keepNotes: this.recovery.jobRequest.keep_notes ?? "",
-        jobMessage: this.recovery.jobId ? "正在恢复生成任务…" : "上次提交结果未确认，可继续提交同一任务",
+        jobMessage: this.recovery.jobId ? "正在恢复生成任务…" : "正在核对上次生成任务…",
         jobId: this.recovery.jobId ?? "",
+        jobConfirmationPending: !this.recovery.jobId,
         jobDraftLocked: true,
       });
       else if (sameScope && this.hiddenDraft?.scope === scope) {
@@ -188,7 +198,8 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
         mode: "soft_furnishing",
         keepNotes: "", canGenerate: false, showGeneration: false, jobId: "",
         jobStatus: "", jobMessage: "", jobRefreshAvailable: false,
-        jobSubmitting: false, jobDraftLocked: false,
+        jobSubmitting: false, jobConfirmationPending: false, jobDraftLocked: false,
+        phoneAuthorizing: false, phoneAuthorizationRequired: false,
         resultUrl: "", resultImageFailed: false });
     },
     onShow() {
@@ -202,6 +213,7 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
     },
     onHide() {
       this.wasHidden = true; this.visible = false; this.requestEpoch++;
+      this.phoneStateEpoch++;
       this.hiddenDraft = this.recoveryScope ? { scope: this.recoveryScope,
         mode: this.data.mode, keepNotes: this.data.keepNotes } : null;
       this.scopeReady = false;
@@ -218,6 +230,7 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
     },
     onUnload() {
       this.wasHidden = false; this.visible = false; this.requestEpoch++;
+      this.phoneStateEpoch++;
       this.jobEpoch++; this.stopJobPolling();
       this.uploadEpoch++; this.uploading = false; this.selectingImage = false;
       this.resumeUpload?.();
@@ -258,7 +271,9 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
         });
         app.recordAnalytics("page_view");
         void this.refreshUploads();
+        void this.refreshPhoneState();
         if (this.recovery.jobId) void this.refreshJob();
+        else if (this.recovery.jobRequest) void this.submitJob();
       } catch (error) {
         if (!this.visible || epoch !== this.requestEpoch) return;
         if (error instanceof ApiRequestError) {
@@ -323,6 +338,39 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
       this.invalidateJobDraft();
     },
     onGenerate() { void this.submitJob(); },
+    async onDouyinPhoneForRendering(event: { detail?: { code?: string } }) {
+      if (!this.visible || !this.scopeReady || this.data.status !== "ready"
+        || this.data.phoneAuthorizing || this.submittingJob || this.recovery.jobId
+        || !this.recoveryIdentity || !dependencies.authorizeRenderingPhone) return;
+      const code = event.detail?.code;
+      if (!code) {
+        this.setData({ jobMessage: "未授权手机号，暂不能生成效果图" });
+        return;
+      }
+      const epoch = this.requestEpoch;
+      const scope = this.recoveryScope;
+      const identity = this.recoveryIdentity;
+      this.phoneStateEpoch++;
+      this.setData({ phoneAuthorizing: true, jobMessage: "正在验证抖音手机号…" });
+      try {
+        const app = dependencies.getApp();
+        const authorized = await dependencies.authorizeRenderingPhone(app.api, code);
+        if (!this.visible || epoch !== this.requestEpoch || scope !== this.recoveryScope) return;
+        app.session.acceptVerifiedSession(authorized, identity);
+        this.setData({ phoneAuthorizationRequired: false, phoneAuthorizing: false,
+          jobMessage: "手机号已验证，正在提交生成任务…" });
+        await this.submitJob();
+      } catch (error) {
+        if (this.visible && epoch === this.requestEpoch && scope === this.recoveryScope) {
+          this.setData({ phoneAuthorizationRequired: true,
+            jobMessage: phoneAuthorizationErrorMessage(error) });
+        }
+      } finally {
+        if (this.visible && epoch === this.requestEpoch && scope === this.recoveryScope) {
+          this.setData({ phoneAuthorizing: false });
+        }
+      }
+    },
     async preview(purpose: RenderingUploadPurpose) {
       const fileId = this.recovery.files[purpose];
       if (!fileId || !this.visible || !this.scopeReady || !dependencies.fetchRenderingUploadPreview
@@ -444,9 +492,24 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
           && (Boolean(this.recovery.jobRequest) || this.data.roomUploadStatus === "ready"
             && (!this.data.floorFileId || this.data.floorUploadStatus === "ready")),
         showGeneration: Boolean(this.data.roomFileId || this.recovery.jobRequest || this.recovery.jobId),
-        generateButtonLabel: this.submittingJob ? "正在提交…"
-          : this.recovery.jobRequest ? "继续确认生成任务" : "生成 AI 参考效果图",
+        generateButtonLabel: this.submittingJob ? "正在核对任务…"
+          : this.recovery.jobRequest ? "查询任务状态" : "生成 AI 参考效果图",
       });
+    },
+    async refreshPhoneState() {
+      if (!dependencies.fetchRenderingPhoneState || !this.visible || !this.scopeReady
+        || this.data.status !== "ready") return;
+      const epoch = this.requestEpoch;
+      const phoneEpoch = ++this.phoneStateEpoch;
+      const scope = this.recoveryScope;
+      try {
+        const state = await dependencies.fetchRenderingPhoneState(dependencies.getApp().api);
+        if (!this.visible || epoch !== this.requestEpoch || phoneEpoch !== this.phoneStateEpoch
+          || scope !== this.recoveryScope) return;
+        this.setData({ phoneAuthorizationRequired: !state.phoneVerified });
+      } catch {
+        // Job admission remains authoritative if the quota read is temporarily unavailable.
+      }
     },
     async refreshUploads() {
       if (!dependencies.fetchRenderingUploadStatus || !this.visible || this.data.status !== "ready") return;
@@ -516,6 +579,7 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
         ...(this.data.keepNotes.trim() ? { keep_notes: this.data.keepNotes.trim() } : {}),
         idempotency_key: (dependencies.createIdempotencyKey ?? createUuidV4IdempotencyKey)(),
       };
+      const confirmingPreviousRequest = Boolean(this.recovery.jobRequest);
       this.recovery.jobRequest = request;
       if (!this.persistRecovery()) {
         this.recovery.jobRequest = undefined;
@@ -527,26 +591,53 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
       const recovery = this.recovery;
       const currentScope = () => this.visible && this.scopeReady
         && this.recoveryScope === scope && this.recovery === recovery;
-      this.setData({ jobSubmitting: true, canGenerate: false,
-        generateButtonLabel: "正在提交…", jobMessage: "正在提交生成任务…",
+      this.setData({ jobSubmitting: true, jobConfirmationPending: confirmingPreviousRequest,
+        canGenerate: false, generateButtonLabel: "正在核对任务…",
+        jobMessage: confirmingPreviousRequest ? "正在核对生成任务…" : "正在提交生成任务…",
         jobRefreshAvailable: false });
+      let uncertainAttempt = false;
       try {
-        const created = await dependencies.createRenderingJob(app.api, request);
+        let created;
+        try {
+          created = await dependencies.createRenderingJob(app.api, request);
+        } catch (error) {
+          if (!currentScope() || confirmingPreviousRequest || !isUncertainJobSubmissionError(error)) throw error;
+          uncertainAttempt = true;
+          // Reuse the persisted payload and idempotency key: this may return a task
+          // already created before the first response was lost.
+          this.setData({ jobConfirmationPending: true, jobMessage: "正在核对任务提交状态…" });
+          created = await dependencies.createRenderingJob(app.api, request);
+        }
         if (!currentScope()) return;
         this.recovery.jobId = created.jobId;
         this.persistRecovery();
         this.setData({ jobId: created.jobId, jobStatus: created.status,
-          jobMessage: "任务已提交，正在查询进度…", jobRefreshAvailable: false });
+          jobMessage: "任务已提交，正在查询进度…", jobConfirmationPending: false,
+          jobRefreshAvailable: false });
         await this.refreshJob();
       } catch (error) {
         if (!currentScope()) return;
-        if (error instanceof ApiRequestError && (error.code === "RENDERING_INPUT_UNAVAILABLE"
-          || error.code === "RENDERING_JOB_DISABLED")) {
+        const uncertain = isUncertainJobSubmissionError(error);
+        const phoneReauthorizationRequired = error instanceof ApiRequestError
+          && error.code === "RENDERING_PHONE_REQUIRED"
+          && (confirmingPreviousRequest || uncertainAttempt);
+        if (error instanceof ApiRequestError && error.code === "RENDERING_PHONE_REQUIRED") {
+          this.setData({ phoneAuthorizationRequired: true });
+        }
+        if (!uncertain && !phoneReauthorizationRequired) {
           this.recovery.jobRequest = undefined;
           this.persistRecovery();
-          this.setData({ jobDraftLocked: false });
+          this.setData({ jobDraftLocked: false, jobConfirmationPending: false });
+        } else if (phoneReauthorizationRequired) {
+          // A previous attempt may already have created this paid task. Keep its
+          // original key until the refreshed phone credential can resolve it.
+          this.setData({ jobConfirmationPending: false });
+        } else {
+          this.setData({ jobConfirmationPending: true });
         }
-        this.setData({ jobMessage: jobErrorMessage(error) });
+        this.setData({ jobMessage: phoneReauthorizationRequired
+          ? "手机号授权已失效，请重新授权以查询当前生成任务"
+          : jobErrorMessage(error) });
         if (error instanceof ApiRequestError && error.code === "RENDERING_INPUT_UNAVAILABLE") {
           void this.refreshUploads();
         }
@@ -753,12 +844,33 @@ function jobProgressMessage(status: RenderingJobStatus, failureReason?: 'content
 }
 
 function jobErrorMessage(error: unknown): string {
-  if (!(error instanceof ApiRequestError)) return "任务提交结果未确认，请继续提交同一任务";
-  if (error.statusCode === 401) return "登录状态已失效，请重新进入后继续提交";
+  if (isUncertainJobSubmissionError(error)) return "暂时无法确认任务是否已提交，请查询任务状态；不会重复创建任务";
+  if (!(error instanceof ApiRequestError)) return "生成请求未通过，请稍后重试";
+  if (error.statusCode === 401) return "登录状态已失效，请重新进入页面后再试";
   if (error.code === "RENDERING_INPUT_UNAVAILABLE") return "上传图片尚未就绪，正在自动确认状态";
+  if (error.code === "RENDERING_PHONE_REQUIRED") return "请先在小程序授权手机号，再生成效果图";
   if (error.code === "RENDERING_QUOTA_EXHAUSTED") return "当前生成次数已用完";
+  if (error.code === "RENDERING_JOB_ACTIVE") return "已有正在生成的任务，请稍后查看结果";
+  if (error.code === "RENDERING_STYLE_UNAVAILABLE") return "这张效果图暂不可用于生成，请选择其他效果图";
+  if (error.code === "RENDERING_DAILY_TASK_LIMIT") return "今日生成任务已达上限，请明天再试";
+  if (error.code === "RENDERING_DAILY_BUDGET_LIMIT") return "今日生成预算已达上限，请明天再试";
+  if (error.code === "RENDERING_IDEMPOTENCY_CONFLICT") return "任务状态异常，请重新进入页面后再试";
   if (error.code === "RENDERING_JOB_DISABLED") return "AI 生成服务尚未开放，请稍后重试；图片仍可调整";
-  return "任务提交结果未确认，请继续提交同一任务";
+  return "生成请求未通过，请稍后重试";
+}
+
+function phoneAuthorizationErrorMessage(error: unknown): string {
+  if (error instanceof ApiRequestError && error.code === "DOUYIN_PHONE_NUMBER_CONFIG_INVALID") {
+    return "抖音手机号授权暂不可用，请稍后重试";
+  }
+  if (error instanceof ApiRequestError && error.statusCode === 401) return "登录状态已失效，请重新进入后授权";
+  return "手机号授权未完成，请重试后生成效果图";
+}
+
+function isUncertainJobSubmissionError(error: unknown): boolean {
+  if (!(error instanceof ApiRequestError)) return true;
+  if (error.code === "RENDERING_JOB_DISABLED" || error.code === "INVALID_RENDERING_JOB") return false;
+  return error.statusCode === 0 || error.statusCode >= 500;
 }
 
 function uploadErrorMessage(error: unknown, retryable: boolean): string {

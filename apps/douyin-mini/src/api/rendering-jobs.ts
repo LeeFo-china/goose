@@ -19,6 +19,24 @@ export type RenderingJobProgress = RenderingJobCreated & {
   failureReason?: 'content_rejected' | 'provider_rejected' | null;
 };
 
+export async function fetchRenderingPhoneState(client: ApiClient): Promise<{ phoneVerified: boolean }> {
+  const value = await client.request<unknown>({ method: 'GET', path: '/douyin-mini/renderings/quota' });
+  if (!isRecord(value) || typeof value.phone_verified !== 'boolean') throw invalidResponse();
+  return { phoneVerified: value.phone_verified };
+}
+
+export async function authorizeRenderingPhone(client: ApiClient, code: string): Promise<{
+  accessToken: string; expiresIn: number;
+}> {
+  if (!code.trim() || code.length > 512) throw new ApiRequestError(0, 'INVALID_DOUYIN_PHONE_CODE', '手机号授权无效');
+  const value = await client.request<unknown>({ method: 'POST',
+    path: '/douyin-mini/renderings/phone:authorize', data: { douyin_phone_code: code } });
+  if (!isRecord(value) || typeof value.access_token !== 'string' || value.access_token.length < 20
+    || !Number.isInteger(value.expires_in) || (value.expires_in as number) < 1
+    || (value.expires_in as number) > 86400) throw invalidResponse();
+  return { accessToken: value.access_token, expiresIn: value.expires_in as number };
+}
+
 const STATUSES: RenderingJobStatus[] = ['queued', 'processing', 'succeeded', 'failed', 'review_required'];
 
 export async function createRenderingJob(client: ApiClient, input: RenderingJobRequest): Promise<RenderingJobCreated> {

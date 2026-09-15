@@ -46,7 +46,7 @@ export type DouyinMiniappTokenPayload = JwtPayload & {
 export type DouyinMiniappTokenInput = Pick<
   DouyinMiniappTokenPayload,
   "tenant_id" | "douyin_installation_id" | "douyin_app_id" | "subject_hash"
->;
+> & { verified_phone?: string };
 
 type JwtHeader = {
   alg: "HS256";
@@ -65,6 +65,7 @@ const DOUYIN_MINIAPP_CLAIMS = new Set([
   "douyin_installation_id",
   "douyin_app_id",
   "subject_hash",
+  "verified_phone",
   "iat",
   "exp",
 ]);
@@ -367,6 +368,8 @@ function isValidDouyinMiniappPayload(
     && typeof payload.subject_hash === "string"
     && /^[a-f0-9]{64}$/.test(payload.subject_hash)
     && payload.sub === payload.subject_hash
+    && (payload.verified_phone === undefined
+      || (typeof payload.verified_phone === "string" && /^1[3-9]\d{9}$/.test(payload.verified_phone)))
     && Number.isSafeInteger(payload.iat)
     && Number.isSafeInteger(payload.exp)
     && payload.iat! >= 0

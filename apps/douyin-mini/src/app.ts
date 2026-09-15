@@ -61,6 +61,7 @@ const bootstrap = new BootstrapStore(
 
 export type DouyinAppContext = {
   api: ApiClient;
+  session: SessionManager;
   customerApi: ApiClient;
   customerSession: CustomerSessionManager;
   analytics: AnalyticsQueue;
@@ -81,6 +82,7 @@ const DEFAULT_LAUNCH_CONTEXT: LaunchContext = {
 
 App({
   api,
+  session,
   customerApi,
   customerSession,
   analytics,

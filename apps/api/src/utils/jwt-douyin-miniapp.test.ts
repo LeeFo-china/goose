@@ -31,6 +31,15 @@ describe("Douyin miniapp JWT", () => {
     expect(JSON.stringify(result.payload)).not.toMatch(/openid|open_id|session_key/i);
   });
 
+  test("accepts an officially verified phone only in a signed Douyin session", () => {
+    const token = jwt.signDouyinMiniappToken({ ...payload, verified_phone: "13800138000" });
+    expect(jwt.verifyTokenDetailed(token).payload?.verified_phone).toBe("13800138000");
+    const invalid = jwt.signToken({ ...payload, verified_phone: "not-a-phone",
+      sub: payload.subject_hash, token_type: "douyin_miniapp", login_channel: "douyin",
+      roles: ["douyin_miniapp"] } as never);
+    expect(jwt.verifyTokenDetailed(invalid).reason).toBe("invalid");
+  });
+
   test("honors the dedicated session expiry setting", () => {
     process.env.DOUYIN_MINIAPP_SESSION_EXPIRES_IN = "30m";
     try {

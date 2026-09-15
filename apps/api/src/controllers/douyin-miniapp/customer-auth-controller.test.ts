@@ -7,11 +7,13 @@ describe("DouyinCustomerAuthController", () => {
     const sendCode = mock(async () => ({ success: true, cooldown_seconds: 60 }));
     const verifySms = mock(async () => ({ status: "authenticated" }));
     const authorizePhone = mock(async () => ({ status: "authenticated" }));
+    const authorizeRenderingPhone = mock(async () => ({ access_token: "mini-token", expires_in: 7200 }));
     const select = mock(async () => ({ status: "authenticated" }));
     const controller = new DouyinCustomerAuthController({
       sendCode,
       verifySms,
       authorizePhone,
+      authorizeRenderingPhone,
       select,
     } as never);
     const user = { token_type: "douyin_miniapp", subject_hash: "a".repeat(64) };
@@ -47,6 +49,13 @@ describe("DouyinCustomerAuthController", () => {
       body: { douyin_phone_code: "official-phone-code" },
     });
     expect(authorizePhone).toHaveBeenCalledWith(expect.objectContaining({
+      input: { douyin_phone_code: "official-phone-code" },
+    }));
+
+    await routes["POST /douyin-mini/renderings/phone:authorize"]!({
+      user, body: { douyin_phone_code: "official-phone-code" },
+    });
+    expect(authorizeRenderingPhone).toHaveBeenCalledWith(expect.objectContaining({
       input: { douyin_phone_code: "official-phone-code" },
     }));
 

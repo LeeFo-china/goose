@@ -13,6 +13,7 @@ import type {
   CustomerTenantOption,
 } from "@/services/wechat-customer-identities/legacy-service";
 import type { JwtPayload } from "@/utils/jwt";
+import type { DouyinMiniappTokenInput } from "@/utils/jwt";
 import type { DouyinMiniappAccessTokenService } from "./access-tokens";
 import type { DouyinMiniappContentRepository } from "@/repositories/douyin-miniapp-content";
 
@@ -85,6 +86,8 @@ export type DouyinCustomerAuthDependencies = {
   contextRepository?: ContentRepository;
   douyinPhoneNumberPrivateKeyPem?: string | null;
   tokenSigner?: TokenSigner;
+  renderingTokenSigner?: (payload: DouyinMiniappTokenInput) => string;
+  renderingTokenExpiresInSeconds?: () => number;
   now?: () => Date;
   createSelectionToken?: () => string;
 };

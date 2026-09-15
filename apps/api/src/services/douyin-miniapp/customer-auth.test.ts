@@ -81,6 +81,26 @@ describe("DouyinCustomerAuthService", () => {
     }));
   });
 
+  test("rendering phone authorization issues a miniapp session without requiring a customer record", async () => {
+    const renderingTokenSigner = mock(() => "rendering-miniapp-token");
+    const service = makeService({
+      renderingTokenSigner,
+      candidateRepository: { ...baseCandidateRepository(), listCustomersByPhone: mock(async () => []) },
+    });
+    const result = await service.authorizeRenderingPhone({
+      request: { user: douyinUser, id: "req-rendering", log: testLog() },
+      input: { douyin_phone_code: "official-phone-code" },
+    });
+    expect(result).toEqual({ access_token: "rendering-miniapp-token", expires_in: 7200 });
+    expect(renderingTokenSigner).toHaveBeenCalledWith({
+      tenant_id: douyinUser.tenant_id,
+      douyin_installation_id: douyinUser.douyin_installation_id,
+      douyin_app_id: douyinUser.douyin_app_id,
+      subject_hash: douyinUser.subject_hash,
+      verified_phone: "13800138000",
+    });
+  });
+
   test("multiple customer candidates return selection_required without employee candidates", async () => {
     const service = makeService({
       candidateRepository: {

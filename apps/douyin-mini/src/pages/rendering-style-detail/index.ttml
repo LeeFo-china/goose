@@ -62,13 +62,16 @@
       <button class="generation-mode {{mode === 'renovation' ? 'generation-mode--active' : ''}}" data-value="renovation" disabled="{{jobDraftLocked || jobSubmitting}}" bindtap="onSelectMode">装修改造</button>
     </view>
     <textarea class="generation-notes ui-control" value="{{keepNotes}}" maxlength="300" placeholder="希望保留的元素或其他要求（选填）" disabled="{{jobDraftLocked || jobSubmitting}}" bindinput="onKeepNotesInput" />
-    <button tt:if="{{!jobId}}" class="generation-button ui-pressable" hover-class="ui-pressable--pressed" loading="{{jobSubmitting}}" disabled="{{!canGenerate || jobSubmitting}}" bindtap="onGenerate">{{generateButtonLabel}}</button>
-    <view tt:if="{{jobSubmitting || jobStatus === 'queued' || jobStatus === 'processing'}}" class="generation-progress" role="status" aria-live="polite">
+    <view tt:if="{{phoneAuthorizationRequired && !jobId && !jobConfirmationPending}}" class="private-inputs-note">{{jobDraftLocked ? '请重新授权手机号，以查询当前生成任务。' : '首次生成需授权手机号，验证后会直接提交任务。'}}</view>
+    <button tt:if="{{!jobId && !jobConfirmationPending && phoneAuthorizationRequired}}" class="generation-button ui-pressable" hover-class="ui-pressable--pressed" open-type="getPhoneNumber" loading="{{phoneAuthorizing}}" disabled="{{!canGenerate || jobSubmitting || phoneAuthorizing}}" bindgetphonenumber="onDouyinPhoneForRendering">{{phoneAuthorizing ? '正在验证手机号…' : '授权手机号并生成效果图'}}</button>
+    <button tt:elif="{{!jobId && !jobConfirmationPending}}" class="generation-button ui-pressable" hover-class="ui-pressable--pressed" loading="{{jobSubmitting}}" disabled="{{!canGenerate || jobSubmitting || phoneAuthorizing}}" bindtap="onGenerate">{{generateButtonLabel}}</button>
+    <view tt:if="{{phoneAuthorizing || jobSubmitting || jobStatus === 'queued' || jobStatus === 'processing'}}" class="generation-progress" role="status" aria-live="polite">
       <view class="generation-activity-track"><view class="generation-activity-bar" style="background-color: {{primaryColor}}"></view></view>
-      <view class="generation-progress-title">{{jobSubmitting ? '正在提交生成任务' : jobStatus === 'queued' ? '任务排队中' : 'AI 正在生成效果图'}}</view>
+      <view class="generation-progress-title">{{phoneAuthorizing ? '正在验证手机号' : jobSubmitting && jobConfirmationPending ? '正在确认任务状态' : jobSubmitting ? '正在提交生成任务' : jobStatus === 'queued' ? '任务排队中' : 'AI 正在生成效果图'}}</view>
       <view class="generation-progress-copy">{{jobMessage}}</view>
     </view>
     <view tt:elif="{{jobMessage}}" class="generation-message" role="status">{{jobMessage}}</view>
+    <button tt:if="{{!jobId && jobConfirmationPending && !jobSubmitting}}" class="detail-check-button ui-pressable" hover-class="ui-pressable--pressed" bindtap="onGenerate">查询任务状态</button>
     <button tt:if="{{jobId && jobRefreshAvailable}}" class="detail-check-button ui-pressable" hover-class="ui-pressable--pressed" bindtap="onRefreshJob">重新查询任务进度</button>
     <button tt:if="{{jobStatus === 'failed'}}" class="detail-check-button ui-pressable" hover-class="ui-pressable--pressed" bindtap="onStartAgain">重新生成</button>
     <view tt:if="{{jobStatus === 'succeeded' && resultUrl}}" class="generation-result">
