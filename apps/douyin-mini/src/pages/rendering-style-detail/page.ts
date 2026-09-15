@@ -306,8 +306,12 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
             this.pendingPhoneScope = null;
             await this.onDouyinPhoneForRendering({ detail: { code } });
           } else if (this.resumeGenerationAfterPhone) {
-            await this.refreshPhoneState();
-            if (this.data.canGenerate) {
+            const phoneState = await this.refreshPhoneState();
+            if (!phoneState?.phoneVerified) {
+              this.resumeGenerationAfterPhone = false;
+              this.setData({ phoneAuthorizationRequired: true,
+                jobMessage: "当前会话尚未验证手机号，请重新授权后再生成" });
+            } else if (this.data.canGenerate) {
               await this.submitJob();
               this.resumeGenerationAfterPhone = false;
             }
@@ -420,7 +424,15 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
         if (!this.visible || !this.scopeReady) return;
         this.setData({ phoneAuthorizationRequired: false, phoneAuthorizing: false,
           jobMessage: "手机号已验证，正在提交生成任务…" });
-        await this.refreshPhoneState();
+        const phoneState = await this.refreshPhoneState();
+        if (!this.visible || !this.scopeReady) return;
+        if (!phoneState?.phoneVerified) {
+          this.resumeGenerationAfterPhone = false;
+          this.setData({ phoneAuthorizationRequired: true,
+            jobMessage: phoneState ? "授权结果未进入当前会话，请重新授权手机号"
+              : "暂无法确认手机号授权状态，请稍后重试" });
+          return;
+        }
         if (!this.data.canGenerate) await this.refreshUploads();
         if (this.data.canGenerate) {
           await this.submitJob();
@@ -566,18 +578,20 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
     },
     async refreshPhoneState() {
       if (!dependencies.fetchRenderingPhoneState || !this.visible || !this.scopeReady
-        || this.data.status !== "ready") return;
+        || this.data.status !== "ready") return null;
       const epoch = this.requestEpoch;
       const phoneEpoch = ++this.phoneStateEpoch;
       const scope = this.recoveryScope;
       try {
         const state = await dependencies.fetchRenderingPhoneState(dependencies.getApp().api);
         if (!this.visible || epoch !== this.requestEpoch || phoneEpoch !== this.phoneStateEpoch
-          || scope !== this.recoveryScope) return;
+          || scope !== this.recoveryScope) return null;
         this.setData({ phoneAuthorizationRequired: !state.phoneVerified,
           quotaRemaining: state.remaining });
+        return state;
       } catch {
         // Job admission remains authoritative if the quota read is temporarily unavailable.
+        return null;
       }
     },
     async refreshUploads() {

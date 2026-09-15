@@ -45,15 +45,18 @@ export class CustomerRenderingQuotaService {
     this.quotaRepository = dependencies.quotaRepository ?? customerRenderingQuotaRepository;
   }
 
-  async getQuota(user: JwtPayload | undefined, channel: Channel): Promise<RenderingQuota> {
+  async getQuota(user: JwtPayload | undefined, channel: Channel): Promise<
+    RenderingQuota & { session_phone_verified?: boolean }
+  > {
     const actor = await this.resolveActor(user, channel);
     const identity = this.digestIdentity(actor);
     if (!actor.verifiedPhone) {
-      return project(await this.quotaRepository.read({
+      const quota = project(await this.quotaRepository.read({
         ...identity,
         phoneKeyVersion: null,
         phoneDigest: null,
       }));
+      return channel === "douyin" ? { ...quota, session_phone_verified: false } : quota;
     }
 
     const phone = this.digestService.phone({
@@ -72,7 +75,8 @@ export class CustomerRenderingQuotaService {
       idempotencyKey,
       requestHash: commandHash(identity, phone, idempotencyKey),
     });
-    return projectBindResult(result);
+    const quota = projectBindResult(result);
+    return channel === "douyin" ? { ...quota, session_phone_verified: true } : quota;
   }
 
   async bindPhone(

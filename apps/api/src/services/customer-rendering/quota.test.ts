@@ -135,6 +135,7 @@ describe("customer rendering quota service", () => {
     const result = await service.getQuota(undefined, "douyin");
 
     expect(result.phone_verified).toBe(true);
+    expect(result.session_phone_verified).toBe(true);
     expect(result.remaining).toBe(3);
     expect(calls.map((call) => call.operation)).toEqual([
       "resolveDouyin",
@@ -146,6 +147,21 @@ describe("customer rendering quota service", () => {
     expect(serialized).not.toContain("138");
     expect(serialized).not.toContain(douyinActor.subject);
     expect(serialized).toContain(phoneDigest.digest);
+  });
+
+  test("a historically bound Douyin quota does not imply the current session has a verified phone", async () => {
+    const { service, calls } = createHarness({
+      resolvedActor: { ...actor, channel: "douyin", subject: "c".repeat(64),
+        applicationId: "tt-app", installationId: "33333333-3333-4333-8333-333333333333" },
+      readResult: { ...ledger("ok"), phone_verified: true, consumed: 1 },
+    });
+
+    const result = await service.getQuota(undefined, "douyin");
+
+    expect(result.phone_verified).toBe(true);
+    expect(result.remaining).toBe(4);
+    expect(result.session_phone_verified).toBe(false);
+    expect(calls.map((call) => call.operation)).toEqual(["resolveDouyin", "subjectDigest", "read"]);
   });
 
   test("requires a signed verified phone for explicit binding", async () => {

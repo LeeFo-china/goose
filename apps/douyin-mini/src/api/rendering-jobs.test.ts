@@ -9,10 +9,13 @@ const TENANT = '55555555-5555-4555-8555-555555555555';
 const RESULT_URL = `https://rendering-123456.cos.ap-guangzhou.myqcloud.com/private/customer-rendering-results/${TENANT}/${ID}/${ATTEMPT}/result.webp?q-signature=${'a'.repeat(40)}`;
 
 test('rendering quota exposes the server remaining count and rejects invalid counts', async () => {
-  const request = mock(async () => ({ phone_verified: false, remaining: 0 }));
-  expect(await fetchRenderingPhoneState({ request } as never)).toEqual({ phoneVerified: false, remaining: 0 });
+  const request = mock(async (): Promise<unknown> => ({ phone_verified: true,
+    session_phone_verified: false, remaining: 4 }));
+  expect(await fetchRenderingPhoneState({ request } as never)).toEqual({ phoneVerified: false, remaining: 4 });
   expect(request).toHaveBeenCalledWith({ method: 'GET', path: '/douyin-mini/renderings/quota' });
-  request.mockImplementation(async () => ({ phone_verified: true, remaining: -1 }));
+  request.mockImplementation(async () => ({ phone_verified: true, session_phone_verified: false, remaining: -1 }));
+  await expect(fetchRenderingPhoneState({ request } as never)).rejects.toMatchObject({ code: 'INVALID_API_RESPONSE' });
+  request.mockImplementation(async () => ({ phone_verified: true, remaining: 4 }));
   await expect(fetchRenderingPhoneState({ request } as never)).rejects.toMatchObject({ code: 'INVALID_API_RESPONSE' });
 });
 

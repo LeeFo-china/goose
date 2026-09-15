@@ -880,8 +880,11 @@ test("Douyin phone authorization continues the same tap into rendering progress"
 
 test("phone authorization callback survives the native popup hiding the detail page", async () => {
   const calls: string[] = [];
+  let verified = false;
   const definition = createRenderingStyleDetailPageDefinition({
-    getApp: () => ({ api: {}, session: { acceptVerifiedSession: () => calls.push("session") },
+    getApp: () => ({ api: {}, session: { acceptVerifiedSession: () => {
+      calls.push("session"); verified = true;
+    } },
       startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
       recordAnalytics: () => undefined }) as never,
     fetchPublishedStyleDetail: async () => STYLE,
@@ -895,7 +898,7 @@ test("phone authorization callback survives the native popup hiding the detail p
       roomFileId: STYLE.id, floorFileId: null, jobRequest: null, jobId: null, savedAt: Date.now() }),
     writeRenderingRecovery: () => true,
     fetchRenderingUploadStatus: async () => ({ fileId: STYLE.id, status: "ready", reviewState: null }),
-    fetchRenderingPhoneState: async () => ({ phoneVerified: false, remaining: 1 }),
+    fetchRenderingPhoneState: async () => ({ phoneVerified: verified, remaining: verified ? 5 : 1 }),
     authorizeRenderingPhone: async (_client, code) => { calls.push(`authorize:${code}`);
       return { accessToken: "verified-server-token", expiresIn: 7200 }; },
     createRenderingJob: async () => { calls.push("job"); return { jobId: STYLE.id, status: "queued" }; },
@@ -956,7 +959,7 @@ test("phone verification finishing while hidden submits once after the page resu
   view.onUnload();
 });
 
-test("returning to an unverified saved draft does not repeatedly submit a paid job", async () => {
+test("a historically bound quota cannot replay a draft without current-session phone verification", async () => {
   const request = { style_asset_id: STYLE.id, room_file_id: STYLE.id,
     space: "living_room" as const, mode: "soft_furnishing" as const,
     idempotency_key: "33333333-3333-4333-8333-333333333333" };
@@ -975,7 +978,7 @@ test("returning to an unverified saved draft does not repeatedly submit a paid j
       roomFileId: STYLE.id, floorFileId: null, jobRequest: request, jobId: null, savedAt: Date.now() }),
     writeRenderingRecovery: () => true,
     fetchRenderingUploadStatus: async () => ({ fileId: STYLE.id, status: "ready", reviewState: null }),
-    fetchRenderingPhoneState: async () => ({ phoneVerified: false, remaining: 0 }),
+    fetchRenderingPhoneState: async () => ({ phoneVerified: false, remaining: 4 }),
     createRenderingJob: async () => { jobs++;
       throw new ApiRequestError(409, "RENDERING_PHONE_REQUIRED", "phone"); },
   });
@@ -987,11 +990,43 @@ test("returning to an unverified saved draft does not repeatedly submit a paid j
   view.onHide(); view.onShow(); await flush(); await flush();
   expect(jobs).toBe(0);
   expect(view.data.phoneAuthorizationRequired).toBe(true);
-  expect(view.data.quotaRemaining).toBe(0);
+  expect(view.data.quotaRemaining).toBe(4);
   view.onUnload();
 });
 
-test("an expired phone session keeps an uncertain task key until reauthorization", async () => {
+test("a phone authorization that does not verify the current session never submits a paid job", async () => {
+  let jobs = 0;
+  const definition = createRenderingStyleDetailPageDefinition({
+    getApp: () => ({ api: {}, session: { acceptVerifiedSession: () => undefined },
+      startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
+      recordAnalytics: () => undefined }) as never,
+    fetchPublishedStyleDetail: async () => STYLE,
+    navigateToList: async () => undefined, showToast: () => undefined,
+    choosePrivateImage: async () => { throw new Error("unused"); },
+    createRenderingUploadIntent: async () => { throw new Error("unused"); },
+    putRenderingBytes: async () => undefined,
+    completeRenderingUploadWithRetry: async () => { throw new Error("unused"); },
+    resolveRecoveryIdentity: async () => OWNER,
+    readRenderingRecovery: () => ({ styleId: STYLE.id, roomIntentId: null, floorIntentId: null,
+      roomFileId: STYLE.id, floorFileId: null, jobRequest: null, jobId: null, savedAt: Date.now() }),
+    writeRenderingRecovery: () => true,
+    fetchRenderingUploadStatus: async () => ({ fileId: STYLE.id, status: "ready", reviewState: null }),
+    fetchRenderingPhoneState: async () => ({ phoneVerified: false, remaining: 4 }),
+    authorizeRenderingPhone: async () => ({ accessToken: "verified-server-token", expiresIn: 7200 }),
+    createRenderingJob: async () => { jobs++; return { jobId: STYLE.id, status: "queued" }; },
+  });
+  const view = Object.assign(definition, { setData(patch: Record<string, unknown>) {
+    Object.assign(definition.data, patch);
+  } });
+  view.onLoad({ id: STYLE.id }); await flush();
+  await view.onDouyinPhoneForRendering({ detail: { code: "phone-code" } });
+  expect(jobs).toBe(0);
+  expect(view.data.phoneAuthorizationRequired).toBe(true);
+  expect(view.data.jobMessage).toContain("当前会话");
+  view.onUnload();
+});
+
+test("a saved task key waits for current-session phone authorization before replay", async () => {
   const request = { style_asset_id: STYLE.id, room_file_id: STYLE.id,
     space: "living_room" as const, mode: "soft_furnishing" as const,
     idempotency_key: "33333333-3333-4333-8333-333333333333" };
@@ -1012,6 +1047,7 @@ test("an expired phone session keeps an uncertain task key until reauthorization
       roomFileId: STYLE.id, floorFileId: null, jobRequest: request, jobId: null, savedAt: Date.now() }),
     writeRenderingRecovery: () => true,
     fetchRenderingUploadStatus: async () => ({ fileId: STYLE.id, status: "ready", reviewState: null }),
+    fetchRenderingPhoneState: async () => ({ phoneVerified: authorized, remaining: authorized ? 5 : 4 }),
     authorizeRenderingPhone: async () => ({ accessToken: "verified-server-token", expiresIn: 7200 }),
     createRenderingJob: async (_client, input) => {
       submitted.push(input);
@@ -1023,12 +1059,12 @@ test("an expired phone session keeps an uncertain task key until reauthorization
   const view = Object.assign(definition, { setData(patch: Record<string, unknown>) { Object.assign(definition.data, patch); } });
   view.onLoad({ id: STYLE.id }); await flush();
   expect(view.data.phoneAuthorizationRequired).toBe(true);
-  expect(view.data.jobConfirmationPending).toBe(false);
+  expect(view.data.jobConfirmationPending).toBe(true);
   expect(view.data.jobDraftLocked).toBe(true);
   await view.onDouyinPhoneForRendering({ detail: { code: "official-phone-code" } });
   expect(view.data.jobStatus).toBe("queued");
-  expect(submitted).toHaveLength(2);
-  expect(submitted[1]).toEqual(request);
+  expect(submitted).toHaveLength(1);
+  expect(submitted[0]).toEqual(request);
   view.onUnload();
 });
 

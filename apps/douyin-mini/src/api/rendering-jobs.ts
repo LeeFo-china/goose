@@ -24,8 +24,9 @@ export async function fetchRenderingPhoneState(client: ApiClient): Promise<{
 }> {
   const value = await client.request<unknown>({ method: 'GET', path: '/douyin-mini/renderings/quota' });
   if (!isRecord(value) || typeof value.phone_verified !== 'boolean'
+    || typeof value.session_phone_verified !== 'boolean'
     || !Number.isSafeInteger(value.remaining) || (value.remaining as number) < 0) throw invalidResponse();
-  return { phoneVerified: value.phone_verified, remaining: value.remaining as number };
+  return { phoneVerified: value.session_phone_verified, remaining: value.remaining as number };
 }
 
 export async function authorizeRenderingPhone(client: ApiClient, code: string): Promise<{

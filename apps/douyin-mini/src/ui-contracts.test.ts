@@ -399,6 +399,9 @@ test("rendering detail exposes ready uploads and a clearly labelled AI reference
   expect(template).not.toContain("!roomFileId || floorUploadStatus");
   expect(template).toContain("roomUploadStatus === 'ready'");
   expect(template).toContain('bindtap="onGenerate"');
+  expect(template).toContain('tt:if="{{!jobId && phoneAuthorizationRequired}}"');
+  expect(template).toContain('!jobSubmitting && !phoneAuthorizationRequired}}"');
+  expect(template).not.toContain('!jobConfirmationPending && phoneAuthorizationRequired');
   expect(template).toContain('class="detail-notes-grid"');
   expect(template).toContain('class="private-input-preview');
   expect(template).not.toContain('bindtap="onCheckUploadStatus"');
