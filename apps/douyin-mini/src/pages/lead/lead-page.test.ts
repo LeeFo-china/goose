@@ -264,7 +264,7 @@ describe("lead page definition", () => {
       submitting: false,
       focusedField: "phone",
       douyinPhoneAuthorized: false,
-      formError: "未获得抖音手机号授权，也可以手动输入手机号",
+      formError: "抖音未返回手机号令牌，也可以手动输入手机号",
     });
   });
 

@@ -1,3 +1,5 @@
+import { resolvePhoneNumberCallback, type PhoneNumberCallbackEvent } from "../../platform/phone-number-callback";
+
 Component({
   properties: {
     value: { type: Object, value: {} },
@@ -60,12 +62,12 @@ Component({
     onSubmit() {
       if (!this.data.submitting) this.triggerEvent("submit");
     },
-    onDouyinPhoneNumber(event: { detail?: { code?: string } }) {
+    onDouyinPhoneNumber(event: PhoneNumberCallbackEvent) {
       if (this.data.submitting) return;
+      const result = resolvePhoneNumberCallback(event);
       this.triggerEvent("douyinphone", {
-        douyin_phone_code: typeof event.detail?.code === "string"
-          ? event.detail.code
-          : "",
+        douyin_phone_code: result.code ?? "",
+        authorization_error: result.error ?? "",
       });
     },
   },

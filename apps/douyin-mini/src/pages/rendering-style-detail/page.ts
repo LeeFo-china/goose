@@ -14,6 +14,7 @@ import {
   type putRenderingBytes,
 } from "../../api/rendering-uploads";
 import { resolveThemeColor } from "../../components/theme";
+import { resolvePhoneNumberCallback, type PhoneNumberCallbackEvent } from "../../platform/phone-number-callback";
 import { type choosePrivateImage } from "../../platform/private-image";
 import { identityKey, type RenderingRecoveryIdentity, type RenderingRecoveryRecord, type clearRenderingRecovery,
   type readRenderingRecovery,
@@ -392,11 +393,12 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
       this.invalidateJobDraft();
     },
     onGenerate() { void this.submitJob(); },
-    async onDouyinPhoneForRendering(event: { detail?: { code?: string } }) {
-      const code = event.detail?.code;
+    async onDouyinPhoneForRendering(event: PhoneNumberCallbackEvent) {
+      const result = resolvePhoneNumberCallback(event);
+      const code = result.code;
       if (!code) {
-        if (this.visible) this.setData({ jobMessage: "未授权手机号，暂不能生成效果图" });
-        else this.pendingPhoneError = "未授权手机号，暂不能生成效果图";
+        if (this.visible) this.setData({ jobMessage: result.error ?? "抖音未返回手机号令牌" });
+        else this.pendingPhoneError = result.error ?? "抖音未返回手机号令牌";
         return;
       }
       if (!this.visible || !this.scopeReady || this.data.status !== "ready") {

@@ -293,7 +293,7 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
       optionalDetailsExpanded: toggleOptionalDetails(this.data.optionalDetailsExpanded),
     });
   },
-  onDouyinPhoneNumber(event: { detail?: { douyin_phone_code?: string } }) {
+  onDouyinPhoneNumber(event: { detail?: { douyin_phone_code?: string; authorization_error?: string } }) {
     if (!this.data.douyinPhoneEnabled || this.data.submitting) return;
     const code = typeof event.detail?.douyin_phone_code === "string"
       ? event.detail.douyin_phone_code.trim()
@@ -305,7 +305,7 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
         douyinPhoneAuthorized: false,
         fieldErrors: clearLeadFieldError(withoutPhoneError, "sms_code"),
         focusedField: "phone",
-        formError: "未获得抖音手机号授权，也可以手动输入手机号",
+        formError: event.detail?.authorization_error || "抖音未返回手机号令牌，也可以手动输入手机号",
       });
       return;
     }

@@ -6,6 +6,7 @@ import type {
   verifyDouyinCustomerSms,
 } from "../../api/customer-auth";
 import { resolveThemeColor } from "../../components/theme";
+import { resolvePhoneNumberCallback, type PhoneNumberCallbackEvent } from "../../platform/phone-number-callback";
 import type { CustomerIdentityCandidate, CustomerIdentitySelectionResult } from "../../models";
 import type { navigateToPage } from "../../platform/navigation";
 
@@ -93,11 +94,12 @@ export function createCustomerLoginPageDefinition(dependencies: CustomerLoginPag
         loginError: "",
       });
     },
-    async onDouyinPhone(event: { detail?: { code?: string } }) {
+    async onDouyinPhone(event: PhoneNumberCallbackEvent) {
       if (this.data.status !== "idle") return;
-      const code = event.detail?.code;
+      const result = resolvePhoneNumberCallback(event);
+      const code = result.code;
       if (!code) {
-        this.setData({ loginError: "未获得手机号授权，可改用短信验证码登录" });
+        this.setData({ loginError: result.error });
         return;
       }
       await this.runAuth(
