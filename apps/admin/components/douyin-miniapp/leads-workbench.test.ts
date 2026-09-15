@@ -378,6 +378,17 @@ describe("tenant Douyin lead workbench behavior", () => {
     }));
     for (const value of ["抖音接口返回（客户端采集）", "来源抖音号", "brand_01",
       "视频标识（加密 ID）", "encrypted-video-1"]) expect(html).toContain(value);
+    expect(html).toContain("留资创建时间");
+    expect(html).toContain("16:00:00");
+  });
+
+  test("labels the lead creation fallback when no appointment exists", () => {
+    const html = renderToStaticMarkup(createElement(LeadDetailPanel, {
+      detail: { ...detail, latest_appointment: null }, actions: [], busy: false,
+      followUpLoading: false, onAction: () => undefined,
+      onFollowUpPage: () => undefined,
+    }));
+    expect(html).toContain("线索创建时间");
   });
 
   test("uses stable accessible field relationships for invalid follow-up input", () => {
