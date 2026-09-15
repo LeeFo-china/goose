@@ -767,6 +767,19 @@ jobs:
             echo "WEB_ROLLBACK_CLEANUP_STATUS=warning" >> "${GITHUB_ENV}"
           fi
 
+      - name: Clean up old unused production CCR digest images
+        if: ${{ success() }}
+        run: |
+          set -euo pipefail
+          if python3 "${SOURCE_DIR}/scripts/cleanup-production-digest-images.py" \
+            --repository-prefix "${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}/" \
+            --retention-hours 24; then
+            echo "CCR_DIGEST_CLEANUP_STATUS=success" >> "${GITHUB_ENV}"
+          else
+            echo "::warning::Failed to clean old production CCR digest images; deployment remains successful."
+            echo "CCR_DIGEST_CLEANUP_STATUS=warning" >> "${GITHUB_ENV}"
+          fi
+
       - name: Deployment summary
         if: ${{ always() }}
         run: |
@@ -801,6 +814,7 @@ jobs:
             echo "Web deployment result: ${web_result:-unknown}"
             echo "Web rollback status: ${WEB_ROLLBACK_STATUS:-not_requested}"
             echo "Web rollback cleanup (>168h / 7 days): ${WEB_ROLLBACK_CLEANUP_STATUS:-not_run}"
+            echo "CCR digest cleanup (>24h): ${CCR_DIGEST_CLEANUP_STATUS:-not_run}"
             echo "Web final revision: ${web_revision:-unknown}"
             echo "Web final tag: ${web_tag:-not_set}"
             if [ "${RELEASE_SERVICE:-}" = "all" ]; then
