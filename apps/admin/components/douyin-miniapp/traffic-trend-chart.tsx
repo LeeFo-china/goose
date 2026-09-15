@@ -21,9 +21,9 @@ export function TrafficTrendChart({ data }: { data: TrafficStats["daily"] }) {
           formatter={(value, name) => [`${Number(value).toLocaleString("zh-CN")} 次`, name]} />
         <Legend />
         <Line type="monotone" dataKey="entries" name="进入"
-          stroke="var(--primary)" strokeWidth={2} dot={false} isAnimationActive={false} />
+          stroke="hsl(var(--primary))" strokeWidth={2} dot={false} isAnimationActive={false} />
         <Line type="monotone" dataKey="appointments" name="预约"
-          stroke="var(--success)" strokeWidth={2} dot={false} isAnimationActive={false} />
+          stroke="hsl(var(--success))" strokeWidth={2} dot={false} isAnimationActive={false} />
       </LineChart>
     </ResponsiveContainer>
   </div>;
