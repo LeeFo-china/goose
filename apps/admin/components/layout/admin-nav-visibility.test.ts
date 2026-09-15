@@ -286,7 +286,7 @@ describe("admin nav visibility", () => {
     expect(
       withPermission.find((group) => group.label === "抖音小程序")?.items
         .map((item) => item.label),
-    ).toEqual(["小程序工作台"]);
+    ).toEqual(["小程序工作台", "流量来源统计"]);
     expect(
       withManagePermission.find((group) => group.label === "抖音小程序")?.items
         .map((item) => item.label),
@@ -298,6 +298,7 @@ describe("admin nav visibility", () => {
     expect(
       withBothPermissions.find((group) => group.label === "抖音小程序")?.items
         .map((item) => item.label),
-    ).toEqual(["小程序工作台", "抖音线索", "项目实景内容", "预算报价配置"]);
+    ).toEqual(["小程序工作台", "抖音线索", "流量来源统计",
+      "项目实景内容", "预算报价配置"]);
   });
 });

@@ -62,10 +62,11 @@ DECLARE
   v_end timestamptz;
   v_result jsonb;
 BEGIN
-  IF p_tenant_id IS NULL OR p_days NOT IN (7, 30, 90)
-    OR p_group_by NOT IN ('content', 'account')
-    OR p_page NOT BETWEEN 1 AND 100000
-    OR p_page_size NOT BETWEEN 1 AND 100 THEN
+  IF p_tenant_id IS NULL OR p_days IS NULL
+    OR p_days NOT IN (7, 30, 90)
+    OR p_group_by IS NULL OR p_group_by NOT IN ('content', 'account')
+    OR p_page IS NULL OR p_page NOT BETWEEN 1 AND 100000
+    OR p_page_size IS NULL OR p_page_size NOT BETWEEN 1 AND 100 THEN
     RAISE EXCEPTION 'DOUYIN_SOURCE_STATS_ARGUMENT_INVALID'
       USING ERRCODE = '22023';
   END IF;
@@ -141,7 +142,9 @@ BEGIN
         (WHERE event_name = 'lead_submit_success')::integer AS appointments
     FROM events GROUP BY basis
   ), per_source AS (
-    SELECT source_key, basis,
+    SELECT source_key,
+      CASE WHEN p_group_by = 'account' AND basis LIKE 'official_%'
+        THEN 'official_account' ELSE basis END AS basis,
       max(payload ->> 'source_type') AS source_type,
       max(payload #>> '{analysis_info,unique_id}') AS account_id,
       CASE WHEN p_group_by = 'content' THEN
@@ -155,7 +158,9 @@ BEGIN
       count(*) FILTER (WHERE event_name = 'lead_cta_click')::integer AS lead_clicks,
       count(DISTINCT payload ->> 'appointment_id') FILTER
         (WHERE event_name = 'lead_submit_success')::integer AS appointments
-    FROM events GROUP BY source_key, basis
+    FROM events GROUP BY source_key,
+      CASE WHEN p_group_by = 'account' AND basis LIKE 'official_%'
+        THEN 'official_account' ELSE basis END
   ), source_page AS (
     SELECT * FROM per_source
     ORDER BY entries DESC, appointments DESC, source_key, basis
