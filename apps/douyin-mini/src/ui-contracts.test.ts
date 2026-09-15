@@ -192,7 +192,7 @@ test("lead form labels every input and keeps optional details collapsed", async 
   ]);
   for (const label of [
     "称呼",
-    "联系电话",
+    "手机号",
     "短信验证码",
     "小区名称",
     "期望量房日期",
@@ -209,7 +209,7 @@ test("lead form labels every input and keeps optional details collapsed", async 
   expect(formTemplate.match(/aria-checked=/g)).toHaveLength(3);
   expect(formTemplate.match(/disabled="{{submitting}}"/g)?.length ?? 0)
     .toBeGreaterThanOrEqual(8);
-  expect(pageTemplate).toContain("验证码仅用于确认本次联系，不会用于其他用途");
+  expect(pageTemplate).toContain("联系方式仅用于本次量房联系，不会用于其他用途");
   expect(pageTemplate).not.toContain("平台不会在客户端读取抖音账号绑定手机号");
   expect(pageStyle).toMatch(/\.security-note \{[^}]*white-space:\s*nowrap;/);
   expect(pageStyle).toMatch(/\.security-note \{[^}]*font-size:\s*21rpx;/);

@@ -216,14 +216,15 @@ describe("lead form model", () => {
     expect(template).toContain('mode="date"');
     expect(template).not.toContain("conversion-target");
     expect(template).not.toContain("clue-component-id");
-    expect(template).toContain("使用短信验证码");
     expect(template).toContain("获取抖音绑定手机号");
     expect(template).toContain("已获取抖音绑定手机号");
-    expect(template).toContain('bindtap="onTogglePhoneCapture"');
-    expect(template).toContain("!douyinPhoneEnabled || smsFallbackExpanded");
+    expect(template).toContain('class="phone-input-shell');
+    expect(template).toContain("!douyinPhoneEnabled || value.phone");
     expect(template).toContain('open-type="getPhoneNumber"');
     expect(template).toContain('bindgetphonenumber="onDouyinPhoneNumber"');
     expect(template).toContain("提交量房申请");
+    expect(template).not.toContain("phone-method-toggle");
+    expect(template).not.toContain("无法授权？使用短信验证码");
     expect(template).toContain("{{estimateNo}}");
     expect(template).toContain("{{estimateRange}}");
     expect(template).not.toContain('data-field="budget"');

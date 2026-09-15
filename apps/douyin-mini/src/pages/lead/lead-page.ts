@@ -96,7 +96,6 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
     optionalDetailsExpanded: false,
     douyinPhoneEnabled: false,
     douyinPhoneAuthorized: false,
-    smsFallbackExpanded: false,
   },
   onLoad() {
     this.lifecycle.onLoad();
@@ -177,7 +176,6 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
       privacyPolicyVersion: bootstrap.privacy_policy_version,
       douyinPhoneEnabled: bootstrap.features.douyin_phone,
       douyinPhoneAuthorized: false,
-      smsFallbackExpanded: false,
     });
     dependencies.getApp().recordAnalytics("page_view");
   },
@@ -208,6 +206,7 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
       || typeof event.detail.value !== "string") return;
     const value = sanitizeLeadField(field, event.detail.value);
     const form = { ...this.data.form, [field]: value } as LeadFormValue;
+    if (field === "phone") this.douyinPhoneAuthorization = null;
     this.idempotency = updateIdempotencyDraft(
       this.idempotency,
       toLeadIdempotencyDraft(form, this.data.privacyPolicyVersion, this.linkedBudget),
@@ -217,6 +216,7 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
       fieldErrors: clearLeadFieldError(this.data.fieldErrors, field),
       focusedField: "",
       phoneReady: /^1[3-9][0-9]{9}$/.test(form.phone),
+      ...(field === "phone" ? { douyinPhoneAuthorized: false } : {}),
       formError: "",
     });
   },
@@ -293,19 +293,6 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
       optionalDetailsExpanded: toggleOptionalDetails(this.data.optionalDetailsExpanded),
     });
   },
-  onTogglePhoneCapture() {
-    if (!this.data.douyinPhoneEnabled || this.data.submitting || this.data.smsSending) return;
-    const smsFallbackExpanded = !this.data.smsFallbackExpanded;
-    const withoutPhoneError = clearLeadFieldError(this.data.fieldErrors, "phone");
-    this.douyinPhoneAuthorization = null;
-    this.setData({
-      smsFallbackExpanded,
-      douyinPhoneAuthorized: false,
-      fieldErrors: clearLeadFieldError(withoutPhoneError, "sms_code"),
-      focusedField: smsFallbackExpanded ? "phone" : "",
-      formError: "",
-    });
-  },
   onDouyinPhoneNumber(event: { detail?: { douyin_phone_code?: string } }) {
     if (!this.data.douyinPhoneEnabled || this.data.submitting) return;
     const code = typeof event.detail?.douyin_phone_code === "string"
@@ -316,39 +303,39 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
       const withoutPhoneError = clearLeadFieldError(this.data.fieldErrors, "phone");
       this.setData({
         douyinPhoneAuthorized: false,
-        smsFallbackExpanded: true,
         fieldErrors: clearLeadFieldError(withoutPhoneError, "sms_code"),
         focusedField: "phone",
-        formError: "未获得抖音手机号授权，请改用短信验证码提交",
+        formError: "未获得抖音手机号授权，也可以手动输入手机号",
       });
       return;
     }
+    const form = { ...this.data.form, phone: "", sms_code: "" };
     this.douyinPhoneAuthorization = {
       code,
       expiresAt: Date.now() + DOUYIN_PHONE_AUTHORIZATION_TTL_MS,
     };
+    this.idempotency = updateIdempotencyDraft(
+      this.idempotency,
+      toLeadIdempotencyDraft(form, this.data.privacyPolicyVersion, this.linkedBudget),
+    );
     this.setData({
+      form,
+      phoneReady: false,
       douyinPhoneAuthorized: true,
-      fieldErrors: clearLeadFieldError(this.data.fieldErrors, "phone"),
+      fieldErrors: clearLeadFieldError(
+        clearLeadFieldError(this.data.fieldErrors, "phone"),
+        "sms_code",
+      ),
       focusedField: "",
       formError: "",
     });
   },
   async onSubmit() {
     const phoneCaptureMode = this.data.douyinPhoneEnabled
-        && !this.data.smsFallbackExpanded
+        && this.douyinPhoneAuthorization !== null
       ? "douyin_phone"
       : "sms";
     const douyinPhoneAuthorization = this.douyinPhoneAuthorization;
-    if (phoneCaptureMode === "douyin_phone" && !douyinPhoneAuthorization) {
-      const message = "请先获取抖音绑定手机号";
-      this.setData({
-        douyinPhoneAuthorized: false,
-        fieldErrors: { ...this.data.fieldErrors, phone: message },
-        formError: message,
-      });
-      return;
-    }
     if (phoneCaptureMode === "douyin_phone"
       && douyinPhoneAuthorization!.expiresAt <= Date.now()) {
       const message = "手机号授权已过期，请重新获取";

@@ -18,7 +18,6 @@ Component({
     estimateRange: { type: String, value: "" },
     douyinPhoneEnabled: { type: Boolean, value: false },
     douyinPhoneAuthorized: { type: Boolean, value: false },
-    smsFallbackExpanded: { type: Boolean, value: false },
   },
   methods: {
     onInput(event: { currentTarget: { dataset: { field?: string } }; detail: { value: string } }) {
@@ -57,11 +56,6 @@ Component({
     onOpenPolicy() { this.triggerEvent("openpolicy"); },
     onToggleOptionalDetails() {
       if (!this.data.submitting) this.triggerEvent("toggleoptional");
-    },
-    onTogglePhoneCapture() {
-      if (!this.data.submitting && !this.data.smsSending) {
-        this.triggerEvent("togglephonecapture");
-      }
     },
     onSubmit() {
       if (!this.data.submitting) this.triggerEvent("submit");

@@ -226,6 +226,8 @@ describe("lead page definition", () => {
     expect(harness.submitLead).not.toHaveBeenCalled();
     expect(harness.page.data).toMatchObject({
       douyinPhoneAuthorized: true,
+      form: { phone: "", sms_code: "" },
+      phoneReady: false,
       formError: "",
     });
 
@@ -260,13 +262,13 @@ describe("lead page definition", () => {
     expect(harness.submitLead).not.toHaveBeenCalled();
     expect(harness.page.data).toMatchObject({
       submitting: false,
-      smsFallbackExpanded: true,
       focusedField: "phone",
-      formError: "未获得抖音手机号授权，请改用短信验证码提交",
+      douyinPhoneAuthorized: false,
+      formError: "未获得抖音手机号授权，也可以手动输入手机号",
     });
   });
 
-  test("asks for Douyin phone authorization before final submission", async () => {
+  test("submits a manually entered phone with SMS when Douyin is also enabled", async () => {
     const harness = createHarness({
       ...BOOTSTRAP,
       features: {
@@ -279,14 +281,16 @@ describe("lead page definition", () => {
     await flushPromises();
     setValidForm(harness.page);
 
-    await harness.page.onSubmit();
+    const submit = harness.deferredSubmit();
+    const operation = harness.page.onSubmit();
+    submit.resolve(publicAppointment());
+    await operation;
 
-    expect(harness.submitLead).not.toHaveBeenCalled();
-    expect(harness.page.data).toMatchObject({
-      douyinPhoneAuthorized: false,
-      formError: "请先获取抖音绑定手机号",
-      fieldErrors: { phone: "请先获取抖音绑定手机号" },
-    });
+    expect(harness.submitLead).toHaveBeenCalledWith({}, expect.objectContaining({
+      verification_method: "sms",
+      phone: "13800138000",
+      sms_code: "123456",
+    }));
   });
 
   test("rejects an expired Douyin phone authorization", async () => {
@@ -339,7 +343,7 @@ describe("lead page definition", () => {
     expect(harness.page.data.douyinPhoneAuthorized).toBe(false);
   });
 
-  test("allows an official-phone lead to switch to SMS submission", async () => {
+  test("typing a phone after authorization switches back to SMS submission", async () => {
     const harness = createHarness({
       ...BOOTSTRAP,
       features: {
@@ -351,11 +355,14 @@ describe("lead page definition", () => {
     harness.page.onLoad();
     await flushPromises();
     setValidForm(harness.page);
-
-    harness.page.onTogglePhoneCapture();
+    harness.page.onDouyinPhoneNumber({
+      detail: { douyin_phone_code: "official-phone-code" },
+    });
+    harness.page.onFieldChange({ detail: { field: "phone", value: "13800138000" } });
+    harness.page.onFieldChange({ detail: { field: "sms_code", value: "123456" } });
     expect(harness.page.data).toMatchObject({
-      smsFallbackExpanded: true,
-      focusedField: "phone",
+      douyinPhoneAuthorized: false,
+      form: { phone: "13800138000", sms_code: "123456" },
     });
 
     const submit = harness.deferredSubmit();
