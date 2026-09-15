@@ -40,7 +40,7 @@
       hover-class="ui-pressable--pressed"
       style="background-color: {{primaryColor}}; color: {{primaryTextColor}}"
       open-type="getPhoneNumber"
-      disabled="{{status !== 'idle'}}"
+      disabled="{{status !== 'idle' || !phoneLoginReady}}"
       loading="{{status === 'authorizing'}}"
       bindgetphonenumber="onDouyinPhone"
     >{{status === 'authorizing' ? '正在登录' : '使用抖音手机号登录'}}</button>

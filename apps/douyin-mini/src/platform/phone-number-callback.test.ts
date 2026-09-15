@@ -26,4 +26,19 @@ describe("resolvePhoneNumberCallback", () => {
     expect(resolvePhoneNumberCallback({ detail: { errMsg: "getPhoneNumber:fail no permission" } }).error)
       .toContain("未开通");
   });
+
+  test("includes safe runtime diagnostics for a native internal error", () => {
+    Object.defineProperty(globalThis, "tt", { configurable: true,
+      value: { getSystemInfoSync: () => ({ SDKVersion: "3.60.0" }) } });
+    try {
+      expect(resolvePhoneNumberCallback({ detail: {
+        errMsg: "getPhoneNumber:fail internal error", errno: 10401,
+      } }).error).toContain("错误码 10401");
+      expect(resolvePhoneNumberCallback({ detail: {
+        errMsg: "getPhoneNumber:fail internal error", errno: 10401,
+      } }).error).toContain("基础库 3.60.0");
+    } finally {
+      Reflect.deleteProperty(globalThis, "tt");
+    }
+  });
 });

@@ -120,13 +120,13 @@ describe("Douyin native session state", () => {
     });
   });
 
-  test("uses a stored unexpired session without invoking tt.login", async () => {
+  test("still invokes tt.login before native phone authorization when a stored JWT is reused", async () => {
     const deps = dependencies({
       readStoredSession: mock(() => ({ accessToken: "stored-token", expiresAt: now + 60_000 })),
     });
 
     await expect(new SessionManager(deps).initialize(launchContext)).resolves.toBe("stored-token");
-    expect(deps.loginOnce).not.toHaveBeenCalled();
+    expect(deps.loginOnce).toHaveBeenCalledTimes(1);
     expect(deps.exchangeSession).not.toHaveBeenCalled();
   });
 
@@ -149,14 +149,18 @@ describe("Douyin native session state", () => {
 
     expect(result).toEqual({ ok: true });
     expect(send).toHaveBeenCalledTimes(2);
-    expect(deps.loginOnce).toHaveBeenCalledTimes(1);
+    expect(deps.loginOnce).toHaveBeenCalledTimes(2);
     expect(deps.clearStoredSession).toHaveBeenCalledTimes(1);
   });
 
   test("concurrent 401 responses share one refresh flight", async () => {
     let releaseLogin: () => void = () => {};
     const loginGate = new Promise<void>((resolve) => { releaseLogin = resolve; });
-    const loginOnce = mock(async () => { await loginGate; return { code: "one-time-code" }; });
+    let loginCalls = 0;
+    const loginOnce = mock(async () => {
+      if (++loginCalls > 1) await loginGate;
+      return { code: "one-time-code" };
+    });
     const deps = dependencies({
       loginOnce,
       readStoredSession: mock(() => ({ accessToken: "old-token", expiresAt: now + 60_000 })),
@@ -174,7 +178,7 @@ describe("Douyin native session state", () => {
     const first = client.request<string>({ path: "/douyin-mini/company", method: "GET" });
     const second = client.request<string>({ path: "/douyin-mini/cases", method: "GET" });
     await Bun.sleep(0);
-    expect(loginOnce).toHaveBeenCalledTimes(1);
+    expect(loginOnce).toHaveBeenCalledTimes(2);
     releaseLogin();
 
     await expect(Promise.all([first, second])).resolves.toEqual([
@@ -184,7 +188,9 @@ describe("Douyin native session state", () => {
   });
 
   test("failed relogin rejects without retrying or looping", async () => {
+    let loginCalls = 0;
     const loginOnce = mock(async () => {
+      if (++loginCalls === 1) return { code: "prerequisite-code" };
       throw new ApiRequestError(0, "DOUYIN_SESSION_EXCHANGE_FAILED", "login unavailable");
     });
     const deps = dependencies({
@@ -200,7 +206,7 @@ describe("Douyin native session state", () => {
     await expect(new ApiClient({ send }, session).request({
       path: "/douyin-mini/bootstrap", method: "GET",
     })).rejects.toThrow("login unavailable");
-    expect(loginOnce).toHaveBeenCalledTimes(1);
+    expect(loginOnce).toHaveBeenCalledTimes(2);
     expect(send).toHaveBeenCalledTimes(1);
   });
 
@@ -218,7 +224,7 @@ describe("Douyin native session state", () => {
       path: "/douyin-mini/bootstrap", method: "GET",
     })).rejects.toMatchObject({ statusCode: 401, code: "TOKEN_INVALID" });
     expect(send).toHaveBeenCalledTimes(2);
-    expect(deps.loginOnce).toHaveBeenCalledTimes(1);
+    expect(deps.loginOnce).toHaveBeenCalledTimes(2);
     expect(deps.exchangeSession).toHaveBeenCalledTimes(1);
   });
 

@@ -32,7 +32,9 @@ export function resolvePhoneNumberCallback(
     return { error: "已拒绝抖音手机号授权，也可以使用短信验证码" };
   }
   if (message.includes("internal error")) {
-    return { error: "抖音手机号服务暂时异常，请稍后重试" };
+    const sdkVersion = readSdkVersion();
+    const errorCode = Number.isInteger(detail?.errno) ? `，错误码 ${detail?.errno}` : "";
+    return { error: `抖音手机号服务暂时异常${versionSuffix(sdkVersion)}${errorCode}，请稍后重试` };
   }
 
   const sdkVersion = readSdkVersion();

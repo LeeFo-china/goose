@@ -38,6 +38,7 @@ export function createCustomerLoginPageDefinition(dependencies: CustomerLoginPag
       logoFailed: false,
       primaryColor: "#191817",
       primaryTextColor: "#FFFFFF",
+      phoneLoginReady: false,
       smsExpanded: false,
       smsCooldown: 0,
       phone: "",
@@ -57,6 +58,7 @@ export function createCustomerLoginPageDefinition(dependencies: CustomerLoginPag
         if (!bootstrap) return;
         const theme = resolveThemeColor(bootstrap.theme.primary_color);
         this.setData({
+          phoneLoginReady: true,
           brandName: bootstrap.company.name,
           logoUrl: bootstrap.company.logo_url || "",
           logoFailed: false,

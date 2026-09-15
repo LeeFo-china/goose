@@ -53,6 +53,7 @@ test("customer login expands SMS on demand and adopts the tenant theme", async (
   expect(page.data.logoUrl).toBe("https://assets.example.com/logo.png");
   expect(page.data.primaryColor).toBe("#09598b");
   expect(page.data.primaryTextColor).toBe("#FFFFFF");
+  expect(page.data.phoneLoginReady).toBe(true);
 });
 
 test("customer login records the SMS cooldown without shifting back to another flow", async () => {

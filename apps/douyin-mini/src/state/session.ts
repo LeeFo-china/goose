@@ -34,8 +34,14 @@ export class SessionManager implements SessionTokenProvider {
 
   constructor(private readonly dependencies: SessionDependencies) {}
 
-  initialize(launchContext: LaunchContext): Promise<string> {
+  async initialize(launchContext: LaunchContext): Promise<string> {
     this.launchContext = launchContext;
+    const stored = this.getCurrentSession();
+    if (stored && this.isUsable(stored)) {
+      // Douyin getPhoneNumber requires tt.login in this app launch even when our JWT is cached.
+      await this.dependencies.loginOnce();
+      return stored.accessToken;
+    }
     return this.getAccessToken();
   }
 
