@@ -9,39 +9,50 @@
   <view class="detail-title">{{style.title}}</view>
   <view class="detail-meta"><text>{{spaceLabel}}</text><text>{{styleLabel}}</text><text>{{sourceLabel}}</text></view>
   <view tt:if="{{style.source_type === 'ai_concept'}}" class="detail-concept-note">AI 概念图仅供风格参考，并非已落地实景。</view>
-  <view class="detail-section"><view class="detail-section-title">配色说明</view><view class="detail-section-copy">{{style.color_notes || '暂无补充说明'}}</view></view>
-  <view class="detail-section"><view class="detail-section-title">材质说明</view><view class="detail-section-copy">{{style.material_notes || '暂无补充说明'}}</view></view>
+  <view class="detail-notes-grid">
+    <view class="detail-note-card"><view class="detail-section-title">配色说明</view><view class="detail-section-copy">{{style.color_notes || '暂无补充说明'}}</view></view>
+    <view class="detail-note-card"><view class="detail-section-title">材质说明</view><view class="detail-section-copy">{{style.material_notes || '暂无补充说明'}}</view></view>
+  </view>
   <view tt:if="{{status === 'ready'}}" class="detail-section private-inputs">
     <view class="detail-section-title">上传我的空间</view>
     <view class="private-inputs-note">房间照必传，户型图可选。每张最多 10 MiB，仅支持静态 JPEG、PNG、WebP；上传完成即可发起 AI 生成，生成时由模型校验内容。</view>
-    <view class="private-input-row">
-      <view class="private-input-copy"><view class="private-input-title">房间照（必传）</view><view class="private-input-message" role="status">{{roomUploadMessage}}</view></view>
-      <button tt:if="{{roomUploadStatus === 'retry_complete'}}" class="private-input-button ui-pressable" hover-class="ui-pressable--pressed" bindtap="onRetryRoomComplete">继续确认</button>
-      <view tt:elif="{{roomUploadStatus === 'checking'}}" class="private-input-pending">确认中</view>
-      <view tt:elif="{{roomUploadStatus === 'ready'}}" class="private-input-pending">已就绪</view>
-      <button tt:else class="private-input-button ui-pressable" hover-class="ui-pressable--pressed" disabled="{{roomUploadStatus === 'selecting' || roomUploadStatus === 'signing' || roomUploadStatus === 'uploading' || roomUploadStatus === 'confirming'}}" bindtap="onChooseRoom">选择照片</button>
+    <view class="private-input-card">
+      <view class="private-input-row">
+        <view class="private-input-copy"><view class="private-input-title">房间照（必传）</view><view class="private-input-message" role="status">{{roomUploadMessage}}</view></view>
+        <button tt:if="{{roomUploadStatus === 'retry_complete'}}" class="private-input-button ui-pressable" hover-class="ui-pressable--pressed" bindtap="onRetryRoomComplete">继续确认</button>
+        <view tt:elif="{{roomUploadStatus === 'checking'}}" class="private-input-pending">同步中</view>
+        <view tt:elif="{{roomUploadStatus === 'ready'}}" class="private-input-pending">已就绪</view>
+        <button tt:else class="private-input-button ui-pressable" hover-class="ui-pressable--pressed" disabled="{{roomUploadStatus === 'selecting' || roomUploadStatus === 'signing' || roomUploadStatus === 'uploading' || roomUploadStatus === 'confirming'}}" bindtap="onChooseRoom">选择照片</button>
+      </view>
+      <view tt:if="{{roomFileId}}" class="private-input-preview ui-pressable" hover-class="ui-pressable--pressed" role="button" aria-label="全屏查看房间照" bindtap="onPreviewRoom">
+        <image tt:if="{{roomPreviewUrl && !roomPreviewFailed}}" class="private-input-preview-image" src="{{roomPreviewUrl}}" mode="aspectFit" binderror="onRoomPreviewError" />
+        <view tt:else class="private-input-preview-empty">{{roomPreviewFailed ? '房间照预览暂不可用' : '正在加载房间照…'}}</view>
+      </view>
+      <view tt:if="{{roomFileId}}" class="private-input-actions">
+        <button tt:if="{{roomUploadStatus === 'ready'}}" class="private-input-action ui-pressable" hover-class="ui-pressable--pressed" disabled="{{jobDraftLocked || jobSubmitting}}" bindtap="onChooseRoom">更换图片</button>
+        <button tt:if="{{roomUploadStatus === 'retry_complete'}}" class="private-input-action ui-pressable" hover-class="ui-pressable--pressed" bindtap="onKeepRoom">保留原图</button>
+        <button tt:if="{{roomUploadStatus === 'ready'}}" class="private-input-action private-input-action--remove ui-pressable" hover-class="ui-pressable--pressed" disabled="{{jobDraftLocked || jobSubmitting}}" bindtap="onRemoveRoom">删除图片</button>
+      </view>
     </view>
-    <view tt:if="{{roomFileId}}" class="private-input-actions">
-      <button class="private-input-action ui-pressable" hover-class="ui-pressable--pressed" bindtap="onPreviewRoom">查看图片</button>
-      <button tt:if="{{roomUploadStatus === 'ready'}}" class="private-input-action ui-pressable" hover-class="ui-pressable--pressed" disabled="{{jobDraftLocked || jobSubmitting}}" bindtap="onChooseRoom">更换图片</button>
-      <button tt:if="{{roomUploadStatus === 'retry_complete'}}" class="private-input-action ui-pressable" hover-class="ui-pressable--pressed" bindtap="onKeepRoom">保留原图</button>
-      <button tt:if="{{roomUploadStatus === 'ready'}}" class="private-input-action private-input-action--remove ui-pressable" hover-class="ui-pressable--pressed" disabled="{{jobDraftLocked || jobSubmitting}}" bindtap="onRemoveRoom">移除本次</button>
+    <view class="private-input-card">
+      <view class="private-input-row">
+        <view class="private-input-copy"><view class="private-input-title">户型图（可选）</view><view class="private-input-message" role="status">{{floorUploadMessage}}</view></view>
+        <button tt:if="{{floorUploadStatus === 'retry_complete'}}" class="private-input-button ui-pressable" hover-class="ui-pressable--pressed" bindtap="onRetryFloorComplete">继续确认</button>
+        <view tt:elif="{{floorUploadStatus === 'checking'}}" class="private-input-pending">同步中</view>
+        <view tt:elif="{{floorUploadStatus === 'ready'}}" class="private-input-pending">已就绪</view>
+        <button tt:else class="private-input-button ui-pressable" hover-class="ui-pressable--pressed" disabled="{{floorUploadStatus === 'selecting' || floorUploadStatus === 'signing' || floorUploadStatus === 'uploading' || floorUploadStatus === 'confirming'}}" bindtap="onChooseFloorPlan">选择图片</button>
+      </view>
+      <view tt:if="{{floorFileId}}" class="private-input-preview ui-pressable" hover-class="ui-pressable--pressed" role="button" aria-label="全屏查看户型图" bindtap="onPreviewFloorPlan">
+        <image tt:if="{{floorPreviewUrl && !floorPreviewFailed}}" class="private-input-preview-image" src="{{floorPreviewUrl}}" mode="aspectFit" binderror="onFloorPreviewError" />
+        <view tt:else class="private-input-preview-empty">{{floorPreviewFailed ? '户型图预览暂不可用' : '正在加载户型图…'}}</view>
+      </view>
+      <view tt:if="{{floorFileId}}" class="private-input-actions">
+        <button tt:if="{{floorUploadStatus === 'ready'}}" class="private-input-action ui-pressable" hover-class="ui-pressable--pressed" disabled="{{jobDraftLocked || jobSubmitting}}" bindtap="onChooseFloorPlan">更换图片</button>
+        <button tt:if="{{floorUploadStatus === 'retry_complete'}}" class="private-input-action ui-pressable" hover-class="ui-pressable--pressed" bindtap="onKeepFloorPlan">保留原图</button>
+        <button tt:if="{{floorUploadStatus === 'ready'}}" class="private-input-action private-input-action--remove ui-pressable" hover-class="ui-pressable--pressed" disabled="{{jobDraftLocked || jobSubmitting}}" bindtap="onRemoveFloorPlan">删除图片</button>
+      </view>
     </view>
-    <view class="private-input-row">
-      <view class="private-input-copy"><view class="private-input-title">户型图（可选）</view><view class="private-input-message" role="status">{{floorUploadMessage}}</view></view>
-      <button tt:if="{{floorUploadStatus === 'retry_complete'}}" class="private-input-button ui-pressable" hover-class="ui-pressable--pressed" bindtap="onRetryFloorComplete">继续确认</button>
-      <view tt:elif="{{floorUploadStatus === 'checking'}}" class="private-input-pending">确认中</view>
-      <view tt:elif="{{floorUploadStatus === 'ready'}}" class="private-input-pending">已就绪</view>
-      <button tt:else class="private-input-button ui-pressable" hover-class="ui-pressable--pressed" disabled="{{floorUploadStatus === 'selecting' || floorUploadStatus === 'signing' || floorUploadStatus === 'uploading' || floorUploadStatus === 'confirming'}}" bindtap="onChooseFloorPlan">选择图片</button>
-    </view>
-    <view tt:if="{{floorFileId}}" class="private-input-actions">
-      <button class="private-input-action ui-pressable" hover-class="ui-pressable--pressed" bindtap="onPreviewFloorPlan">查看图片</button>
-      <button tt:if="{{floorUploadStatus === 'ready'}}" class="private-input-action ui-pressable" hover-class="ui-pressable--pressed" disabled="{{jobDraftLocked || jobSubmitting}}" bindtap="onChooseFloorPlan">更换图片</button>
-      <button tt:if="{{floorUploadStatus === 'retry_complete'}}" class="private-input-action ui-pressable" hover-class="ui-pressable--pressed" bindtap="onKeepFloorPlan">保留原图</button>
-      <button tt:if="{{floorUploadStatus === 'ready'}}" class="private-input-action private-input-action--remove ui-pressable" hover-class="ui-pressable--pressed" disabled="{{jobDraftLocked || jobSubmitting}}" bindtap="onRemoveFloorPlan">移除本次</button>
-    </view>
-    <view tt:if="{{roomFileId || floorFileId}}" class="private-input-action-note">“移除本次”只取消这次生成的图片选择。</view>
-    <button tt:if="{{roomFileId || floorFileId}}" class="detail-check-button ui-pressable" hover-class="ui-pressable--pressed" bindtap="onCheckUploadStatus">检查图片状态</button>
+    <view tt:if="{{roomFileId || floorFileId}}" class="private-input-action-note">删除只会取消本次生成使用的图片，不影响手机相册中的原文件。</view>
   </view>
   <view tt:if="{{status === 'ready' && showGeneration}}" class="detail-section generation-section">
     <view class="detail-section-title">生成我的空间参考图</view>
@@ -51,14 +62,29 @@
       <button class="generation-mode {{mode === 'renovation' ? 'generation-mode--active' : ''}}" data-value="renovation" disabled="{{jobDraftLocked || jobSubmitting}}" bindtap="onSelectMode">装修改造</button>
     </view>
     <textarea class="generation-notes ui-control" value="{{keepNotes}}" maxlength="300" placeholder="希望保留的元素或其他要求（选填）" disabled="{{jobDraftLocked || jobSubmitting}}" bindinput="onKeepNotesInput" />
-    <button tt:if="{{!jobId}}" class="generation-button ui-pressable" hover-class="ui-pressable--pressed" disabled="{{!canGenerate || jobSubmitting}}" bindtap="onGenerate">{{generateButtonLabel}}</button>
-    <view tt:if="{{jobMessage}}" class="generation-message" role="status">{{jobMessage}}</view>
-    <button tt:if="{{jobId}}" class="detail-check-button ui-pressable" hover-class="ui-pressable--pressed" bindtap="onRefreshJob">刷新任务进度</button>
+    <button tt:if="{{!jobId}}" class="generation-button ui-pressable" hover-class="ui-pressable--pressed" loading="{{jobSubmitting}}" disabled="{{!canGenerate || jobSubmitting}}" bindtap="onGenerate">{{generateButtonLabel}}</button>
+    <view tt:if="{{jobSubmitting || jobStatus === 'queued' || jobStatus === 'processing'}}" class="generation-progress" role="status" aria-live="polite">
+      <view class="generation-activity-track"><view class="generation-activity-bar" style="background-color: {{primaryColor}}"></view></view>
+      <view class="generation-progress-title">{{jobSubmitting ? '正在提交生成任务' : jobStatus === 'queued' ? '任务排队中' : 'AI 正在生成效果图'}}</view>
+      <view class="generation-progress-copy">{{jobMessage}}</view>
+    </view>
+    <view tt:elif="{{jobMessage}}" class="generation-message" role="status">{{jobMessage}}</view>
+    <button tt:if="{{jobId && jobRefreshAvailable}}" class="detail-check-button ui-pressable" hover-class="ui-pressable--pressed" bindtap="onRefreshJob">重新查询任务进度</button>
     <button tt:if="{{jobStatus === 'failed'}}" class="detail-check-button ui-pressable" hover-class="ui-pressable--pressed" bindtap="onStartAgain">重新生成</button>
     <view tt:if="{{jobStatus === 'succeeded' && resultUrl}}" class="generation-result">
-      <view class="detail-section-title">AI 参考效果图</view>
-      <image tt:if="{{!resultImageFailed}}" class="generation-result-image" src="{{resultUrl}}" mode="aspectFit" binderror="onResultImageError" />
-      <view tt:else class="detail-image--empty generation-result-image">图片链接已失效，请刷新任务进度</view>
+      <view class="detail-section-title">生成效果对比</view>
+      <view class="generation-comparison-grid">
+        <view class="generation-comparison-card ui-pressable" hover-class="ui-pressable--pressed" role="button" aria-label="全屏查看原始房间" bindtap="onPreviewOriginal">
+          <view class="generation-comparison-label">原始房间</view>
+          <image tt:if="{{roomPreviewUrl && !roomPreviewFailed}}" class="generation-comparison-image" src="{{roomPreviewUrl}}" mode="aspectFit" binderror="onRoomPreviewError" />
+          <view tt:else class="generation-comparison-image detail-image--empty">原图预览暂不可用</view>
+        </view>
+        <view class="generation-comparison-card ui-pressable" hover-class="ui-pressable--pressed" role="button" aria-label="全屏查看 AI 效果图" bindtap="onPreviewResult">
+          <view class="generation-comparison-label">AI 效果图</view>
+          <image tt:if="{{!resultImageFailed}}" class="generation-comparison-image" src="{{resultUrl}}" mode="aspectFit" binderror="onResultImageError" />
+          <view tt:else class="generation-comparison-image detail-image--empty">效果图预览暂不可用</view>
+        </view>
+      </view>
       <view class="private-inputs-note">仅供装修参考，具体方案以现场设计为准。</view>
     </view>
   </view>

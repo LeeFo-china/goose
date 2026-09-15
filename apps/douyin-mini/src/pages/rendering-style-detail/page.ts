@@ -94,6 +94,10 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
       primaryTextColor: "#FFFFFF",
       roomFileId: "",
       floorFileId: "",
+      roomPreviewUrl: "",
+      floorPreviewUrl: "",
+      roomPreviewFailed: false,
+      floorPreviewFailed: false,
       roomUploadStatus: "idle" as UploadStatus,
       floorUploadStatus: "idle" as UploadStatus,
       roomUploadMessage: "房间照为必传，最多 10 MiB",
@@ -106,6 +110,7 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
       jobId: "",
       jobStatus: "" as RenderingJobStatus | "",
       jobMessage: "",
+      jobRefreshAvailable: false,
       jobSubmitting: false,
       jobDraftLocked: false,
       resultUrl: "",
@@ -132,8 +137,11 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
         this.recovery = scope ? recoveryFor(dependencies.getApp().api, scope, this.styleId)
           : { ids: {}, puts: {}, files: {} };
         this.setData({ roomFileId: "", floorFileId: "", roomUploadStatus: "idle",
-          floorUploadStatus: "idle", mode: "soft_furnishing", keepNotes: "", jobId: "",
-          jobStatus: "", jobMessage: "", jobDraftLocked: false, jobSubmitting: false,
+          floorUploadStatus: "idle", roomPreviewUrl: "", floorPreviewUrl: "",
+          roomPreviewFailed: false, floorPreviewFailed: false,
+          mode: "soft_furnishing", keepNotes: "", jobId: "",
+          jobStatus: "", jobMessage: "", jobRefreshAvailable: false,
+          jobDraftLocked: false, jobSubmitting: false,
           resultUrl: "", resultImageFailed: false });
       }
       this.recoveryIdentity = scope ? identity : null;
@@ -175,9 +183,12 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
     maskPrivateDisplay() {
       this.setData({ roomFileId: "", floorFileId: "", roomUploadStatus: "idle",
         floorUploadStatus: "idle", roomUploadMessage: "房间照为必传，最多 10 MiB",
-        floorUploadMessage: "户型图可选，最多 10 MiB", mode: "soft_furnishing",
+        floorUploadMessage: "户型图可选，最多 10 MiB", roomPreviewUrl: "",
+        floorPreviewUrl: "", roomPreviewFailed: false, floorPreviewFailed: false,
+        mode: "soft_furnishing",
         keepNotes: "", canGenerate: false, showGeneration: false, jobId: "",
-        jobStatus: "", jobMessage: "", jobSubmitting: false, jobDraftLocked: false,
+        jobStatus: "", jobMessage: "", jobRefreshAvailable: false,
+        jobSubmitting: false, jobDraftLocked: false,
         resultUrl: "", resultImageFailed: false });
     },
     onShow() {
@@ -277,13 +288,16 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
     onChooseFloorPlan() { void this.upload("floor_plan"); },
     onPreviewRoom() { void this.preview("room"); },
     onPreviewFloorPlan() { void this.preview("floor_plan"); },
+    onPreviewOriginal() { void this.previewComparison("room"); },
+    onPreviewResult() { void this.previewComparison("result"); },
+    onRoomPreviewError() { this.setData({ roomPreviewFailed: true }); },
+    onFloorPreviewError() { this.setData({ floorPreviewFailed: true }); },
     onRemoveRoom() { this.removeFromDraft("room"); },
     onRemoveFloorPlan() { this.removeFromDraft("floor_plan"); },
     onKeepRoom() { this.keepOriginal("room"); },
     onKeepFloorPlan() { this.keepOriginal("floor_plan"); },
     onRetryRoomComplete() { void this.retryComplete("room"); },
     onRetryFloorComplete() { void this.retryComplete("floor_plan"); },
-    onCheckUploadStatus() { void this.refreshUploads(); },
     onRefreshJob() { void this.refreshJob(true); },
     onResultImageError() { this.setData({ resultImageFailed: true }); },
     onStartAgain() {
@@ -293,7 +307,7 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
       this.recovery.jobRequest = undefined;
       this.persistRecovery();
       this.setData({ jobId: "", jobStatus: "", jobMessage: "", resultUrl: "",
-        resultImageFailed: false, jobDraftLocked: false });
+        resultImageFailed: false, jobRefreshAvailable: false, jobDraftLocked: false });
       this.updateCanGenerate();
     },
     onSelectMode(event: { currentTarget: { dataset: { value?: string } } }) {
@@ -326,17 +340,72 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
         const url = await dependencies.fetchRenderingUploadPreview(dependencies.getApp().api, fileId);
         if (!this.visible || !this.scopeReady || this.requestEpoch !== epoch || this.recoveryScope !== scope
           || this.recovery.files[purpose] !== fileId) return;
+        this.setInlinePreview(purpose, url);
         dependencies.previewImage({ urls: [url], current: url, showmenu: false, fail: reportFailure });
       } catch {
         reportFailure();
+      }
+    },
+    async previewComparison(preferred: "room" | "result") {
+      const roomFileId = this.recovery.files.room;
+      const jobId = this.recovery.jobId;
+      if (!roomFileId || !jobId || this.data.jobStatus !== "succeeded" || !this.visible
+        || !this.scopeReady || !dependencies.fetchRenderingUploadPreview
+        || !dependencies.previewImage) return;
+      const scope = this.recoveryScope;
+      const epoch = this.requestEpoch;
+      try {
+        const roomUrl = await dependencies.fetchRenderingUploadPreview(
+          dependencies.getApp().api,
+          roomFileId,
+        );
+        let resultUrl = this.data.resultUrl;
+        if (dependencies.fetchRenderingJobStatus) {
+          const progress = await dependencies.fetchRenderingJobStatus(dependencies.getApp().api, jobId);
+          if (progress.status === "succeeded" && progress.result?.url) resultUrl = progress.result.url;
+        }
+        if (!resultUrl || !this.visible || !this.scopeReady || this.requestEpoch !== epoch
+          || this.recoveryScope !== scope || this.recovery.files.room !== roomFileId
+          || this.recovery.jobId !== jobId) return;
+        this.setData({ roomPreviewUrl: roomUrl, roomPreviewFailed: false,
+          resultUrl, resultImageFailed: false });
+        const urls = [roomUrl, resultUrl];
+        const current = preferred === "room" ? roomUrl : resultUrl;
+        dependencies.previewImage({ urls, current, showmenu: false,
+          fail: () => dependencies.showToast({ title: "暂无法查看对比图片，请稍后重试", icon: "none" }) });
+      } catch {
+        if (this.visible && this.requestEpoch === epoch && this.recoveryScope === scope) {
+          dependencies.showToast({ title: "暂无法查看对比图片，请稍后重试", icon: "none" });
+        }
+      }
+    },
+    setInlinePreview(purpose: RenderingUploadPurpose, url: string) {
+      if (purpose === "room") this.setData({ roomPreviewUrl: url, roomPreviewFailed: false });
+      else this.setData({ floorPreviewUrl: url, floorPreviewFailed: false });
+    },
+    async refreshInlinePreview(purpose: RenderingUploadPurpose, fileId: string) {
+      if (!dependencies.fetchRenderingUploadPreview || !this.visible || !this.scopeReady) return;
+      const scope = this.recoveryScope;
+      const epoch = this.requestEpoch;
+      try {
+        const url = await dependencies.fetchRenderingUploadPreview(dependencies.getApp().api, fileId);
+        if (!this.visible || !this.scopeReady || this.requestEpoch !== epoch || this.recoveryScope !== scope
+          || this.recovery.files[purpose] !== fileId) return;
+        this.setInlinePreview(purpose, url);
+      } catch {
+        if (!this.visible || this.requestEpoch !== epoch || this.recoveryScope !== scope
+          || this.recovery.files[purpose] !== fileId) return;
+        if (purpose === "room") this.setData({ roomPreviewUrl: "", roomPreviewFailed: true });
+        else this.setData({ floorPreviewUrl: "", floorPreviewFailed: true });
       }
     },
     removeFromDraft(purpose: RenderingUploadPurpose) {
       if (!this.visible || !this.scopeReady || this.uploading || this.pendingIntent[purpose]
         || this.recovery.jobRequest || this.recovery.jobId || !this.recovery.files[purpose]) return;
       this.recovery.files[purpose] = undefined;
-      if (purpose === "room") this.setData({ roomFileId: "" });
-      else this.setData({ floorFileId: "" });
+      if (purpose === "room") this.setData({ roomFileId: "", roomPreviewUrl: "",
+        roomPreviewFailed: false });
+      else this.setData({ floorFileId: "", floorPreviewUrl: "", floorPreviewFailed: false });
       this.setUploadState(purpose, "idle", purpose === "room" ? "请重新选择房间照" : "本次生成不使用户型图");
       this.persistRecovery();
     },
@@ -346,6 +415,7 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
       this.pendingIntent[purpose] = undefined;
       this.persistRecovery();
       this.setUploadState(purpose, "ready", "原图已保留，可用于 AI 生成");
+      void this.refreshInlinePreview(purpose, this.recovery.files[purpose]!);
     },
     persistRecovery(): boolean {
       if (!this.scopeReady || !this.recoveryIdentity) return false;
@@ -394,16 +464,18 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
             purpose === "room" ? this.data.roomUploadStatus : this.data.floorUploadStatus)) continue;
           if (progress.status === "ready" || progress.status === "approved") {
             this.setUploadState(purpose, "ready", "图片已就绪，可用于 AI 生成");
+            await this.refreshInlinePreview(purpose, fileId);
           } else if (progress.status === "pending_review") {
-            this.setUploadState(purpose, "checking", "图片状态正在同步，请稍后检查");
+            this.setUploadState(purpose, "checking", "图片状态正在自动同步…");
           } else if (progress.status === "rejected" || progress.status === "failed" || progress.status === "deleted") {
             this.recovery.files[purpose] = undefined;
-            if (purpose === "room") this.setData({ roomFileId: "" });
-            else this.setData({ floorFileId: "" });
+            if (purpose === "room") this.setData({ roomFileId: "", roomPreviewUrl: "",
+              roomPreviewFailed: false });
+            else this.setData({ floorFileId: "", floorPreviewUrl: "", floorPreviewFailed: false });
             this.persistRecovery();
             this.setUploadState(purpose, "error", "图片不可用，请重新选择");
           } else {
-            this.setUploadState(purpose, "checking", "图片仍在处理，请稍后检查状态");
+            this.setUploadState(purpose, "checking", "图片仍在处理，状态会自动更新…");
           }
         } catch (error) {
           if (!this.visible || epoch !== this.requestEpoch) return;
@@ -412,11 +484,12 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
               purpose === "room" ? this.data.roomUploadStatus : this.data.floorUploadStatus)) continue;
           if (error instanceof ApiRequestError && [401, 403, 404].includes(error.statusCode)) {
             this.recovery.files[purpose] = undefined;
-            if (purpose === "room") this.setData({ roomFileId: "" });
-            else this.setData({ floorFileId: "" });
+            if (purpose === "room") this.setData({ roomFileId: "", roomPreviewUrl: "",
+              roomPreviewFailed: false });
+            else this.setData({ floorFileId: "", floorPreviewUrl: "", floorPreviewFailed: false });
             this.persistRecovery();
             this.setUploadState(purpose, "error", "图片不可访问，请重新选择");
-          } else this.setUploadState(purpose, "checking", "暂无法查询图片状态，请稍后手动检查");
+          } else this.setUploadState(purpose, "checking", "暂时无法同步状态，页面会自动重试");
         }
       }
       this.updateCanGenerate();
@@ -455,13 +528,15 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
       const currentScope = () => this.visible && this.scopeReady
         && this.recoveryScope === scope && this.recovery === recovery;
       this.setData({ jobSubmitting: true, canGenerate: false,
-        generateButtonLabel: "正在提交…", jobMessage: "正在提交生成任务…" });
+        generateButtonLabel: "正在提交…", jobMessage: "正在提交生成任务…",
+        jobRefreshAvailable: false });
       try {
         const created = await dependencies.createRenderingJob(app.api, request);
         if (!currentScope()) return;
         this.recovery.jobId = created.jobId;
         this.persistRecovery();
-        this.setData({ jobId: created.jobId, jobStatus: created.status, jobMessage: "任务已提交，正在查询进度…" });
+        this.setData({ jobId: created.jobId, jobStatus: created.status,
+          jobMessage: "任务已提交，正在查询进度…", jobRefreshAvailable: false });
         await this.refreshJob();
       } catch (error) {
         if (!currentScope()) return;
@@ -472,6 +547,9 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
           this.setData({ jobDraftLocked: false });
         }
         this.setData({ jobMessage: jobErrorMessage(error) });
+        if (error instanceof ApiRequestError && error.code === "RENDERING_INPUT_UNAVAILABLE") {
+          void this.refreshUploads();
+        }
       } finally {
         if (currentScope()) {
           this.submittingJob = false;
@@ -486,20 +564,26 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
     },
     async refreshJob(manual = false) {
       if (!dependencies.fetchRenderingJobStatus || !this.visible || !this.recovery.jobId) return;
-      if (manual) { this.jobPolls = 0; this.stopJobPolling(); }
+      if (manual) {
+        this.jobPolls = 0;
+        this.stopJobPolling();
+        this.setData({ jobRefreshAvailable: false });
+      }
       const epoch = ++this.jobEpoch;
       const id = this.recovery.jobId;
       try {
         const progress = await dependencies.fetchRenderingJobStatus(dependencies.getApp().api, id);
         if (!this.visible || epoch !== this.jobEpoch || this.recovery.jobId !== id) return;
         this.setData({ jobStatus: progress.status, resultUrl: progress.result?.url ?? "",
-          resultImageFailed: false, jobMessage: jobProgressMessage(progress.status, progress.failureReason) });
+          resultImageFailed: false, jobMessage: jobProgressMessage(progress.status, progress.failureReason),
+          jobRefreshAvailable: progress.status === "review_required" });
         this.stopJobPolling();
         if ((progress.status === "queued" || progress.status === "processing") && this.jobPolls < 24) {
           this.jobPolls++;
           this.jobTimer = setTimeout(() => { void this.refreshJob(); }, 5000);
         } else if (progress.status === "queued" || progress.status === "processing") {
-          this.setData({ jobMessage: "生成仍在进行，请稍后手动刷新进度" });
+          this.setData({ jobMessage: "生成仍在进行，可以稍后回来查看",
+            jobRefreshAvailable: true });
         }
       } catch (error) {
         if (!this.visible || epoch !== this.jobEpoch) return;
@@ -509,9 +593,11 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
           this.recovery.jobRequest = undefined;
           this.persistRecovery();
           this.setData({ jobId: "", jobStatus: "", jobDraftLocked: false, resultUrl: "",
-            resultImageFailed: false, jobMessage: "任务不可访问，请重新提交" });
+            resultImageFailed: false, jobMessage: "任务不可访问，请重新提交",
+            jobRefreshAvailable: false });
           this.updateCanGenerate();
-        } else this.setData({ jobMessage: "暂无法查询任务进度，请手动刷新" });
+        } else this.setData({ jobMessage: "暂无法自动查询任务进度",
+          jobRefreshAvailable: true });
       }
     },
     async upload(purpose: RenderingUploadPurpose) {
@@ -619,6 +705,7 @@ export function createRenderingStyleDetailPageDefinition(dependencies: Rendering
       else this.setData({ floorFileId: result.fileId });
       this.setUploadState(purpose, "ready", "图片已就绪，可用于 AI 生成");
       this.persistRecovery();
+      await this.refreshInlinePreview(purpose, result.fileId);
     },
     setUploadState(purpose: RenderingUploadPurpose, status: UploadStatus, message: string) {
       if (purpose === "room") this.setData({ roomUploadStatus: status, roomUploadMessage: message });
@@ -668,7 +755,7 @@ function jobProgressMessage(status: RenderingJobStatus, failureReason?: 'content
 function jobErrorMessage(error: unknown): string {
   if (!(error instanceof ApiRequestError)) return "任务提交结果未确认，请继续提交同一任务";
   if (error.statusCode === 401) return "登录状态已失效，请重新进入后继续提交";
-  if (error.code === "RENDERING_INPUT_UNAVAILABLE") return "上传图片尚未就绪，请检查图片状态";
+  if (error.code === "RENDERING_INPUT_UNAVAILABLE") return "上传图片尚未就绪，正在自动确认状态";
   if (error.code === "RENDERING_QUOTA_EXHAUSTED") return "当前生成次数已用完";
   if (error.code === "RENDERING_JOB_DISABLED") return "AI 生成服务尚未开放，请稍后重试；图片仍可调整";
   return "任务提交结果未确认，请继续提交同一任务";

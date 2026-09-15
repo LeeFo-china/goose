@@ -45,6 +45,7 @@ test("ready room image can be previewed, replaced without losing the old image, 
   });
   const view = Object.assign(definition, { setData(patch: Record<string, unknown>) { Object.assign(definition.data, patch); } });
   view.onLoad({ id: STYLE.id }); await flush();
+  expect(view.data.roomPreviewUrl).toBe("https://private.example.com/signed.webp");
   await view.preview("room");
   expect(previews).toEqual(["https://private.example.com/signed.webp"]);
   const replacing = view.upload("room"); await flush();
@@ -630,6 +631,7 @@ test("completed upload immediately allows Ark generation and displays the privat
   const image: PrivateImage = { bytes: new Uint8Array([0xff, 0xd8, 0xff, 0xd9]).buffer,
     mimeType: "image/jpeg", sizeBytes: 4 };
   const submitted: unknown[] = [];
+  const previews: Array<{ urls: string[]; current?: string }> = [];
   const definition = createRenderingStyleDetailPageDefinition({
     getApp: () => ({ api: {}, startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
       recordAnalytics: () => undefined }) as never,
@@ -642,6 +644,8 @@ test("completed upload immediately allows Ark generation and displays the privat
     putRenderingBytes: async () => undefined,
     completeRenderingUploadWithRetry: async () => ({ fileId: STYLE.id, status: "ready" }),
     fetchRenderingUploadStatus: async () => ({ fileId: STYLE.id, status: "ready", reviewState: null }),
+    fetchRenderingUploadPreview: async () => "https://private.example.com/room.webp",
+    previewImage: ({ urls, current }) => { previews.push({ urls, current }); },
     createIdempotencyKey: () => "22222222-2222-4222-8222-222222222222",
     createRenderingJob: async (_client, input) => { submitted.push(input); return { jobId: STYLE.id, status: "succeeded" }; },
     fetchRenderingJobStatus: async () => ({ jobId: STYLE.id, status: "succeeded",
@@ -654,6 +658,7 @@ test("completed upload immediately allows Ark generation and displays the privat
   await view.upload("room");
   await flush();
   expect(view.data.roomUploadMessage).toContain("已就绪");
+  expect(view.data.roomPreviewUrl).toContain("room.webp");
   expect(view.data.canGenerate).toBe(true);
   view.onSelectMode({ currentTarget: { dataset: { value: "renovation" } } });
   view.onKeepNotesInput({ detail: { value: "保留木地板" } });
@@ -663,6 +668,39 @@ test("completed upload immediately allows Ark generation and displays the privat
     idempotency_key: "22222222-2222-4222-8222-222222222222" }]);
   expect(view.data.jobStatus).toBe("succeeded");
   expect(view.data.resultUrl).toContain("result.webp");
+  await view.previewComparison("result");
+  expect(previews).toEqual([{
+    urls: ["https://private.example.com/room.webp", "https://private.example.com/result.webp"],
+    current: "https://private.example.com/result.webp",
+  }]);
+});
+
+test("queued and processing jobs expose recoverable busy presentation without fake progress", async () => {
+  const definition = createRenderingStyleDetailPageDefinition({
+    getApp: () => ({ api: {}, startup: Promise.resolve({ theme: { primary_color: "#191817" } }),
+      recordAnalytics: () => undefined }) as never,
+    resolveRecoveryIdentity: async () => OWNER,
+    fetchPublishedStyleDetail: async () => STYLE,
+    navigateToList: async () => undefined,
+    showToast: () => undefined,
+    choosePrivateImage: async () => { throw new Error("unused"); },
+    createRenderingUploadIntent: async () => { throw new Error("unused"); },
+    putRenderingBytes: async () => undefined,
+    completeRenderingUploadWithRetry: async () => { throw new Error("unused"); },
+    readRenderingRecovery: () => ({ styleId: STYLE.id, roomIntentId: null, floorIntentId: null,
+      roomFileId: STYLE.id, floorFileId: null, jobRequest: null, jobId: STYLE.id, savedAt: Date.now() }),
+    fetchRenderingUploadStatus: async () => ({ fileId: STYLE.id, status: "ready", reviewState: null }),
+    fetchRenderingUploadPreview: async () => "https://private.example.com/room.webp",
+    fetchRenderingJobStatus: async () => ({ jobId: STYLE.id, status: "processing", result: null }),
+  });
+  const view = Object.assign(definition, { setData(patch: Record<string, unknown>) { Object.assign(definition.data, patch); } });
+  view.onLoad({ id: STYLE.id });
+  await flush();
+  expect(view.data).toMatchObject({
+    jobStatus: "processing",
+    jobMessage: "AI 参考效果图生成中，页面会自动更新进度",
+    jobRefreshAvailable: false,
+  });
 });
 
 test("Ark content refusal gives a retryable explanation without exposing provider details", async () => {

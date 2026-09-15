@@ -386,7 +386,10 @@ test("rendering catalog has a home entry and separate list and detail pages", as
 });
 
 test("rendering detail exposes ready uploads and a clearly labelled AI reference action", async () => {
-  const template = await readSource("pages/rendering-style-detail/index.ttml");
+  const [template, style] = await Promise.all([
+    readSource("pages/rendering-style-detail/index.ttml"),
+    readSource("pages/rendering-style-detail/index.ttss"),
+  ]);
   expect(template).toContain('bindtap="onChooseRoom"');
   expect(template).toContain('bindtap="onChooseFloorPlan"');
   expect(template).toContain('bindtap="onRetryRoomComplete"');
@@ -396,6 +399,17 @@ test("rendering detail exposes ready uploads and a clearly labelled AI reference
   expect(template).not.toContain("!roomFileId || floorUploadStatus");
   expect(template).toContain("roomUploadStatus === 'ready'");
   expect(template).toContain('bindtap="onGenerate"');
-  expect(template).toContain('bindtap="onCheckUploadStatus"');
+  expect(template).toContain('class="detail-notes-grid"');
+  expect(template).toContain('class="private-input-preview');
+  expect(template).not.toContain('bindtap="onCheckUploadStatus"');
+  expect(template).not.toContain("检查图片状态");
+  expect(template).toContain('class="generation-activity-bar"');
+  expect(template).toContain("jobSubmitting || jobStatus === 'queued' || jobStatus === 'processing'");
+  expect(template).toContain("原始房间");
+  expect(template).toContain("AI 效果图");
+  expect(template).toContain('bindtap="onPreviewOriginal"');
+  expect(template).toContain('bindtap="onPreviewResult"');
+  expect(style).toContain("@keyframes generation-activity");
+  expect(style).toMatch(/@media \(prefers-reduced-motion: reduce\)/);
   expect(template).toContain("AI 参考效果图");
 });
