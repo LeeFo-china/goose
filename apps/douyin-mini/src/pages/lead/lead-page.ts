@@ -43,6 +43,9 @@ import {
 import { isPrivacyVersionMismatch, readableError } from "./lead-page-errors";
 import { runPolicyNavigation, runPrivacyPolicyRefresh } from "./lead-page-operations";
 
+// The platform code lasts five minutes; keep a one-minute delivery margin.
+const DOUYIN_PHONE_AUTHORIZATION_TTL_MS = 4 * 60 * 1000;
+
 export type LeadPageDependencies = {
   getApp(): DouyinAppContext;
   sendLeadSms: typeof sendLeadSms;
@@ -67,6 +70,7 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
   attributionEntryVersion: 0,
   submissionAttribution: null as { key: string; value: LaunchContext } | null,
   successNavigationInFlight: false,
+  douyinPhoneAuthorization: null as { code: string; expiresAt: number } | null,
   data: {
     loading: true,
     error: false,
@@ -91,6 +95,7 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
     focusedField: "",
     optionalDetailsExpanded: false,
     douyinPhoneEnabled: false,
+    douyinPhoneAuthorized: false,
     smsFallbackExpanded: false,
   },
   onLoad() {
@@ -105,7 +110,11 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
       this.idempotency = createIdempotencyState(this.idempotency.draft);
     }
     this.attributionEntryVersion = entryVersion;
-    this.setData({ smsSending: false, submitting: false });
+    this.setData({
+      smsSending: false,
+      submitting: false,
+      douyinPhoneAuthorized: this.douyinPhoneAuthorization !== null,
+    });
     this.syncBudgetContext();
     this.resumeCooldown();
     if (becameVisible && (this.data.loading || this.data.error)) {
@@ -116,11 +125,13 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
   onHide() {
     if (!this.lifecycle.onHide()) return;
     this.idempotency = failIdempotentSubmission(this.idempotency);
+    this.douyinPhoneAuthorization = null;
     this.stopCooldown();
   },
   onUnload() {
     this.lifecycle.onUnload();
     this.idempotency = failIdempotentSubmission(this.idempotency);
+    this.douyinPhoneAuthorization = null;
     this.stopCooldown();
     this.cooldownUntil = 0;
   },
@@ -154,6 +165,7 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
         this.linkedBudget,
       ),
     );
+    this.douyinPhoneAuthorization = null;
     this.setData({
       loading: false,
       error: false,
@@ -164,6 +176,7 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
       primaryTextColor: theme.primaryTextColor,
       privacyPolicyVersion: bootstrap.privacy_policy_version,
       douyinPhoneEnabled: bootstrap.features.douyin_phone,
+      douyinPhoneAuthorized: false,
       smsFallbackExpanded: false,
     });
     dependencies.getApp().recordAnalytics("page_view");
@@ -284,23 +297,66 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
     if (!this.data.douyinPhoneEnabled || this.data.submitting || this.data.smsSending) return;
     const smsFallbackExpanded = !this.data.smsFallbackExpanded;
     const withoutPhoneError = clearLeadFieldError(this.data.fieldErrors, "phone");
+    this.douyinPhoneAuthorization = null;
     this.setData({
       smsFallbackExpanded,
+      douyinPhoneAuthorized: false,
       fieldErrors: clearLeadFieldError(withoutPhoneError, "sms_code"),
       focusedField: smsFallbackExpanded ? "phone" : "",
       formError: "",
     });
   },
-  async onSubmit(event?: { detail?: { douyin_phone_code?: string } }) {
+  onDouyinPhoneNumber(event: { detail?: { douyin_phone_code?: string } }) {
+    if (!this.data.douyinPhoneEnabled || this.data.submitting) return;
+    const code = typeof event.detail?.douyin_phone_code === "string"
+      ? event.detail.douyin_phone_code.trim()
+      : "";
+    if (!code) {
+      this.douyinPhoneAuthorization = null;
+      const withoutPhoneError = clearLeadFieldError(this.data.fieldErrors, "phone");
+      this.setData({
+        douyinPhoneAuthorized: false,
+        smsFallbackExpanded: true,
+        fieldErrors: clearLeadFieldError(withoutPhoneError, "sms_code"),
+        focusedField: "phone",
+        formError: "未获得抖音手机号授权，请改用短信验证码提交",
+      });
+      return;
+    }
+    this.douyinPhoneAuthorization = {
+      code,
+      expiresAt: Date.now() + DOUYIN_PHONE_AUTHORIZATION_TTL_MS,
+    };
+    this.setData({
+      douyinPhoneAuthorized: true,
+      fieldErrors: clearLeadFieldError(this.data.fieldErrors, "phone"),
+      focusedField: "",
+      formError: "",
+    });
+  },
+  async onSubmit() {
     const phoneCaptureMode = this.data.douyinPhoneEnabled
         && !this.data.smsFallbackExpanded
       ? "douyin_phone"
       : "sms";
-    if (phoneCaptureMode === "douyin_phone" && !event?.detail?.douyin_phone_code) {
+    const douyinPhoneAuthorization = this.douyinPhoneAuthorization;
+    if (phoneCaptureMode === "douyin_phone" && !douyinPhoneAuthorization) {
+      const message = "请先获取抖音绑定手机号";
       this.setData({
-        smsFallbackExpanded: true,
-        focusedField: "phone",
-        formError: "未获得抖音手机号授权，请改用短信验证码提交",
+        douyinPhoneAuthorized: false,
+        fieldErrors: { ...this.data.fieldErrors, phone: message },
+        formError: message,
+      });
+      return;
+    }
+    if (phoneCaptureMode === "douyin_phone"
+      && douyinPhoneAuthorization!.expiresAt <= Date.now()) {
+      const message = "手机号授权已过期，请重新获取";
+      this.douyinPhoneAuthorization = null;
+      this.setData({
+        douyinPhoneAuthorized: false,
+        fieldErrors: { ...this.data.fieldErrors, phone: message },
+        formError: message,
       });
       return;
     }
@@ -359,7 +415,7 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
       const verification = phoneCaptureMode === "douyin_phone"
         ? {
           verification_method: "douyin_phone" as const,
-          douyin_phone_code: event?.detail?.douyin_phone_code ?? "",
+          douyin_phone_code: douyinPhoneAuthorization!.code,
         }
         : {
           verification_method: "sms" as const,
@@ -407,13 +463,21 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
         return;
       }
       if (isPrivacyVersionMismatch(error)) {
+        if (phoneCaptureMode === "douyin_phone") {
+          this.douyinPhoneAuthorization = null;
+          this.setData({ douyinPhoneAuthorized: false });
+        }
         await this.refreshPrivacyPolicy(authority);
         return;
       }
       if (!this.lifecycle.finishSubmit(authority)) return;
       this.idempotency = failIdempotentSubmission(this.idempotency);
+      if (phoneCaptureMode === "douyin_phone") this.douyinPhoneAuthorization = null;
       this.setData({
         submitting: false,
+        ...(phoneCaptureMode === "douyin_phone"
+          ? { douyinPhoneAuthorized: false }
+          : {}),
         formError: readableError(error, "提交失败，请检查网络后重试"),
       });
       return;

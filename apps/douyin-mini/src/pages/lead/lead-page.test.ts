@@ -202,7 +202,7 @@ describe("lead page definition", () => {
     expect(harness.page.data.phoneReady).toBe(false);
   });
 
-  test("submits with a Douyin phone code and no manual SMS fields", async () => {
+  test("captures a Douyin phone code before the final form submission", async () => {
     const harness = createHarness({
       ...BOOTSTRAP,
       features: {
@@ -219,10 +219,18 @@ describe("lead page definition", () => {
       phone: "",
       sms_code: "",
     };
-    const submit = harness.deferredSubmit();
-    const operation = harness.page.onSubmit({
+    harness.page.onDouyinPhoneNumber({
       detail: { douyin_phone_code: "official-phone-code" },
     });
+
+    expect(harness.submitLead).not.toHaveBeenCalled();
+    expect(harness.page.data).toMatchObject({
+      douyinPhoneAuthorized: true,
+      formError: "",
+    });
+
+    const submit = harness.deferredSubmit();
+    const operation = harness.page.onSubmit();
     submit.resolve(publicAppointment());
     await operation;
 
@@ -247,7 +255,7 @@ describe("lead page definition", () => {
     harness.page.onLoad();
     await flushPromises();
 
-    await harness.page.onSubmit({ detail: { douyin_phone_code: "" } });
+    harness.page.onDouyinPhoneNumber({ detail: { douyin_phone_code: "" } });
 
     expect(harness.submitLead).not.toHaveBeenCalled();
     expect(harness.page.data).toMatchObject({
@@ -256,6 +264,79 @@ describe("lead page definition", () => {
       focusedField: "phone",
       formError: "未获得抖音手机号授权，请改用短信验证码提交",
     });
+  });
+
+  test("asks for Douyin phone authorization before final submission", async () => {
+    const harness = createHarness({
+      ...BOOTSTRAP,
+      features: {
+        ...BOOTSTRAP.features,
+        douyin_phone: true,
+        phone_capture_mode: "douyin_phone",
+      },
+    });
+    harness.page.onLoad();
+    await flushPromises();
+    setValidForm(harness.page);
+
+    await harness.page.onSubmit();
+
+    expect(harness.submitLead).not.toHaveBeenCalled();
+    expect(harness.page.data).toMatchObject({
+      douyinPhoneAuthorized: false,
+      formError: "请先获取抖音绑定手机号",
+      fieldErrors: { phone: "请先获取抖音绑定手机号" },
+    });
+  });
+
+  test("rejects an expired Douyin phone authorization", async () => {
+    const harness = createHarness({
+      ...BOOTSTRAP,
+      features: {
+        ...BOOTSTRAP.features,
+        douyin_phone: true,
+        phone_capture_mode: "douyin_phone",
+      },
+    });
+    harness.page.onLoad();
+    await flushPromises();
+    setValidForm(harness.page);
+    harness.page.onDouyinPhoneNumber({
+      detail: { douyin_phone_code: "expired-phone-code" },
+    });
+    harness.page.douyinPhoneAuthorization!.expiresAt = Date.now() - 1;
+
+    await harness.page.onSubmit();
+
+    expect(harness.submitLead).not.toHaveBeenCalled();
+    expect(harness.page.data).toMatchObject({
+      douyinPhoneAuthorized: false,
+      formError: "手机号授权已过期，请重新获取",
+      fieldErrors: { phone: "手机号授权已过期，请重新获取" },
+    });
+  });
+
+  test("clears an unconsumed phone authorization when the page is hidden", async () => {
+    const harness = createHarness({
+      ...BOOTSTRAP,
+      features: {
+        ...BOOTSTRAP.features,
+        douyin_phone: true,
+        phone_capture_mode: "douyin_phone",
+      },
+    });
+    harness.page.onLoad();
+    await flushPromises();
+    harness.page.onShow();
+    harness.page.onDouyinPhoneNumber({
+      detail: { douyin_phone_code: "page-scoped-phone-code" },
+    });
+
+    harness.page.onHide();
+    harness.page.onShow();
+
+    expect(harness.page.douyinPhoneAuthorization).toBeNull();
+    expect(harness.page.data.douyinPhoneAuthorized).toBe(false);
   });
 
   test("allows an official-phone lead to switch to SMS submission", async () => {

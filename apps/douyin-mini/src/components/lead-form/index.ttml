@@ -6,9 +6,15 @@
       <view tt:if="{{fieldErrors.name}}" class="ui-field-error" role="alert">{{fieldErrors.name}}</view>
     </view>
     <view tt:if="{{douyinPhoneEnabled && !smsFallbackExpanded}}" class="field-group">
-      <view class="douyin-phone-note" role="note">
-        提交时可快捷授权抖音手机号，不需要填写短信验证码。
+      <view class="field-label">手机号 <text class="required" style="color: {{primaryColor}}">*</text></view>
+      <view class="douyin-phone-row">
+        <view class="douyin-phone-value ui-control {{fieldErrors.phone ? 'ui-control--error' : ''}}" aria-label="抖音绑定手机号状态">
+          <text class="{{douyinPhoneAuthorized ? 'douyin-phone-value--ready' : 'douyin-phone-value--placeholder'}}">{{douyinPhoneAuthorized ? '已获取抖音绑定手机号' : '授权后自动获取'}}</text>
+        </view>
+        <button class="douyin-phone-action ui-pressable" hover-class="ui-pressable--pressed" style="border-color: {{primaryColor}}; color: {{primaryColor}}" open-type="getPhoneNumber" bindgetphonenumber="onDouyinPhoneNumber" disabled="{{submitting}}">{{douyinPhoneAuthorized ? '重新获取' : '获取抖音绑定手机号'}}</button>
       </view>
+      <view class="douyin-phone-help">由抖音安全提供，仅用于本次量房联系</view>
+      <view tt:if="{{fieldErrors.phone}}" class="ui-field-error" role="alert">{{fieldErrors.phone}}</view>
     </view>
     <view tt:if="{{!douyinPhoneEnabled || smsFallbackExpanded}}" class="field-group">
       <view class="field-label">联系电话 <text class="required" style="color: {{primaryColor}}">*</text></view>
@@ -21,7 +27,7 @@
       <view tt:if="{{fieldErrors.sms_code}}" class="ui-field-error" role="alert">{{fieldErrors.sms_code}}</view>
     </view>
     <button tt:if="{{douyinPhoneEnabled}}" class="phone-method-toggle ui-pressable" hover-class="ui-pressable--pressed" disabled="{{submitting || smsSending}}" bindtap="onTogglePhoneCapture">
-      <text>{{smsFallbackExpanded ? '使用抖音手机号快捷提交' : '改用短信验证码'}}</text>
+      <text>{{smsFallbackExpanded ? '改用抖音绑定手机号' : '无法授权？使用短信验证码'}}</text>
       <text class="phone-method-arrow" aria-hidden="true">›</text>
     </button>
     <view class="field-group">
@@ -70,6 +76,5 @@
   </view>
 
   <view class="consent-block"><privacy-consent checked="{{consented}}" company-name="{{companyName}}" primary-color="{{primaryColor}}" primary-text-color="{{primaryTextColor}}" error="{{fieldErrors.consent || ''}}" disabled="{{submitting}}" bindchange="onConsentChange" bindopenpolicy="onOpenPolicy" /></view>
-  <button tt:if="{{douyinPhoneEnabled && !smsFallbackExpanded}}" class="submit-button ui-pressable" hover-class="ui-pressable--pressed" style="background-color: {{primaryColor}}; color: {{primaryTextColor}}" open-type="getPhoneNumber" bindgetphonenumber="onDouyinPhoneNumber" loading="{{submitting}}" disabled="{{submitting}}">{{submitting ? '正在提交' : '使用抖音手机号提交'}}</button>
-  <button tt:else class="submit-button ui-pressable" hover-class="ui-pressable--pressed" style="background-color: {{primaryColor}}; color: {{primaryTextColor}}" form-type="submit" loading="{{submitting}}" disabled="{{submitting}}">{{submitting ? '正在提交' : '提交量房申请'}}</button>
+  <button class="submit-button ui-pressable" hover-class="ui-pressable--pressed" style="background-color: {{primaryColor}}; color: {{primaryTextColor}}" form-type="submit" loading="{{submitting}}" disabled="{{submitting}}">{{submitting ? '正在提交' : '提交量房申请'}}</button>
 </form>

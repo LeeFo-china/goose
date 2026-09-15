@@ -17,6 +17,7 @@ Component({
     estimateNo: { type: String, value: "" },
     estimateRange: { type: String, value: "" },
     douyinPhoneEnabled: { type: Boolean, value: false },
+    douyinPhoneAuthorized: { type: Boolean, value: false },
     smsFallbackExpanded: { type: Boolean, value: false },
   },
   methods: {
@@ -67,7 +68,7 @@ Component({
     },
     onDouyinPhoneNumber(event: { detail?: { code?: string } }) {
       if (this.data.submitting) return;
-      this.triggerEvent("submit", {
+      this.triggerEvent("douyinphone", {
         douyin_phone_code: typeof event.detail?.code === "string"
           ? event.detail.code
           : "",
