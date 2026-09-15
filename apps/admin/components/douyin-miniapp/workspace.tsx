@@ -1,24 +1,10 @@
 import Link from "next/link";
 import type { DouyinReleaseReadiness } from "@gooes/domain";
-import {
-  AppWindow,
-  ArrowUpRight,
-  BriefcaseBusiness,
-  Building2,
-  Construction,
-  MapPin,
-  ShieldAlert,
-} from "lucide-react";
+import { AppWindow, ArrowUpRight, ShieldAlert } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Empty,
   EmptyContent,
@@ -27,7 +13,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { Separator } from "@/components/ui/separator";
 import {
   authorizationLabel,
   authorizationTone,
@@ -65,11 +50,9 @@ export function TenantDouyinMiniappWorkspace({
 }: TenantDouyinMiniappWorkspaceProps) {
   return (
     <main className="flex h-full min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-5 [scrollbar-gutter:stable] lg:p-6">
-      <header className="flex flex-col gap-1">
+      <header className="mx-auto flex w-full max-w-5xl flex-col gap-1">
         <h1 className="text-xl font-semibold tracking-tight">抖音小程序</h1>
-        <p className="text-sm text-muted-foreground">
-          查看租户品牌、公开内容、授权状态与版本进度。
-        </p>
+        <p className="text-sm text-muted-foreground">查看当前进度并完成下一步操作。</p>
       </header>
 
       {!canRead ? <PermissionEmpty /> : null}
@@ -155,170 +138,94 @@ function WorkspaceOverview({
   workspace: TenantDouyinWorkspace;
 }) {
   return (
-    <div className="flex flex-col gap-4">
-      <TemplateAvailabilityNotice workspace={workspace} />
-      {readiness ? <ReleaseReadinessPanel readiness={readiness} /> : null}
-      {readinessLoadError ? (
-        <Alert variant="destructive">
-          <ShieldAlert aria-hidden="true" />
-          <AlertTitle>提审就绪检查加载失败</AlertTitle>
-          <AlertDescription>
-            {readinessLoadError}。请刷新后重试；服务端仍会在提交审核前重新拦截。
-          </AlertDescription>
-        </Alert>
-      ) : null}
-      <Card className="overflow-hidden">
-        <CardHeader className="gap-4 border-b bg-muted/20">
-          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
-            <div className="flex min-w-0 flex-col gap-1.5">
-              <CardTitle>运营状态总览</CardTitle>
-              <CardDescription>
-                核对授权、公开资料与版本进度，按当前状态完成体验和提审。
-              </CardDescription>
-            </div>
-            <div
-              className="flex flex-wrap items-center gap-2"
-              aria-label="小程序状态"
-            >
-              <Badge variant={authorizationTone(workspace.authorization_state)}>
-                {authorizationLabel(workspace.authorization_state)}
-              </Badge>
-              <Badge variant={releaseTone(workspace.release_state)}>
-                {releaseLabel(workspace.release_state)}
-              </Badge>
-            </div>
+    <div className="mx-auto flex w-full max-w-5xl flex-col rounded-md bg-card px-5 sm:px-7">
+      <section aria-labelledby="douyin-progress-heading" className="border-b py-6">
+        <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+          <div>
+            <h2 id="douyin-progress-heading" className="text-base font-semibold">当前进度</h2>
+            <p className="mt-1 text-sm text-muted-foreground">按当前版本状态完成体验、提审与发布。</p>
           </div>
-
-          <div className="rounded-md border bg-background p-4">
-            <TenantDouyinMiniappWorkspaceActions
-              canManage={canManage}
-              canPublish={canPublish}
-              canSubmitAudit={canSubmitAudit}
-              readiness={readiness}
-              readinessLoadError={readinessLoadError}
-              workspace={workspace}
-            />
+          <div className="flex flex-wrap items-center gap-2" aria-label="小程序状态">
+            <Badge variant={authorizationTone(workspace.authorization_state)}>
+              {authorizationLabel(workspace.authorization_state)}
+            </Badge>
+            <Badge variant={releaseTone(workspace.release_state)}>
+              {releaseLabel(workspace.release_state)}
+            </Badge>
           </div>
-        </CardHeader>
+        </div>
+        <TenantDouyinMiniappWorkspaceActions
+          canManage={canManage}
+          canPublish={canPublish}
+          canSubmitAudit={canSubmitAudit}
+          readiness={readiness}
+          readinessLoadError={readinessLoadError}
+          workspace={workspace}
+        />
+        <TemplateAvailabilityNotice workspace={workspace} />
+      </section>
 
-        <CardContent className="flex flex-col gap-6 pt-5">
-          <TenantDouyinLeadCaptureConfig
-            canManage={canManage}
-            installation={workspace.installation}
-          />
-          <Separator />
-          <section
-            className="flex flex-col gap-4"
-            aria-labelledby="douyin-brand-heading"
-          >
-            <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
-              <div className="flex min-w-0 flex-col gap-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2
-                    id="douyin-brand-heading"
-                    className="text-sm font-semibold"
-                  >
-                    品牌与公开资料
-                  </h2>
-                  {workspace.public_profile ? (
-                    <Badge
-                      variant={profileStatusTone(
-                        workspace.public_profile.status,
-                      )}
-                    >
-                      {profileStatusLabel(workspace.public_profile.status)}
-                    </Badge>
-                  ) : (
-                    <Badge variant="secondary">公开资料未创建</Badge>
-                  )}
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  内部租户名称用于后台识别，公开品牌展示给小程序访客。
-                </p>
-              </div>
-              <Button asChild size="sm" variant="outline">
-                <Link href="/settings/service-provider">
-                  维护公开资料
-                  <ArrowUpRight aria-hidden="true" />
-                </Link>
-              </Button>
-            </div>
-
-            <dl className="grid gap-4 sm:grid-cols-2">
-              <IdentityField
-                icon={Building2}
-                label="租户内部名称"
-                value={workspace.tenant.name}
-              />
-              <IdentityField
-                icon={AppWindow}
-                label="小程序公开品牌"
-                value={workspace.public_profile?.public_name || "尚未设置"}
-              />
-            </dl>
-
-            {workspace.public_profile?.introduction ? (
-              <div className="rounded-md border bg-muted/20 px-4 py-3">
-                <p className="text-xs font-medium text-muted-foreground">
-                  公开简介
-                </p>
-                <p className="mt-1 break-words text-sm leading-6">
-                  {workspace.public_profile.introduction}
-                </p>
-              </div>
-            ) : null}
-          </section>
-
-        <Separator />
-
-        <section
-          className="flex flex-col gap-4"
-          aria-labelledby="douyin-content-heading"
-        >
-          <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
-            <div>
-              <h2
-                id="douyin-content-heading"
-                className="text-sm font-semibold"
-              >
-                小程序公开内容
-              </h2>
-              <p className="mt-1 text-xs text-muted-foreground">
-                统计当前符合公开条件的案例、在建工地与服务区域。
-              </p>
-            </div>
-            <Button asChild size="sm" variant="outline">
-              <Link href="/projects">
-                管理项目内容
-                <ArrowUpRight aria-hidden="true" />
-              </Link>
-            </Button>
-          </div>
-
-          <dl className="grid gap-px overflow-hidden rounded-md border bg-border sm:grid-cols-3">
-            <Metric
-              icon={BriefcaseBusiness}
-              label="精选案例"
-              value={`${workspace.public_content.cases} 个`}
-            />
-            <Metric
-              icon={Construction}
-              label="在建工地"
-              value={`${workspace.public_content.sites} 个`}
-            />
-            <Metric
-              icon={MapPin}
-              label="有效服务区域"
-              value={`${workspace.public_content.active_service_areas} 个`}
-            />
-          </dl>
+      {readiness ? (
+        <section className="border-b py-5">
+          <ReleaseReadinessPanel readiness={readiness} />
         </section>
+      ) : null}
+      {readinessLoadError ? (
+        <section className="border-b py-5">
+          <Alert variant="destructive">
+            <ShieldAlert aria-hidden="true" />
+            <AlertTitle>提审就绪检查加载失败</AlertTitle>
+            <AlertDescription>
+              {readinessLoadError}。请刷新后重试；服务端仍会在提交审核前重新拦截。
+            </AlertDescription>
+          </Alert>
+        </section>
+      ) : null}
+      <section className="border-b py-5" aria-labelledby="douyin-brand-heading">
+        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 id="douyin-brand-heading" className="text-sm font-semibold">品牌与公开资料</h2>
+            {workspace.public_profile ? (
+              <Badge variant={profileStatusTone(workspace.public_profile.status)}>
+                {profileStatusLabel(workspace.public_profile.status)}
+              </Badge>
+            ) : <Badge variant="secondary">公开资料未创建</Badge>}
+          </div>
+          <Button asChild size="sm" variant="ghost">
+            <Link href="/settings/service-provider">维护公开资料<ArrowUpRight aria-hidden="true" /></Link>
+          </Button>
+        </div>
+        <dl className="mt-4 grid gap-4 sm:grid-cols-2">
+          <IdentityField label="租户内部名称" value={workspace.tenant.name} />
+          <IdentityField label="小程序公开品牌" value={workspace.public_profile?.public_name || "尚未设置"} />
+        </dl>
+        {workspace.public_profile?.introduction ? (
+          <div className="mt-4">
+            <p className="text-xs text-muted-foreground">公开简介</p>
+            <p className="mt-1 break-words text-sm leading-6">{workspace.public_profile.introduction}</p>
+          </div>
+        ) : null}
+      </section>
 
-        <Separator />
+      <section className="border-b py-5" aria-labelledby="douyin-content-heading">
+        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+          <h2 id="douyin-content-heading" className="text-sm font-semibold">小程序公开内容</h2>
+          <Button asChild size="sm" variant="ghost">
+            <Link href="/projects">管理项目内容<ArrowUpRight aria-hidden="true" /></Link>
+          </Button>
+        </div>
+        <dl className="mt-4 grid gap-4 sm:grid-cols-3">
+          <Metric label="精选案例" value={`${workspace.public_content.cases} 个`} />
+          <Metric label="在建工地" value={`${workspace.public_content.sites} 个`} />
+          <Metric label="有效服务区域" value={`${workspace.public_content.active_service_areas} 个`} />
+        </dl>
+      </section>
 
-        <ReleaseSummary workspace={workspace} />
-      </CardContent>
-      </Card>
+      <div className="border-b py-5">
+        <TenantDouyinLeadCaptureConfig canManage={canManage} installation={workspace.installation} />
+      </div>
+
+      <ReleaseSummary workspace={workspace} />
     </div>
   );
 }
@@ -329,90 +236,61 @@ function TemplateAvailabilityNotice({
   workspace: TenantDouyinWorkspace;
 }) {
   const template = workspace.available_template;
-  if (!template) return null;
+  if (!template || template.state === "up_to_date" || template.state === "in_progress") return null;
   const auditInProgress = template.state === "new_available"
     && (workspace.latest_release?.status === "audit_pending"
       || workspace.latest_release?.status === "audit_approved");
-  const content = template.state === "up_to_date"
-    ? {
-      title: `当前已是最新版本 ${template.version}`,
-      description: "该租户线上版本与平台当前可发布模板一致。",
-      variant: "default" as const,
-    }
-    : template.state === "stale_version"
+  const content = template.state === "stale_version"
     ? {
       title: `当前可发布模板版本异常 ${template.version}`,
       description: "平台当前模板不是该租户的新版本，请先在平台确认新的抖音模板版本。",
-      variant: "destructive" as const,
-    }
-    : template.state === "in_progress"
-    ? {
-      title: `版本 ${template.version} 正在发布流程中`,
-      description: "请按当前状态完成体验验收、审核和正式发布。",
-      variant: "default" as const,
+      attention: true,
     }
     : auditInProgress
     ? {
       title: `另有可用新版 ${template.version}`,
       description: "当前版本正在审核或等待发布，完成后即可生成新版体验版。",
-      variant: "default" as const,
+      attention: false,
     }
     : {
       title: `发现可用新版 ${template.version}`,
       description: `${template.description}。可生成体验版进行验收。`,
-      variant: "default" as const,
+      attention: false,
     };
   return (
-    <Alert variant={content.variant}>
-      <AppWindow aria-hidden="true" />
-      <AlertTitle>{content.title}</AlertTitle>
-      <AlertDescription>{content.description}</AlertDescription>
-    </Alert>
+    <div className={`mt-5 border-l-2 pl-3 ${content.attention ? "border-destructive" : "border-primary/50"}`} role="status">
+      <p className="text-sm font-medium">{content.title}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{content.description}</p>
+    </div>
   );
 }
 
 function IdentityField({
-  icon: Icon,
   label,
   value,
 }: {
-  icon: typeof Building2;
   label: string;
   value: string;
 }) {
   return (
-    <div className="flex min-w-0 gap-3 rounded-md border px-4 py-3">
-      <Icon
-        className="mt-0.5 size-4 shrink-0 text-muted-foreground"
-        aria-hidden="true"
-      />
-      <div className="min-w-0">
-        <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
-        <dd className="mt-1 break-words text-sm font-medium">{value}</dd>
-      </div>
+    <div className="min-w-0">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="mt-1 break-words text-sm font-medium">{value}</dd>
     </div>
   );
 }
 
 function Metric({
-  icon: Icon,
   label,
   value,
 }: {
-  icon: typeof Building2;
   label: string;
   value: string;
 }) {
   return (
-    <div className="flex items-center gap-3 bg-background px-4 py-4">
-      <Icon
-        className="size-4 shrink-0 text-muted-foreground"
-        aria-hidden="true"
-      />
-      <div className="min-w-0">
-        <dt className="text-xs text-muted-foreground">{label}</dt>
-        <dd className="mt-1 text-base font-semibold tabular-nums">{value}</dd>
-      </div>
+    <div className="min-w-0">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="mt-1 text-base font-semibold tabular-nums">{value}</dd>
     </div>
   );
 }
@@ -428,21 +306,11 @@ function ReleaseSummary({
     : null;
 
   return (
-    <section
-      className="flex flex-col gap-4"
-      aria-labelledby="douyin-release-heading"
-    >
-      <div>
-        <h2 id="douyin-release-heading" className="text-sm font-semibold">
-          最近版本
-        </h2>
-        <p className="mt-1 text-xs text-muted-foreground">
-          展示最近一次模板上传与审核进度。
-        </p>
-      </div>
+    <section className="py-5" aria-labelledby="douyin-release-heading">
+      <h2 id="douyin-release-heading" className="text-sm font-semibold">最近版本</h2>
 
       {release ? (
-        <div className="grid gap-4 rounded-md border px-4 py-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+        <div className="mt-4 flex flex-col gap-3">
           <dl className="grid min-w-0 gap-4 sm:grid-cols-3">
             <ReleaseField label="模板版本" value={release.template_version} />
             <ReleaseField label="模板编号" value={release.template_id} />
@@ -451,14 +319,11 @@ function ReleaseSummary({
               value={formatDateTime(release.updated_at)}
             />
           </dl>
-          <Badge variant={releaseTone(workspace.release_state)}>
-            {releaseLabel(workspace.release_state)}
-          </Badge>
-          <p className="break-words text-sm text-muted-foreground sm:col-span-3 md:col-span-1">
+          <p className="break-words text-sm text-muted-foreground">
             {release.description}
           </p>
           {rejectionReason ? (
-            <Alert variant="destructive" className="sm:col-span-3 md:col-span-2">
+            <Alert variant="destructive">
               <ShieldAlert aria-hidden="true" />
               <AlertTitle>审核驳回原因</AlertTitle>
               <AlertDescription className="whitespace-pre-wrap break-words">
@@ -468,7 +333,7 @@ function ReleaseSummary({
           ) : null}
         </div>
       ) : (
-        <div className="rounded-md border border-dashed px-4 py-5">
+        <div className="mt-4">
           <p className="text-sm font-medium">尚未上传小程序版本</p>
           <p className="mt-1 text-xs text-muted-foreground">
             完成授权后，可由平台代开发并上传租户专属版本。

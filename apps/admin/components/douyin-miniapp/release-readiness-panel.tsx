@@ -3,24 +3,9 @@ import type {
   DouyinReleaseBlockerCode,
   DouyinReleaseReadiness,
 } from "@gooes/domain";
-import {
-  AlertTriangle,
-  ArrowUpRight,
-  CheckCircle2,
-  Info,
-  ShieldCheck,
-} from "lucide-react";
-
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { ArrowUpRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 
 type ActionRoute = {
   readonly label: string;
@@ -55,92 +40,48 @@ export function ReleaseReadinessPanel({
 }) {
   const checkedAt = formatDateTime(readiness.checked_at);
   return (
-    <Card>
-      <CardHeader className="gap-3 border-b bg-muted/20">
-        <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
-          <div className="flex min-w-0 flex-col gap-1.5">
-            <CardTitle className="flex items-center gap-2">
-              {readiness.ready
-                ? <ShieldCheck aria-hidden="true" />
-                : <AlertTriangle aria-hidden="true" />}
-              提审就绪检查
-            </CardTitle>
-            <CardDescription>
-              最近检查：{checkedAt}。阻断项必须清零后才能提交审核。
-            </CardDescription>
-          </div>
-          <Badge variant={readiness.ready ? "success" : "danger"}>
-            {readiness.ready
-              ? "已达到提审条件"
-              : `${readiness.blockers.length} 项阻断`}
-          </Badge>
+    <div aria-label="提审就绪检查">
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="text-sm font-semibold">提审就绪检查</h2>
+        <Badge variant={readiness.ready ? "success" : "danger"}>
+          {readiness.ready ? "已达到提审条件" : `${readiness.blockers.length} 项阻断`}
+        </Badge>
+        <span className="text-xs text-muted-foreground">最近检查：{checkedAt}</span>
+      </div>
+
+      {!readiness.ready ? (
+        <div className="mt-3 divide-y">
+          {readiness.blockers.map((item) => {
+            const action = releaseReadinessActionRoute(item.code);
+            return (
+              <div className="flex flex-col gap-2 py-2 sm:flex-row sm:items-center sm:justify-between" key={item.code}>
+                <p className="text-sm">{item.message}</p>
+                <Button asChild size="sm" variant="ghost">
+                  <Link href={action.href}>{action.label}<ArrowUpRight aria-hidden="true" /></Link>
+                </Button>
+              </div>
+            );
+          })}
         </div>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4 pt-5">
-        {readiness.ready ? (
-          <Alert>
-            <CheckCircle2 aria-hidden="true" />
-            <AlertTitle>已达到提审条件</AlertTitle>
-            <AlertDescription>
-              当前公开资料、项目内容、预算报价、短信和宿主配置均满足提审门槛。
-            </AlertDescription>
-          </Alert>
-        ) : (
-          <div className="flex flex-col gap-3">
-            {readiness.blockers.map((item) => {
-              const action = releaseReadinessActionRoute(item.code);
-              return (
-                <div
-                  className="flex flex-col gap-3 rounded-md border bg-background p-3 md:flex-row md:items-start md:justify-between"
-                  key={item.code}
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium">{item.message}</p>
-                  </div>
-                  <Button asChild size="sm" variant="outline">
-                    <Link href={action.href}>
-                      {action.label}
-                      <ArrowUpRight aria-hidden="true" />
-                    </Link>
-                  </Button>
-                </div>
-              );
-            })}
-          </div>
-        )}
+      ) : null}
 
-        {readiness.warnings.length > 0 ? (
-          <Alert>
-            <Info aria-hidden="true" />
-            <AlertTitle>需要记录的风险提示</AlertTitle>
-            <AlertDescription>
-              <ul className="mt-2 flex list-disc flex-col gap-1 pl-4">
-                {readiness.warnings.map((item) => (
-                  <li key={item.code}>
-                    {item.message}
-                  </li>
-                ))}
-              </ul>
-            </AlertDescription>
-          </Alert>
-        ) : null}
+      {readiness.warnings.length > 0 ? (
+        <div className="mt-3 text-xs text-muted-foreground">
+          <p className="font-medium">需要记录的风险提示</p>
+          <ul className="mt-1 list-disc space-y-1 pl-4">
+            {readiness.warnings.map((item) => <li key={item.code}>{item.message}</li>)}
+          </ul>
+        </div>
+      ) : null}
 
-        <dl className="grid gap-px overflow-hidden rounded-md border bg-border md:grid-cols-3">
-          <ReadinessMetric
-            label="公开项目"
-            value={readiness.metrics.published_project_count}
-          />
-          <ReadinessMetric
-            label="服务区域"
-            value={readiness.metrics.active_service_area_count}
-          />
-          <ReadinessMetric
-            label="提审宿主"
-            value={readiness.metrics.required_host_count}
-          />
+      {!readiness.ready ? (
+        <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-xs text-muted-foreground">
+          <ReadinessMetric label="公开项目" value={readiness.metrics.published_project_count} />
+          <ReadinessMetric label="服务区域" value={readiness.metrics.active_service_area_count} />
+          <ReadinessMetric label="提审宿主" value={readiness.metrics.required_host_count} />
         </dl>
-      </CardContent>
-    </Card>
+      ) : null}
+    </div>
   );
 }
 
@@ -152,9 +93,9 @@ function ReadinessMetric({
   readonly value: unknown;
 }) {
   return (
-    <div className="bg-background px-4 py-3">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="mt-1 text-base font-semibold tabular-nums">
+    <div className="flex gap-1">
+      <dt>{label}</dt>
+      <dd className="font-medium tabular-nums text-foreground">
         {typeof value === "number" || typeof value === "string" ? value : "未同步"}
       </dd>
     </div>

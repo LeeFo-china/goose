@@ -97,6 +97,23 @@ const blockedReadiness: DouyinReleaseReadiness = {
 };
 
 describe("TenantDouyinMiniappWorkspace", () => {
+  test("puts the current operation before public content without an overview card", () => {
+    const html = renderToStaticMarkup(
+      <TenantDouyinMiniappWorkspace
+        canRead
+        canManage
+        loadError={null}
+        workspace={workspace}
+      />,
+    );
+
+    expect(html).not.toContain("运营状态总览");
+    expect(html.indexOf("当前可执行操作")).toBeLessThan(
+      html.indexOf("小程序公开内容"),
+    );
+    expect(html).not.toContain('class="overflow-hidden rounded-md border"');
+  });
+
   test("constrains the workspace to the shell height for internal scrolling", () => {
     const html = renderToStaticMarkup(
       <TenantDouyinMiniappWorkspace
@@ -384,7 +401,7 @@ describe("TenantDouyinMiniappWorkspace", () => {
     expect(html).not.toContain("公开资料展示中");
   });
 
-  test("keeps long public names and rejected releases readable in one flat card", () => {
+  test("keeps long public names and rejected releases readable in the flat layout", () => {
     const longPublicName = "河南好店透明施工档案与装修服务中心".repeat(6);
     const html = renderToStaticMarkup(
       <TenantDouyinMiniappWorkspace
@@ -407,8 +424,6 @@ describe("TenantDouyinMiniappWorkspace", () => {
     expect(html).toContain("审核驳回");
     expect(html).toContain("break-words");
     expect(html).toContain("overflow-y-auto");
-    expect(
-      html.match(/rounded-lg border border-border bg-card/g),
-    ).toHaveLength(1);
+    expect(html).not.toContain("rounded-lg border border-border bg-card");
   });
 });

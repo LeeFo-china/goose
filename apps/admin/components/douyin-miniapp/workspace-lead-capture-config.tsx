@@ -1,19 +1,12 @@
 "use client";
 
 import { useId, useState } from "react";
-import { Info } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Field,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-} from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { requestBackendJson } from "@/lib/backend-client";
@@ -122,95 +115,54 @@ function BoundLeadCaptureConfig({
   const authorizationActive = installation.authorization_status === "active";
   const controlsDisabled = !canManage || !authorizationActive || pending;
   return (
-    <section
-      aria-labelledby="douyin-lead-capture-heading"
-      className="overflow-hidden rounded-md border"
-    >
-      <div className="flex flex-col gap-3 border-b bg-muted/20 p-4">
-        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
-          <div className="min-w-0">
-            <h2 id="douyin-lead-capture-heading" className="text-sm font-semibold">
-              手机号留资
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              优先使用抖音手机号授权快速提交；关闭后继续使用短信验证码。
-            </p>
-          </div>
-          <Badge variant={enabled ? "success" : "secondary"}>
-            {enabled ? "抖音手机号已启用" : "短信验证码模式"}
-          </Badge>
+    <section aria-labelledby="douyin-lead-capture-heading">
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 id="douyin-lead-capture-heading" className="text-sm font-semibold">手机号留资</h2>
+        <Badge variant={enabled ? "success" : "secondary"}>
+          {enabled ? "抖音手机号已启用" : "短信验证码模式"}
+        </Badge>
+      </div>
+      <div className="mt-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+        <div className="min-w-0">
+          <label htmlFor={`${inputId}-switch`} className="text-sm font-medium">抖音官方手机号快捷留资</label>
+          <p className="mt-1 text-xs text-muted-foreground">开启后仍保留短信验证码兜底。</p>
         </div>
+        <Switch
+          id={`${inputId}-switch`}
+          checked={enabled}
+          disabled={controlsDisabled}
+          onCheckedChange={(checked) => {
+            setEnabled(checked);
+            setError(null);
+          }}
+        />
       </div>
-      <div className="p-4">
-        <FieldGroup>
-          <Field orientation="horizontal" className="justify-between rounded-md border px-4 py-3">
-            <div className="min-w-0 pr-4">
-              <FieldLabel htmlFor={`${inputId}-switch`}>
-                抖音官方手机号快捷留资
-              </FieldLabel>
-              <FieldDescription>
-                开启后免费量房页展示官方手机号按钮，同时保留短信验证码兜底。
-              </FieldDescription>
-            </div>
-            <Switch
-              id={`${inputId}-switch`}
-              checked={enabled}
-              disabled={controlsDisabled}
-              onCheckedChange={(checked) => {
-                setEnabled(checked);
-                setError(null);
-              }}
-            />
-          </Field>
-          <Field>
-            <FieldLabel>当前授权小程序</FieldLabel>
-            <FieldDescription>
-              AppID：<span className="font-mono text-foreground">{installation.authorizer_appid}</span>
-            </FieldDescription>
-          </Field>
-          {error ? (
-            <Alert variant="destructive">
-              <AlertTitle>保存失败</AlertTitle>
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          ) : null}
-          {!canManage ? (
-            <Alert>
-              <Info aria-hidden="true" />
-              <AlertTitle>只读模式</AlertTitle>
-              <AlertDescription>
-                当前账号缺少抖音小程序管理权限，可查看但不能修改。
-              </AlertDescription>
-            </Alert>
-          ) : null}
-          {!authorizationActive ? (
-            <Alert>
-              <Info aria-hidden="true" />
-              <AlertTitle>小程序授权未启用</AlertTitle>
-              <AlertDescription>
-                请先恢复当前小程序授权，再修改手机号留资配置。
-              </AlertDescription>
-            </Alert>
-          ) : null}
-        </FieldGroup>
-      </div>
-      <div className="flex justify-end border-t p-4">
-        <Button disabled={controlsDisabled} onClick={save}>
+      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="break-all text-xs text-muted-foreground">
+          当前授权小程序 AppID：<span className="font-mono text-foreground">{installation.authorizer_appid}</span>
+        </p>
+        <Button disabled={controlsDisabled} onClick={save} size="sm" variant="outline">
           {pending ? <Spinner data-icon="inline-start" /> : null}
           保存留资配置
         </Button>
       </div>
+      {error ? (
+        <Alert variant="destructive" className="mt-3">
+          <AlertTitle>保存失败</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : null}
+      {!canManage ? <p className="mt-3 text-xs text-muted-foreground">只读模式：当前账号缺少抖音小程序管理权限。</p> : null}
+      {!authorizationActive ? <p className="mt-3 text-xs text-muted-foreground">小程序授权未启用，请先恢复授权再修改留资配置。</p> : null}
     </section>
   );
 }
 
 function UnboundLeadCaptureConfig() {
   return (
-    <section className="rounded-md border p-4">
-        <h2 className="text-sm font-semibold">手机号留资</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          完成抖音小程序授权后，可为当前商家启用抖音手机号快捷留资。
-        </p>
+    <section>
+      <h2 className="text-sm font-semibold">手机号留资</h2>
+      <p className="mt-1 text-xs text-muted-foreground">完成小程序授权后，可启用抖音手机号快捷留资。</p>
     </section>
   );
 }

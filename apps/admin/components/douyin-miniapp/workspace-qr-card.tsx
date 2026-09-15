@@ -17,7 +17,7 @@ export function ReleaseQrCard({
   readonly url: string | null;
 }) {
   return (
-    <div className="flex flex-col gap-3 rounded-md border bg-background p-4 sm:flex-row sm:items-center">
+    <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center">
       {url ? (
         <Image
           alt={imageAlt}
