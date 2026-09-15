@@ -266,6 +266,38 @@ describe("PlatformDouyinTemplatePromotionService", () => {
     expect(harness.wait).toHaveBeenCalledTimes(1);
   });
 
+  test("waits when a newly added draft identity is visible before its metadata settles", async () => {
+    const harness = createHarness();
+    const unsettledTemplate = {
+      ...providerTemplate,
+      templateId: draft.draftId,
+      description: "provider metadata is still synchronizing",
+    };
+    const settledTemplate = {
+      ...providerTemplate,
+      templateId: draft.draftId,
+      createdAt: draft.createdAt,
+    };
+    harness.gateway.listTemplates
+      .mockResolvedValueOnce({ items: [], logId: "before-log" })
+      .mockResolvedValueOnce({
+        items: [unsettledTemplate],
+        logId: "identity-visible-log",
+      })
+      .mockResolvedValueOnce({
+        items: [settledTemplate],
+        logId: "metadata-settled-log",
+      });
+
+    await expect(harness.service.confirmLatest(authContext as never, {
+      channel: "default",
+    })).resolves.toEqual(currentTemplate);
+
+    expect(harness.gateway.addTemplate).toHaveBeenCalledTimes(1);
+    expect(harness.gateway.listTemplates).toHaveBeenCalledTimes(3);
+    expect(harness.wait).toHaveBeenCalledTimes(1);
+  });
+
   test("bounds provider visibility checks when the new template stays unavailable", async () => {
     const harness = createHarness();
 

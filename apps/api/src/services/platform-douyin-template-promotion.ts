@@ -267,6 +267,7 @@ export class PlatformDouyinTemplatePromotionService {
         draft.version,
         draft.description,
         draft.createdAt,
+        true,
       );
       if (recovered) return recovered;
 
@@ -289,6 +290,7 @@ export class PlatformDouyinTemplatePromotionService {
     version: string,
     description: string,
     draftCreatedAt: number,
+    allowPendingMetadata = false,
   ): DouyinCodeTemplate | undefined {
     const identityMatches = templates.filter(
       (template) => template.templateId === draftId,
@@ -300,6 +302,13 @@ export class PlatformDouyinTemplatePromotionService {
         && template.description === description
         && template.createdAt === draftCreatedAt,
     );
+    if (
+      allowPendingMetadata
+      && identityMatches.length === 1
+      && exactMatches.length === 0
+    ) {
+      return undefined;
+    }
     if (identityMatches.length !== 1 || exactMatches.length !== 1) {
       throw Errors.business(
         409,
