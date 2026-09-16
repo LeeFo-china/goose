@@ -49,7 +49,7 @@ bun test \
 
 本轮新增边界证据：
 
-- 商品版本确认：预览携带三档 `product_version_id`，发布 DTO 只接受三档唯一正式商品及版本 UUID、不接受客户端价格；repository/service 透传 `expected_product_versions`。migration 文本契约检查先取共享价格锁，再比对商品版本，冲突发生在替换旧活动之前；错误映射为 409。真实数据库并发行为仍待 RPC gate。
+- 商品版本确认：预览携带三档 `product_version_id`，发布 DTO 只接受三档唯一正式商品及版本 UUID、不接受客户端价格；repository/service 透传 `expected_product_versions`。migration 文本契约检查先取统一的价格互斥锁（`pg_advisory_xact_lock` 排他事务锁），再比对商品版本，冲突发生在替换旧活动之前；错误映射为 409。真实数据库并发行为仍待 RPC gate。
 - 北京时间：输入、回填、展示和表单提示统一 UTC+08:00；拒绝不存在的日期/越界时间。对美国 DST 缺失小时的输入仍按北京时间解释。
 - 超管：五个活动路由在 service 委托前拒绝非超管；service 对每个操作复核显式超管身份；Admin 服务端读取前拦截并隐藏入口；数据库拒绝映射为安全的 403。
 - 422：套餐发布触发 `SERVICE_PROMOTION_PRICE_NOT_LOWER` 时返回业务 422 和调整/停止活动提示；未知数据库错误保留原安全包装，不误映射。
