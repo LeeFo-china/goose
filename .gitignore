@@ -27,6 +27,7 @@ apps/admin/next-env.d.ts
 supabase/.temp
 supabase/.branches/
 *.tgz
+.artifacts/
 
 # local migration backup artifacts
 docs/state_machine_migrate/audit/backups/
