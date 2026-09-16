@@ -25,9 +25,8 @@ class PlatformServicePromotionsController extends PlatformBaseController {
 
   @Get("/platform/billing/service-promotions")
   async listPromotions(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformPermissionContext(
+    const authContext = await this.getRequiredPlatformSuperAdminContext(
       request,
-      "platform.service_product.manage",
     );
     const queryResult = PlatformServicePromotionListQuerySchema.safeParse(
       request.query || {},
@@ -41,9 +40,8 @@ class PlatformServicePromotionsController extends PlatformBaseController {
 
   @Post("/platform/billing/service-promotions")
   async createDraft(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformPermissionContext(
+    const authContext = await this.getRequiredPlatformSuperAdminContext(
       request,
-      "platform.service_product.manage",
     );
     const bodyResult = PlatformServicePromotionCreateSchema.safeParse(
       request.body || {},
@@ -57,9 +55,8 @@ class PlatformServicePromotionsController extends PlatformBaseController {
 
   @Patch("/platform/billing/service-promotions/:id")
   async saveDraft(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformPermissionContext(
+    const authContext = await this.getRequiredPlatformSuperAdminContext(
       request,
-      "platform.service_product.manage",
     );
     const paramsResult = PlatformServicePromotionParamSchema.safeParse(
       request.params || {},
@@ -81,9 +78,8 @@ class PlatformServicePromotionsController extends PlatformBaseController {
 
   @Post("/platform/billing/service-promotions/:id/publish")
   async publish(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformPermissionContext(
+    const authContext = await this.getRequiredPlatformSuperAdminContext(
       request,
-      "platform.service_product.manage",
     );
     const paramsResult = PlatformServicePromotionParamSchema.safeParse(
       request.params || {},
@@ -105,9 +101,8 @@ class PlatformServicePromotionsController extends PlatformBaseController {
 
   @Post("/platform/billing/service-promotions/:id/stop")
   async stop(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformPermissionContext(
+    const authContext = await this.getRequiredPlatformSuperAdminContext(
       request,
-      "platform.service_product.manage",
     );
     const paramsResult = PlatformServicePromotionParamSchema.safeParse(
       request.params || {},

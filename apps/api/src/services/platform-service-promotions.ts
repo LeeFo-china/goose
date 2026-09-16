@@ -12,7 +12,6 @@ import type {
   PlatformServicePromotionUpdateInput,
 } from "@/schema/platform-service-promotions";
 import type { AuthContext } from "@/services/authorization";
-import { platformAuthorizationService } from "@/services/platform-authorization";
 
 type RepositoryPort = Pick<
   PlatformServicePromotionRepository,
@@ -35,7 +34,9 @@ const MAX_PAGE_SIZE = 100;
 const PROMOTION_CODE_PREFIX = "platform_service_promotion_";
 
 const PROMOTION_ERRORS = {
+  PLATFORM_SUPER_ADMIN_REQUIRED: [403, "当前操作仅平台超管可执行"],
   SERVICE_PROMOTION_NOT_FOUND: [404, "限时活动不存在"],
+  SERVICE_PROMOTION_PRODUCT_VERSION_CONFLICT: [409, "套餐价格已更新，请重新确认活动价格"],
   SERVICE_PROMOTION_VERSION_CONFLICT: [409, "限时活动已被更新，请刷新后重试"],
   SERVICE_PROMOTION_TIME_INVALID: [422, "活动时间无效"],
   SERVICE_PROMOTION_OVERLAP: [409, "活动时间与已发布活动重叠"],
@@ -92,6 +93,7 @@ export class PlatformServicePromotionService {
     const actor = this.requireActor(authContext);
     return this.execute(() => this.repository.publish({
       promotionId,
+      expectedProductVersions: input.expected_product_versions,
       expectedVersion: input.expected_version,
       idempotencyKey: input.idempotency_key,
       actorEmployeeId: actor.employeeId,
@@ -118,20 +120,15 @@ export class PlatformServicePromotionService {
   private requireActor(authContext: AuthContext): PromotionActor {
     if (
       authContext.tenantId !== null ||
-      (
-        !authContext.isPlatformStaff &&
-        !authContext.isPlatformAdmin &&
-        !authContext.isPlatformSuperAdmin
-      ) ||
+      authContext.isPlatformSuperAdmin !== true ||
       !authContext.employeeId ||
       !authContext.authUserId
     ) {
       throw Errors.forbidden();
     }
-    platformAuthorizationService.assertPermission(
-      authContext,
-      MANAGE_PERMISSION,
-    );
+    if (!authContext.permissions.some((permission) => permission.code === MANAGE_PERMISSION)) {
+      throw Errors.forbidden();
+    }
     return {
       employeeId: authContext.employeeId,
       authUserId: authContext.authUserId,

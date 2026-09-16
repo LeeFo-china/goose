@@ -1,6 +1,7 @@
 import { Errors } from "@/errors/error-factory";
 import type {
   PlatformServicePromotionCreateInput,
+  PlatformServicePromotionPublishInput,
   PlatformServicePromotionUpdateInput,
 } from "@/schema/platform-service-promotions";
 import { SupabaseDB } from "@/utils/supabase";
@@ -107,6 +108,7 @@ export class PlatformServicePromotionRepository {
 
   async publish(input: {
     promotionId: string;
+    expectedProductVersions: PlatformServicePromotionPublishInput["expected_product_versions"];
     expectedVersion: number;
     idempotencyKey: string;
     actorEmployeeId: string;
@@ -117,6 +119,7 @@ export class PlatformServicePromotionRepository {
       {
         p_promotion_id: input.promotionId,
         p_expected_version: input.expectedVersion,
+        p_expected_product_versions: input.expectedProductVersions,
         p_idempotency_key: input.idempotencyKey,
         p_actor_employee_id: input.actorEmployeeId,
         p_actor_user_id: input.actorUserId,

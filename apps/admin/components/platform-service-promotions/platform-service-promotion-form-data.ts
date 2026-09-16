@@ -2,11 +2,13 @@ import type {
   PlatformServicePromotionFormValues,
   PlatformServicePromotionListItem,
   PlatformServicePromotionPayloadResult,
+  PlatformServicePromotionPublishPayload,
 } from "./platform-service-promotion-types";
 
 const DISCOUNT_RATE_PATTERN = /^\d(?:\.\d)?$/;
 const DATETIME_LOCAL_PATTERN =
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
+const BEIJING_OFFSET_MS = 8 * 60 * 60 * 1000;
 
 export const DEFAULT_PROMOTION_FORM_VALUES:
   PlatformServicePromotionFormValues = {
@@ -47,10 +49,14 @@ export function isoToDatetimeLocal(
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
 
-  const timezoneOffsetMs = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - timezoneOffsetMs)
-    .toISOString()
-    .slice(0, 16);
+  const beijing = new Date(date.getTime() + BEIJING_OFFSET_MS);
+  const pad = (part: number) => String(part).padStart(2, "0");
+  const datePart = [
+    String(beijing.getUTCFullYear()).padStart(4, "0"),
+    pad(beijing.getUTCMonth() + 1),
+    pad(beijing.getUTCDate()),
+  ].join("-");
+  return `${datePart}T${pad(beijing.getUTCHours())}:${pad(beijing.getUTCMinutes())}`;
 }
 
 export function buildPromotionPayload(
@@ -158,12 +164,9 @@ function parseSchedule(startsAtValue: string, endsAtValue: string):
     };
   }
 
-  const startsAtDate = new Date(startsAtInput);
-  const endsAtDate = new Date(endsAtInput);
-  if (
-    !isValidDatetimeLocal(startsAtInput, startsAtDate) ||
-    !isValidDatetimeLocal(endsAtInput, endsAtDate)
-  ) {
+  const startsAtDate = parseBeijingDatetimeLocal(startsAtInput);
+  const endsAtDate = parseBeijingDatetimeLocal(endsAtInput);
+  if (!startsAtDate || !endsAtDate) {
     return { ok: false, message: "活动时间无效" };
   }
   if (endsAtDate.getTime() <= startsAtDate.getTime()) {
@@ -176,10 +179,17 @@ function parseSchedule(startsAtValue: string, endsAtValue: string):
   };
 }
 
-function isValidDatetimeLocal(value: string, date: Date): boolean {
-  return DATETIME_LOCAL_PATTERN.test(value) &&
-    !Number.isNaN(date.getTime()) &&
-    isoToDatetimeLocal(date.toISOString()) === value;
+function parseBeijingDatetimeLocal(value: string): Date | null {
+  const parts = DATETIME_LOCAL_PATTERN.exec(value);
+  if (!parts) return null;
+  // Beijing is always UTC+08; never interpret a datetime-local in the host zone.
+  const date = new Date(Date.UTC(
+    Number(parts[1]), Number(parts[2]) - 1, Number(parts[3]),
+    Number(parts[4]) - 8, Number(parts[5]),
+  ));
+  return !Number.isNaN(date.getTime()) && isoToDatetimeLocal(date.toISOString()) === value
+    ? date
+    : null;
 }
 
 function validateText(
@@ -201,4 +211,18 @@ function validateText(
     };
   }
   return { ok: true, value: normalized };
+}
+
+export function buildPromotionPublishBody(
+  promotion: PlatformServicePromotionListItem,
+  idempotencyKey: string,
+): PlatformServicePromotionPublishPayload {
+  return {
+    expected_version: promotion.version,
+    idempotency_key: idempotencyKey,
+    expected_product_versions: promotion.price_preview.map((price) => ({
+      product_code: price.code,
+      product_version_id: price.product_version_id,
+    })),
+  };
 }

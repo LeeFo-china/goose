@@ -5,7 +5,7 @@ import type { KeyboardEvent } from "react";
 import { platformTabsListClassName, platformTabsTriggerClassName } from "@/components/platform/platform-tabs";
 import { TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-export function PlatformServicePromotionTabsNav({ pageSize }: { pageSize: number }) {
+export function PlatformServicePromotionTabsNav({ pageSize, canManagePromotions }: { pageSize: number; canManagePromotions: boolean }) {
   function handleLinkKeyDown(event: KeyboardEvent<HTMLAnchorElement>) {
     // Radix handles arrow focus; anchors need explicit Space activation.
     if (event.key === " ") {
@@ -19,9 +19,9 @@ export function PlatformServicePromotionTabsNav({ pageSize }: { pageSize: number
       <TabsTrigger value="products" asChild className={platformTabsTriggerClassName}>
         <Link href={`/platform/service-products?tab=products&page=1&pageSize=${pageSize}`} onKeyDown={handleLinkKeyDown}>套餐</Link>
       </TabsTrigger>
-      <TabsTrigger value="promotions" asChild className={platformTabsTriggerClassName}>
+      {canManagePromotions ? <TabsTrigger value="promotions" asChild className={platformTabsTriggerClassName}>
         <Link href={`/platform/service-products?tab=promotions&page=1&pageSize=${pageSize}`} onKeyDown={handleLinkKeyDown}>限时活动</Link>
-      </TabsTrigger>
+      </TabsTrigger> : null}
     </TabsList>
   );
 }

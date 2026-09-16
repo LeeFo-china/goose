@@ -41,17 +41,37 @@ export const PlatformServicePromotionUpdateSchema = z.object({
     .positive("活动版本必须大于 0"),
 }).strict().superRefine(validatePromotionTimePair);
 
-export const PlatformServicePromotionPublishSchema = z.object({
+const PromotionCommandShape = {
   expected_version: z.number().int("活动版本必须是整数")
     .positive("活动版本必须大于 0"),
   idempotency_key: z.uuid("幂等键格式不正确"),
-}).strict();
+};
+const FORMAL_PRODUCT_CODES = [
+  "platform_service_1y", "platform_service_2y", "platform_service_3y",
+] as const;
 
-export const PlatformServicePromotionStopSchema =
-  PlatformServicePromotionPublishSchema.extend({
-    reason: z.string().trim().min(1, "停止原因不能为空")
-      .max(500, "停止原因不能超过 500 个字符"),
-  }).strict();
+export const PlatformServicePromotionPublishSchema = z.object({
+  ...PromotionCommandShape,
+  expected_product_versions: z.array(z.object({
+    product_code: z.enum(FORMAL_PRODUCT_CODES),
+    product_version_id: z.uuid("套餐版本格式不正确"),
+  }).strict()).length(3, "必须确认三档正式套餐版本"),
+}).strict().superRefine((value, context) => {
+  const codes = new Set(value.expected_product_versions.map((item) => item.product_code));
+  if (value.expected_product_versions.length !== 3 || codes.size !== 3 ||
+    !FORMAL_PRODUCT_CODES.every((code) => codes.has(code))) {
+    context.addIssue({
+      code: "custom", path: ["expected_product_versions"],
+      message: "必须且只能确认三档不同的正式套餐版本",
+    });
+  }
+});
+
+export const PlatformServicePromotionStopSchema = z.object({
+  ...PromotionCommandShape,
+  reason: z.string().trim().min(1, "停止原因不能为空")
+    .max(500, "停止原因不能超过 500 个字符"),
+}).strict();
 
 export const PlatformServicePromotionParamSchema = z.object({
   id: z.uuid("无效的平台服务限时活动 ID"),

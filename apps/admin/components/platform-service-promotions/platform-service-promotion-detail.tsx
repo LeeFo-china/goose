@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { requestBackendJson } from "@/lib/backend-client";
+import { buildPromotionPublishBody } from "./platform-service-promotion-form-data";
 import { PlatformServicePromotionFormButton } from "./platform-service-promotion-form";
 import { formatPromotionDateTime, formatPromotionFen, getPromotionPhaseMeta, getPromotionVersionStatusMeta } from "./platform-service-promotion-rules";
 import type { PlatformServicePromotionListItem, PlatformServicePromotionPage, PlatformServicePromotionPricePreview, PlatformServicePromotionVersion } from "./platform-service-promotion-types";
@@ -97,11 +98,13 @@ export function PlatformServicePromotionDetail({ promotion, serverTime, page, pa
           : `/platform/billing/service-promotions/${confirmationPromotion.id}/stop`,
         {
           method: "POST",
-          body: JSON.stringify({
-            expected_version: confirmationPromotion.version,
-            idempotency_key: crypto.randomUUID(),
-            ...(confirmAction === "stop" ? { reason: reason.trim() } : {}),
-          }),
+          body: JSON.stringify(confirmAction === "publish"
+            ? buildPromotionPublishBody(confirmationPromotion, crypto.randomUUID())
+            : {
+              expected_version: confirmationPromotion.version,
+              idempotency_key: crypto.randomUUID(),
+              reason: reason.trim(),
+            }),
           fallbackMessage: confirmAction === "publish" ? "发布活动失败" : "停止活动失败",
         },
       );

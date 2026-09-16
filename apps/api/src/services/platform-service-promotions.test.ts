@@ -59,7 +59,7 @@ const allowedContext: AuthContext = {
   tenantStatus: null,
   isPlatformAdmin: false,
   isPlatformStaff: true,
-  isPlatformSuperAdmin: false,
+  isPlatformSuperAdmin: true,
   employeeName: "平台运营",
   employeeStatus: "active",
   departmentId: null,
@@ -110,6 +110,9 @@ const update = { ...draft, expected_version: 7 };
 const publishInput = {
   expected_version: 8,
   idempotency_key: IDEMPOTENCY_KEY,
+  expected_product_versions: (["platform_service_1y", "platform_service_2y", "platform_service_3y"] as const).map(
+    (product_code) => ({ product_code, product_version_id: PROMOTION_ID }),
+  ),
 };
 const stopInput = {
   ...publishInput,
@@ -161,6 +164,34 @@ describe("PlatformServicePromotionService", () => {
     await expect(service.listPromotions(nonPlatformContext, {}))
       .rejects.toMatchObject({ statusCode: 403 });
     expect(fixture.list).not.toHaveBeenCalled();
+  });
+
+  test("rejects staff and admin without an explicit superadmin flag for every operation", async () => {
+    const fixture = repositoryFixture();
+    const service = new Service({ repository: fixture.repository });
+    for (const auth of [
+      context({ isPlatformSuperAdmin: false, isPlatformStaff: true }),
+      context({ isPlatformSuperAdmin: false, isPlatformAdmin: true }),
+      context({ isPlatformSuperAdmin: undefined, isPlatformAdmin: true }),
+    ]) {
+      for (const operation of [
+        () => service.listPromotions(auth),
+        () => service.createDraft(auth, draft),
+        () => service.saveDraft(auth, PROMOTION_ID, update),
+        () => service.publish(auth, PROMOTION_ID, publishInput),
+        () => service.stop(auth, PROMOTION_ID, stopInput),
+      ]) await expect(operation()).rejects.toMatchObject({ statusCode: 403 });
+    }
+    for (const method of Object.values(fixture.repository)) expect(method).not.toHaveBeenCalled();
+  });
+
+  test("maps the actual database actor rejection to a safe 403", async () => {
+    const fixture = repositoryFixture();
+    fixture.publish.mockImplementation(async () => {
+      throw Errors.dbError("发布失败", { code: "P0001", message: "PLATFORM_SUPER_ADMIN_REQUIRED" });
+    });
+    await expect(new Service({ repository: fixture.repository }).publish(allowedContext, PROMOTION_ID, publishInput))
+      .rejects.toMatchObject({ statusCode: 403, code: "PLATFORM_SUPER_ADMIN_REQUIRED", message: "当前操作仅平台超管可执行" });
   });
 
   test("normalizes pagination defensively and delegates for an authorized operator", async () => {
@@ -216,6 +247,7 @@ describe("PlatformServicePromotionService", () => {
       promotionId: PROMOTION_ID,
       expectedVersion: 8,
       idempotencyKey: IDEMPOTENCY_KEY,
+      expectedProductVersions: publishInput.expected_product_versions,
       actorEmployeeId: EMPLOYEE_ID,
       actorUserId: USER_ID,
     });
@@ -233,6 +265,7 @@ describe("PlatformServicePromotionService", () => {
     const mappings = [
       ["SERVICE_PROMOTION_NOT_FOUND", 404, "限时活动不存在"],
       ["SERVICE_PROMOTION_VERSION_CONFLICT", 409, "限时活动已被更新，请刷新后重试"],
+      ["SERVICE_PROMOTION_PRODUCT_VERSION_CONFLICT", 409, "套餐价格已更新，请重新确认活动价格"],
       ["SERVICE_PROMOTION_TIME_INVALID", 422, "活动时间无效"],
       ["SERVICE_PROMOTION_OVERLAP", 409, "活动时间与已发布活动重叠"],
       ["SERVICE_PROMOTION_PRICE_NOT_LOWER", 422, "活动价必须低于三档套餐的日常价"],

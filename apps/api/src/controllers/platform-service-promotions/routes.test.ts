@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { Errors } from "@/errors/error-factory";
 import type { FastifyRequest } from "fastify";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
@@ -76,6 +77,22 @@ describe("PlatformServicePromotionsController routes", () => {
     ]);
   });
 
+  test("rejects every route at the superadmin guard before service delegation", async () => {
+    const controller = await loadController();
+    const original = Reflect.get(controller, "getRequiredPlatformSuperAdminContext");
+    const denied = Errors.business(403, "当前操作仅平台超管可执行", "PLATFORM_SUPER_ADMIN_REQUIRED");
+    const guard = mock(async () => { throw denied; });
+    replaceMethod(controller, "getRequiredPlatformSuperAdminContext", guard);
+    try {
+      for (const route of registeredRoutes(controller)) {
+        await expect(route.handler({} as FastifyRequest, {})).rejects.toBe(denied);
+      }
+      expect(guard).toHaveBeenCalledTimes(5);
+    } finally {
+      replaceMethod(controller, "getRequiredPlatformSuperAdminContext", original);
+    }
+  });
+
   test("requires permission, parses each request, delegates, and wraps success", async () => {
     const [{ platformServicePromotionService }, controller] = await Promise.all([
       import("@/services/platform-service-promotions"),
@@ -86,10 +103,10 @@ describe("PlatformServicePromotionsController routes", () => {
     ));
     const originalAuth = Reflect.get(
       controller,
-      "getRequiredPlatformPermissionContext",
+      "getRequiredPlatformSuperAdminContext",
     );
     const requireContext = mock(async () => authContext);
-    replaceMethod(controller, "getRequiredPlatformPermissionContext", requireContext);
+    replaceMethod(controller, "getRequiredPlatformSuperAdminContext", requireContext);
     for (const [name, method] of Object.entries(serviceMethods)) {
       replaceMethod(platformServicePromotionService, name, method);
     }
@@ -113,7 +130,12 @@ describe("PlatformServicePromotionsController routes", () => {
       },
       {
         params: { id: PROMOTION_ID },
-        body: { expected_version: 2, idempotency_key: IDEMPOTENCY_KEY },
+        body: {
+          expected_version: 2, idempotency_key: IDEMPOTENCY_KEY,
+          expected_product_versions: ["platform_service_1y", "platform_service_2y", "platform_service_3y"].map(
+            (product_code) => ({ product_code, product_version_id: PROMOTION_ID }),
+          ),
+        },
       },
       {
         params: { id: PROMOTION_ID },
@@ -183,7 +205,6 @@ describe("PlatformServicePromotionsController routes", () => {
         expect(requireContext).toHaveBeenNthCalledWith(
           index + 1,
           requests[index],
-          "platform.service_product.manage",
         );
       }
       expect(responses).toEqual([
@@ -200,7 +221,7 @@ describe("PlatformServicePromotionsController routes", () => {
         },
       ]);
     } finally {
-      replaceMethod(controller, "getRequiredPlatformPermissionContext", originalAuth);
+      replaceMethod(controller, "getRequiredPlatformSuperAdminContext", originalAuth);
       for (const [name, method] of Object.entries(originals)) {
         replaceMethod(platformServicePromotionService, name, method);
       }
@@ -217,11 +238,11 @@ describe("PlatformServicePromotionsController routes", () => {
     ));
     const originalAuth = Reflect.get(
       controller,
-      "getRequiredPlatformPermissionContext",
+      "getRequiredPlatformSuperAdminContext",
     );
     replaceMethod(
       controller,
-      "getRequiredPlatformPermissionContext",
+      "getRequiredPlatformSuperAdminContext",
       mock(async () => authContext),
     );
     for (const [name, method] of Object.entries(serviceMethods)) {
@@ -260,7 +281,7 @@ describe("PlatformServicePromotionsController routes", () => {
         expect(method).not.toHaveBeenCalled();
       }
     } finally {
-      replaceMethod(controller, "getRequiredPlatformPermissionContext", originalAuth);
+      replaceMethod(controller, "getRequiredPlatformSuperAdminContext", originalAuth);
       for (const [name, method] of Object.entries(originals)) {
         replaceMethod(platformServicePromotionService, name, method);
       }
@@ -280,7 +301,7 @@ describe("PlatformServicePromotionsController routes", () => {
       /PlatformServicePromotionsController\.registerExtraRoutes\(app\)/g,
     )).toHaveLength(1);
     expect(controllerSource).toContain("extends PlatformBaseController");
-    expect(controllerSource.match(/getRequiredPlatformPermissionContext/g))
+    expect(controllerSource.match(/getRequiredPlatformSuperAdminContext/g))
       .toHaveLength(5);
     expect(controllerSource.match(/ResponseHandler\.success/g)).toHaveLength(5);
     expect(controllerSource).not.toContain("throw new Error");

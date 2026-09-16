@@ -22,6 +22,9 @@ const PRODUCT_ID = "33333333-3333-4333-8333-333333333333";
 const EMPLOYEE_ID = "44444444-4444-4444-8444-444444444444";
 const USER_ID = "55555555-5555-4555-8555-555555555555";
 const IDEMPOTENCY_KEY = "66666666-6666-4666-8666-666666666666";
+const expectedProductVersions = (["platform_service_1y", "platform_service_2y", "platform_service_3y"] as const).map(
+  (product_code) => ({ product_code, product_version_id: DRAFT_ID }),
+);
 const NOW = "2026-09-16T15:00:00.000Z";
 
 const draft = {
@@ -61,6 +64,7 @@ const draftVersion = {
 };
 const pricePreview = [{
   product_id: PRODUCT_ID,
+  product_version_id: DRAFT_ID,
   code: "platform_service_1y",
   title: "平台技术服务 1 年",
   term_years: 1,
@@ -148,6 +152,7 @@ describe("platform service promotion schemas", () => {
     expect(schemas.PlatformServicePromotionPublishSchema.safeParse({
       expected_version: 3,
       idempotency_key: IDEMPOTENCY_KEY,
+      expected_product_versions: expectedProductVersions,
     }).success).toBe(true);
     for (const reason of ["", " ", "x".repeat(501)]) {
       expect(schemas.PlatformServicePromotionStopSchema.safeParse({
@@ -159,6 +164,20 @@ describe("platform service promotion schemas", () => {
     expect(schemas.PlatformServicePromotionParamSchema.safeParse({
       id: "not-a-uuid",
     }).success).toBe(false);
+  });
+
+  test("requires exactly the three unique formal product UUIDs and forbids client prices", () => {
+    const body = { expected_version: 1, idempotency_key: IDEMPOTENCY_KEY };
+    expect(schemas.PlatformServicePromotionPublishSchema.safeParse(body).success).toBe(false);
+    for (const versions of [
+      [], expectedProductVersions.slice(0, 2), [...expectedProductVersions, expectedProductVersions[0]],
+      [expectedProductVersions[0], expectedProductVersions[0], expectedProductVersions[2]],
+      expectedProductVersions.map((item) => ({ ...item, product_version_id: "invalid" })),
+      expectedProductVersions.map((item) => ({ ...item, amount_fen: 1 })),
+      expectedProductVersions.map((item) => ({ ...item, product_code: "platform_service_smoke_1fen" })),
+    ]) expect(schemas.PlatformServicePromotionPublishSchema.safeParse({ ...body, expected_product_versions: versions }).success).toBe(false);
+    expect(schemas.PlatformServicePromotionPublishSchema.safeParse({ ...body, expected_product_versions: expectedProductVersions }).success).toBe(true);
+    expect(schemas.PlatformServicePromotionStopSchema.safeParse({ ...body, reason: "停止" }).success).toBe(true);
   });
 
   test("defaults bounded list pagination and rejects an unbounded request", () => {
@@ -212,6 +231,21 @@ describe("PlatformServicePromotionRepository", () => {
     }
   });
 
+  test("rejects missing or invalid product version identifiers in command and list previews", async () => {
+    for (const product_version_id of [undefined, null, "invalid", 3]) {
+      const preview = [{ ...pricePreview[0], product_version_id }];
+      const command = createClient({ data: { ...commandResult, price_preview: preview }, error: null });
+      await expect(new Repository(command.client).createDraft({ code: promotion.code, draft }, actor))
+        .rejects.toMatchObject({ code: "DB_ERROR" });
+      const list = createClient({ data: {
+        list: [{ ...promotion, draft: draftVersion, published: null, phase: "draft", price_preview: preview }],
+        pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 }, server_time: NOW,
+      }, error: null });
+      await expect(new Repository(list.client).list({ page: 1, pageSize: 20 }))
+        .rejects.toMatchObject({ code: "DB_ERROR" });
+    }
+  });
+
   test("creates a draft through only the create RPC", async () => {
     const fixture = createClient();
     const repository = new Repository(fixture.client);
@@ -260,6 +294,7 @@ describe("PlatformServicePromotionRepository", () => {
     await repository.publish({
       promotionId: PROMOTION_ID,
       expectedVersion: 3,
+      expectedProductVersions,
       idempotencyKey: IDEMPOTENCY_KEY,
       actorEmployeeId: EMPLOYEE_ID,
       actorUserId: USER_ID,
@@ -270,6 +305,7 @@ describe("PlatformServicePromotionRepository", () => {
       {
         p_promotion_id: PROMOTION_ID,
         p_expected_version: 3,
+        p_expected_product_versions: expectedProductVersions,
         p_idempotency_key: IDEMPOTENCY_KEY,
         p_actor_employee_id: EMPLOYEE_ID,
         p_actor_user_id: USER_ID,
@@ -314,6 +350,7 @@ describe("PlatformServicePromotionRepository", () => {
     await expect(repository.publish({
       promotionId: PROMOTION_ID,
       expectedVersion: 3,
+      expectedProductVersions,
       idempotencyKey: IDEMPOTENCY_KEY,
       actorEmployeeId: EMPLOYEE_ID,
       actorUserId: USER_ID,

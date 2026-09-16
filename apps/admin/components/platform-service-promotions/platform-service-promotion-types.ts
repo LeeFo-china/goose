@@ -47,6 +47,7 @@ export type PlatformServicePromotionVersion = {
 
 export type PlatformServicePromotionPricePreview = {
   product_id: string;
+  product_version_id: string;
   code: string;
   title: string;
   term_years: number;
@@ -111,6 +112,15 @@ export type PlatformServicePromotionUpdatePayload =
   PlatformServicePromotionCreatePayload & {
     expected_version: number;
   };
+
+export type PlatformServicePromotionPublishPayload = {
+  expected_version: number;
+  idempotency_key: string;
+  expected_product_versions: Array<{
+    product_code: string;
+    product_version_id: string;
+  }>;
+};
 
 export type PlatformServicePromotionPayload =
   | PlatformServicePromotionCreatePayload

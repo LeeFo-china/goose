@@ -52,8 +52,8 @@ function promotionFixture(): PlatformServicePromotionListItem {
       summary: "三档套餐同步优惠",
       rules_text: "优惠以支付时价格为准",
       discount_rate_basis_points: 2500,
-      starts_at: new Date(LOCAL_START).toISOString(),
-      ends_at: new Date(LOCAL_END).toISOString(),
+      starts_at: "2026-09-20T02:00:00.000Z",
+      ends_at: "2026-09-30T14:00:00.000Z",
       published_at: null,
       published_by_employee_id: null,
       stopped_at: null,
@@ -65,6 +65,7 @@ function promotionFixture(): PlatformServicePromotionListItem {
     phase: "draft",
     price_preview: [1, 2, 3].map((years) => ({
       product_id: `product-${years}`,
+      product_version_id: `00000000-0000-4000-8000-00000000000${years}`,
       code: `platform_service_${years}y`,
       title: `${years} 年套餐`,
       term_years: years,
@@ -104,7 +105,7 @@ describe("平台技术服务限时活动表单规则", () => {
     });
   });
 
-  test("把浏览器本地时间和中文折数转换为 API 字段", () => {
+  test("把北京时间和中文折数转换为 API 字段", () => {
     expect(buildPromotionPayload({
       ...DEFAULT_PROMOTION_FORM_VALUES,
       startsAt: LOCAL_START,
@@ -119,8 +120,8 @@ describe("平台技术服务限时活动表单规则", () => {
         summary: "1 年、2 年、3 年套餐同步限时优惠",
         rules_text: "",
         discount_rate_basis_points: 2000,
-        starts_at: new Date(LOCAL_START).toISOString(),
-        ends_at: new Date(LOCAL_END).toISOString(),
+        starts_at: "2026-09-20T02:00:00.000Z",
+        ends_at: "2026-09-30T14:00:00.000Z",
       },
     });
   });
@@ -174,6 +175,14 @@ describe("平台技术服务限时活动表单规则", () => {
     });
   });
 
+  test("北京时间不受美国 DST 缺失小时影响且严格验证日期分量", () => {
+    expect(build({ startsAt: "2026-03-08T02:30", endsAt: "2026-03-08T03:30" }))
+      .toMatchObject({ ok: true, body: { starts_at: "2026-03-07T18:30:00.000Z", ends_at: "2026-03-07T19:30:00.000Z" } });
+    for (const startsAt of ["2026-02-29T10:00", "2026-13-01T00:00", "2026-09-00T10:00", "2026-09-20T24:00", "2026-09-20T10:60", "2026-09-20T10:00Z"]) {
+      expect(build({ startsAt, endsAt: LOCAL_END })).toEqual({ ok: false, message: "活动时间无效" });
+    }
+  });
+
   test("按后端 trim 与最大长度规则构建运营文案", () => {
     expect(build({
       name: `  ${"名".repeat(80)}  `,
@@ -222,11 +231,13 @@ describe("平台技术服务限时活动表单规则", () => {
     expect(() => calculatePromotionAmount(980_000, Number.NaN)).toThrow();
   });
 
-  test("ISO 与本地 datetime-local 回填可按当前时区往返", () => {
-    const iso = new Date(LOCAL_START).toISOString();
+  test("ISO 与北京时间 datetime-local 回填不依赖当前时区", () => {
+    const iso = "2026-09-20T02:00:00.000Z";
     const localValue = isoToDatetimeLocal(iso);
     expect(localValue).toBe(LOCAL_START);
-    expect(new Date(localValue).toISOString()).toBe(iso);
+    expect(build({ startsAt: localValue, endsAt: LOCAL_END })).toMatchObject({
+      ok: true, body: { starts_at: iso },
+    });
     expect(isoToDatetimeLocal(null)).toBe("");
     expect(isoToDatetimeLocal("invalid")).toBe("");
 

@@ -30,6 +30,22 @@ describe("平台技术服务限时活动页面", () => {
     expect(shell).toContain("new URLSearchParams(window.location.search)");
   });
 
+  test("服务端在读取活动前拒绝非超管，并隐藏活动入口", async () => {
+    const page = readSource(pagePath);
+    expect(page).toContain("session.is_platform_super_admin === true");
+    expect(page).toContain('if (activeTab === "promotions" && !canManagePromotions)');
+    expect(page).toContain('redirect("/platform/service-products")');
+    expect(page.indexOf('if (activeTab === "promotions" && !canManagePromotions)'))
+      .toBeLessThan(page.indexOf("promotions = await getPlatformServicePage"));
+    expect(page).toContain("canManagePromotions={canManagePromotions}");
+    const { Tabs } = await import("../ui/tabs");
+    const { PlatformServicePromotionTabsNav } = await import("./platform-service-promotion-tabs");
+    const html = renderToStaticMarkup(createElement(Tabs, { value: "products" },
+      createElement(PlatformServicePromotionTabsNav, { pageSize: 20, canManagePromotions: false }),
+    ));
+    expect(html).not.toContain("限时活动");
+  });
+
   test("表格展示权威状态并提供唯一行操作", () => {
     const table = readSource("./platform-service-promotion-table.tsx");
     for (const label of ["活动", "折扣", "活动时间", "状态", "版本", "更新时间", "查看配置"]) {
@@ -42,7 +58,7 @@ describe("平台技术服务限时活动页面", () => {
 
   test("创建编辑使用已验证 payload 并锁定待提交对话框", () => {
     const form = readSource("./platform-service-promotion-form.tsx");
-    for (const label of ["运营内容", "价格与时间", "开始时间", "结束时间", "datetime-local"]) {
+    for (const label of ["运营内容", "价格与时间", "开始时间", "结束时间", "北京时间", "datetime-local"]) {
       expect(form).toContain(label);
     }
     expect(form).toContain("buildPromotionPayload(values, promotion?.version)");
@@ -74,7 +90,7 @@ describe("平台技术服务限时活动页面", () => {
     expect(detail).toContain("prices={confirmationPromotion.price_preview}");
     expect(detail).toContain("找不到该活动");
     const { loadPromotionPreview } = await import("./platform-service-promotion-detail");
-    const freshPromotion = { id: "promotion-1", version: 9, price_preview: [{ list_amount_fen: 1200000, base_amount_fen: 1000000, effective_amount_fen: 200000 }] };
+    const freshPromotion = { id: "promotion-1", version: 9, price_preview: [{ product_version_id: "00000000-0000-4000-8000-000000000001", list_amount_fen: 1200000, base_amount_fen: 1000000, effective_amount_fen: 200000 }] };
     const fetchMock = spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(new Response(JSON.stringify({ data: { list: [freshPromotion] } })))
       .mockResolvedValueOnce(new Response(JSON.stringify({ data: { list: [freshPromotion] } })))
@@ -87,6 +103,29 @@ describe("平台技术服务限时活动页面", () => {
       expect(init).toMatchObject({ method: "GET", cache: "no-store" });
       expect(await loadPromotionPreview("missing", 2, 20)).toBeUndefined();
       await expect(loadPromotionPreview("promotion-1", 2, 20)).rejects.toMatchObject({ message: "读取失败" });
+    } finally { fetchMock.mockRestore(); }
+  });
+
+  test("发布 body 只提交确认预览的商品版本与活动版本，不提交价格", async () => {
+    const detail = readSource("./platform-service-promotion-detail.tsx");
+    expect(detail).toContain("buildPromotionPublishBody(confirmationPromotion");
+    const { buildPromotionPublishBody } = await import("./platform-service-promotion-form-data");
+    const { loadPromotionPreview } = await import("./platform-service-promotion-detail");
+    const prices = [1, 2, 3].map((term) => ({
+      product_id: `product-${term}`, code: `platform_service_${term}y`,
+      product_version_id: `00000000-0000-4000-8000-00000000000${term}`,
+      effective_amount_fen: 200000 * term,
+    }));
+    const fetchMock = spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(JSON.stringify({ data: {
+      list: [{ id: "promotion-1", version: 9, price_preview: prices }],
+    } })));
+    try {
+      const fresh = await loadPromotionPreview("promotion-1", 1, 20);
+      expect(fresh).toBeDefined();
+      expect(buildPromotionPublishBody(fresh!, "idempotency-1")).toEqual({
+        expected_version: 9, idempotency_key: "idempotency-1",
+        expected_product_versions: prices.map((price) => ({ product_code: price.code, product_version_id: price.product_version_id })),
+      });
     } finally { fetchMock.mockRestore(); }
   });
 
@@ -119,7 +158,7 @@ describe("平台技术服务限时活动页面", () => {
     const { Tabs, TabsContent } = await import("../ui/tabs");
     const { PlatformServicePromotionTabsNav } = await import("./platform-service-promotion-tabs");
     const html = renderToStaticMarkup(createElement(Tabs, { value: "promotions", activationMode: "manual" },
-      createElement(PlatformServicePromotionTabsNav, { pageSize: 20 }),
+      createElement(PlatformServicePromotionTabsNav, { pageSize: 20, canManagePromotions: true }),
       createElement(TabsContent, { value: "products", forceMount: true, hidden: true }),
       createElement(TabsContent, { value: "promotions", forceMount: true }, "限时活动列表"),
     ));

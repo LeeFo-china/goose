@@ -270,6 +270,35 @@ describe("platform service promotions migration", () => {
     expect(list).toContain("'list_amount_fen', packages.list_amount_fen");
   });
 
+  test("binds preview and publication to the locked current product versions", async () => {
+    const sql = await readMigration();
+    expect(functionSql(sql, "platform_service_promotion_price_preview"))
+      .toContain("'product_version_id', published.id");
+    const list = functionSql(sql, "platform_service_list_promotions");
+    expect(list).toContain("published.id AS product_version_id");
+    expect(list).toContain("'product_version_id', packages.product_version_id");
+    const publish = functionSql(sql, "platform_service_publish_promotion");
+    expect(publish).toContain("p_expected_product_versions jsonb");
+    for (const fragment of [
+      "jsonb_typeof(p_expected_product_versions)",
+      "jsonb_array_length(p_expected_product_versions)",
+      "jsonb_array_elements(p_expected_product_versions)",
+      "jsonb_typeof(item->'product_code')",
+      "jsonb_typeof(item->'product_version_id')",
+      "item - 'product_code' - 'product_version_id'",
+      "count(DISTINCT item->>'product_code')",
+      "lower(item->>'product_version_id') IS DISTINCT FROM v_product_versions->>(item->>'product_code')",
+      "SERVICE_PROMOTION_PRODUCT_VERSION_CONFLICT",
+    ]) expect(publish).toContain(fragment);
+    expect(publish.indexOf("pg_advisory_xact_lock")).toBeLessThan(publish.indexOf("FOR SHARE OF product, published"));
+    expect(publish.indexOf("FOR SHARE OF product, published")).toBeLessThan(publish.indexOf("jsonb_typeof(p_expected_product_versions)"));
+    expect(publish.indexOf("SERVICE_PROMOTION_PRODUCT_VERSION_CONFLICT")).toBeLessThan(publish.indexOf("SET publication_status = 'superseded'"));
+    for (const grant of ["REVOKE ALL", "GRANT EXECUTE"]) {
+      expect(sql).toContain(`${grant} ON FUNCTION public.platform_service_publish_promotion(uuid, integer, jsonb, uuid, uuid, uuid)`);
+    }
+    expect(sql).not.toContain("platform_service_publish_promotion(uuid, integer, uuid, uuid, uuid)");
+  });
+
   test("preserves the trial-aware order signature and lock checks", async () => {
     const previous = await Bun.file(new URL("../../../../supabase/migrations/20260811005555_create_platform_service_trials.sql", import.meta.url)).text();
     const order = functionSql(await readMigration(), "platform_service_create_pending_order");

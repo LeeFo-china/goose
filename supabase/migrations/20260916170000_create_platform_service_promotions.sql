@@ -178,7 +178,7 @@ SET search_path = public, pg_temp
 AS $$
   -- Internal preview is bounded to exactly three unique formal product codes.
   SELECT coalesce(jsonb_agg(jsonb_build_object(
-    'product_id', product.id, 'code', product.code, 'title', published.title,
+    'product_id', product.id, 'product_version_id', published.id, 'code', product.code, 'title', published.title,
     'term_years', published.term_years, 'list_amount_fen', published.list_amount_fen,
     'base_amount_fen', published.amount_fen,
     'effective_amount_fen', GREATEST(1, round(published.amount_fen::numeric * p_rate / 10000.0))::bigint,
@@ -277,7 +277,7 @@ END;
 $$;
 
 CREATE OR REPLACE FUNCTION public.platform_service_publish_promotion(
-  p_promotion_id uuid, p_expected_version integer, p_idempotency_key uuid,
+  p_promotion_id uuid, p_expected_version integer, p_expected_product_versions jsonb, p_idempotency_key uuid,
   p_actor_employee_id uuid, p_actor_user_id uuid
 )
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER
@@ -289,6 +289,7 @@ DECLARE
   v_existing jsonb;
   v_result jsonb;
   v_product_count integer;
+  v_product_versions jsonb;
   v_invalid_price boolean;
   v_now timestamptz;
 BEGIN
@@ -321,7 +322,7 @@ BEGIN
   WITH eligible_products AS MATERIALIZED (
     -- Product archival is status = 'archived'; requiring enabled excludes it.
     -- These three unique codes bound the internal query and its row locks.
-    SELECT published.amount_fen
+    SELECT product.code, published.id AS product_version_id, published.amount_fen
     FROM public.platform_service_products AS product
     JOIN public.platform_service_product_versions AS published
       ON published.id = product.published_version_id AND published.product_id = product.id
@@ -329,11 +330,35 @@ BEGIN
       AND product.status = 'enabled'
     FOR SHARE OF product, published
   )
-  SELECT count(*), bool_or(GREATEST(1, round(published.amount_fen::numeric * v_draft.discount_rate_basis_points / 10000.0)) >= published.amount_fen)
-  INTO v_product_count, v_invalid_price
+  SELECT count(*), bool_or(GREATEST(1, round(published.amount_fen::numeric * v_draft.discount_rate_basis_points / 10000.0)) >= published.amount_fen),
+    jsonb_object_agg(published.code, published.product_version_id)
+  INTO v_product_count, v_invalid_price, v_product_versions
   FROM eligible_products AS published;
   IF v_product_count <> 3 THEN
     RAISE EXCEPTION 'SERVICE_PROMOTION_PRODUCT_UNAVAILABLE' USING ERRCODE = 'P0001';
+  END IF;
+  -- Compare the confirmed versions only after locking the current three packages.
+  IF jsonb_typeof(p_expected_product_versions) IS DISTINCT FROM 'array' THEN
+    RAISE EXCEPTION 'SERVICE_PROMOTION_PRODUCT_VERSION_CONFLICT' USING ERRCODE = 'P0001';
+  END IF;
+  IF jsonb_array_length(p_expected_product_versions) <> 3 THEN
+    RAISE EXCEPTION 'SERVICE_PROMOTION_PRODUCT_VERSION_CONFLICT' USING ERRCODE = 'P0001';
+  END IF;
+  IF EXISTS (SELECT 1 FROM jsonb_array_elements(p_expected_product_versions) AS item
+    WHERE jsonb_typeof(item) IS DISTINCT FROM 'object') THEN
+    RAISE EXCEPTION 'SERVICE_PROMOTION_PRODUCT_VERSION_CONFLICT' USING ERRCODE = 'P0001';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM jsonb_array_elements(p_expected_product_versions) AS item
+    WHERE jsonb_typeof(item->'product_code') IS DISTINCT FROM 'string'
+      OR jsonb_typeof(item->'product_version_id') IS DISTINCT FROM 'string'
+      OR item - 'product_code' - 'product_version_id' <> '{}'::jsonb
+      OR item->>'product_code' NOT IN ('platform_service_1y', 'platform_service_2y', 'platform_service_3y')
+      OR item->>'product_version_id' !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      OR lower(item->>'product_version_id') IS DISTINCT FROM v_product_versions->>(item->>'product_code')
+  ) OR (SELECT count(DISTINCT item->>'product_code')
+    FROM jsonb_array_elements(p_expected_product_versions) AS item) <> 3 THEN
+    RAISE EXCEPTION 'SERVICE_PROMOTION_PRODUCT_VERSION_CONFLICT' USING ERRCODE = 'P0001';
   END IF;
   IF v_invalid_price THEN
     RAISE EXCEPTION 'SERVICE_PROMOTION_PRICE_NOT_LOWER' USING ERRCODE = 'P0001';
@@ -440,7 +465,7 @@ BEGIN
     LIMIT p_page_size OFFSET ((p_page - 1) * p_page_size)
   ), packages AS MATERIALIZED (
     -- Three unique package codes bound this internal price preview to <= 3 rows.
-    SELECT product.id, product.code, published.title, published.term_years, published.list_amount_fen, published.amount_fen
+    SELECT product.id, product.code, published.id AS product_version_id, published.title, published.term_years, published.list_amount_fen, published.amount_fen
     FROM public.platform_service_products AS product
     JOIN public.platform_service_product_versions AS published
       ON published.id = product.published_version_id AND published.product_id = product.id
@@ -463,7 +488,7 @@ BEGIN
     LEFT JOIN public.platform_service_promotion_versions AS published ON published.id = page.published_version_id
     CROSS JOIN LATERAL (
       SELECT coalesce(jsonb_agg(jsonb_build_object(
-        'product_id', packages.id, 'code', packages.code, 'title', packages.title,
+        'product_id', packages.id, 'product_version_id', packages.product_version_id, 'code', packages.code, 'title', packages.title,
         'term_years', packages.term_years, 'list_amount_fen', packages.list_amount_fen,
         'base_amount_fen', packages.amount_fen,
         'effective_amount_fen', GREATEST(1, round(packages.amount_fen::numeric * coalesce(draft.discount_rate_basis_points, published.discount_rate_basis_points, 10000) / 10000.0))::bigint,
@@ -885,8 +910,8 @@ GRANT EXECUTE ON FUNCTION public.platform_service_create_promotion_draft(text, j
 REVOKE ALL ON FUNCTION public.platform_service_save_promotion_draft(uuid, integer, jsonb, uuid, uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.platform_service_save_promotion_draft(uuid, integer, jsonb, uuid, uuid) TO service_role;
 
-REVOKE ALL ON FUNCTION public.platform_service_publish_promotion(uuid, integer, uuid, uuid, uuid) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.platform_service_publish_promotion(uuid, integer, uuid, uuid, uuid) TO service_role;
+REVOKE ALL ON FUNCTION public.platform_service_publish_promotion(uuid, integer, jsonb, uuid, uuid, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.platform_service_publish_promotion(uuid, integer, jsonb, uuid, uuid, uuid) TO service_role;
 
 REVOKE ALL ON FUNCTION public.platform_service_stop_promotion(uuid, integer, uuid, text, uuid, uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.platform_service_stop_promotion(uuid, integer, uuid, text, uuid, uuid) TO service_role;

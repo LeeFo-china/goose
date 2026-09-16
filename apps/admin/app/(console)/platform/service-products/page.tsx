@@ -69,8 +69,10 @@ export default async function PlatformServiceProductsPage({
   const permissions = new Set(session.permissions.map((item) => item.code));
   const isPlatformAdmin = isPlatformOnlySession(session);
   const canManage = isPlatformAdmin && permissions.has(MANAGE_PERMISSION);
+  const canManagePromotions = canManage && session.is_platform_super_admin === true;
   const params = await searchParams;
   const activeTab = params.tab === "promotions" ? "promotions" : "products";
+  if (activeTab === "promotions" && !canManagePromotions) redirect("/platform/service-products");
   const page = normalizePage(params.page);
   const pageSize = normalizePlatformListPageSize(params.pageSize);
 
@@ -108,7 +110,7 @@ export default async function PlatformServiceProductsPage({
         }
         action={canManage ? (isPromotions ? <PlatformServicePromotionFormButton /> : <PlatformServiceProductFormButton />) : null}
         error={error}
-        tabs={<PlatformServicePromotionTabsNav pageSize={pageSize} />}
+        tabs={<PlatformServicePromotionTabsNav pageSize={pageSize} canManagePromotions={canManagePromotions} />}
         listHeader={
           <div className="text-sm text-muted-foreground">
             {isPromotions ? "限时活动统一覆盖三档套餐，保存草稿后需确认价格并发布。" : "修改草稿后需点击“发布套餐”，小程序端才会读取新的购买版本。"}
@@ -127,7 +129,7 @@ export default async function PlatformServiceProductsPage({
           {!isPromotions ? <PlatformServiceProductTable products={products.list} canManage={canManage} /> : null}
         </TabsContent>
         <TabsContent value="promotions" forceMount hidden={!isPromotions} className="mt-0">
-          {isPromotions ? <PlatformServicePromotionTable promotions={promotions.list} canManage={canManage} serverTime={promotions.server_time} page={pagination.page} pageSize={pagination.pageSize} /> : null}
+          {isPromotions ? <PlatformServicePromotionTable promotions={promotions.list} canManage={canManagePromotions} serverTime={promotions.server_time} page={pagination.page} pageSize={pagination.pageSize} /> : null}
         </TabsContent>
       </PlatformListPageShell>
     </Tabs>

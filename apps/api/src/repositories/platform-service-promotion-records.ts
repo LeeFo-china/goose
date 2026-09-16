@@ -55,6 +55,7 @@ const PlatformServicePromotionPhaseSchema = z.enum([
 
 const PlatformServicePromotionPricePreviewSchema = z.strictObject({
   product_id: z.string(),
+  product_version_id: z.uuid(),
   code: z.string(),
   title: z.string(),
   term_years: z.number().int().positive(),

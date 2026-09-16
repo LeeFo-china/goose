@@ -122,11 +122,11 @@ export function PlatformServicePromotionFormButton({ promotion, disabled, onSave
                 <FieldDescription>填写 0.1 至 9.9 折，例如 2 表示 2 折。适用于 1 年、2 年、3 年套餐。</FieldDescription>
               </Field>
               <Field>
-                <FieldLabel htmlFor={`${fieldId}-start`}>开始时间</FieldLabel>
+                <FieldLabel htmlFor={`${fieldId}-start`}>开始时间（北京时间）</FieldLabel>
                 <Input id={`${fieldId}-start`} type="datetime-local" value={values.startsAt} onChange={(event) => update({ startsAt: event.target.value })} />
               </Field>
               <Field>
-                <FieldLabel htmlFor={`${fieldId}-end`}>结束时间</FieldLabel>
+                <FieldLabel htmlFor={`${fieldId}-end`}>结束时间（北京时间）</FieldLabel>
                 <Input id={`${fieldId}-end`} type="datetime-local" value={values.endsAt} onChange={(event) => update({ endsAt: event.target.value })} />
               </Field>
             </FieldGroup>

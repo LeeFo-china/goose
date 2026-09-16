@@ -3,6 +3,7 @@ import type {
   PlatformProductRecord,
   ProductVersionRecord,
 } from "@/repositories/platform-service-order-records";
+import { Errors } from "@/errors/error-factory";
 import type { AuthContext } from "@/services/authorization";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
@@ -231,6 +232,28 @@ describe("PlatformServiceProductService", () => {
       employeeId,
     });
     expect(result.published_version.version).toBe(2);
+  });
+
+  test("maps promotion price protection to 422 and retains unknown database errors", async () => {
+    const { PlatformServiceProductService } = await import("./platform-service-products");
+    const service = new PlatformServiceProductService({ repository });
+    for (const code of ["SERVICE_PROMOTION_PRICE_NOT_LOWER", "UNKNOWN_FAILURE"]) {
+      const wrapped = Errors.dbError("发布平台服务商品版本失败", { code: "P0001", message: code });
+      repository.publishProductVersion.mockImplementationOnce(async () => { throw wrapped; });
+      const operation = service.publishProduct(platformAuth, productId, {
+        expected_version: 1,
+        idempotency_key: "00000000-0000-4000-8000-000000000904",
+      });
+      if (code === "SERVICE_PROMOTION_PRICE_NOT_LOWER") {
+        await expect(operation).rejects.toMatchObject({
+          statusCode: 422,
+          code,
+          message: "新价格会使已发布限时活动失去折扣，请先调整或停止活动",
+        });
+      } else {
+        await expect(operation).rejects.toBe(wrapped);
+      }
+    }
   });
 
   test("maps a stale atomic publish result to version conflict", async () => {
