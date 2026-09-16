@@ -277,6 +277,15 @@ describe("平台技术服务限时活动展示规则", () => {
     }
   });
 
+  test("活动展示固定为北京时间，与运行环境时区无关", () => {
+    expect(formatPromotionDateTime("2026-09-17T08:00:00.000Z"))
+      .toBe("2026/9/17 16:00:00");
+    expect(formatPromotionDateTime("2026-09-17T20:30:00.000Z"))
+      .toBe("2026/9/18 04:30:00");
+    expect(formatPromotionDateTime("2026-09-17T16:00:00+08:00"))
+      .toBe("2026/9/17 16:00:00");
+  });
+
   test("安全格式化分钱金额和时间", () => {
     expect(formatPromotionFen(196_000)).toBe("¥1960.00");
     expect(formatPromotionFen(null)).toBe("未设置");
