@@ -46,6 +46,7 @@ export function assertDirectObjectKeyBelongsToActor(input: {
   actorContext: DirectUploadActorContext;
   projectId?: string;
   mimetype?: string;
+  businessId?: string;
 }): void {
   const expectedPrefix = buildExpectedPrefix(input.scene, input.actorContext);
   if (!input.objectKey.startsWith(expectedPrefix)) {
@@ -73,6 +74,12 @@ export function assertDirectObjectKeyBelongsToActor(input: {
       VIRTUAL_GOODS_OBJECT_SUFFIX_PATTERN.exec(suffix)?.[1];
     if (!expectedExtension || matchedExtension !== expectedExtension) {
       throw ownershipError("虚拟商品图片上传对象路径无效");
+    }
+  }
+  if (input.scene === "supplier_purchase_receipt_delivery_note") {
+    const expectedReceiptSegment = `/receipts/${input.businessId}/`;
+    if (!input.businessId || !input.objectKey.includes(expectedReceiptSegment)) {
+      throw ownershipError("上传对象不属于当前收货记录");
     }
   }
 

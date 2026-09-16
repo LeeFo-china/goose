@@ -111,3 +111,33 @@ describe("tenant_service_fulfillment_attachment direct upload declaration", () =
     }));
   });
 });
+
+describe("supplier_purchase_receipt_delivery_note direct upload declaration", () => {
+  test.each(["image/jpeg", "image/png", "image/webp"])(
+    "accepts canonical %s up to 10 MiB",
+    (mimetype) => {
+      expect(() => assertDirectUploadFileDeclaration({
+        scene: "supplier_purchase_receipt_delivery_note",
+        mimetype,
+        sizeBytes: 10 * 1024 * 1024,
+      })).not.toThrow();
+    },
+  );
+
+  test.each([
+    ["HEIC", "image/heic", 100],
+    ["PDF", "application/pdf", 100],
+    ["zero size", "image/png", 0],
+    ["fractional size", "image/png", 1.5],
+    ["oversize", "image/webp", 10 * 1024 * 1024 + 1],
+  ])("rejects invalid %s as a bad request", (_name, mimetype, sizeBytes) => {
+    expect(() => assertDirectUploadFileDeclaration({
+      scene: "supplier_purchase_receipt_delivery_note",
+      mimetype,
+      sizeBytes,
+    })).toThrow(expect.objectContaining({
+      statusCode: 400,
+      code: "VALIDATION_ERROR",
+    }));
+  });
+});

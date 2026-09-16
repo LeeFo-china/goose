@@ -41,6 +41,12 @@ import {
   getPlatformServiceFulfillmentAttachmentPrivatePolicy,
   isPrivatePlatformServiceFulfillmentAttachmentUpload,
 } from "./platform-service-fulfillment-upload-guard";
+import {
+  assertSupplierPurchaseReceiptCompletion,
+  assertSupplierPurchaseReceiptDirectUpload,
+  getSupplierPurchaseReceiptDeliveryNotePrivatePolicy,
+  isPrivateSupplierPurchaseReceiptDeliveryNote,
+} from "./supplier-purchase-receipt-upload-guard";
 
 const PRIVATE_LICENSE_SCENE = "tenant_onboarding_license";
 const PRIVATE_APPLYMENT_SCENE = "wechat_pay_applyment";
@@ -75,6 +81,8 @@ export async function createDirectUpload(this: any, input: DirectUploadInput) {
     : null;
   const platformServiceFulfillmentAttachmentPolicy =
     getPlatformServiceFulfillmentAttachmentPrivatePolicy(input);
+  const supplierPurchaseReceiptDeliveryNotePolicy =
+    getSupplierPurchaseReceiptDeliveryNotePrivatePolicy(input);
   const isBrandLogo = validateBrandLogoDirectUpload(input);
   const isVirtualGoodsImage = validateVirtualGoodsDirectUpload(input);
   const isPrivatePlatformServiceFulfillmentAttachment =
@@ -91,11 +99,13 @@ export async function createDirectUpload(this: any, input: DirectUploadInput) {
     assertSupplierLicenseUploadDeclaration(input, supplierLicensePolicy);
   }
   assertPlatformServiceFulfillmentAttachmentDirectUpload(input);
+  assertSupplierPurchaseReceiptDirectUpload(input);
   const expiresAtSeconds = Math.floor(Date.now() / 1000) + config.signedUrlTtl;
   // COS only enforces this overwrite guard when bucket versioning is disabled.
   // Task 13 must verify the target bucket setting before release.
   const signedHeaders = applymentPolicy || supplierLicensePolicy ||
-      platformServiceFulfillmentAttachmentPolicy || isBrandLogo || isVirtualGoodsImage
+      platformServiceFulfillmentAttachmentPolicy || isBrandLogo ||
+      isVirtualGoodsImage || supplierPurchaseReceiptDeliveryNotePolicy
     ? {
       "Content-Length": input.sizeBytes,
       "Content-Type": input.mimetype,
@@ -132,6 +142,8 @@ export async function createDirectUpload(this: any, input: DirectUploadInput) {
     isVirtualGoodsImage,
     isPlatformServiceFulfillmentAttachment:
       Boolean(platformServiceFulfillmentAttachmentPolicy),
+    isSupplierPurchaseReceiptDeliveryNote:
+      Boolean(supplierPurchaseReceiptDeliveryNotePolicy),
   });
 
   return {
@@ -145,7 +157,8 @@ export async function createDirectUpload(this: any, input: DirectUploadInput) {
     headers: {
       "content-type": input.mimetype,
       ...(isPrivateLicense || applymentPolicy || supplierLicensePolicy ||
-          platformServiceFulfillmentAttachmentPolicy || isBrandLogo || isVirtualGoodsImage
+          platformServiceFulfillmentAttachmentPolicy || isBrandLogo ||
+          isVirtualGoodsImage || supplierPurchaseReceiptDeliveryNotePolicy
         ? {
           "content-length": String(input.sizeBytes),
           ...(isVirtualGoodsImage ? { "x-cos-acl": "public-read" } : {}),
@@ -188,6 +201,8 @@ export async function registerExistingCosObject(this: any, input: RegisterExisti
     input.scene === PRIVATE_SUPPLIER_LICENSE_SCENE && isPrivateObject;
   const isPrivatePlatformServiceFulfillmentAttachment =
     isPrivatePlatformServiceFulfillmentAttachmentUpload(input);
+  const isPrivateSupplierPurchaseReceipt =
+    isPrivateSupplierPurchaseReceiptDeliveryNote(input);
   const isBrandLogo = validateBrandLogoDirectUpload(input);
   const isVirtualGoodsImage = validateVirtualGoodsDirectUpload(input);
   const privateHeadPolicy = getPrivateHeadPolicy(input);
@@ -214,6 +229,7 @@ export async function registerExistingCosObject(this: any, input: RegisterExisti
     });
   }
   assertPlatformServiceFulfillmentAttachmentCompletion(input, config.secretKey);
+  assertSupplierPurchaseReceiptCompletion(input, config.secretKey);
   if (isBrandLogo) assertValidBrandLogoUploadIntent(input, config.secretKey);
   if (isVirtualGoodsImage) {
     assertValidVirtualGoodsUploadIntent(input, config.secretKey);
@@ -296,8 +312,12 @@ export async function registerExistingCosObject(this: any, input: RegisterExisti
       ? "visitor"
       : isPrivateSupplierLicense
       ? "supplier_business_license"
+      : isPrivateSupplierPurchaseReceipt
+      ? "supplier_purchase_receipt"
       : input.ownerType ?? input.scene,
-    owner_id: input.ownerId ?? null,
+    owner_id: isPrivateSupplierPurchaseReceipt
+      ? input.businessId ?? null
+      : input.ownerId ?? null,
     owner_visitor_id: isPrivateLicense ? visitorId : null,
     scene: input.scene,
     provider: "tencent_cos",
@@ -316,6 +336,8 @@ export async function registerExistingCosObject(this: any, input: RegisterExisti
       ...(input.metadata || {}),
       project_id: input.projectId ?? null,
       customer_id: input.customerId ?? null,
+      supplier_purchase_order_id: input.supplierPurchaseOrderId ?? null,
+      receipt_id: input.businessId ?? null,
       verified_head_object: verifyHeadObject,
       signed_url: Boolean(accessUrl && accessUrl !== publicUrl),
     },

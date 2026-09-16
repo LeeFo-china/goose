@@ -9,6 +9,8 @@ import { createDirectVirtualGoodsUploadIntent } from
   "./virtual-goods-upload-intent";
 import { createDirectPlatformServiceFulfillmentUploadIntent } from
   "./platform-service-fulfillment-upload-intent";
+import { createSupplierPurchaseReceiptUploadIntent } from
+  "./supplier-purchase-receipt-upload-intent";
 
 export function createSceneUploadIntent(
   input: DirectUploadInput,
@@ -23,6 +25,7 @@ export function createSceneUploadIntent(
     isBrandLogo: boolean;
     isVirtualGoodsImage: boolean;
     isPlatformServiceFulfillmentAttachment: boolean;
+    isSupplierPurchaseReceiptDeliveryNote: boolean;
   },
 ) {
   const common = {
@@ -59,6 +62,9 @@ export function createSceneUploadIntent(
   }
   if (context.isPlatformServiceFulfillmentAttachment) {
     return createDirectPlatformServiceFulfillmentUploadIntent(input, context);
+  }
+  if (context.isSupplierPurchaseReceiptDeliveryNote) {
+    return createSupplierPurchaseReceiptUploadIntent(input, context);
   }
   return undefined;
 }

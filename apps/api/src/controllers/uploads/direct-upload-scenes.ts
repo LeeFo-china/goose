@@ -32,6 +32,7 @@ export const DIRECT_UPLOAD_SCENES = [
   "brand_logo",
   "branding_virtual_goods",
   "tenant_service_fulfillment_attachment",
+  "supplier_purchase_receipt_delivery_note",
 ] as const;
 
 export type UploadScene = (typeof DIRECT_UPLOAD_SCENES)[number];
@@ -49,10 +50,12 @@ export const PRIVATE_DIRECT_UPLOAD_SCENES = new Set<UploadScene>([
   "wechat_pay_applyment",
   "supplier_business_license",
   "tenant_service_fulfillment_attachment",
+  "supplier_purchase_receipt_delivery_note",
 ]);
 
 export const SENSITIVE_DIRECT_UPLOAD_LOG_SCENES = new Set<UploadScene>([
   "wechat_pay_applyment",
   "supplier_business_license",
   "tenant_service_fulfillment_attachment",
+  "supplier_purchase_receipt_delivery_note",
 ]);

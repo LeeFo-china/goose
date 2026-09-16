@@ -62,6 +62,17 @@ export const SUPPLIER_PURCHASE_ORDER_RECEIPT_ITEM_SELECT = [
   "variance_reason",
 ].join(",");
 
+export const SUPPLIER_PURCHASE_RECEIPT_ATTACHMENT_SELECT = [
+  "id",
+  "file_id",
+  "scene",
+  "file_name",
+  "mime_type",
+  "size_bytes",
+  "uploaded_by_employee_id",
+  "created_at",
+].join(",");
+
 export const SUPPLIER_PURCHASE_ORDER_RECEIPT_SELECT = [
   "id",
   "tenant_id",
@@ -73,6 +84,9 @@ export const SUPPLIER_PURCHASE_ORDER_RECEIPT_SELECT = [
   "created_at",
   `items:supplier_purchase_order_receipt_items(${
     SUPPLIER_PURCHASE_ORDER_RECEIPT_ITEM_SELECT
+  })`,
+  `attachments:supplier_purchase_receipt_attachments(${
+    SUPPLIER_PURCHASE_RECEIPT_ATTACHMENT_SELECT
   })`,
 ].join(",");
 
@@ -163,9 +177,22 @@ export const SupplierPurchaseOrderReceiptHeaderSchema = z.object({
   created_at: dateTime,
 }).strict();
 
+export const SupplierPurchaseReceiptAttachmentSchema = z.object({
+  id: uuid,
+  file_id: uuid,
+  scene: z.literal("supplier_purchase_receipt_delivery_note"),
+  file_name: z.string().nullable(),
+  mime_type: z.enum(["image/jpeg", "image/png", "image/webp"]),
+  size_bytes: z.number().int().positive().max(10 * 1024 * 1024),
+  uploaded_by_employee_id: uuid,
+  created_at: dateTime,
+}).strict();
+
 export const SupplierPurchaseOrderReceiptSchema =
   SupplierPurchaseOrderReceiptHeaderSchema.extend({
     items: z.array(SupplierPurchaseOrderReceiptItemSchema).max(100),
+    attachments: z.array(SupplierPurchaseReceiptAttachmentSchema).max(3)
+      .optional(),
   }).strict();
 
 export const SupplierPurchaseOrderFulfillmentDetailSchema = z.object({
@@ -220,6 +247,8 @@ export type SupplierPurchaseOrderReceiptHeader =
   z.infer<typeof SupplierPurchaseOrderReceiptHeaderSchema>;
 export type SupplierPurchaseOrderReceipt =
   z.infer<typeof SupplierPurchaseOrderReceiptSchema>;
+export type SupplierPurchaseReceiptAttachment =
+  z.infer<typeof SupplierPurchaseReceiptAttachmentSchema>;
 export type SupplierPurchaseOrderFulfillmentDetail =
   z.infer<typeof SupplierPurchaseOrderFulfillmentDetailSchema>;
 export type SupplierPurchaseOrderFulfillmentCommandEnvelope =

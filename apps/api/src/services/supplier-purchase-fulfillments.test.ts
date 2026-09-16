@@ -15,6 +15,8 @@ const EMPLOYEE_ID = "63000000-0000-4000-8000-000000000005";
 const SHIPMENT_ID = "63000000-0000-4000-8000-000000000006";
 const RECEIPT_ID = "63000000-0000-4000-8000-000000000007";
 const ITEM_ID = "63000000-0000-4000-8000-000000000008";
+const ATTACHMENT_ID = "63000000-0000-4000-8000-000000000009";
+const FILE_ID = "63000000-0000-4000-8000-000000000010";
 
 const auth = {
   authUserId: USER_ID,
@@ -88,7 +90,22 @@ function dependencies(options: { orderExists?: boolean; warehouse?: boolean } = 
         calls.push("createReceipt");
         return { input };
       }),
+      findReceiptAttachmentPreview: mock(async (input: unknown) => {
+        calls.push("findReceiptAttachmentPreview");
+        return {
+          input,
+          id: ATTACHMENT_ID,
+          file_id: FILE_ID,
+          supplier_purchase_receipt_id: RECEIPT_ID,
+          supplier_purchase_order_id: ORDER_ID,
+          file_name: "delivery-note.jpg",
+          mime_type: "image/jpeg",
+          size_bytes: 1024,
+          file: { object_key: "private/delivery-note.jpg" },
+        };
+      }),
     },
+    signedUrlResolver: mock(async () => "https://example.com/signed.jpg"),
   };
 }
 
@@ -176,6 +193,37 @@ describe("SupplierPurchaseFulfillmentsService", () => {
       page: 3,
       pageSize: 20,
     });
+  });
+
+  test("authorizes receipt attachment preview and returns only a signed URL summary", async () => {
+    const deps = dependencies();
+    const service = await serviceFor(deps);
+    const result = await service.getReceiptAttachmentPreview(
+      auth,
+      ORDER_ID,
+      RECEIPT_ID,
+      ATTACHMENT_ID,
+    );
+    expect(deps.fulfillment.findReceiptAttachmentPreview).toHaveBeenCalledWith({
+      tenant_id: TENANT_ID,
+      order_id: ORDER_ID,
+      receipt_id: RECEIPT_ID,
+      attachment_id: ATTACHMENT_ID,
+    });
+    expect(deps.signedUrlResolver).toHaveBeenCalledWith(
+      "private/delivery-note.jpg",
+      { ttlSeconds: 600 },
+    );
+    expect(result).toMatchObject({
+      url: "https://example.com/signed.jpg",
+      file: {
+        file_id: FILE_ID,
+        file_name: "delivery-note.jpg",
+        mime_type: "image/jpeg",
+        size_bytes: 1024,
+      },
+    });
+    expect(result).not.toHaveProperty("object_key");
   });
 
   test("authorizes tenant and project before forwarding every command", async () => {

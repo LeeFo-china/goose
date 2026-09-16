@@ -42,7 +42,8 @@ export type PlatformUploadScene =
   | "supplier_business_license"
   | "brand_logo"
   | "branding_virtual_goods"
-  | "tenant_service_fulfillment_attachment";
+  | "tenant_service_fulfillment_attachment"
+  | "supplier_purchase_receipt_delivery_note";
 
 export type UploadImageInput = {
   buffer: Buffer;
@@ -54,6 +55,8 @@ export type UploadImageInput = {
   authUserId?: string | null;
   employeeId?: string | null;
   customerId?: string | null;
+  businessId?: string | null;
+  supplierPurchaseOrderId?: string | null;
 };
 
 export type DirectUploadInput = Omit<UploadImageInput, "buffer"> & {

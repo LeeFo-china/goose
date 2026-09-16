@@ -10,6 +10,7 @@ import type {
 } from "@/schema/supplier-purchase-orders";
 import type { AuthContext } from "@/services/authorization";
 import { supplierPurchaseOrderAccessService } from "@/services/supplier-purchase-order-access";
+import { resolveSignedStoredFileUrl } from "@/services/files/file-url-resolver";
 
 type PurchaseOrderAccessPort = Pick<
   typeof supplierPurchaseOrderAccessService,
@@ -30,18 +31,21 @@ type FulfillmentRepositoryPort = Pick<
   | "confirm"
   | "createShipment"
   | "createReceipt"
+  | "findReceiptAttachmentPreview"
 >;
 
 export type SupplierPurchaseFulfillmentsServiceDependencies = {
   access?: PurchaseOrderAccessPort;
   orders?: PurchaseOrderRepositoryPort;
   fulfillment?: FulfillmentRepositoryPort;
+  signedUrlResolver?: typeof resolveSignedStoredFileUrl;
 };
 
 export class SupplierPurchaseFulfillmentsService {
   private readonly access: PurchaseOrderAccessPort;
   private readonly orders: PurchaseOrderRepositoryPort;
   private readonly fulfillment: FulfillmentRepositoryPort;
+  private readonly signedUrlResolver: typeof resolveSignedStoredFileUrl;
 
   constructor(
     dependencies: SupplierPurchaseFulfillmentsServiceDependencies = {},
@@ -50,6 +54,8 @@ export class SupplierPurchaseFulfillmentsService {
     this.orders = dependencies.orders ?? supplierPurchaseOrdersRepository;
     this.fulfillment = dependencies.fulfillment ??
       supplierPurchaseFulfillmentsRepository;
+    this.signedUrlResolver = dependencies.signedUrlResolver ??
+      resolveSignedStoredFileUrl;
   }
 
   async getDetail(auth: AuthContext, orderId: string) {
@@ -137,6 +143,46 @@ export class SupplierPurchaseFulfillmentsService {
       actor_employee_id: scope.employeeId,
       idempotency_key: idempotencyKey,
     });
+  }
+
+  async authorizeDeliveryNoteUpload(auth: AuthContext, orderId: string) {
+    return this.authorizeManage(auth, orderId);
+  }
+
+  async getReceiptAttachmentPreview(
+    auth: AuthContext,
+    orderId: string,
+    receiptId: string,
+    attachmentId: string,
+  ) {
+    const tenantId = await this.authorizeRead(auth, orderId);
+    const attachment = await this.fulfillment.findReceiptAttachmentPreview({
+      tenant_id: tenantId,
+      order_id: orderId,
+      receipt_id: receiptId,
+      attachment_id: attachmentId,
+    });
+    if (!attachment) {
+      throw Errors.business(
+        404,
+        "送货单据附件不存在",
+        "SUPPLIER_PURCHASE_RECEIPT_ATTACHMENT_NOT_FOUND",
+      );
+    }
+    const ttlSeconds = 600;
+    return {
+      url: await this.signedUrlResolver(
+        attachment.file.object_key,
+        { ttlSeconds },
+      ),
+      expires_at: new Date(Date.now() + ttlSeconds * 1000).toISOString(),
+      file: {
+        file_id: attachment.file_id,
+        file_name: attachment.file_name,
+        mime_type: attachment.mime_type,
+        size_bytes: attachment.size_bytes,
+      },
+    };
   }
 
   private async authorizeRead(auth: AuthContext, orderId: string) {

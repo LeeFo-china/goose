@@ -12,6 +12,7 @@ import {
   SupplierPurchaseOrderOptionQuerySchema,
   SupplierPurchaseOrderParamSchema,
   SupplierPurchaseOrderReceiptCreateSchema,
+  SupplierPurchaseReceiptAttachmentParamSchema,
   SupplierPurchaseOrderShipmentCreateSchema,
   SupplierPurchaseOrderSubmitSchema,
 } from "@/schema/supplier-purchase-orders";
@@ -173,6 +174,23 @@ class SupplierPurchaseOrdersController extends TenantBaseController {
         auth,
         id,
         query,
+      ),
+    );
+  }
+
+  @Get("/supplier-purchase-orders/:orderId/receipts/:receiptId/attachments/:attachmentId/preview-url")
+  async getReceiptAttachmentPreview(request: FastifyRequest) {
+    const auth = await this.getRequiredTenantContext(request);
+    const { orderId, receiptId, attachmentId } = this.parse(
+      SupplierPurchaseReceiptAttachmentParamSchema,
+      request.params,
+    );
+    return ResponseHandler.success(
+      await supplierPurchaseFulfillmentsService.getReceiptAttachmentPreview(
+        auth,
+        orderId,
+        receiptId,
+        attachmentId,
       ),
     );
   }

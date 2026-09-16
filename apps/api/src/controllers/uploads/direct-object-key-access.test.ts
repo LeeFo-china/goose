@@ -138,3 +138,29 @@ describe("virtual goods direct object ownership", () => {
     }));
   });
 });
+
+describe("supplier purchase receipt delivery note ownership", () => {
+  const receiptId = "70000000-0000-4000-8000-000000000001";
+  const key =
+    `tenants/tenant-1/supplier-purchase-receipt-delivery-note/receipts/${receiptId}/2026/09/16/${LOGO_UUID}.jpg`;
+
+  test("accepts only the declared receipt path for the current tenant", () => {
+    expect(() => assertDirectObjectKeyBelongsToActor({
+      objectKey: key,
+      scene: "supplier_purchase_receipt_delivery_note",
+      actorContext: tenantActor,
+      businessId: receiptId,
+      mimetype: "image/jpeg",
+    })).not.toThrow();
+    expect(() => assertDirectObjectKeyBelongsToActor({
+      objectKey: key,
+      scene: "supplier_purchase_receipt_delivery_note",
+      actorContext: tenantActor,
+      businessId: "70000000-0000-4000-8000-000000000002",
+      mimetype: "image/jpeg",
+    })).toThrow(expect.objectContaining({
+      statusCode: 403,
+      code: "FORBIDDEN",
+    }));
+  });
+});

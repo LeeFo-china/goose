@@ -16,6 +16,7 @@ const EMPLOYEE_ID = "60000000-0000-4000-8000-000000000008";
 const PROJECT_ID = "60000000-0000-4000-8000-000000000009";
 const RELATIONSHIP_ID = "60000000-0000-4000-8000-000000000010";
 const SUPPLIER_ID = "60000000-0000-4000-8000-000000000011";
+const DELIVERY_NOTE_FILE_ID = "60000000-0000-4000-8000-000000000012";
 
 async function repositoryFor(
   responder: (
@@ -210,7 +211,7 @@ describe("SupplierPurchaseFulfillmentsRepository", () => {
       "receipt_created",
     ] as const;
     const { repository, requests } = await repositoryFor((_request, index) => ({
-      body: commandResult(statuses[index]!, index + 1),
+      body: index === 3 ? receipt : commandResult(statuses[index]!, index + 1),
     }));
     await repository.confirm(confirmCommand);
     await repository.createShipment(shipmentCommand);
@@ -219,7 +220,8 @@ describe("SupplierPurchaseFulfillmentsRepository", () => {
     expect(requests.map((request) => new URL(request.url).pathname)).toEqual([
       "/rest/v1/rpc/confirm_supplier_purchase_order_fulfillment",
       "/rest/v1/rpc/create_supplier_purchase_order_shipment",
-      "/rest/v1/rpc/create_supplier_purchase_order_receipt",
+      "/rest/v1/rpc/create_supplier_purchase_order_receipt_with_attachments",
+      "/rest/v1/supplier_purchase_order_receipts",
     ]);
     expect(await requests[0]!.clone().json()).toEqual({
       p_order_id: ORDER_ID,
@@ -263,6 +265,7 @@ describe("SupplierPurchaseFulfillmentsRepository", () => {
       p_actor_user_id: USER_ID,
       p_actor_employee_id: EMPLOYEE_ID,
       p_idempotency_key: "fulfillment:command",
+      p_delivery_note_file_ids: [DELIVERY_NOTE_FILE_ID],
     });
   });
 
@@ -451,6 +454,7 @@ const receiptCommand = {
   id: RECEIPT_ID, expected_fulfillment_version: 2,
   receipt_no: "RCV-001", received_at: "2026-07-30T04:00:00.000Z",
   remark: null,
+  delivery_note_file_ids: [DELIVERY_NOTE_FILE_ID],
   items: [{
     purchase_order_item_id: ITEM_ID,
     accepted_quantity: 5,

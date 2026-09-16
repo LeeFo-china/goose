@@ -25,6 +25,15 @@ export const PLATFORM_SERVICE_FULFILLMENT_ATTACHMENT_UPLOAD_POLICY = {
   checksumError: "履约附件文件校验值不一致",
 } as const;
 
+export const SUPPLIER_PURCHASE_RECEIPT_DELIVERY_NOTE_UPLOAD_POLICY = {
+  scene: "supplier_purchase_receipt_delivery_note",
+  maxSizeBytes: 10 * 1024 * 1024,
+  mimeTypes: new Set(["image/jpeg", "image/png", "image/webp"]),
+  sizeError: "送货单据文件大小校验失败",
+  typeError: "送货单据仅支持 JPG、PNG 或 WebP",
+  checksumError: "送货单据文件校验值不一致",
+} as const;
+
 export function getWechatPayApplymentUploadPolicy(scene: string) {
   return scene === WECHAT_PAY_APPLYMENT_UPLOAD_POLICY.scene
     ? WECHAT_PAY_APPLYMENT_UPLOAD_POLICY
@@ -40,5 +49,11 @@ export function getSupplierBusinessLicenseUploadPolicy(scene: string) {
 export function getPlatformServiceFulfillmentAttachmentUploadPolicy(scene: string) {
   return scene === PLATFORM_SERVICE_FULFILLMENT_ATTACHMENT_UPLOAD_POLICY.scene
     ? PLATFORM_SERVICE_FULFILLMENT_ATTACHMENT_UPLOAD_POLICY
+    : null;
+}
+
+export function getSupplierPurchaseReceiptDeliveryNoteUploadPolicy(scene: string) {
+  return scene === SUPPLIER_PURCHASE_RECEIPT_DELIVERY_NOTE_UPLOAD_POLICY.scene
+    ? SUPPLIER_PURCHASE_RECEIPT_DELIVERY_NOTE_UPLOAD_POLICY
     : null;
 }

@@ -15,6 +15,11 @@ const FULFILLMENT_ATTACHMENT_MIME_TYPES = new Set([
   "image/webp",
   "application/pdf",
 ]);
+const RECEIPT_DELIVERY_NOTE_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
 const ALLOWED_MIME_TYPES = new Set([
   "image/jpeg",
   "image/png",
@@ -64,6 +69,19 @@ export function assertDirectUploadFileDeclaration(input: {
       input.sizeBytes > FULFILLMENT_ATTACHMENT_MAX_UPLOAD_FILE_SIZE
     ) {
       throw Errors.badRequest("履约附件大小必须大于 0 且不能超过 10MB");
+    }
+    return;
+  }
+  if (input.scene === "supplier_purchase_receipt_delivery_note") {
+    if (!RECEIPT_DELIVERY_NOTE_MIME_TYPES.has(input.mimetype)) {
+      throw Errors.badRequest("送货单据仅支持 JPG、PNG 或 WebP");
+    }
+    if (
+      !Number.isSafeInteger(input.sizeBytes) ||
+      input.sizeBytes <= 0 ||
+      input.sizeBytes > FULFILLMENT_ATTACHMENT_MAX_UPLOAD_FILE_SIZE
+    ) {
+      throw Errors.badRequest("送货单据大小必须大于 0 且不能超过 10MB");
     }
     return;
   }

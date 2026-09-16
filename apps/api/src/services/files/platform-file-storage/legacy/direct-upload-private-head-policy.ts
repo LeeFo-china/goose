@@ -4,6 +4,7 @@ import {
 } from "./private-upload-intent";
 import {
   getSupplierBusinessLicenseUploadPolicy,
+  getSupplierPurchaseReceiptDeliveryNoteUploadPolicy,
   getWechatPayApplymentUploadPolicy,
 } from "./direct-upload-scene-policy";
 import {
@@ -45,6 +46,9 @@ export function getPrivateHeadPolicy(
   }
   if (input.scene === PLATFORM_SERVICE_FULFILLMENT_ATTACHMENT_SCENE) {
     return getPlatformServiceFulfillmentAttachmentPrivatePolicy(input);
+  }
+  if (input.scene === "supplier_purchase_receipt_delivery_note") {
+    return getSupplierPurchaseReceiptDeliveryNoteUploadPolicy(input.scene);
   }
   return null;
 }

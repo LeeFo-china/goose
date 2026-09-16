@@ -1,9 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
-
 const emptyPage = {
   list: [],
   pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
@@ -23,6 +21,7 @@ const getFulfillmentDetail = mock(async () => ({
 }));
 const listShipments = mock(async () => emptyPage);
 const listReceipts = mock(async () => emptyPage);
+const getReceiptAttachmentPreview = mock(async () => ({ url: "https://example.com/signed" }));
 const confirmFulfillment = mock(async () => ({ status: "confirmed" }));
 const createShipment = mock(async () => ({ status: "shipment_created" }));
 const createReceipt = mock(async () => ({ status: "receipt_created" }));
@@ -71,6 +70,7 @@ mock.module("@/services/supplier-purchase-fulfillments", () => ({
     getDetail: getFulfillmentDetail,
     listShipments,
     listReceipts,
+    getReceiptAttachmentPreview,
     confirm: confirmFulfillment,
     createShipment,
     createReceipt,
@@ -101,7 +101,6 @@ const auth = {
   employeeId: "62000000-0000-4000-8000-000000000006",
   tenantId: "62000000-0000-4000-8000-000000000007",
 };
-
 async function controller() {
   const { default: value } = await import(".");
   Object.defineProperty(value, "getRequiredTenantContext", {
@@ -144,7 +143,7 @@ describe("SupplierPurchaseOrdersController", () => {
       fn.mockClear();
     }
   });
-  test("registers all twenty five purchase order routes", async () => {
+  test("registers all twenty six purchase order routes", async () => {
     const value = await controller();
     const routes: Array<{ method: string; path: string }> = [];
 
@@ -167,6 +166,7 @@ describe("SupplierPurchaseOrdersController", () => {
       { method: "GET", path: "/supplier-purchase-orders/:id/fulfillment" },
       { method: "GET", path: "/supplier-purchase-orders/:id/shipments" },
       { method: "GET", path: "/supplier-purchase-orders/:id/receipts" },
+      { method: "GET", path: "/supplier-purchase-orders/:orderId/receipts/:receiptId/attachments/:attachmentId/preview-url" },
       { method: "GET", path: "/supplier-purchase-order-catalog" },
       { method: "GET", path: "/supplier-purchase-order-project-options" },
       { method: "GET", path: "/supplier-purchase-order-supplier-options" },

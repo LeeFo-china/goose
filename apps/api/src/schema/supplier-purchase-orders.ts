@@ -100,6 +100,12 @@ export const SupplierPurchaseOrderParamSchema = z.object({
   id: uuid("无效的供应商采购单 ID"),
 }).strict();
 
+export const SupplierPurchaseReceiptAttachmentParamSchema = z.object({
+  orderId: uuid("无效的供应商采购单 ID"),
+  receiptId: uuid("无效的收货 ID"),
+  attachmentId: uuid("无效的送货单据附件 ID"),
+}).strict();
+
 export const SupplierPurchaseOrderFinancialSummarySchema = z.object({
   purchase_order_id: uuid("无效的供应商采购单 ID"),
   accepted_amount: financialSummaryMoney,
@@ -199,11 +205,26 @@ export const SupplierPurchaseOrderReceiptCreateSchema = z.object({
   receipt_no: requiredTrimmedText(80, "收货编号"),
   received_at: fulfillmentDateTime,
   remark: optionalTrimmedText(500, "收货备注"),
+  delivery_note_file_ids: z.array(uuid("无效的送货单据文件 ID"))
+    .max(3, "送货单据最多上传 3 张")
+    .optional(),
   items: z.array(SupplierPurchaseOrderReceiptLineSchema)
     .min(1, "收货至少需要一个明细")
     .max(100, "收货明细不能超过 100 行"),
 }).strict().superRefine((input, context) => {
   uniquePurchaseOrderItemIds(input.items, context);
+  const seenFileIds = new Set<string>();
+  input.delivery_note_file_ids?.forEach((fileId, index) => {
+    const normalizedId = fileId.toLowerCase();
+    if (seenFileIds.has(normalizedId)) {
+      context.addIssue({
+        code: "custom",
+        path: ["delivery_note_file_ids", index],
+        message: "同一送货单据不能重复添加",
+      });
+    }
+    seenFileIds.add(normalizedId);
+  });
   input.items.forEach((item, index) => {
     if (item.accepted_quantity + item.rejected_quantity <= 0) {
       context.addIssue({

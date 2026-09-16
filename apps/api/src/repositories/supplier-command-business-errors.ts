@@ -244,6 +244,22 @@ export const BUSINESS_ERRORS = {
     statusCode: 409,
     message: "采购收货记录编号已存在",
   },
+  SUPPLIER_PURCHASE_ORDER_RECEIPT_NOT_FOUND: {
+    statusCode: 404,
+    message: "采购收货记录不存在",
+  },
+  SUPPLIER_PURCHASE_RECEIPT_ATTACHMENT_NOT_FOUND: {
+    statusCode: 404,
+    message: "送货单据附件不存在",
+  },
+  SUPPLIER_PURCHASE_RECEIPT_ATTACHMENT_INVALID: {
+    statusCode: 400,
+    message: "送货单据附件无效",
+  },
+  SUPPLIER_PURCHASE_RECEIPT_ATTACHMENT_CONFLICT: {
+    statusCode: 409,
+    message: "送货单据附件已绑定其他收货记录",
+  },
   SUPPLIER_PURCHASE_ORDER_ITEM_NOT_FOUND: {
     statusCode: 404,
     message: "供应商采购单明细不存在",

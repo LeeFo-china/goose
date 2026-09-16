@@ -52,6 +52,7 @@ export function buildLegacyObjectPath(this: any, input: {
     brand_logo: "brand-logo",
     branding_virtual_goods: "branding-virtual-goods",
     tenant_service_fulfillment_attachment: "tenant-service-fulfillment-attachment",
+    supplier_purchase_receipt_delivery_note: "supplier-purchase-receipt-delivery-note",
   };
 
   return `${prefixByScene[input.scene]}/${year}/${month}/${day}/${randomUUID()}${input.extension}`;
@@ -59,7 +60,7 @@ export function buildLegacyObjectPath(this: any, input: {
 
 export function buildCosObjectKey(this: any, input: Pick<
   UploadImageInput,
-  "filename" | "mimetype" | "scene" | "projectId" | "tenantId" | "employeeId"
+  "filename" | "mimetype" | "scene" | "projectId" | "tenantId" | "employeeId" | "businessId"
 > & { visitorId?: string | null }) {
   const now = new Date();
   const year = String(now.getFullYear());
@@ -69,6 +70,7 @@ export function buildCosObjectKey(this: any, input: Pick<
     filename: input.scene === "tenant_onboarding_license" ||
       input.scene === "supplier_business_license" ||
       input.scene === "tenant_service_fulfillment_attachment" ||
+      input.scene === "supplier_purchase_receipt_delivery_note" ||
       input.scene === "brand_logo" ||
       input.scene === "branding_virtual_goods"
       ? undefined
@@ -86,6 +88,12 @@ export function buildCosObjectKey(this: any, input: Pick<
   if (input.scene === "tenant_service_fulfillment_attachment") {
     return `${buildPlatformServiceFulfillmentAttachmentEmployeePrefix(input.employeeId)}`
       + `${year}/${month}/${day}/${randomUUID()}${extension}`;
+  }
+  if (input.scene === "supplier_purchase_receipt_delivery_note") {
+    if (!input.tenantId || !input.businessId) {
+      throw Errors.badRequest("送货单据缺少租户或收货记录标识");
+    }
+    return `tenants/${input.tenantId}/supplier-purchase-receipt-delivery-note/receipts/${input.businessId}/${year}/${month}/${day}/${randomUUID()}${extension}`;
   }
   const tenantPrefix = input.tenantId
     ? `tenants/${input.tenantId}`

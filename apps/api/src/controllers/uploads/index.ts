@@ -22,6 +22,8 @@ import { assertVirtualGoodsUploadSceneAccess } from
   "./virtual-goods-upload-access";
 import { assertPlatformServiceFulfillmentUploadSceneAccess } from
   "./platform-service-fulfillment-upload-access";
+import { assertSupplierPurchaseReceiptUploadSceneAccess } from
+  "./supplier-purchase-receipt-upload-access";
 import {
   parseUploadPublicUrlQuery,
   resolveUploadPublicUrl,
@@ -48,13 +50,33 @@ const DirectUploadInitSchema = z.object({
     message: "当前场景暂不支持直传",
   }),
   project_id: z.string().uuid("无效的项目ID").optional(),
+  business_id: z.string().uuid("无效的收货 ID").optional(),
+  supplier_purchase_order_id: z.string()
+    .uuid("无效的供应商采购单 ID")
+    .optional(),
   filename: z.string().trim().max(200, "文件名过长").optional(),
   mimetype: z.enum(DIRECT_UPLOAD_MIME_TYPES, {
     message: "仅支持 jpg、png、webp、heic、heif 图片或 PDF",
   }),
   size_bytes: z.number().int().positive("图片大小无效"),
+}).superRefine((value, context) => {
+  if (value.scene !== "supplier_purchase_receipt_delivery_note") return;
+  if (!value.business_id) {
+    context.addIssue({
+      code: "custom",
+      path: ["business_id"],
+      message: "缺少收货 ID",
+    });
+  }
+  if (!value.supplier_purchase_order_id) {
+    context.addIssue({
+      code: "custom",
+      path: ["supplier_purchase_order_id"],
+      message: "缺少供应商采购单 ID",
+    });
+  }
 });
-const DirectUploadCompleteSchema = DirectUploadInitSchema.extend({
+const DirectUploadCompleteSchema = DirectUploadInitSchema.safeExtend({
   object_key: z.string()
     .trim()
     .min(1, "缺少对象路径")
@@ -72,7 +94,8 @@ const DirectUploadCompleteSchema = DirectUploadInitSchema.extend({
       value.scene === "supplier_business_license" ||
       value.scene === "brand_logo" ||
       value.scene === "branding_virtual_goods" ||
-      value.scene === "tenant_service_fulfillment_attachment"
+      value.scene === "tenant_service_fulfillment_attachment" ||
+      value.scene === "supplier_purchase_receipt_delivery_note"
     ) &&
     !value.upload_intent
   ) {
@@ -145,6 +168,13 @@ class UploadController extends BaseController {
     const actorContext = await assertVirtualGoodsUploadSceneAccess(user, scene)
       ?? await assertBrandLogoUploadSceneAccess(user, scene)
       ?? await assertPlatformServiceFulfillmentUploadSceneAccess(user, scene)
+      ?? await assertSupplierPurchaseReceiptUploadSceneAccess(
+        user,
+        scene,
+        result.data.supplier_purchase_order_id,
+        result.data.business_id,
+        getTenantServiceAuthOptions(request),
+      )
       ?? await assertApplymentUploadSceneAccess(user, scene)
       ?? await assertSupplierLicenseUploadSceneAccess(user, scene)
       ?? await this.resolveUploadActorContext(
@@ -164,6 +194,8 @@ class UploadController extends BaseController {
       sizeBytes: result.data.size_bytes,
       scene,
       projectId: result.data.project_id,
+      businessId: result.data.business_id,
+      supplierPurchaseOrderId: result.data.supplier_purchase_order_id,
       tenantId: actorContext.tenantId,
       authUserId: user.sub ?? null,
       employeeId: actorContext.employeeId,
@@ -206,6 +238,13 @@ class UploadController extends BaseController {
     const actorContext = await assertVirtualGoodsUploadSceneAccess(user, scene)
       ?? await assertBrandLogoUploadSceneAccess(user, scene)
       ?? await assertPlatformServiceFulfillmentUploadSceneAccess(user, scene)
+      ?? await assertSupplierPurchaseReceiptUploadSceneAccess(
+        user,
+        scene,
+        result.data.supplier_purchase_order_id,
+        result.data.business_id,
+        getTenantServiceAuthOptions(request),
+      )
       ?? await assertApplymentUploadSceneAccess(user, scene)
       ?? await assertSupplierLicenseUploadSceneAccess(user, scene)
       ?? await this.resolveUploadActorContext(
@@ -225,6 +264,7 @@ class UploadController extends BaseController {
       actorContext,
       projectId: result.data.project_id,
       mimetype: result.data.mimetype,
+      businessId: result.data.business_id,
     });
 
     const uploaded = await platformFileStorageService.completeDirectUpload({
@@ -233,6 +273,8 @@ class UploadController extends BaseController {
       sizeBytes: result.data.size_bytes,
       scene,
       projectId: result.data.project_id,
+      businessId: result.data.business_id,
+      supplierPurchaseOrderId: result.data.supplier_purchase_order_id,
       tenantId: actorContext.tenantId,
       authUserId: user.sub ?? null,
       employeeId: actorContext.employeeId,

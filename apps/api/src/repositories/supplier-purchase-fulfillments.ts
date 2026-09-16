@@ -64,7 +64,19 @@ export type SupplierPurchaseOrderFulfillmentCommandResult = {
   purchase_order: SupplierPurchaseOrder;
   fulfillment: SupplierPurchaseOrderFulfillment;
   version: number;
+  receipt?: SupplierPurchaseOrderReceipt;
 };
+
+const ReceiptAttachmentPreviewSchema = z.object({
+  id: z.uuid(),
+  file_id: z.uuid(),
+  supplier_purchase_receipt_id: z.uuid(),
+  supplier_purchase_order_id: z.uuid(),
+  file_name: z.string().nullable(),
+  mime_type: z.enum(["image/jpeg", "image/png", "image/webp"]),
+  size_bytes: z.number().int().positive(),
+  file: z.object({ object_key: z.string().min(1) }).strict(),
+}).strict();
 
 type QueryResult = {
   data: unknown;
@@ -210,9 +222,9 @@ export class SupplierPurchaseFulfillmentsRepository {
     );
   }
 
-  createReceipt(input: SupplierPurchaseOrderReceiptCreateCommand) {
-    return this.command(
-      "create_supplier_purchase_order_receipt",
+  async createReceipt(input: SupplierPurchaseOrderReceiptCreateCommand) {
+    const result = await this.command(
+      "create_supplier_purchase_order_receipt_with_attachments",
       {
         p_receipt_id: input.id,
         p_order_id: input.order_id,
@@ -225,9 +237,70 @@ export class SupplierPurchaseFulfillmentsRepository {
         p_actor_user_id: input.actor_user_id,
         p_actor_employee_id: input.actor_employee_id,
         p_idempotency_key: input.idempotency_key,
+        p_delivery_note_file_ids: input.delivery_note_file_ids ?? [],
       },
       "创建采购收货记录失败",
       "receipt_created",
+    );
+    return {
+      ...result,
+      receipt: await this.getReceipt({
+        tenant_id: input.tenant_id,
+        order_id: input.order_id,
+        receipt_id: input.id,
+      }),
+    };
+  }
+
+  async getReceipt(input: OrderScope & { receipt_id: string }) {
+    const { data, error } = await this.client
+      .from("supplier_purchase_order_receipts")
+      .select(SUPPLIER_PURCHASE_ORDER_RECEIPT_SELECT)
+      .eq("tenant_id", input.tenant_id)
+      .eq("supplier_purchase_order_id", input.order_id)
+      .eq("id", input.receipt_id)
+      .maybeSingle();
+    if (error) throw Errors.dbError("查询采购收货记录失败", error);
+    if (!data) {
+      throw Errors.business(
+        404,
+        "采购收货记录不存在",
+        "SUPPLIER_PURCHASE_ORDER_RECEIPT_NOT_FOUND",
+      );
+    }
+    return parse(
+      SupplierPurchaseOrderReceiptSchema,
+      data,
+      "查询采购收货记录失败",
+    );
+  }
+
+  async findReceiptAttachmentPreview(input: OrderScope & {
+    receipt_id: string;
+    attachment_id: string;
+  }) {
+    const { data, error } = await this.client
+      .from("supplier_purchase_receipt_attachments")
+      .select([
+        "id",
+        "file_id",
+        "supplier_purchase_receipt_id",
+        "supplier_purchase_order_id",
+        "file_name",
+        "mime_type",
+        "size_bytes",
+        "file:platform_file_objects!inner(object_key)",
+      ].join(","))
+      .eq("tenant_id", input.tenant_id)
+      .eq("supplier_purchase_order_id", input.order_id)
+      .eq("supplier_purchase_receipt_id", input.receipt_id)
+      .eq("id", input.attachment_id)
+      .maybeSingle();
+    if (error) throw Errors.dbError("查询送货单据附件失败", error);
+    return data === null ? null : parse(
+      ReceiptAttachmentPreviewSchema,
+      data,
+      "查询送货单据附件失败",
     );
   }
 

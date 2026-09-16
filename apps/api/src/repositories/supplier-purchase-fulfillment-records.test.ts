@@ -360,6 +360,9 @@ describe("supplier purchase fulfillment records", () => {
     expect(SUPPLIER_PURCHASE_ORDER_RECEIPT_SELECT).toContain(
       "accepted_quantity::text",
     );
+    expect(SUPPLIER_PURCHASE_ORDER_RECEIPT_SELECT).toContain(
+      "attachments:supplier_purchase_receipt_attachments",
+    );
     for (const columns of [
       SUPPLIER_PURCHASE_ORDER_FULFILLMENT_SELECT,
       SUPPLIER_PURCHASE_ORDER_FULFILLMENT_ITEM_SELECT,
