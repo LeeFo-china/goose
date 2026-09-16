@@ -130,7 +130,7 @@ export function PlatformServicePromotionFormButton({ promotion, disabled, onSave
                 <Input id={`${fieldId}-end`} type="datetime-local" value={values.endsAt} onChange={(event) => update({ endsAt: event.target.value })} />
               </Field>
             </FieldGroup>
-            <FieldDescription>使用当前浏览器时区；草稿可暂不排期，发布前需填写完整时间。</FieldDescription>
+            <FieldDescription>使用北京时间（UTC+08:00）；草稿可暂不排期，发布前需填写完整时间。</FieldDescription>
           </FieldSet>
           {error ? <StatusAlert>{error}</StatusAlert> : null}
           <DialogFooter>

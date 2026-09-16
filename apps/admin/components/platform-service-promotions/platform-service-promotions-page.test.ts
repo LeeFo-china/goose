@@ -61,6 +61,8 @@ describe("平台技术服务限时活动页面", () => {
     for (const label of ["运营内容", "价格与时间", "开始时间", "结束时间", "北京时间", "datetime-local"]) {
       expect(form).toContain(label);
     }
+    expect(form).toContain("使用北京时间（UTC+08:00）");
+    expect(form).not.toContain("浏览器时区");
     expect(form).toContain("buildPromotionPayload(values, promotion?.version)");
     expect(form).toContain('method: promotion ? "PATCH" : "POST"');
     expect(form).toContain("JSON.stringify(payload.body)");
