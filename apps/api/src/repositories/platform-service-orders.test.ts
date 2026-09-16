@@ -466,19 +466,23 @@ describe("PlatformServiceOrderRepository", () => {
     );
   });
 
-  test("maps database errors with Errors.dbError", async () => {
+  test("maps RPC database failures without exposing SQL details", async () => {
     const { PlatformServiceOrderRepository } = await import(
       "./platform-service-orders"
     );
     const repository = new PlatformServiceOrderRepository(() => client);
-    listResult = {
-      data: null,
-      error: { message: "db failed" },
-      count: null,
+    rpcResult = {
+      data: effectiveProductPage(),
+      error: { code: "XX000", message: "SELECT secret FROM private" },
     };
 
     await expect(
       repository.listEnabledProducts({ page: 1, pageSize: 20 }),
-    ).rejects.toMatchObject({ statusCode: 500 });
+    ).rejects.toMatchObject({
+      statusCode: 500,
+      code: "DB_ERROR",
+      message: "查询平台技术服务商品失败",
+      details: undefined,
+    });
   });
 });
