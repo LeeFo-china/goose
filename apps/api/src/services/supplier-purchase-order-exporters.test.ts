@@ -4,6 +4,7 @@ import { describe, expect, test } from "bun:test";
 import ExcelJS from "exceljs";
 
 import {
+  buildPurchaseOrderDocumentModel,
   exportPurchaseBatchXlsx,
   exportPurchaseOrderPdf,
   exportPurchaseOrderXlsx,
@@ -16,6 +17,40 @@ import type {
 type ExcelLoadBuffer = Parameters<ExcelJS.Workbook["xlsx"]["load"]>[0];
 
 describe("supplier purchase order exporters", () => {
+  test("uses one document model for PDF and Excel columns and amounts", () => {
+    const snapshot = sampleSnapshot();
+    snapshot.items[0]!.specification_snapshot = "5cm";
+    snapshot.items[0]!.model_snapshot = "M1";
+    const model = buildPurchaseOrderDocumentModel(snapshot);
+    expect(model.headings).toEqual([
+      { label: "采购单号", value: "PO-20260904-00000001" },
+      { label: "供应商", value: "Supplier A" },
+      { label: "项目", value: "Project A" },
+      { label: "项目地址", value: "Address A" },
+      { label: "预计到货", value: "2026-09-10" },
+      { label: "备注", value: "deliver" },
+    ]);
+    expect(model.columns.map((column) => column.label)).toEqual([
+      "序号",
+      "材料",
+      "规格/型号",
+      "数量",
+      "单位",
+      "单价",
+      "合计",
+    ]);
+    expect(model.rows[0]).toMatchObject({
+      lineNumber: 1,
+      productName: "Product A",
+      specification: "Sku A / 5cm / M1",
+      quantity: 2,
+      unit: "pcs",
+      unitPrice: 50,
+      amount: 100,
+    });
+    expect(model.summary).toEqual({ label: "汇总", amount: 100 });
+  });
+
   test("warehouse exports expose destination without requiring project", async () => {
     const snapshot = sampleSnapshot();
     snapshot.order = { ...snapshot.order, destination_type: "warehouse", project_id: null,
@@ -43,8 +78,27 @@ describe("supplier purchase order exporters", () => {
     expect(pdf.content.subarray(0, 4).toString()).toBe("%PDF");
   });
 
+  test("paginates a long PDF purchase-order table", async () => {
+    const snapshot = sampleSnapshot();
+    snapshot.items = Array.from({ length: 80 }, (_, index) => ({
+      ...snapshot.items[0]!,
+      id: `62000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+      line_no: index + 1,
+      product_name_snapshot: `Product ${index + 1}`,
+    }));
+
+    const pdf = await exportPurchaseOrderPdf(snapshot);
+    const pageCount = pdf.content.toString("latin1")
+      .match(/\/Type \/Page\b/g)?.length ?? 0;
+
+    expect(pageCount).toBeGreaterThan(1);
+  });
+
   test("formats xlsx as a purchase order sheet instead of a field-value dump", async () => {
-    const file = await exportPurchaseOrderXlsx(sampleSnapshot());
+    const snapshot = sampleSnapshot();
+    snapshot.items[0]!.specification_snapshot = "5cm";
+    snapshot.items[0]!.model_snapshot = "M1";
+    const file = await exportPurchaseOrderXlsx(snapshot);
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(file.content as unknown as ExcelLoadBuffer);
     const worksheet = workbook.getWorksheet("采购单");
@@ -81,7 +135,7 @@ describe("supplier purchase order exporters", () => {
       });
     }
     expect(worksheet.getCell("B9").value).toBe("Product A");
-    expect(worksheet.getCell("C9").value).toBe("Sku A");
+    expect(worksheet.getCell("C9").value).toBe("Sku A / 5cm / M1");
     expect(worksheet.getCell("G9").formula).toBe("D9*F9");
     expect(worksheet.getCell("G10").formula).toBe("SUM(G9:G9)");
   });

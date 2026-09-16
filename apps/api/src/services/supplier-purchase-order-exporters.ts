@@ -1,11 +1,20 @@
 import { existsSync } from "node:fs";
 
 import ExcelJS from "exceljs";
-import PDFDocument from "pdfkit";
 
 import type {
   SupplierPurchaseOrderExportSnapshot,
 } from "@/repositories/supplier-purchase-order-sharing";
+import {
+  buildPurchaseOrderDocumentModel,
+} from "@/services/supplier-purchase-order-document";
+import {
+  renderPurchaseOrderPdf,
+  type PurchaseOrderPdfFont,
+} from "@/services/supplier-purchase-order-pdf";
+
+export { buildPurchaseOrderDocumentModel } from
+  "@/services/supplier-purchase-order-document";
 
 export type SupplierPurchaseOrderExportFile = {
   filename: string;
@@ -19,15 +28,6 @@ const XLSX_CONTENT_TYPE =
 const EXCEL_FONT = "Microsoft YaHei";
 const EXCEL_MONEY_FORMAT = '"¥"#,##0.00';
 const EXCEL_QUANTITY_FORMAT = "#,##0.####";
-const PURCHASE_ORDER_COLUMNS = [
-  { width: 8 },
-  { width: 28 },
-  { width: 24 },
-  { width: 12 },
-  { width: 10 },
-  { width: 14 },
-  { width: 14 },
-] as const;
 
 export function toPurchaseOrderPrintPreview(
   snapshot: SupplierPurchaseOrderExportSnapshot,
@@ -103,67 +103,13 @@ export async function exportPurchaseBatchXlsx(
 export async function exportPurchaseOrderPdf(
   snapshot: SupplierPurchaseOrderExportSnapshot,
 ): Promise<SupplierPurchaseOrderExportFile> {
-  const doc = new PDFDocument({ margin: 48, size: "A4", bufferPages: true });
-  const chunks: Buffer[] = [];
-  doc.on("data", (chunk: Buffer) => chunks.push(chunk));
-  const finished = new Promise<Buffer>((resolve, reject) => {
-    doc.on("end", () => resolve(Buffer.concat(chunks)));
-    doc.on("error", reject);
-  });
-
-  const font = resolveChineseFont();
-  if (font) {
-    if (font.family) {
-      doc.font(font.path, font.family);
-    } else {
-      doc.font(font.path);
-    }
-  }
-
-  doc.fontSize(18).text("供应商采购单", { align: "center" });
-  doc.moveDown();
-  doc.fontSize(10);
-  writePair(doc, "采购单号", snapshot.order.order_no);
-  writePair(doc, "供应商", snapshot.order.supplier.name);
-  writePair(doc, snapshot.order.destination_type === "warehouse" ? "仓库" : "项目",
-    snapshot.order.warehouse?.name ?? snapshot.order.project?.name ?? "-");
-  if (snapshot.order.destination_type !== "warehouse") writePair(doc, "项目地址", snapshot.order.project?.address ?? "-");
-  writePair(doc, "预计到货", snapshot.order.expected_delivery_date ?? "-");
-  writePair(doc, "备注", snapshot.order.remark ?? "-");
-  doc.moveDown();
-
-  doc.fontSize(11).text("商品明细");
-  doc.moveDown(0.5);
-  const columns = ["序号", "商品", "SKU/规格", "数量", "单价", "金额"];
-  doc.fontSize(9).text(columns.join("    "));
-  doc.moveDown(0.3);
-  for (const item of snapshot.items) {
-    const specification = [
-      item.sku_name_snapshot,
-      item.specification_snapshot,
-      item.model_snapshot,
-    ].filter(Boolean).join(" / ");
-    doc.text([
-      String(item.line_no),
-      item.product_name_snapshot,
-      specification || "-",
-      `${item.quantity}${item.purchase_unit_symbol_snapshot}`,
-      money(item.unit_price),
-      money(item.total_amount),
-    ].join("    "));
-  }
-
-  doc.moveDown();
-  doc.fontSize(10)
-    .text(`小计：${money(snapshot.order.subtotal_amount)} CNY`)
-    .text(`税额：${money(snapshot.order.tax_amount)} CNY`)
-    .text(`合计：${money(snapshot.order.total_amount)} CNY`);
-  doc.end();
-
   return {
     filename: `${safeFilename(snapshot.order.order_no)}.pdf`,
     content_type: PDF_CONTENT_TYPE,
-    content: await finished,
+    content: await renderPurchaseOrderPdf(
+      buildPurchaseOrderDocumentModel(snapshot),
+      resolveChineseFont(),
+    ),
   };
 }
 
@@ -172,6 +118,7 @@ function appendOrderWorksheet(
   snapshot: SupplierPurchaseOrderExportSnapshot,
   name: string,
 ) {
+  const model = buildPurchaseOrderDocumentModel(snapshot);
   const worksheet = workbook.addWorksheet(name.slice(0, 31));
   workbook.calcProperties.fullCalcOnLoad = true;
   worksheet.properties.defaultRowHeight = 22;
@@ -189,37 +136,23 @@ function appendOrderWorksheet(
       footer: 0.2,
     },
   };
-  PURCHASE_ORDER_COLUMNS.forEach((column, index) => {
-    worksheet.getColumn(index + 1).width = column.width;
+  model.columns.forEach((column, index) => {
+    worksheet.getColumn(index + 1).width = column.excelWidth;
   });
 
-  [
-    ["采购单号", snapshot.order.order_no],
-    ["供应商", snapshot.order.supplier.name],
-    [snapshot.order.destination_type === "warehouse" ? "仓库" : "项目",
-      snapshot.order.warehouse?.name ?? snapshot.order.project?.name ?? ""],
-    ["项目地址", snapshot.order.project?.address ?? ""],
-    ["预计到货", snapshot.order.expected_delivery_date ?? ""],
-    ["备注", snapshot.order.remark ?? ""],
-  ].forEach(([label, value], index) => {
+  model.headings.forEach(({ label, value }, index) => {
     const rowNumber = index + 1;
-    worksheet.mergeCells(rowNumber, 1, rowNumber, 7);
+    worksheet.mergeCells(rowNumber, 1, rowNumber, model.columns.length);
     const cell = worksheet.getCell(rowNumber, 1);
-    cell.value = `${label}：${value || "-"}`;
+    cell.value = `${label}：${value}`;
     cell.font = { name: EXCEL_FONT, size: 11 };
     cell.alignment = { vertical: "middle", wrapText: true };
   });
 
   worksheet.addRow([]);
-  const headerRow = worksheet.addRow([
-    "序号",
-    "材料",
-    "规格/型号",
-    "数量",
-    "单位",
-    "单价",
-    "合计",
-  ]);
+  const headerRow = worksheet.addRow(
+    model.columns.map((column) => column.label),
+  );
   headerRow.eachCell((cell) => {
     cell.font = { name: EXCEL_FONT, size: 11, bold: true };
     cell.alignment = { horizontal: "center", vertical: "middle" };
@@ -232,27 +165,27 @@ function appendOrderWorksheet(
   });
 
   const firstItemRow = headerRow.number + 1;
-  for (const item of snapshot.items) {
+  for (const item of model.rows) {
     const row = worksheet.addRow([
-      item.line_no,
-      item.product_name_snapshot,
-      specificationText(item),
-      Number(item.quantity),
-      item.purchase_unit_symbol_snapshot,
-      Number(item.unit_price),
+      item.lineNumber,
+      item.productName,
+      item.specification,
+      item.quantity,
+      item.unit,
+      item.unitPrice,
       {
         formula: `D${worksheet.rowCount + 1}*F${worksheet.rowCount + 1}`,
-        result: Number(item.quantity) * Number(item.unit_price),
+        result: item.amount,
       },
     ]);
     styleItemRow(row);
   }
   const lastItemRow = worksheet.rowCount;
-  const summaryFormula = snapshot.items.length > 0
+  const summaryFormula = model.rows.length > 0
     ? `SUM(G${firstItemRow}:G${lastItemRow})`
     : "0";
   const summaryRow = worksheet.addRow([
-    "汇总",
+    model.summary.label,
     "",
     "",
     "",
@@ -260,10 +193,7 @@ function appendOrderWorksheet(
     "",
     {
       formula: summaryFormula,
-      result: snapshot.items.reduce(
-        (total, item) => total + Number(item.quantity) * Number(item.unit_price),
-        0,
-      ),
+      result: model.summary.amount,
     },
   ]);
   worksheet.mergeCells(summaryRow.number, 1, summaryRow.number, 6);
@@ -273,16 +203,6 @@ function appendOrderWorksheet(
     cell.border = thinBorder();
   });
   summaryRow.getCell(7).numFmt = EXCEL_MONEY_FORMAT;
-}
-
-function specificationText(
-  item: SupplierPurchaseOrderExportSnapshot["items"][number],
-) {
-  return [
-    item.sku_name_snapshot,
-    item.specification_snapshot,
-    item.model_snapshot,
-  ].filter(Boolean).join(" / ") || "-";
 }
 
 function styleItemRow(row: ExcelJS.Row) {
@@ -345,14 +265,6 @@ function serializeOrder(snapshot: SupplierPurchaseOrderExportSnapshot) {
   };
 }
 
-function writePair(doc: PDFKit.PDFDocument, label: string, value: string) {
-  doc.text(`${label}：${value}`);
-}
-
-function money(value: string) {
-  return Number(value).toFixed(2);
-}
-
 function sheetName(supplierName: string, orderNo: string) {
   return safeFilename(`${supplierName}-${orderNo}`).slice(0, 31) || "采购单";
 }
@@ -361,12 +273,7 @@ function safeFilename(value: string) {
   return value.replace(/[\\/:*?"<>|]/g, "-");
 }
 
-type ChineseFont = {
-  path: string;
-  family?: string;
-};
-
-function resolveChineseFont(): ChineseFont | null {
+function resolveChineseFont(): PurchaseOrderPdfFont | null {
   const configured = process.env.SUPPLIER_PURCHASE_ORDER_PDF_FONT_PATH;
   const configuredFamily =
     process.env.SUPPLIER_PURCHASE_ORDER_PDF_FONT_FAMILY;
@@ -376,7 +283,7 @@ function resolveChineseFont(): ChineseFont | null {
     if (configuredFont) return configuredFont;
   }
 
-  const candidates: ChineseFont[] = [
+  const candidates: PurchaseOrderPdfFont[] = [
     { path: "/usr/share/fonts/opentype/noto/NotoSansCJKsc-Regular.otf" },
     { path: "/usr/share/fonts/truetype/noto/NotoSansCJKsc-Regular.ttf" },
     {
@@ -400,7 +307,10 @@ function resolveChineseFont(): ChineseFont | null {
   return candidates.find((candidate) => existsSync(candidate.path)) ?? null;
 }
 
-function fontCandidate(path: string, family?: string): ChineseFont | null {
+function fontCandidate(
+  path: string,
+  family?: string,
+): PurchaseOrderPdfFont | null {
   if (family) return { path, family };
   if (!path.toLowerCase().endsWith(".ttc")) return { path };
 
