@@ -11,10 +11,12 @@ import { PlatformServicePromotionDetail } from "./platform-service-promotion-det
 import { formatPromotionDateTime, getPromotionPhaseMeta } from "./platform-service-promotion-rules";
 import type { PlatformServicePromotionListItem } from "./platform-service-promotion-types";
 
-export function PlatformServicePromotionTable({ promotions, canManage, serverTime }: {
+export function PlatformServicePromotionTable({ promotions, canManage, serverTime, page, pageSize }: {
   promotions: PlatformServicePromotionListItem[];
   canManage: boolean;
   serverTime: string;
+  page: number;
+  pageSize: number;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = promotions.find((item) => item.id === selectedId);
@@ -67,7 +69,7 @@ export function PlatformServicePromotionTable({ promotions, canManage, serverTim
   return (
     <>
       <DataTable columns={columns} data={promotions} emptyText="暂无限时活动，可新建活动草稿。" minWidth="min-w-[1060px]" tableClassName="border-t-0" rowClassName={() => PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME} />
-      {selected ? <PlatformServicePromotionDetail key={selected.id} promotion={selected} serverTime={serverTime} canManage={canManage} open onOpenChange={(open) => { if (!open) setSelectedId(null); }} /> : null}
+      {selected ? <PlatformServicePromotionDetail key={selected.id} promotion={selected} serverTime={serverTime} page={page} pageSize={pageSize} canManage={canManage} open onOpenChange={(open) => { if (!open) setSelectedId(null); }} /> : null}
     </>
   );
 }

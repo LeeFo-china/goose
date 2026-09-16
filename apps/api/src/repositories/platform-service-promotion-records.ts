@@ -58,6 +58,7 @@ const PlatformServicePromotionPricePreviewSchema = z.strictObject({
   code: z.string(),
   title: z.string(),
   term_years: z.number().int().positive(),
+  list_amount_fen: z.number().int().positive(),
   base_amount_fen: z.number().int().positive(),
   effective_amount_fen: z.number().int().positive(),
   base_price_rate_basis_points: z.number().int().min(1).max(10_000),

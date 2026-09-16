@@ -179,7 +179,8 @@ AS $$
   -- Internal preview is bounded to exactly three unique formal product codes.
   SELECT coalesce(jsonb_agg(jsonb_build_object(
     'product_id', product.id, 'code', product.code, 'title', published.title,
-    'term_years', published.term_years, 'base_amount_fen', published.amount_fen,
+    'term_years', published.term_years, 'list_amount_fen', published.list_amount_fen,
+    'base_amount_fen', published.amount_fen,
     'effective_amount_fen', GREATEST(1, round(published.amount_fen::numeric * p_rate / 10000.0))::bigint,
     'base_price_rate_basis_points', 10000, 'price_rate_basis_points', p_rate
   ) ORDER BY published.term_years), '[]'::jsonb)
@@ -439,7 +440,7 @@ BEGIN
     LIMIT p_page_size OFFSET ((p_page - 1) * p_page_size)
   ), packages AS MATERIALIZED (
     -- Three unique package codes bound this internal price preview to <= 3 rows.
-    SELECT product.id, product.code, published.title, published.term_years, published.amount_fen
+    SELECT product.id, product.code, published.title, published.term_years, published.list_amount_fen, published.amount_fen
     FROM public.platform_service_products AS product
     JOIN public.platform_service_product_versions AS published
       ON published.id = product.published_version_id AND published.product_id = product.id
@@ -463,7 +464,8 @@ BEGIN
     CROSS JOIN LATERAL (
       SELECT coalesce(jsonb_agg(jsonb_build_object(
         'product_id', packages.id, 'code', packages.code, 'title', packages.title,
-        'term_years', packages.term_years, 'base_amount_fen', packages.amount_fen,
+        'term_years', packages.term_years, 'list_amount_fen', packages.list_amount_fen,
+        'base_amount_fen', packages.amount_fen,
         'effective_amount_fen', GREATEST(1, round(packages.amount_fen::numeric * coalesce(draft.discount_rate_basis_points, published.discount_rate_basis_points, 10000) / 10000.0))::bigint,
         'base_price_rate_basis_points', 10000,
         'price_rate_basis_points', coalesce(draft.discount_rate_basis_points, published.discount_rate_basis_points, 10000)

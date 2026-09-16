@@ -64,6 +64,7 @@ const pricePreview = [{
   code: "platform_service_1y",
   title: "平台技术服务 1 年",
   term_years: 1,
+  list_amount_fen: 1_200_000,
   base_amount_fen: 980_000,
   effective_amount_fen: 196_000,
   base_price_rate_basis_points: 10_000,
@@ -198,6 +199,17 @@ describe("PlatformServicePromotionRepository", () => {
       "platform_service_list_promotions",
       { p_page: 1, p_page_size: 100 },
     );
+  });
+
+  test("rejects missing, fractional and non-positive preview list prices", async () => {
+    for (const list_amount_fen of [undefined, 0, -1, 1.5]) {
+      const fixture = createClient({
+        data: { ...commandResult, price_preview: [{ ...pricePreview[0], list_amount_fen }] },
+        error: null,
+      });
+      await expect(new Repository(fixture.client).createDraft({ code: promotion.code, draft }, actor))
+        .rejects.toMatchObject({ code: "DB_ERROR" });
+    }
   });
 
   test("creates a draft through only the create RPC", async () => {

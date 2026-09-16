@@ -42,7 +42,7 @@ describe("平台技术服务套餐配置页", () => {
     expect(page).toContain("技术服务套餐");
     expect(page).toContain("1年 / 2年 / 3年");
     expect(page).toContain("PlatformServiceProductFormButton");
-    expect(page).toContain('value="products" asChild');
+    expect(readSource("../platform-service-promotions/platform-service-promotion-tabs.tsx")).toContain('value="products" asChild');
     expect(page).toContain("PlatformServicePromotionTable");
     expect(page).toContain('tableViewportTestId="platform-service-products-table-viewport"');
     expect(loading).toContain("h-[calc(100vh-6.5625rem)]");

@@ -50,6 +50,7 @@ export type PlatformServicePromotionPricePreview = {
   code: string;
   title: string;
   term_years: number;
+  list_amount_fen: number;
   base_amount_fen: number;
   effective_amount_fen: number;
   base_price_rate_basis_points: number;

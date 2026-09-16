@@ -261,6 +261,15 @@ describe("platform service promotions migration", () => {
     }
   });
 
+  test("returns list, daily and promotion amounts in every admin preview", async () => {
+    const sql = await readMigration();
+    const preview = functionSql(sql, "platform_service_promotion_price_preview");
+    expect(preview).toContain("'list_amount_fen', published.list_amount_fen");
+    const list = functionSql(sql, "platform_service_list_promotions");
+    expect(list).toContain("published.list_amount_fen");
+    expect(list).toContain("'list_amount_fen', packages.list_amount_fen");
+  });
+
   test("preserves the trial-aware order signature and lock checks", async () => {
     const previous = await Bun.file(new URL("../../../../supabase/migrations/20260811005555_create_platform_service_trials.sql", import.meta.url)).text();
     const order = functionSql(await readMigration(), "platform_service_create_pending_order");

@@ -63,7 +63,17 @@ function promotionFixture(): PlatformServicePromotionListItem {
     },
     published: null,
     phase: "draft",
-    price_preview: [],
+    price_preview: [1, 2, 3].map((years) => ({
+      product_id: `product-${years}`,
+      code: `platform_service_${years}y`,
+      title: `${years} 年套餐`,
+      term_years: years,
+      list_amount_fen: 1_200_000 * years,
+      base_amount_fen: 980_000 * years,
+      effective_amount_fen: 245_000 * years,
+      base_price_rate_basis_points: 10_000,
+      price_rate_basis_points: 2500,
+    })),
   };
 }
 

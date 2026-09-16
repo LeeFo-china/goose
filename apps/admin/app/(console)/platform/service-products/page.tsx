@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { BriefcaseBusiness } from "lucide-react";
 
@@ -17,8 +16,8 @@ import type {
 import { PlatformServicePromotionFormButton } from "@/components/platform-service-promotions/platform-service-promotion-form";
 import { PlatformServicePromotionTable } from "@/components/platform-service-promotions/platform-service-promotion-table";
 import type { PlatformServicePromotionPage } from "@/components/platform-service-promotions/platform-service-promotion-types";
-import { platformTabsListClassName, platformTabsTriggerClassName } from "@/components/platform/platform-tabs";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PlatformServicePromotionTabsNav } from "@/components/platform-service-promotions/platform-service-promotion-tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 import { isPlatformOnlySession } from "@/lib/session-mode";
@@ -98,7 +97,7 @@ export default async function PlatformServiceProductsPage({
   const pagination = isPromotions ? promotions.pagination : products.pagination;
 
   return (
-    <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
+    <Tabs value={activeTab} activationMode="manual" className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
       <PlatformListPageShell
         title="技术服务套餐"
         description="管理平台技术服务 1年 / 2年 / 3年套餐的价格、折扣、服务范围和发布版本。"
@@ -109,18 +108,7 @@ export default async function PlatformServiceProductsPage({
         }
         action={canManage ? (isPromotions ? <PlatformServicePromotionFormButton /> : <PlatformServiceProductFormButton />) : null}
         error={error}
-        tabs={
-          <Tabs value={activeTab}>
-            <TabsList className={platformTabsListClassName}>
-              <TabsTrigger value="products" asChild className={platformTabsTriggerClassName}>
-                <Link href={`/platform/service-products?tab=products&page=1&pageSize=${pageSize}`}>套餐</Link>
-              </TabsTrigger>
-              <TabsTrigger value="promotions" asChild className={platformTabsTriggerClassName}>
-                <Link href={`/platform/service-products?tab=promotions&page=1&pageSize=${pageSize}`}>限时活动</Link>
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-        }
+        tabs={<PlatformServicePromotionTabsNav pageSize={pageSize} />}
         listHeader={
           <div className="text-sm text-muted-foreground">
             {isPromotions ? "限时活动统一覆盖三档套餐，保存草稿后需确认价格并发布。" : "修改草稿后需点击“发布套餐”，小程序端才会读取新的购买版本。"}
@@ -135,12 +123,13 @@ export default async function PlatformServiceProductsPage({
         tableViewportTestId="platform-service-products-table-viewport"
         unit="个"
       >
-        {isPromotions ? (
-          <PlatformServicePromotionTable promotions={promotions.list} canManage={canManage} serverTime={promotions.server_time} />
-        ) : (
-          <PlatformServiceProductTable products={products.list} canManage={canManage} />
-        )}
+        <TabsContent value="products" forceMount hidden={isPromotions} className="mt-0">
+          {!isPromotions ? <PlatformServiceProductTable products={products.list} canManage={canManage} /> : null}
+        </TabsContent>
+        <TabsContent value="promotions" forceMount hidden={!isPromotions} className="mt-0">
+          {isPromotions ? <PlatformServicePromotionTable promotions={promotions.list} canManage={canManage} serverTime={promotions.server_time} page={pagination.page} pageSize={pagination.pageSize} /> : null}
+        </TabsContent>
       </PlatformListPageShell>
-    </div>
+    </Tabs>
   );
 }
