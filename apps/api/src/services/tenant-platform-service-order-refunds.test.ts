@@ -71,6 +71,7 @@ function createDependencies() {
   return {
     repository: {
       listEnabledProducts: mock(async () => ({
+        server_time: "2026-08-03T12:00:00.000Z",
         list: [],
         pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
       })),

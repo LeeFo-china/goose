@@ -38,5 +38,15 @@ export function throwPendingOrderCreationError(error: unknown): never {
       SOURCE_INVALID,
     );
   }
-  throw Errors.dbError("创建平台技术服务订单失败", error);
+  if (matchesPostgresError(error, "P0001", "SERVICE_TERMS_VERSION_STALE")) {
+    throw Errors.business(
+      409, "服务条款已更新，请重新确认后下单", "SERVICE_TERMS_VERSION_STALE",
+    );
+  }
+  if (matchesPostgresError(error, "P0001", "SERVICE_PRODUCT_NOT_FOUND")) {
+    throw Errors.business(
+      404, "平台技术服务商品不存在", "SERVICE_PRODUCT_NOT_FOUND",
+    );
+  }
+  throw Errors.dbError("创建平台技术服务订单失败");
 }

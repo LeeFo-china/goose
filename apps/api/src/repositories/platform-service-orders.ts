@@ -1,3 +1,4 @@
+import { parseEffectiveProductsPage } from "./platform-service-effective-product-records";
 import { Errors } from "../errors/error-factory";
 import { SupabaseDB } from "../utils/supabase";
 import {
@@ -63,6 +64,7 @@ type ServiceClient = {
   ): ServiceQuery;
   rpc(
     name:
+      | "platform_service_list_effective_products"
       | "platform_service_create_pending_order"
       | "platform_service_confirm_payment"
       | "platform_service_publish_product_version"
@@ -80,14 +82,11 @@ export class PlatformServiceOrderRepository {
 
   async listEnabledProducts(input: { page: number; pageSize: number }) {
     const pagination = normalizePagination(input.page, input.pageSize);
-    const { data, error, count } = await this.products()
-      .select(TENANT_PRODUCT_SELECT, { count: "exact" })
-      .eq("status", "enabled")
-      .order("sort_order", { ascending: true })
-      .order("created_at", { ascending: false })
-      .range(pagination.from, pagination.to);
-    if (error) throw Errors.dbError("查询平台技术服务商品失败", error);
-    return pageResult<ProductRecord>(data, count, pagination);
+    const data = await this.rpcData("platform_service_list_effective_products", {
+      p_page: pagination.page,
+      p_page_size: pagination.pageSize,
+    }, "查询平台技术服务商品失败");
+    return parseEffectiveProductsPage(data);
   }
 
   async findEnabledProductByCode(code: string): Promise<ProductRecord | null> {

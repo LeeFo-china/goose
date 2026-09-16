@@ -26,6 +26,7 @@ import { requireMatchingPlatformPaymentSecretBundle } from "@/services/platform-
 import {
   serializeTenantServiceOrder,
   serializeTenantServiceProduct,
+  serializeTenantServiceProductSnapshot,
 } from "@/services/platform-service-order-views";
 import { requireActiveServicePaymentConfig } from "@/services/tenant-platform-service-order-payment-config";
 import {
@@ -248,7 +249,7 @@ export class TenantPlatformServiceOrderService {
 
     const paymentRequest = await this.createPaymentRequestForOrder(
       order,
-      productSnapshot.title,
+      getOrderDescription(order),
       true,
     );
     const responseNow = this.nowFactory();
@@ -257,7 +258,7 @@ export class TenantPlatformServiceOrderService {
       order: serializeTenantServiceOrder(order, responseNow, {
         canCancelPayment: true,
       }),
-      product: serializeTenantServiceProduct(product),
+      product: serializeTenantServiceProductSnapshot(order.product_snapshot),
       payment_request: paymentRequest,
       server_time: responseNow.toISOString(),
     };
@@ -377,7 +378,7 @@ export class TenantPlatformServiceOrderService {
     return {
       idempotent: true,
       order: orderView,
-      product: null,
+      product: serializeTenantServiceProductSnapshot(order.product_snapshot),
       payment_request: orderView.available_actions.continue_payment.enabled
         ? paymentRequest
         : null,
