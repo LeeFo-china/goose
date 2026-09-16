@@ -15,7 +15,11 @@ export default function PlatformServiceProductsLoading() {
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border bg-card">
         <div className="flex flex-col gap-3 border-b bg-muted/20 p-3">
-          <Skeleton className="h-14 w-full" />
+          <div className="flex gap-5" aria-label="加载套餐与限时活动">
+            <Skeleton className="h-9 w-16" />
+            <Skeleton className="h-9 w-24" />
+          </div>
+          <Skeleton className="h-4 w-72 max-w-full" />
         </div>
         <div className="flex-1 p-3">
           <div className="flex flex-col gap-1">

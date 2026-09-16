@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { BriefcaseBusiness } from "lucide-react";
 
@@ -13,6 +14,11 @@ import type {
   PageData,
   PlatformServiceProductListItem,
 } from "@/components/platform-service-products/platform-service-product-types";
+import { PlatformServicePromotionFormButton } from "@/components/platform-service-promotions/platform-service-promotion-form";
+import { PlatformServicePromotionTable } from "@/components/platform-service-promotions/platform-service-promotion-table";
+import type { PlatformServicePromotionPage } from "@/components/platform-service-promotions/platform-service-promotion-types";
+import { platformTabsListClassName, platformTabsTriggerClassName } from "@/components/platform/platform-tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 import { isPlatformOnlySession } from "@/lib/session-mode";
@@ -20,6 +26,7 @@ import { isPlatformOnlySession } from "@/lib/session-mode";
 const MANAGE_PERMISSION = "platform.service_product.manage";
 
 type SearchParams = Promise<{
+  tab?: string;
   page?: string;
   pageSize?: string;
 }>;
@@ -36,18 +43,18 @@ function normalizePage(value: string | undefined) {
   return Number.isSafeInteger(page) && page > 0 ? page : 1;
 }
 
-async function getPlatformServiceProductsPage(query: string) {
+async function getPlatformServicePage<T>(path: string) {
   const token = await getAdminToken();
   if (!token) throw new Error("缺少登录凭证");
   const response = await fetch(
-    buildBackendUrl(`/platform/billing/service-products?${query}`),
+    buildBackendUrl(path),
     {
       headers: { authorization: `Bearer ${token}` },
       cache: "no-store",
     },
   );
   const payload =
-    await parseBackendJson<PageData<PlatformServiceProductListItem>>(response);
+    await parseBackendJson<T>(response);
   if (!payload.data) throw new Error("接口未返回平台技术服务套餐列表");
   return payload.data;
 }
@@ -64,10 +71,12 @@ export default async function PlatformServiceProductsPage({
   const isPlatformAdmin = isPlatformOnlySession(session);
   const canManage = isPlatformAdmin && permissions.has(MANAGE_PERMISSION);
   const params = await searchParams;
+  const activeTab = params.tab === "promotions" ? "promotions" : "products";
   const page = normalizePage(params.page);
   const pageSize = normalizePlatformListPageSize(params.pageSize);
 
   let products = emptyPage(page, pageSize);
+  let promotions: PlatformServicePromotionPage = { ...emptyPage(page, pageSize), list: [], server_time: "" };
   let error: string | null = null;
 
   if (!canManage) {
@@ -75,11 +84,18 @@ export default async function PlatformServiceProductsPage({
   } else {
     try {
       const query = buildPlatformServiceProductQuery({ page, pageSize });
-      products = await getPlatformServiceProductsPage(query);
+      if (activeTab === "promotions") {
+        promotions = await getPlatformServicePage<PlatformServicePromotionPage>(`/platform/billing/service-promotions?${query}`);
+      } else {
+        products = await getPlatformServicePage<PageData<PlatformServiceProductListItem>>(`/platform/billing/service-products?${query}`);
+      }
     } catch (caught) {
       error = caught instanceof Error ? caught.message : "平台技术服务套餐列表加载失败";
     }
   }
+
+  const isPromotions = activeTab === "promotions";
+  const pagination = isPromotions ? promotions.pagination : products.pagination;
 
   return (
     <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
@@ -91,15 +107,27 @@ export default async function PlatformServiceProductsPage({
             <BriefcaseBusiness className="size-4" aria-hidden="true" />
           </span>
         }
-        action={canManage ? <PlatformServiceProductFormButton /> : null}
+        action={canManage ? (isPromotions ? <PlatformServicePromotionFormButton /> : <PlatformServiceProductFormButton />) : null}
         error={error}
+        tabs={
+          <Tabs value={activeTab}>
+            <TabsList className={platformTabsListClassName}>
+              <TabsTrigger value="products" asChild className={platformTabsTriggerClassName}>
+                <Link href={`/platform/service-products?tab=products&page=1&pageSize=${pageSize}`}>套餐</Link>
+              </TabsTrigger>
+              <TabsTrigger value="promotions" asChild className={platformTabsTriggerClassName}>
+                <Link href={`/platform/service-products?tab=promotions&page=1&pageSize=${pageSize}`}>限时活动</Link>
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        }
         listHeader={
           <div className="text-sm text-muted-foreground">
-            修改草稿后需点击“发布套餐”，小程序端才会读取新的购买版本。
+            {isPromotions ? "限时活动统一覆盖三档套餐，保存草稿后需确认价格并发布。" : "修改草稿后需点击“发布套餐”，小程序端才会读取新的购买版本。"}
           </div>
         }
-        pagination={products.pagination}
-        currentCount={getListCurrentCount({
+        pagination={pagination}
+        currentCount={isPromotions ? promotions.list.length : getListCurrentCount({
           products: products.list,
           pageSize,
           total: products.pagination.total,
@@ -107,7 +135,11 @@ export default async function PlatformServiceProductsPage({
         tableViewportTestId="platform-service-products-table-viewport"
         unit="个"
       >
-        <PlatformServiceProductTable products={products.list} canManage={canManage} />
+        {isPromotions ? (
+          <PlatformServicePromotionTable promotions={promotions.list} canManage={canManage} serverTime={promotions.server_time} />
+        ) : (
+          <PlatformServiceProductTable products={products.list} canManage={canManage} />
+        )}
       </PlatformListPageShell>
     </div>
   );
