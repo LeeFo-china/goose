@@ -149,6 +149,20 @@ describe("PlatformServicePromotionService", () => {
     expect(fixture.stop).not.toHaveBeenCalled();
   });
 
+  test("rejects a context without any platform identity flag", async () => {
+    const fixture = repositoryFixture();
+    const service = new Service({ repository: fixture.repository });
+    const nonPlatformContext = context({
+      isPlatformStaff: false,
+      isPlatformAdmin: false,
+      isPlatformSuperAdmin: false,
+    });
+
+    await expect(service.listPromotions(nonPlatformContext, {}))
+      .rejects.toMatchObject({ statusCode: 403 });
+    expect(fixture.list).not.toHaveBeenCalled();
+  });
+
   test("normalizes pagination defensively and delegates for an authorized operator", async () => {
     const fixture = repositoryFixture();
     const service = new Service({ repository: fixture.repository });

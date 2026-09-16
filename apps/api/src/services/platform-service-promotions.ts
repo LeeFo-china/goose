@@ -118,6 +118,11 @@ export class PlatformServicePromotionService {
   private requireActor(authContext: AuthContext): PromotionActor {
     if (
       authContext.tenantId !== null ||
+      (
+        !authContext.isPlatformStaff &&
+        !authContext.isPlatformAdmin &&
+        !authContext.isPlatformSuperAdmin
+      ) ||
       !authContext.employeeId ||
       !authContext.authUserId
     ) {
