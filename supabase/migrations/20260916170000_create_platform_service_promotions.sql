@@ -68,6 +68,8 @@ CREATE TRIGGER tr_platform_service_promotions_updated_at
 ALTER TABLE public.platform_service_promotions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.platform_service_promotion_versions ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.platform_service_promotions, public.platform_service_promotion_versions FROM PUBLIC, anon, authenticated;
+-- Clear default privileges, including DELETE/TRUNCATE, before the minimal grant.
+REVOKE ALL ON TABLE public.platform_service_promotions, public.platform_service_promotion_versions FROM service_role;
 GRANT SELECT, INSERT, UPDATE ON TABLE public.platform_service_promotions, public.platform_service_promotion_versions TO service_role;
 
 -- Published facts remain immutable even for direct service_role UPDATEs.
@@ -140,8 +142,10 @@ CREATE TRIGGER tr_platform_service_promotion_versions_immutable
   BEFORE UPDATE ON public.platform_service_promotion_versions
   FOR EACH ROW EXECUTE FUNCTION public.platform_service_guard_promotion_version_update();
 
--- One resolver keeps order snapshots and tenant list pricing identical. The
--- caller supplies one database clock value for the whole operation.
+-- These helpers resolve individual order snapshots and command activity previews.
+-- Tenant lists use a bounded set-based query instead of per-product helper calls.
+-- Keep their pricing parity covered by isolated-database verification.
+-- The snapshot caller supplies one database clock value for the whole operation.
 CREATE OR REPLACE FUNCTION public.platform_service_promotion_snapshot(
   p_product_code text, p_base_amount_fen bigint, p_now timestamptz
 )

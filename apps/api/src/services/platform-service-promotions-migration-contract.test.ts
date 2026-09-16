@@ -44,6 +44,22 @@ describe("platform service promotions migration", () => {
     expect(ddl).not.toMatch(/INSERT\s+INTO\s+public\.platform_service_promotion_versions/i);
   });
 
+  test("resets service_role default privileges before granting only required table access", async () => {
+    const sql = await readMigration();
+    const tables = "public.platform_service_promotions, public.platform_service_promotion_versions";
+    const revoke = `REVOKE ALL ON TABLE ${tables} FROM service_role;`;
+    const grant = `GRANT SELECT, INSERT, UPDATE ON TABLE ${tables} TO service_role;`;
+    expect(sql.indexOf(revoke)).toBeGreaterThanOrEqual(0);
+    expect(sql.indexOf(grant)).toBeGreaterThan(sql.indexOf(revoke));
+    for (const match of sql.matchAll(/GRANT ([^;]+?) ON TABLE ([^;]+?) TO service_role;/g)) {
+      if (match[2]?.includes("platform_service_promotion")) {
+        expect(match[1]).toBe("SELECT, INSERT, UPDATE");
+        expect(match[1]).not.toMatch(/ALL|DELETE|TRUNCATE/);
+      }
+    }
+    expect(sql).not.toMatch(/CREATE SEQUENCE/i);
+  });
+
   test("enforces half-open global published overlap in the database", async () => {
     const sql = await readMigration();
     for (const fragment of [
