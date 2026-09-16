@@ -70,6 +70,63 @@ ALTER TABLE public.platform_service_promotion_versions ENABLE ROW LEVEL SECURITY
 REVOKE ALL ON TABLE public.platform_service_promotions, public.platform_service_promotion_versions FROM PUBLIC, anon, authenticated;
 GRANT SELECT, INSERT, UPDATE ON TABLE public.platform_service_promotions, public.platform_service_promotion_versions TO service_role;
 
+-- Published facts remain immutable even for direct service_role UPDATEs.
+CREATE OR REPLACE FUNCTION public.platform_service_guard_promotion_version_update()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+BEGIN
+  IF OLD.publication_status = 'draft' THEN
+    IF NEW.publication_status NOT IN ('draft', 'published') THEN
+      RAISE EXCEPTION 'SERVICE_PROMOTION_INVALID_STATE' USING ERRCODE = 'P0001';
+    END IF;
+    -- Draft edits and the initial publication may set publication metadata.
+    RETURN NEW;
+  END IF;
+
+  IF ROW(
+    NEW.id, NEW.promotion_id, NEW.version_no, NEW.name, NEW.badge_text,
+    NEW.title, NEW.summary, NEW.rules_text, NEW.discount_rate_basis_points,
+    NEW.starts_at, NEW.ends_at, NEW.created_at,
+    NEW.published_at, NEW.published_by_employee_id
+  ) IS DISTINCT FROM ROW(
+    OLD.id, OLD.promotion_id, OLD.version_no, OLD.name, OLD.badge_text,
+    OLD.title, OLD.summary, OLD.rules_text, OLD.discount_rate_basis_points,
+    OLD.starts_at, OLD.ends_at, OLD.created_at,
+    OLD.published_at, OLD.published_by_employee_id
+  ) THEN
+    RAISE EXCEPTION 'SERVICE_PROMOTION_INVALID_STATE' USING ERRCODE = 'P0001';
+  END IF;
+
+  IF OLD.publication_status = 'published' AND NEW.publication_status = 'stopped' THEN
+    IF NEW.stopped_at IS NULL OR NEW.stopped_by_employee_id IS NULL
+      OR NEW.stop_reason IS NULL OR char_length(btrim(NEW.stop_reason)) NOT BETWEEN 1 AND 500
+    THEN
+      RAISE EXCEPTION 'SERVICE_PROMOTION_INVALID_STATE' USING ERRCODE = 'P0001';
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  IF NEW.publication_status IS DISTINCT FROM OLD.publication_status
+    AND NOT (OLD.publication_status = 'published' AND NEW.publication_status = 'superseded')
+  THEN
+    RAISE EXCEPTION 'SERVICE_PROMOTION_INVALID_STATE' USING ERRCODE = 'P0001';
+  END IF;
+  -- Replacing a published version only changes status. Terminal versions may
+  -- receive no-op updates, but their stop and publication history cannot change.
+  IF ROW(NEW.stopped_at, NEW.stopped_by_employee_id, NEW.stop_reason)
+    IS DISTINCT FROM ROW(OLD.stopped_at, OLD.stopped_by_employee_id, OLD.stop_reason)
+  THEN
+    RAISE EXCEPTION 'SERVICE_PROMOTION_INVALID_STATE' USING ERRCODE = 'P0001';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER tr_platform_service_promotion_versions_immutable
+  BEFORE UPDATE ON public.platform_service_promotion_versions
+  FOR EACH ROW EXECUTE FUNCTION public.platform_service_guard_promotion_version_update();
+
 -- One resolver keeps order snapshots and tenant list pricing identical. The
 -- caller supplies one database clock value for the whole operation.
 CREATE OR REPLACE FUNCTION public.platform_service_promotion_snapshot(
@@ -112,7 +169,8 @@ AS $$
   FROM public.platform_service_products AS product
   JOIN public.platform_service_product_versions AS published
     ON published.id = product.published_version_id AND published.product_id = product.id
-  WHERE product.code IN ('platform_service_1y', 'platform_service_2y', 'platform_service_3y');
+  WHERE product.code IN ('platform_service_1y', 'platform_service_2y', 'platform_service_3y')
+    AND product.status = 'enabled';
 $$;
 
 CREATE OR REPLACE FUNCTION public.platform_service_create_promotion_draft(
@@ -238,17 +296,28 @@ BEGIN
   END IF;
   SELECT * INTO v_draft FROM public.platform_service_promotion_versions
   WHERE id = v_promotion.draft_version_id AND publication_status = 'draft' FOR UPDATE;
-  IF NOT FOUND THEN RAISE EXCEPTION 'SERVICE_PROMOTION_STATE_CONFLICT' USING ERRCODE = 'P0001'; END IF;
+  IF NOT FOUND THEN RAISE EXCEPTION 'SERVICE_PROMOTION_INVALID_STATE' USING ERRCODE = 'P0001'; END IF;
   IF v_draft.starts_at IS NULL OR v_draft.ends_at IS NULL OR v_draft.starts_at >= v_draft.ends_at OR v_draft.ends_at <= v_now THEN
-    RAISE EXCEPTION 'SERVICE_PROMOTION_INVALID_SCHEDULE' USING ERRCODE = 'P0001';
+    RAISE EXCEPTION 'SERVICE_PROMOTION_TIME_INVALID' USING ERRCODE = 'P0001';
   END IF;
+  WITH eligible_products AS MATERIALIZED (
+    -- Product archival is status = 'archived'; requiring enabled excludes it.
+    -- These three unique codes bound the internal query and its row locks.
+    SELECT published.amount_fen
+    FROM public.platform_service_products AS product
+    JOIN public.platform_service_product_versions AS published
+      ON published.id = product.published_version_id AND published.product_id = product.id
+    WHERE product.code IN ('platform_service_1y', 'platform_service_2y', 'platform_service_3y')
+      AND product.status = 'enabled'
+    FOR SHARE OF product, published
+  )
   SELECT count(*), bool_or(GREATEST(1, round(published.amount_fen::numeric * v_draft.discount_rate_basis_points / 10000.0)) >= published.amount_fen)
   INTO v_product_count, v_invalid_price
-  FROM public.platform_service_products AS product
-  JOIN public.platform_service_product_versions AS published
-    ON published.id = product.published_version_id AND published.product_id = product.id
-  WHERE product.code IN ('platform_service_1y', 'platform_service_2y', 'platform_service_3y');
-  IF v_product_count <> 3 OR v_invalid_price THEN
+  FROM eligible_products AS published;
+  IF v_product_count <> 3 THEN
+    RAISE EXCEPTION 'SERVICE_PROMOTION_PRODUCT_UNAVAILABLE' USING ERRCODE = 'P0001';
+  END IF;
+  IF v_invalid_price THEN
     RAISE EXCEPTION 'SERVICE_PROMOTION_PRICE_NOT_LOWER' USING ERRCODE = 'P0001';
   END IF;
   UPDATE public.platform_service_promotion_versions SET publication_status = 'superseded'
@@ -313,7 +382,7 @@ BEGIN
     stopped_by_employee_id = p_actor_employee_id, stop_reason = btrim(p_reason)
   WHERE id = v_promotion.published_version_id AND publication_status = 'published'
   RETURNING * INTO v_published;
-  IF NOT FOUND THEN RAISE EXCEPTION 'SERVICE_PROMOTION_STATE_CONFLICT' USING ERRCODE = 'P0001'; END IF;
+  IF NOT FOUND THEN RAISE EXCEPTION 'SERVICE_PROMOTION_INVALID_STATE' USING ERRCODE = 'P0001'; END IF;
   UPDATE public.platform_service_promotions
   SET version = version + 1, updated_by_employee_id = p_actor_employee_id
   WHERE id = p_promotion_id RETURNING * INTO v_promotion;
@@ -358,6 +427,7 @@ BEGIN
     JOIN public.platform_service_product_versions AS published
       ON published.id = product.published_version_id AND published.product_id = product.id
     WHERE product.code IN ('platform_service_1y', 'platform_service_2y', 'platform_service_3y')
+      AND product.status = 'enabled'
   ), records AS (
     SELECT page.created_at, page.id, to_jsonb(page) || jsonb_build_object(
       'draft', CASE WHEN draft.id IS NULL THEN NULL ELSE to_jsonb(draft) END,
@@ -780,6 +850,9 @@ BEGIN
   RETURN v_order;
 END;
 $$;
+
+REVOKE ALL ON FUNCTION public.platform_service_guard_promotion_version_update() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.platform_service_guard_promotion_version_update() TO service_role;
 
 REVOKE ALL ON FUNCTION public.platform_service_promotion_snapshot(text, bigint, timestamptz) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.platform_service_promotion_snapshot(text, bigint, timestamptz) TO service_role;

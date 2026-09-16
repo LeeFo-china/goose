@@ -96,7 +96,7 @@ describe("platform service promotions migration", () => {
     expect(sql).not.toContain("platform_service_smoke_1fen");
     for (const fragment of [
       "SERVICE_PROMOTION_PRICE_NOT_LOWER",
-      "SERVICE_PROMOTION_INVALID_SCHEDULE",
+      "SERVICE_PROMOTION_TIME_INVALID",
       "'superseded'",
       "v_product_count <> 3",
       "GREATEST(1, round(",
@@ -108,6 +108,66 @@ describe("platform service promotions migration", () => {
     expect(stop).toContain("publication_status = 'stopped'");
     expect(stop).toContain("stop_reason = btrim(p_reason)");
     expect(stop).not.toMatch(/SET\s+(discount_rate_basis_points|starts_at|ends_at|title|name)\s*=/i);
+  });
+
+  test("rejects missing, disabled or archived formal products before price checks", async () => {
+    const sql = await readMigration();
+    const foundation = await Bun.file(new URL(
+      "../../../../supabase/migrations/20260803110000_create_platform_service_sales_foundation.sql",
+      import.meta.url,
+    )).text();
+    const productTable = foundation.split("CREATE TABLE public.platform_service_products (")[1]
+      ?.split("CREATE TABLE public.platform_service_product_versions")[0] ?? "";
+    // Product archival is a status, whereas promotions have archived_at.
+    expect(productTable).toContain("'enabled', 'disabled', 'archived'");
+    expect(productTable).not.toContain("archived_at");
+    for (const name of [
+      "platform_service_publish_promotion",
+      "platform_service_promotion_price_preview",
+      "platform_service_list_promotions",
+    ]) {
+      const body = functionSql(sql, name);
+      expect(body).toContain("product.status = 'enabled'");
+      expect(body).toContain("published.id = product.published_version_id");
+      expect(body).toContain("published.product_id = product.id");
+      expect(body).not.toContain("product.archived_at");
+    }
+    const publish = functionSql(sql, "platform_service_publish_promotion");
+    expect(publish).toContain("archived_at IS NULL");
+    expect(publish).toMatch(/IF v_product_count <> 3 THEN\s+RAISE EXCEPTION 'SERVICE_PROMOTION_PRODUCT_UNAVAILABLE'/);
+    expect(publish).toContain("IF v_invalid_price THEN");
+    expect(publish.indexOf("SERVICE_PROMOTION_PRODUCT_UNAVAILABLE"))
+      .toBeLessThan(publish.indexOf("IF v_invalid_price THEN"));
+  });
+
+  test("protects published version content and history with a database update trigger", async () => {
+    const sql = await readMigration();
+    const guard = functionSql(sql, "platform_service_guard_promotion_version_update");
+    expect(sql).toMatch(/CREATE TRIGGER tr_platform_service_promotion_versions_immutable\s+BEFORE UPDATE ON public\.platform_service_promotion_versions/);
+    expect(sql).toContain("EXECUTE FUNCTION public.platform_service_guard_promotion_version_update()");
+    expect(guard).toContain("SET search_path = public, pg_temp");
+    expect(guard).toContain("OLD.publication_status = 'draft'");
+    expect(guard).toContain("NEW.publication_status NOT IN ('draft', 'published')");
+    expect(guard).toContain("OLD.publication_status = 'published' AND NEW.publication_status = 'stopped'");
+    expect(guard).toContain("OLD.publication_status = 'published' AND NEW.publication_status = 'superseded'");
+    expect(guard).toContain("IS DISTINCT FROM ROW(");
+    for (const field of [
+      "id", "promotion_id", "version_no", "name", "badge_text", "title", "summary",
+      "rules_text", "discount_rate_basis_points", "starts_at", "ends_at", "created_at",
+      "published_at", "published_by_employee_id", "stopped_at", "stopped_by_employee_id", "stop_reason",
+    ]) {
+      expect(guard).toContain(`NEW.${field}`);
+      expect(guard).toContain(`OLD.${field}`);
+    }
+    expect(guard).toContain("SERVICE_PROMOTION_INVALID_STATE");
+  });
+
+  test("keeps established state and schedule error codes", async () => {
+    const sql = await readMigration();
+    expect(sql).toContain("SERVICE_PROMOTION_INVALID_STATE");
+    expect(sql).toContain("SERVICE_PROMOTION_TIME_INVALID");
+    expect(sql).not.toContain("SERVICE_PROMOTION_STATE_CONFLICT");
+    expect(sql).not.toContain("SERVICE_PROMOTION_INVALID_SCHEDULE");
   });
 
   test("guards product repricing against unexpired published promotions", async () => {
@@ -214,8 +274,8 @@ describe("platform service promotions migration", () => {
     const names = [...sql.matchAll(/CREATE OR REPLACE FUNCTION public\.(\w+)\(/g)].map((match) => match[1]);
     expect(names.length).toBeGreaterThanOrEqual(8);
     for (const name of names) {
-      expect(sql).toMatch(new RegExp(`REVOKE ALL ON FUNCTION public\\.${name}\\([^;]+\\) FROM PUBLIC, anon, authenticated;`));
-      expect(sql).toMatch(new RegExp(`GRANT EXECUTE ON FUNCTION public\\.${name}\\([^;]+\\) TO service_role;`));
+      expect(sql).toMatch(new RegExp(`REVOKE ALL ON FUNCTION public\\.${name}\\([^;]*\\) FROM PUBLIC, anon, authenticated;`));
+      expect(sql).toMatch(new RegExp(`GRANT EXECUTE ON FUNCTION public\\.${name}\\([^;]*\\) TO service_role;`));
     }
   });
 });
