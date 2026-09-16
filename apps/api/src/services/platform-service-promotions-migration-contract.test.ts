@@ -162,6 +162,33 @@ describe("platform service promotions migration", () => {
     expect(guard).toContain("SERVICE_PROMOTION_INVALID_STATE");
   });
 
+  test("allows employee FK cleanup without permitting audit actor reassignment", async () => {
+    const sql = await readMigration();
+    const guard = functionSql(sql, "platform_service_guard_promotion_version_update");
+    const immutableRows = [...guard.matchAll(/IF ROW\(([\s\S]+?)\)\s+IS DISTINCT FROM ROW\(([\s\S]+?)\)/g)]
+      .map((match) => `${match[1]} ${match[2]}`).join(" ");
+    for (const field of ["published_by_employee_id", "stopped_by_employee_id"]) {
+      expect(sql).toContain(`${field} uuid REFERENCES public.employees(id) ON DELETE SET NULL`);
+      expect(guard).toMatch(new RegExp(
+        `NEW\\.${field} IS NOT NULL\\s+AND NEW\\.${field} IS DISTINCT FROM OLD\\.${field}`,
+      ));
+      expect(immutableRows).not.toContain(field);
+    }
+    for (const field of [
+      "id", "promotion_id", "version_no", "name", "badge_text", "title", "summary",
+      "rules_text", "discount_rate_basis_points", "starts_at", "ends_at", "created_at",
+      "published_at", "stopped_at", "stop_reason",
+    ]) {
+      expect(immutableRows).toContain(`NEW.${field}`);
+      expect(immutableRows).toContain(`OLD.${field}`);
+    }
+    const stopTransition = guard.indexOf("OLD.publication_status = 'published' AND NEW.publication_status = 'stopped'");
+    expect(guard.indexOf("NEW.published_by_employee_id IS NOT NULL")).toBeLessThan(stopTransition);
+    expect(guard.indexOf("NEW.stopped_by_employee_id IS NOT NULL")).toBeGreaterThan(stopTransition);
+    // Initial publication still returns from the draft branch before actor protection.
+    expect(guard.indexOf("RETURN NEW;")).toBeLessThan(guard.indexOf("NEW.published_by_employee_id IS NOT NULL"));
+  });
+
   test("keeps established state and schedule error codes", async () => {
     const sql = await readMigration();
     expect(sql).toContain("SERVICE_PROMOTION_INVALID_STATE");

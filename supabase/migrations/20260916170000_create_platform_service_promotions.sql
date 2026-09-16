@@ -88,13 +88,21 @@ BEGIN
     NEW.id, NEW.promotion_id, NEW.version_no, NEW.name, NEW.badge_text,
     NEW.title, NEW.summary, NEW.rules_text, NEW.discount_rate_basis_points,
     NEW.starts_at, NEW.ends_at, NEW.created_at,
-    NEW.published_at, NEW.published_by_employee_id
+    NEW.published_at
   ) IS DISTINCT FROM ROW(
     OLD.id, OLD.promotion_id, OLD.version_no, OLD.name, OLD.badge_text,
     OLD.title, OLD.summary, OLD.rules_text, OLD.discount_rate_basis_points,
     OLD.starts_at, OLD.ends_at, OLD.created_at,
-    OLD.published_at, OLD.published_by_employee_id
+    OLD.published_at
   ) THEN
+    RAISE EXCEPTION 'SERVICE_PROMOTION_INVALID_STATE' USING ERRCODE = 'P0001';
+  END IF;
+
+  -- Employee deletion uses ON DELETE SET NULL. Allow clearing the FK, but
+  -- never attaching a different employee to an existing publication record.
+  IF NEW.published_by_employee_id IS NOT NULL
+    AND NEW.published_by_employee_id IS DISTINCT FROM OLD.published_by_employee_id
+  THEN
     RAISE EXCEPTION 'SERVICE_PROMOTION_INVALID_STATE' USING ERRCODE = 'P0001';
   END IF;
 
@@ -112,10 +120,15 @@ BEGIN
   THEN
     RAISE EXCEPTION 'SERVICE_PROMOTION_INVALID_STATE' USING ERRCODE = 'P0001';
   END IF;
-  -- Replacing a published version only changes status. Terminal versions may
-  -- receive no-op updates, but their stop and publication history cannot change.
-  IF ROW(NEW.stopped_at, NEW.stopped_by_employee_id, NEW.stop_reason)
-    IS DISTINCT FROM ROW(OLD.stopped_at, OLD.stopped_by_employee_id, OLD.stop_reason)
+  -- The stop transition above may initially set its actor. Afterwards only
+  -- FK cleanup to NULL is permitted; stop timing and reason remain frozen.
+  IF NEW.stopped_by_employee_id IS NOT NULL
+    AND NEW.stopped_by_employee_id IS DISTINCT FROM OLD.stopped_by_employee_id
+  THEN
+    RAISE EXCEPTION 'SERVICE_PROMOTION_INVALID_STATE' USING ERRCODE = 'P0001';
+  END IF;
+  IF ROW(NEW.stopped_at, NEW.stop_reason)
+    IS DISTINCT FROM ROW(OLD.stopped_at, OLD.stop_reason)
   THEN
     RAISE EXCEPTION 'SERVICE_PROMOTION_INVALID_STATE' USING ERRCODE = 'P0001';
   END IF;
