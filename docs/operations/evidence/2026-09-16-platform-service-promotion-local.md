@@ -1,5 +1,7 @@
 # 技术服务限时活动本地验证证据
 
+最新状态（2026-09-17 北京时间）：**开发发布 DONE_WITH_CONCERNS**。五条迁移已应用、631 条 Local/Remote 对齐、API/Admin 同 SHA 发布与无支付 API smoke 通过；类型生成、浏览器交互及 Orange/支付验收仍有独立门禁。下文前半部分保留本地验证和首次阻塞的历史，最新开发发布结论见末尾。
+
 验证时间：2026-09-16 UTC（北京时间 2026-09-17）。本轮非数据库复验记录时间为 17:37 UTC。
 分支：`feature/platform-service-promotion`。
 证据提交前最新 reviewed feature SHA：`df2ee19ef9a1512ae1a32f6348889ccecbae40b3`。
@@ -287,3 +289,111 @@ applied_versions=
 - **浏览器交互、Orange 真机与真实支付验收仍未完成。** 本轮未触发支付，未访问或改写 Orange 工作区，未执行 production workflow 或数据库操作。
 
 本轮仅提交本 Markdown。提交前核对 `git diff --check`、暂存差异、敏感信息模式和生成类型差异；不保存原始 workflow 日志、凭据、签名、OpenID 或用户信息。
+
+
+## Task 9 继续执行：五条开发迁移与发布（2026-09-17 北京时间）
+
+用户确认按推荐方案继续，明确授权通过正式开发 workflow 顺序应用上述 5 条 pending migration，随后发布 API/Admin 并做无真实支付 smoke。固定 release branch/SHA 仍为 `release/platform-service-promotion-dev-20260917` / `07c7da008118c97fb2203b3cf68d820d58b9bacc`，未改变 release branch。
+
+### 重跑 plan 与正式 apply
+
+| 阶段 | Run | 结果 |
+| --- | --- | --- |
+| 重跑 plan | [35160075051](https://github.com/LeeFo-china/goose/actions/runs/35160075051) | success；2026-09-16T22:56:54Z 创建；pending 恰好授权 5 条，626 → 626，applied 0 |
+| 正式 apply | [35160138552](https://github.com/LeeFo-china/goose/actions/runs/35160138552) | success；2026-09-16T22:57:48Z 创建；626 → 631，applied 5，latest `20260916170000` |
+
+两次 workflow 均经 `gh run watch --exit-status` 和完成态元数据核验，headSha 与上述固定 SHA 精确一致。plan 前本地 631 个唯一 migration 版本减去 5 条 pending 恰好等于 remote history 626 条，结合 pending 集合推导没有 remote-only 版本；这不是内容 checksum 校验。
+
+实际 applied_versions 按顺序为：
+
+```text
+20260914202700 20260915090000 20260915092804 20260916133000 20260916170000
+```
+
+应用通过现有 `migrate-dev-database.yml` 执行；未手工执行远端 DDL/DML、db push 或 migration repair。工作流逐 migration 提交，不宣称五条为同一事务。
+
+应用后通过现有开发 runner 的 CLI 执行只读 `supabase@2.99.0 migration list --db-url`。先核对 runner checkout 固定 SHA，再使用仓库 `validate-dev-database-target.mjs --direct-migration-history` 校验开发 project/host，连接串仅在远端进程环境中使用。远端与本地 `verify-migration-history.mjs` 均确认 **631 条 Local/Remote 严格对齐**，目标显式为 `20260916170000`。日志不含连接串或凭据；完整列表仅暂存于忽略目录。
+
+### 类型生成门禁
+
+已执行 `bun run gen`，指定 project ref 为 `fclnkyatvfvmzgzdqlba`。Supabase 管理 API 返回 `failed to retrieve generated types: {"message":"Project must be active and healthy."}`，exit 1；一次只读诊断重试得到相同错误。由于脚本输出重定向会截断文件，失败后立即恢复原始 `apps/api/src/types/database.ts`，核对无差异。
+
+因此 **类型生成仍未完成**，没有伪造 promotion/attachments 类型或将失败空文件提交。该错误来自管理 API 的项目状态，不等同于迁移实际使用的 self-hosted 开发数据库状态；后者已通过上述严格 history 验证。继续使用已通过本地检查的固定 release SHA，类型文件保持不变。
+
+### 首次发布失败与开发 runner 恢复
+
+首次 [Release Dev 35160393023](https://github.com/LeeFo-china/goose/actions/runs/35160393023) 创建于 `2026-09-16T23:01:06Z`，结束于 `2026-09-16T23:02:30Z`，headSha 正确。API 镜像构建 failure，Admin job cancelled，workflow 内迁移 gate 与 API/Admin deploy 均 skipped。没有部署本次版本；不可将 prepare/认证预检成功描述为发布成功。
+
+根因证据：GitHub job annotation 为 `System.IO.IOException: No space left on device`，runner 无法写 `_diag/Worker_20260916-230136-utc.log`，完整失败 job 日志未能上传（`log not found`）。只读 `df -h /` 显示 59G 分区 100%、可用 0；早期 annotation 仅剩 51 MB。磁盘耗尽随后导致开发 PostgreSQL 写 `postmaster.pid`/恢复文件失败，DB、realtime 和 social-video-worker 自动重启，REST/pooler 短暂 unhealthy。API/Admin 容器仍 healthy、根路径/登录页 HTTP 200，但这不表示当时全部数据库功能可用。
+
+只读容量审计显示 Images 152 个/33.94GB、Build Cache 157 项/5.846GB（active 0，全部 reclaimable）、Containers 29 个、Volumes 13 个。`/opt/gooes-dev/docker/backups` 不存在；`/tmp` 中仍有四份历史 preapply 备份，未删除。runner 日志约 584MB、系统日志约 521MB，均未删除；既有 rollback 镜像和配置备份保持。
+
+经单独授权，仅执行 `docker builder prune --all --force`，exit 0，输出回收 **5.846GB**。此前首次包装命令在只读容器快照阶段即退出，尚未到达 prune；随后直接执行上述获授权命令。没有执行 image/container/volume/system prune，没有删除备份、runner work、日志或配置，没有手动 restart/recreate/down。
+
+清理后 `df` 可用约 4.9G、使用率 92%；Build Cache 归零，Images 仍 152、Containers 仍 29、Volumes 仍 13。共享层释放使 Docker 报告的 Images 占用降至 28.73GB，未执行镜像删除命令。DB、REST、realtime、pooler、social-video-worker 均自行恢复 healthy；API/Admin 保持 healthy。恢复后重新执行只读 migration list 和本地严格 verifier，再次确认 631 条对齐、目标活动 migration 存在。
+
+已按 runbook 以全新 dispatch 启动 [Release Dev 35161044686](https://github.com/LeeFo-china/goose/actions/runs/35161044686)，createdAt `2026-09-16T23:09:42Z`，同一固定 SHA、`service=api,admin`、`operation=release`；没有对旧 run 使用 Re-run。
+
+
+第二次合并服务 release `35161044686` 的 API build 成功，可信 `dev-build-plan` 的 build/deploy services 均精确为 `api,admin`。API manifest 绑定本 run/SHA。Admin 冷构建时磁盘由 4.9G → 3.6G → 1.9G → 959MB；为避免再次满盘，主动取消该 run，最终结论 cancelled，所有 deploy 与内建 history gate skipped。DB/API/Admin/REST/realtime 持续 healthy，未发生第二次数据库故障。取消后临时构建层释放，磁盘恢复约 1.9G。
+
+随后只读审计：48 项 unused build cache 共 2.989GB，dangling image 列表为空；保留所有 tagged/current/rollback images。`docker system df` 曾在构建取消收尾期间返回 snapshot NotFound，稍后复查成功；未通过重启 Docker 或删除存储修复。
+
+为降低峰值，获授权改为同一固定 SHA 分两次正式 release：先 API 发布健康，再清 unused build cache，再 Admin 发布。第二次仅 `docker builder prune --all --force` 回收 2.989GB，磁盘恢复 4.4G/93%；29 个容器均保留，所有带 healthcheck 服务 healthy。已核对 workflow service 为字符串输入，仓库 resolver 单独接受 `api` 和 `admin`。
+
+API 单服务 [Release Dev 35161715441](https://github.com/LeeFo-china/goose/actions/runs/35161715441) 创建于 `2026-09-16T23:18:31Z`，headSha 仍为固定 `07c7da008118c97fb2203b3cf68d820d58b9bacc`。
+
+
+API 单服务 release **success**，内建严格迁移历史 gate 于 `23:21:04Z` 完成，API deploy 于 `23:21:48Z` 完成，run 最终于 `2026-09-16T23:22:05Z` success。下载的 migration evidence 经本地 `verify-dev-migration-evidence.mjs` 复验通过，绑定 development/固定 SHA；gate 的既有目标为 `20260711120000`，本次活动版本另由前述目标 `20260916170000` 的完整列表校验覆盖。
+
+独立 Docker inspect：API running/healthy，revision 为固定 SHA、run label `35161715441`，镜像 digest `sha256:37a09add4c487c6e5e52ba03e0ffeabb4c9bed74e312dec84e9a7b44212d6ef5`，与下载的本 run API manifest 精确一致。Admin 此时仍旧版本 healthy，证明 API 先于 Admin。新 API 的正常超管鉴权活动列表返回 HTTP 200、total 0，属于只读检查。
+
+第三次仅清 unused build cache 回收 **1.135GB**，可用空间恢复至 `4,268,978,176` bytes（`df -h` 显示 4.0G，93%）；API/Admin/DB/REST/realtime 全部 healthy。随后新建 Admin 单服务 [Release Dev 35162095785](https://github.com/LeeFo-china/goose/actions/runs/35162095785)，createdAt `2026-09-16T23:23:44Z`，仍使用固定 SHA。
+
+
+### 最终开发发布结果与镜像核验
+
+Admin 单服务 release **success**，内建严格迁移 gate 于 `23:31:45Z` 完成，Admin deploy 于 `23:32:16Z` 完成，run 最终于 `2026-09-16T23:32:27Z` success。下载的 Admin build-plan 确认 build/deploy services 均仅为 `admin`；migration evidence 再次通过本地 verifier。
+
+| 服务 | 最终成功 run | 独立 inspect revision | manifest 与容器一致的 digest |
+| --- | --- | --- | --- |
+| API | [35161715441](https://github.com/LeeFo-china/goose/actions/runs/35161715441) | `07c7da008118c97fb2203b3cf68d820d58b9bacc` | `sha256:37a09add4c487c6e5e52ba03e0ffeabb4c9bed74e312dec84e9a7b44212d6ef5` |
+| Admin | [35162095785](https://github.com/LeeFo-china/goose/actions/runs/35162095785) | `07c7da008118c97fb2203b3cf68d820d58b9bacc` | `sha256:149e987a968083aa439a3be1c3cded9c0a59de94728c078816e5a09c01fa698f` |
+
+两个容器独立 inspect 均 running/healthy，run label 分别等于各自成功 run。API deploy 完成早于 Admin deploy 开始，发布顺序符合要求。两个正式 workflow 都成功通过部署前 migration list 门禁和既有健康/登录态 project-health smoke；production 镜像校验任务未执行。没有把失败或取消 run 的镜像证据混入最终发布结果。
+
+### 认证 Admin/API 无支付 smoke
+
+通过现有开发登录流程取得平台超管和租户测试会话，凭据只在进程内存中使用。所有业务操作经 `https://admin-dev.goodcms.cn/api/backend` 代理请求已发布 API，未伪造身份、直接调用 service-role RPC 或手工写数据库。开始前正常分页列表确认没有 active/scheduled 活动；未触碰其他活动。
+
+实际通过 13 项检查，流程为：
+
+1. 默认创建草稿，确认 `discount_rate_basis_points=2000`、开始/结束时间均为 null。
+2. 以响应的 `server_time` 为基准设为未来一小时开始、持续一小时，保存成功。
+3. 确认预览恰好为三档正式商品，每档均有有效 UUID `product_version_id` 及正整数原价/日常价/活动价。
+4. 发布携带三档唯一商品版本，重新分页读取活动为 `phase=scheduled`。
+5. 调用正式 stop 命令并重新读取为 `phase=stopped`。
+6. 租户 `GET /billing/service-products?page=1&pageSize=20` 三档均 `promotion=null`，`amount_fen=base_amount_fen`，且等于 smoke 前的日常价。
+
+活动 ID（脱敏）：`d71304…9441`；最终 aggregate version：`4`；活动已停止。只保留停用后的审计历史，没有创建订单或提交支付。预览金额单位为分：
+
+| 商品 | 原价 `list_amount_fen` | 日常价 `base_amount_fen` | 活动价 `effective_amount_fen` |
+| --- | --- | --- | --- |
+| `platform_service_1y` | 980000 | 980000 | 196000 |
+| `platform_service_2y` | 1960000 | 1568000 | 313600 |
+| `platform_service_3y` | 2940000 | 2058000 | 411600 |
+
+这是开发数据库真实认证 API/BFF 流程验证，不是浏览器点击或 Orange 真机验收，也不覆盖真实支付、并发锁或时间边界的全部数据库验收场景。
+
+### 最终容量、状态和剩余门禁
+
+smoke 完成后，按单独授权第四次仅执行 `docker builder prune --all --force`，exit 0，回收 **3.199GB**。最终磁盘约 **3.9G 可用 / 94%**，Build Cache 为 0，运行容器 29 个、Volumes 13 个；全部带 healthcheck 的业务/Supabase 服务 healthy，API 根和 Admin 登录页均 HTTP 200。所有清理均仅针对 unused build cache，未删除 tagged/current/rollback images、容器、volume、备份、日志或配置。
+
+最终结论：**DONE_WITH_CONCERNS**。
+
+- 开发迁移、严格 history 对齐、API 先 Admin 同 SHA 发布、真实认证无支付 smoke 已完成。
+- 管理 API 的 `bun run gen` 仍失败，`database.ts` 恢复原样且无差异；需要单独恢复/确认指定项目的类型生成通道，不伪造 schema 类型。
+- 浏览器 Tabs/弹窗/pending 交互、Orange 真机、真实支付及更完整并发/时间边界数据库验收仍未完成；未执行 production 发布或生产数据库操作，未改写 Orange。
+- 开发 runner 总磁盘仍偏紧；本次靠分服务发布与清 unused cache完成，长期容量和构建缓存治理另行处理，不在本任务扩展清理范围。
+
+本次仅更新本证据文件并在功能分支提交；release branch 继续指向固定 `07c7da008118c97fb2203b3cf68d820d58b9bacc`。原始认证响应、token、支付参数、签名、OpenID 和用户明细均未写入证据。最终执行差异/敏感信息检查，确认生成类型未变。
