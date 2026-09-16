@@ -229,3 +229,61 @@ supabase stop --project-id gooes-promotion-verification --no-backup --yes \
 清理命令 exit 0；确认隔离实例容器不存在，共享 `supabase_db_gooes` 仍 healthy。临时 config、日志和迁移链接已删除。
 
 证据只提交本 Markdown；本地凭据、连接串、支付字段、签名 URL、OpenID 和用户明细不进入证据。提交前再次检查 `git diff --check`、`git diff --cached --check`、证据敏感信息及类型文件差异；提交后核对工作区 clean。
+
+
+## Task 9 开发发布门禁（2026-09-17 北京时间）
+
+本轮结论：**BLOCKED**。2026-09-16 17:44 UTC（北京时间 2026-09-17 01:44）的正式开发迁移 plan 成功，但返回 5 条 pending migration，其中 4 条不是本次活动 migration；因此未执行 apply、类型生成、API/Admin release 或活动 smoke。前文 Task 8 本地检查结果保持历史记录，不能替代本节开发发布门禁。
+
+### 固定发布版本与预检
+
+- 工作区：`.worktrees/platform-service-promotion`；操作前 `git status --porcelain` 为空。
+- reviewed release SHA：`07c7da008118c97fb2203b3cf68d820d58b9bacc`。
+- release branch：`release/platform-service-promotion-dev-20260917`。
+- origin：`https://github.com/LeeFo-china/goose.git`；GitHub CLI 已认证。
+- 推送前确认远端同名分支不存在；仅创建、推送该独立分支，随后 `git ls-remote --heads` 精确核对远端 SHA。未推送 main。
+- 本节证据提交位于 `feature/platform-service-promotion`，不移动已固定的 release branch。
+
+### 正式 workflow 结果
+
+| 阶段 | Run ID / URL | 结果 |
+| --- | --- | --- |
+| Migration plan | [35130052574](https://github.com/LeeFo-china/goose/actions/runs/35130052574) | workflow success；发布门禁 BLOCKED：pending 5 条 |
+| Migration apply | 未触发 | 被 pending 范围门禁阻断 |
+| API/Admin release | 未触发 | 未应用 migration，不允许发布 |
+
+plan 使用 `migrate-dev-database.yml`，输入 `mode=plan`、`confirm_dev_project_ref=fclnkyatvfvmzgzdqlba`；触发 ref 为上述 release branch。run 的 `event=workflow_dispatch`、`headBranch` 和完整 `headSha` 均已核对，createdAt 为 `2026-09-16T17:44:31Z`，completed/updatedAt 为 `2026-09-16T17:44:44Z`。`gh run watch --exit-status` 返回 0；随后再次读取完成态元数据和白名单过滤的迁移摘要。
+
+脱敏摘要：
+
+```text
+mode=plan
+before_count=626
+before_latest=20260914191000
+after_count=626
+after_latest=20260914191000
+pending_count=5
+pending_versions=20260914202700 20260915090000 20260915092804 20260916133000 20260916170000
+applied_count=0
+applied_versions=
+```
+
+与本地 migration 文件对应的完整待执行清单：
+
+1. `20260914202700_accept_douyin_official_lead_attribution.sql`
+2. `20260915090000_remove_douyin_clue_component_dependency.sql`
+3. `20260915092804_douyin_source_dashboard_stats.sql`
+4. `20260916133000_supplier_purchase_receipt_delivery_note_attachments.sql`
+5. `20260916170000_create_platform_service_promotions.sql`（本次目标）
+
+这表明开发库缺少当前 release SHA 中的四条前置迁移。没有删改待执行文件、修改迁移历史、手工执行远端 DDL/DML 或绕过 gate。解除阻塞需要先由对应范围的开发迁移流程审查并处理四条非目标 migration，再重新执行本活动 plan，不能直接用本次 plan 结果执行 apply。
+
+### 未完成门禁
+
+- **Migration list：NOT_RUN。** 本次停在只读 plan，未发生 apply。现有 `migrate-dev-database.yml` 本身只输出 migration history 数量/版本摘要，没有运行 `supabase migration list`；后续 apply 后仍须独立取得严格 Local/Remote 对齐证据。`release-dev.yml` 的部署前 reusable migration gate 会运行 `supabase@2.99.0 migration list`，但本轮未触发 release，不能引用它为已完成检查。
+- **数据库类型：NOT_RUN。** 因活动 migration 未应用，未运行 `bun run gen`；`git diff -- apps/api/src/types/database.ts` 为空。
+- **API/Admin 部署与健康：NOT_RUN。** 没有新的 release run、镜像 revision 或部署后健康结果。
+- **认证 Admin/API smoke：NOT_RUN。** 未创建、发布或停止活动，没有 promotion ID/version 可记录；默认 2 折、空时间、未来一小时三档价格与 `product_version_id`、scheduled → stopped、租户商品恢复日常价仍待开发联调。
+- **浏览器交互、Orange 真机与真实支付验收仍未完成。** 本轮未触发支付，未访问或改写 Orange 工作区，未执行 production workflow 或数据库操作。
+
+本轮仅提交本 Markdown。提交前核对 `git diff --check`、暂存差异、敏感信息模式和生成类型差异；不保存原始 workflow 日志、凭据、签名、OpenID 或用户信息。
