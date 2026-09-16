@@ -83,13 +83,73 @@ c8d2c195e fix(admin): 发布前刷新活动价格并补齐确认契约
 
 既有 `supabase_db_gooes` 正在运行，因此没有对共享项目 reset。临时项目位于 Git 忽略的 `node_modules/.cache/promotion-verification`，project ID 为 `gooes-promotion-verification`，端口由 543xx 改为 553xx。临时 config 复制自仓库，未复制 `.env`、linked project 或远端连接配置；migrations 链接到仓库完整目录，不筛选或修改 SQL。为先启动 Supabase 自身完整基线，临时禁用 migrations 和 seed；start 成功后重新开启 migrations，保留 seed 禁用，然后实际执行完整 reset。
 
+以下按实际执行顺序记录准备与验证命令，cwd 均为 worktree 根目录。本次仅复制 `supabase/config.toml`，再创建指向完整 `supabase/migrations` 的符号链接；没有复制 seed、functions、`.env` 或 `supabase/.temp`。以下临时目录在执行前不存在，执行后已清理；这些命令用于复现记录，本次补充文档没有重新运行数据库验证。
+
 ```bash
+python3 - <<'PY'
+from pathlib import Path
+import re
+
+root = Path.cwd()
+target = root / 'node_modules/.cache/promotion-verification'
+(target / 'supabase').mkdir(parents=True, exist_ok=True)
+config = (root / 'supabase/config.toml').read_text()
+config = config.replace(
+    'project_id = "gooes"',
+    'project_id = "gooes-promotion-verification"',
+)
+config = re.sub(r'\b543(\d\d)\b', r'553\1', config)
+config = config.replace(
+    '[db.migrations]\n'
+    '# If disabled, migrations will be skipped during a db push or reset.\n'
+    'enabled = true',
+    '[db.migrations]\n'
+    '# Initially disabled to start the isolated baseline.\n'
+    'enabled = false',
+)
+config = config.replace(
+    '[db.seed]\n'
+    '# If enabled, seeds the database after migrations during a db reset.\n'
+    'enabled = true',
+    '[db.seed]\n'
+    '# Seed disabled for disposable migration verification.\n'
+    'enabled = false',
+)
+(target / 'supabase/config.toml').write_text(config)
+(target / 'supabase/migrations').symlink_to(
+    root / 'supabase/migrations', target_is_directory=True,
+)
+PY
+
 supabase start --workdir node_modules/.cache/promotion-verification \
-  --exclude analytics,vector,studio,edge-runtime,realtime,imgproxy,inbucket
+  --exclude analytics,vector,studio,edge-runtime,realtime,imgproxy,inbucket \
+  > node_modules/.cache/promotion-verification/start.log 2>&1
+```
+
+端口替换覆盖 config 中全部独立的 `543xx` 数值，例如 API `54321→55321`、数据库 `54322→55322`、shadow `54320→55320`。准备脚本对配置中已有的 `env(...)` 引用只保留变量名，不读取或写入其值。CLI 自动创建本地实例凭据；本记录不包含这些值，也不使用完整连接串。`start.log` 可能含本地凭据，未提交，已随临时目录删除。
+
+确认 start exit 0 后，仅重新开启临时 config 的 migrations 开关，seed 仍为 false：
+
+```bash
+python3 - <<'PY'
+from pathlib import Path
+
+p = Path('node_modules/.cache/promotion-verification/supabase/config.toml')
+config = p.read_text().replace(
+    '# Initially disabled to start the isolated baseline.\nenabled = false',
+    '# Full repository migration chain enabled for isolated reset.\nenabled = true',
+)
+p.write_text(config)
+PY
+
 supabase db reset --local --no-seed --yes \
-  --workdir node_modules/.cache/promotion-verification
+  --workdir node_modules/.cache/promotion-verification \
+  > node_modules/.cache/promotion-verification/reset.log 2>&1
+
+# reset 失败后单独执行此只读命令，获取实际 applied / pending 状态。
 supabase migration list --local \
-  --workdir node_modules/.cache/promotion-verification
+  --workdir node_modules/.cache/promotion-verification \
+  > node_modules/.cache/promotion-verification/migration-list.log 2>&1
 ```
 
 结果：start exit 0；reset **exit 1**；migration list exit 0。完整链执行到历史文件：
