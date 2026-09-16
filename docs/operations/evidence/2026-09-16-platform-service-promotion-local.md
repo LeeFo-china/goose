@@ -1,0 +1,147 @@
+# 技术服务限时活动本地验证证据
+
+验证时间：2026-09-16 UTC（北京时间 2026-09-17）。
+分支：`feature/platform-service-promotion`。
+证据提交前 reviewed feature SHA：`f6f11a67d7093c66ddb3b6eb76ed362611b1bd6d`。
+工作区：`.worktrees/platform-service-promotion`。
+
+结论：**DONE_WITH_CONCERNS**。API/Admin 聚焦测试、静态检查和构建通过；隔离 Supabase 完整迁移链被既有非事务索引 migration 的 CLI 执行限制阻断，活动 migration 尚未应用，真实 RPC 和 Admin 交互 smoke 未完成。本记录不是完整数据库验收或开发发布放行凭证。
+
+## 聚焦测试
+
+以下命令均在指定工作目录实际运行，Bun 1.3.2。
+
+API cwd：`apps/api`。
+
+```bash
+bun test \
+  src/services/platform-service-promotions-migration-contract.test.ts \
+  src/repositories/platform-service-promotions.test.ts \
+  src/services/platform-service-promotions.test.ts \
+  src/controllers/platform-service-promotions/routes.test.ts \
+  src/repositories/platform-service-orders.test.ts \
+  src/repositories/platform-service-order-trial-attribution.test.ts \
+  src/services/platform-service-order-views.test.ts \
+  src/services/tenant-platform-service-orders.test.ts \
+  src/services/tenant-platform-service-orders-trial-attribution.test.ts \
+  src/services/platform-service-products.test.ts \
+  src/controllers/platform-service-products/routes.test.ts \
+  src/services/platform-service-order-payment-confirmation.test.ts
+```
+
+结果：exit 0；12 个文件，103 pass、0 fail、570 次 `expect()`。
+包含 migration 文本契约、活动 schema/repository/service/routes、有效价格边界、订单快照与试用归因、套餐及支付确认适配测试。文本契约和 mock RPC 通过不代表真实 PostgreSQL RPC 通过。
+
+Admin cwd：`apps/admin`。
+
+```bash
+bun test \
+  components/platform-service-promotions/platform-service-promotion-form-data.test.ts \
+  components/platform-service-promotions/platform-service-promotions-page.test.ts \
+  components/platform-service-products/platform-service-products-page.test.ts
+```
+
+结果：exit 0；3 个文件，25 pass、0 fail、214 次 `expect()`。
+覆盖默认 2 折草稿、金额预览、北京时间展示、分页 Tabs、发布前刷新、确认金额和 pending 状态契约；这些不是浏览器交互测试。
+
+## 静态检查、构建和仓库边界
+
+以下命令 cwd 为 worktree 根目录。
+
+| 命令 | 实际结果 |
+| --- | --- |
+| `bun run api:check` | exit 0；TypeScript 检查通过，985 modules 构建成功；API 文件上限 500 行、豁免 0，生成的 database.ts 单独排除 |
+| `pnpm --dir apps/admin check` | exit 0；1,627 个 TS/TSX 文件均不超过 500 行；Next route typegen 和 tsc 通过 |
+| `pnpm --dir apps/admin build` | exit 0；Next.js 15.5.15，101/101 页面生成，standalone assets 同步完成 |
+| `bun run check:permission-boundaries` | exit 0，权限边界检查通过 |
+| `bun run audit:supabase-writes` | exit 0，但报告 17 个 candidate，不能解读为零风险 |
+| `git diff --check` | exit 0 |
+| `git diff -- apps/api/src/types/database.ts` | 无输出，生成类型未修改 |
+| `git status --short` | 写证据前无输出 |
+| `git log --oneline -8` | 核对 reviewed SHA 及下列最近提交 |
+
+Admin 构建包含 `/platform/service-products`（13.2 kB；First Load JS 183 kB）和 `/platform/service-orders`。构建结果只说明路由能够编译，不证明浏览器操作或已部署。
+
+写入审计的 17 个候选分布在 10 个既有文件（访客项目关注、验收模板、合作伙伴收益、图库、虚拟支付渠道和若干测试），与 `git diff --name-only main...HEAD` 的活动功能改动文件交集为空。本次只记录结果，不调整无关代码。审计脚本默认有候选仍返回 0，未使用 `--fail-on-candidates`。
+
+最近提交核对：
+
+```text
+f6f11a67d docs(miniprogram): 说明活动示例为节选
+7bd07ac3f docs(miniprogram): 修正限时活动刷新契约
+d0b39caa5 docs(miniprogram): 交接技术服务限时活动
+881427027 fix(admin): 统一限时活动展示为北京时间
+c8d2c195e fix(admin): 发布前刷新活动价格并补齐确认契约
+4b5bd1782 feat(admin): 管理技术服务限时活动
+01b15a9fb fix(admin): 收紧限时活动状态查询
+38cfb3e3f feat(admin): 增加限时活动表单规则
+```
+
+## 隔离 Supabase 完整迁移尝试
+
+环境：Darwin arm64；Docker client 29.7.1 / server 29.5.2；Supabase CLI 2.99.0；隔离 PostgreSQL 17.6；pnpm 10.33.0。
+
+既有 `supabase_db_gooes` 正在运行，因此没有对共享项目 reset。临时项目位于 Git 忽略的 `node_modules/.cache/promotion-verification`，project ID 为 `gooes-promotion-verification`，端口由 543xx 改为 553xx。临时 config 复制自仓库，未复制 `.env`、linked project 或远端连接配置；migrations 链接到仓库完整目录，不筛选或修改 SQL。为先启动 Supabase 自身完整基线，临时禁用 migrations 和 seed；start 成功后重新开启 migrations，保留 seed 禁用，然后实际执行完整 reset。
+
+```bash
+supabase start --workdir node_modules/.cache/promotion-verification \
+  --exclude analytics,vector,studio,edge-runtime,realtime,imgproxy,inbucket
+supabase db reset --local --no-seed --yes \
+  --workdir node_modules/.cache/promotion-verification
+supabase migration list --local \
+  --workdir node_modules/.cache/promotion-verification
+```
+
+结果：start exit 0；reset **exit 1**；migration list exit 0。完整链执行到历史文件：
+
+```text
+20260826141500_prepare_supplier_purchase_batch_catalog_search.sql
+ERROR: CREATE INDEX CONCURRENTLY cannot be executed within a pipeline (SQLSTATE 25001)
+At statement: 2
+CREATE INDEX CONCURRENTLY IF NOT EXISTS
+  supplier_products_product_code_batch_catalog_trgm_idx
+ON public.supplier_products
+USING gin (product_code extensions.gin_trgm_ops)
+```
+
+Root Cause：该 migration 首行已有 `-- gooes:migration-mode=nontransactional`。Supabase CLI reset 使用 pipeline 执行，无法按仓库 marker 把该并发索引文件放在事务外执行。此问题先于本功能 migration，不能据此判断本功能 SQL 已通过或失败。
+
+已查阅 [非事务索引操作手册](../../runbooks/supplier-purchase-batch-nontransactional-migrations.md)、`.github/workflows/migrate-dev-database.yml`、对应 production workflow，以及 `scripts/verify-warehouse-stage-b-database.ts`。正式 workflow 内嵌 runner 会在事务外执行标记文件、核验索引元数据后登记 history；dev workflow 固定开发项目确认、host 和 `/opt/gooes-dev/docker/.env.dev.db`，没有可直接调用的本地完整链模式。现有 warehouse 隔离脚本只选采购域且排除特定数据修复，明确不等同于完整链。因此未触发远端 workflow、未删改历史 migration、未跳过失败版本、未手工补 history，也未只执行活动单文件。
+
+`supabase migration list --local` 及隔离容器只读 psql 核对结果：
+
+```text
+Local migration files: 631
+Applied migrations in isolated local database: 521
+Latest applied: 20260826141000
+Target row:
+20260916170000 |                | 2026-09-16 17:00:00
+```
+
+这里 CLI 的 Remote 列指向隔离本地数据库，**并未对齐**，110 个版本仍 pending。未连接云端开发或生产数据库。只读核对命令：
+
+```bash
+docker exec supabase_db_gooes-promotion-verification \
+  psql -U postgres -d postgres -X -At \
+  -c "select current_setting('server_version'),count(*),max(version) from supabase_migrations.schema_migrations;"
+```
+
+## 未完成门禁与回滚
+
+- **真实 RPC smoke：NOT_RUN。** 完整链在前述历史 migration 停止，`20260916170000` 未应用；没有活动对象可供验证。默认 2000、三档预览、future/active、半开区间、有效套餐列表、重叠拒绝、停止恢复及订单 snapshot/amount 仅有前述契约/mock 测试证据，均待完整 schema 上真实 SQL 验证。未插入临时员工、套餐或订单。
+- **生成类型：NOT_RUN。** `apps/api/src/types/database.ts` 保持不变；等待 Task 9 dev migration 后生成/核对。只有指定 development project 确认迁移应用后才能运行 `bun run gen`，本次未连接该项目或伪造类型。
+- **Admin 交互 smoke：NOT_RUN。** 当前隔离数据库未完成活动 schema，未建立可用的本地活动 API/平台登录数据；现有 service-access E2E mock 是其他业务流程。没有为此修改配置、绕过鉴权或发送远端请求。Tabs、弹窗、pending 的真实交互仍为开发联调门禁。
+- 未执行真实支付、Orange 真机验收、development migration/apply/deploy 或 production 操作；未修改或操作 Orange 工作区。
+- 本次清理只销毁新建隔离实例及其数据卷；共享 `gooes` 本地实例继续运行。未对任何真实数据执行回滚。
+- 将来活动回退按 migration 内既定说明：先使用带审计的 stop 命令停止已发布活动，再以审查后的 forward migration 恢复之前订单/产品 RPC 并撤销活动 RPC 权限；保留活动版本历史和已有订单冻结快照，不能删除历史或重新定价旧订单。本次没有执行该远端回退。
+
+隔离环境清理命令：
+
+```bash
+supabase stop --project-id gooes-promotion-verification --no-backup --yes \
+  --workdir node_modules/.cache/promotion-verification
+```
+
+清理命令 exit 0；确认隔离实例容器不存在，共享 `supabase_db_gooes` 仍 healthy。临时 config、日志和迁移链接已删除。
+
+证据只提交本 Markdown；本地凭据、连接串、支付字段、签名 URL、OpenID 和用户明细不进入证据。提交前再次检查 `git diff --check`、`git diff --cached --check`、证据敏感信息及类型文件差异；提交后核对工作区 clean。
