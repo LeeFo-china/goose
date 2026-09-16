@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+const DateTimeSchema = z.iso.datetime({ offset: true });
+const NullableDateTimeSchema = DateTimeSchema.nullable();
 const NullableStringSchema = z.string().nullable();
 
 const PlatformServicePromotionRecordSchema = z.strictObject({
@@ -7,12 +9,12 @@ const PlatformServicePromotionRecordSchema = z.strictObject({
   code: z.string(),
   draft_version_id: NullableStringSchema,
   published_version_id: NullableStringSchema,
-  version: z.number().int(),
-  archived_at: NullableStringSchema,
+  version: z.number().int().positive(),
+  archived_at: NullableDateTimeSchema,
   created_by_employee_id: NullableStringSchema,
   updated_by_employee_id: NullableStringSchema,
-  created_at: z.string(),
-  updated_at: z.string(),
+  created_at: DateTimeSchema,
+  updated_at: DateTimeSchema,
 });
 
 const PlatformServicePromotionVersionStatusSchema = z.enum([
@@ -25,22 +27,22 @@ const PlatformServicePromotionVersionStatusSchema = z.enum([
 const PlatformServicePromotionVersionRecordSchema = z.strictObject({
   id: z.string(),
   promotion_id: z.string(),
-  version_no: z.number().int(),
+  version_no: z.number().int().positive(),
   publication_status: PlatformServicePromotionVersionStatusSchema,
   name: z.string(),
   badge_text: z.string(),
   title: z.string(),
   summary: z.string(),
   rules_text: z.string(),
-  discount_rate_basis_points: z.number().int(),
-  starts_at: NullableStringSchema,
-  ends_at: NullableStringSchema,
-  published_at: NullableStringSchema,
+  discount_rate_basis_points: z.number().int().min(1).max(9999),
+  starts_at: NullableDateTimeSchema,
+  ends_at: NullableDateTimeSchema,
+  published_at: NullableDateTimeSchema,
   published_by_employee_id: NullableStringSchema,
-  stopped_at: NullableStringSchema,
+  stopped_at: NullableDateTimeSchema,
   stopped_by_employee_id: NullableStringSchema,
   stop_reason: NullableStringSchema,
-  created_at: z.string(),
+  created_at: DateTimeSchema,
 });
 
 const PlatformServicePromotionPhaseSchema = z.enum([
@@ -55,11 +57,11 @@ const PlatformServicePromotionPricePreviewSchema = z.strictObject({
   product_id: z.string(),
   code: z.string(),
   title: z.string(),
-  term_years: z.number().int(),
-  base_amount_fen: z.number().int(),
-  effective_amount_fen: z.number().int(),
-  base_price_rate_basis_points: z.number().int(),
-  price_rate_basis_points: z.number().int(),
+  term_years: z.number().int().positive(),
+  base_amount_fen: z.number().int().positive(),
+  effective_amount_fen: z.number().int().positive(),
+  base_price_rate_basis_points: z.number().int().min(1).max(10_000),
+  price_rate_basis_points: z.number().int().min(1).max(10_000),
 });
 
 const PlatformServicePromotionCommandResultSchema = z.strictObject({
@@ -68,7 +70,7 @@ const PlatformServicePromotionCommandResultSchema = z.strictObject({
   draft: PlatformServicePromotionVersionRecordSchema.nullable(),
   published: PlatformServicePromotionVersionRecordSchema.nullable(),
   price_preview: z.array(PlatformServicePromotionPricePreviewSchema),
-  server_time: z.string(),
+  server_time: DateTimeSchema,
 });
 
 const PlatformServicePromotionListRecordSchema =
@@ -82,12 +84,12 @@ const PlatformServicePromotionListRecordSchema =
 const PlatformServicePromotionListPageSchema = z.strictObject({
   list: z.array(PlatformServicePromotionListRecordSchema),
   pagination: z.strictObject({
-    page: z.number().int(),
-    pageSize: z.number().int(),
-    total: z.number().int(),
-    totalPages: z.number().int(),
+    page: z.number().int().positive(),
+    pageSize: z.number().int().min(1).max(100),
+    total: z.number().int().nonnegative(),
+    totalPages: z.number().int().nonnegative(),
   }),
-  server_time: z.string(),
+  server_time: DateTimeSchema,
 });
 
 export type PlatformServicePromotionRecord =
@@ -109,14 +111,12 @@ export type PlatformServicePromotionListPage =
 
 export function parsePlatformServicePromotionCommandResult(
   value: unknown,
-): PlatformServicePromotionCommandResult | null {
-  const parsed = PlatformServicePromotionCommandResultSchema.safeParse(value);
-  return parsed.success ? parsed.data : null;
+) {
+  return PlatformServicePromotionCommandResultSchema.safeParse(value);
 }
 
 export function parsePlatformServicePromotionListPage(
   value: unknown,
-): PlatformServicePromotionListPage | null {
-  const parsed = PlatformServicePromotionListPageSchema.safeParse(value);
-  return parsed.success ? parsed.data : null;
+) {
+  return PlatformServicePromotionListPageSchema.safeParse(value);
 }

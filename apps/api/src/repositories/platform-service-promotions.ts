@@ -53,10 +53,10 @@ export class PlatformServicePromotionRepository {
     );
     if (error) throw Errors.dbError("查询平台技术服务限时活动失败", error);
     const parsed = parsePlatformServicePromotionListPage(data);
-    if (!parsed) {
-      throw Errors.dbError("查询平台技术服务限时活动响应格式异常", data);
+    if (!parsed.success) {
+      throw Errors.dbError("解析平台技术服务限时活动列表失败", parsed.error);
     }
-    return parsed;
+    return parsed.data;
   }
 
   async createDraft(
@@ -75,7 +75,11 @@ export class PlatformServicePromotionRepository {
         p_actor_user_id: actor.authUserId,
       },
     );
-    return commandResultOrThrow(result, "创建平台技术服务限时活动草稿失败");
+    return commandResultOrThrow(
+      result,
+      "创建平台技术服务限时活动草稿失败",
+      "解析平台技术服务限时活动草稿创建结果失败",
+    );
   }
 
   async saveDraft(
@@ -94,7 +98,11 @@ export class PlatformServicePromotionRepository {
         p_actor_user_id: actor.authUserId,
       },
     );
-    return commandResultOrThrow(result, "保存平台技术服务限时活动草稿失败");
+    return commandResultOrThrow(
+      result,
+      "保存平台技术服务限时活动草稿失败",
+      "解析平台技术服务限时活动草稿保存结果失败",
+    );
   }
 
   async publish(input: {
@@ -114,7 +122,11 @@ export class PlatformServicePromotionRepository {
         p_actor_user_id: input.actorUserId,
       },
     );
-    return commandResultOrThrow(result, "发布平台技术服务限时活动失败");
+    return commandResultOrThrow(
+      result,
+      "发布平台技术服务限时活动失败",
+      "解析平台技术服务限时活动发布结果失败",
+    );
   }
 
   async stop(input: {
@@ -136,20 +148,25 @@ export class PlatformServicePromotionRepository {
         p_actor_user_id: input.actorUserId,
       },
     );
-    return commandResultOrThrow(result, "停止平台技术服务限时活动失败");
+    return commandResultOrThrow(
+      result,
+      "停止平台技术服务限时活动失败",
+      "解析平台技术服务限时活动停止结果失败",
+    );
   }
 }
 
 function commandResultOrThrow(
   result: PromotionRpcResult,
   context: string,
+  parseContext: string,
 ): PlatformServicePromotionCommandResult {
   if (result.error) throw Errors.dbError(context, result.error);
   const parsed = parsePlatformServicePromotionCommandResult(result.data);
-  if (!parsed) {
-    throw Errors.dbError(`${context}：数据库响应格式异常`, result.data);
+  if (!parsed.success) {
+    throw Errors.dbError(parseContext, parsed.error);
   }
-  return parsed;
+  return parsed.data;
 }
 
 function normalizePagination(page: number, pageSize: number) {

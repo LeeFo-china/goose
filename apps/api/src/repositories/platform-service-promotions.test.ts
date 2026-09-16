@@ -312,4 +312,46 @@ describe("PlatformServicePromotionRepository", () => {
       details: databaseError,
     });
   });
+
+  test("rejects malformed list timestamps, negative prices and unbounded pagination", async () => {
+    const malformed = {
+      list: [{
+        ...promotion,
+        created_at: "not-a-date",
+        draft: draftVersion,
+        published: null,
+        phase: "draft",
+        price_preview: [{ ...pricePreview[0], effective_amount_fen: -1 }],
+      }],
+      pagination: { page: 1, pageSize: 101, total: 0, totalPages: 0 },
+      server_time: "not-a-date",
+    };
+    const fixture = createClient({ data: malformed, error: null });
+
+    await expect(new Repository(fixture.client).list({ page: 1, pageSize: 20 }))
+      .rejects.toMatchObject({
+        statusCode: 500,
+        code: "DB_ERROR",
+        message: "解析平台技术服务限时活动列表失败",
+      });
+  });
+
+  test("rejects malformed command timestamps and negative prices as database errors", async () => {
+    const malformed = {
+      ...commandResult,
+      promotion: { ...promotion, updated_at: "not-a-date" },
+      price_preview: [{ ...pricePreview[0], base_amount_fen: -1 }],
+      server_time: "not-a-date",
+    };
+    const fixture = createClient({ data: malformed, error: null });
+
+    await expect(new Repository(fixture.client).createDraft({
+      code: promotion.code,
+      draft,
+    }, actor)).rejects.toMatchObject({
+      statusCode: 500,
+      code: "DB_ERROR",
+      message: "解析平台技术服务限时活动草稿创建结果失败",
+    });
+  });
 });
