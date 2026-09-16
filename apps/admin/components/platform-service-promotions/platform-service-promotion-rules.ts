@@ -36,17 +36,23 @@ export const platformServicePromotionVersionStatusMeta: Record<
 };
 
 export function getPromotionPhaseMeta(status: string): PromotionStatusMeta {
-  return platformServicePromotionPhaseMeta[
-    status as PlatformServicePromotionPhase
-  ] ?? { label: status, variant: "secondary" };
+  if (Object.hasOwn(platformServicePromotionPhaseMeta, status)) {
+    return platformServicePromotionPhaseMeta[
+      status as PlatformServicePromotionPhase
+    ];
+  }
+  return { label: status, variant: "secondary" };
 }
 
 export function getPromotionVersionStatusMeta(
   status: string,
 ): PromotionStatusMeta {
-  return platformServicePromotionVersionStatusMeta[
-    status as PlatformServicePromotionVersionStatus
-  ] ?? { label: status, variant: "secondary" };
+  if (Object.hasOwn(platformServicePromotionVersionStatusMeta, status)) {
+    return platformServicePromotionVersionStatusMeta[
+      status as PlatformServicePromotionVersionStatus
+    ];
+  }
+  return { label: status, variant: "secondary" };
 }
 
 export function formatPromotionFen(

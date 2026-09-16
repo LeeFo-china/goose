@@ -254,6 +254,19 @@ describe("平台技术服务限时活动展示规则", () => {
     });
   });
 
+  test("原型链属性名也按未知状态安全回退", () => {
+    for (const status of ["constructor", "__proto__"]) {
+      expect(getPromotionPhaseMeta(status)).toEqual({
+        label: status,
+        variant: "secondary",
+      });
+      expect(getPromotionVersionStatusMeta(status)).toEqual({
+        label: status,
+        variant: "secondary",
+      });
+    }
+  });
+
   test("安全格式化分钱金额和时间", () => {
     expect(formatPromotionFen(196_000)).toBe("¥1960.00");
     expect(formatPromotionFen(null)).toBe("未设置");
