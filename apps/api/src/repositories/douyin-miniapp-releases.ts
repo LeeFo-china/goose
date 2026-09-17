@@ -23,7 +23,7 @@ export const DOUYIN_MINIAPP_RELEASE_STATUSES = [
 
 const RELEASE_SELECT = [
   "id", "installation_id", "template_id", "template_version", "description",
-  "channel", "ext_json", "status", "douyin_log_id", "test_qr_url",
+  "provider_summary", "channel", "ext_json", "status", "douyin_log_id", "test_qr_url",
   "latest_test_qr_url", "audit_qr_url", "audit_host_names", "audit_note",
   "audit_result", "submitted_at", "audited_at", "released_at",
   "platform_operator_id", "created_at", "updated_at",
@@ -73,6 +73,7 @@ const ReleaseSchema = z.strictObject({
   template_id: TemplateIdSchema,
   template_version: TemplateVersionSchema,
   description: z.string().trim().min(1).max(200),
+  provider_summary: z.string().trim().min(1).max(200).nullable().default(null),
   channel: z.enum(["default", "1"]),
   ext_json: ExtJsonSchema,
   status: z.enum(DOUYIN_MINIAPP_RELEASE_STATUSES),

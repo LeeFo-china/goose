@@ -74,6 +74,7 @@ const releaseRow = {
   template_id: "9133504853504535288",
   template_version: "1.2.3",
   description: "装修行业模板首发",
+  provider_summary: null,
   channel: "default" as const,
   ext_json: {
     extEnable: true as const,

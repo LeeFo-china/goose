@@ -2,7 +2,8 @@ import { redirect } from "next/navigation";
 import type { DouyinReleaseReadiness } from "@gooes/domain";
 
 import { TenantDouyinMiniappWorkspace } from "@/components/douyin-miniapp/workspace";
-import type { TenantDouyinWorkspace } from "@/components/douyin-miniapp/workspace-types";
+import type { TenantDouyinReleaseOptionsResponse, TenantDouyinWorkspace } from
+  "@/components/douyin-miniapp/workspace-types";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
@@ -33,12 +34,14 @@ export default async function TenantDouyinMiniappWorkspacePage() {
   );
   let workspace: TenantDouyinWorkspace | null = null;
   let readiness: DouyinReleaseReadiness | null = null;
+  let releaseOptions: TenantDouyinReleaseOptionsResponse | null = null;
+  let releaseOptionsLoadError: string | null = null;
   let readinessLoadError: string | null = null;
   let loadError: string | null = null;
 
   if (canRead && token) {
     const headers = { authorization: `Bearer ${token}` };
-    const [workspaceResult, readinessResult] = await Promise.allSettled([
+    const [workspaceResult, readinessResult, releaseOptionsResult] = await Promise.allSettled([
       fetch(buildBackendUrl("/tenant/douyin-miniapp/workspace"), {
         headers,
         cache: "no-store",
@@ -47,6 +50,10 @@ export default async function TenantDouyinMiniappWorkspacePage() {
         headers,
         cache: "no-store",
       }).then((response) => parseBackendJson<DouyinReleaseReadiness>(response)),
+      fetch(buildBackendUrl("/tenant/douyin-miniapp/release-options?page=1&pageSize=20"), {
+        headers,
+        cache: "no-store",
+      }).then((response) => parseBackendJson<TenantDouyinReleaseOptionsResponse>(response)),
     ]);
     if (workspaceResult.status === "fulfilled") {
       workspace = workspaceResult.value.data ?? null;
@@ -62,6 +69,12 @@ export default async function TenantDouyinMiniappWorkspacePage() {
         ? readinessResult.reason.message
         : "提审就绪检查加载失败";
     }
+    if (releaseOptionsResult.status === "fulfilled") {
+      releaseOptions = releaseOptionsResult.value.data ?? null;
+    } else {
+      releaseOptionsLoadError = releaseOptionsResult.reason instanceof Error
+        ? releaseOptionsResult.reason.message : "可操作版本加载失败";
+    }
   } else if (canRead) {
     loadError = "缺少登录凭证，请重新登录后重试";
   }
@@ -75,6 +88,8 @@ export default async function TenantDouyinMiniappWorkspacePage() {
       loadError={loadError}
       readiness={readiness}
       readinessLoadError={readinessLoadError}
+      releaseOptions={releaseOptions}
+      releaseOptionsLoadError={releaseOptionsLoadError}
       workspace={workspace}
     />
   );

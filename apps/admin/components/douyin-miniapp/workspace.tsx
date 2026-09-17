@@ -25,7 +25,7 @@ import {
 import { TenantDouyinMiniappWorkspaceActions } from "./workspace-actions";
 import { TenantDouyinLeadCaptureConfig } from "./workspace-lead-capture-config";
 import { ReleaseReadinessPanel } from "./release-readiness-panel";
-import type { TenantDouyinWorkspace } from "./workspace-types";
+import type { TenantDouyinReleaseOptionsResponse, TenantDouyinWorkspace } from "./workspace-types";
 
 type TenantDouyinMiniappWorkspaceProps = {
   canRead: boolean;
@@ -35,6 +35,8 @@ type TenantDouyinMiniappWorkspaceProps = {
   loadError: string | null;
   readiness?: DouyinReleaseReadiness | null;
   readinessLoadError?: string | null;
+  releaseOptions?: TenantDouyinReleaseOptionsResponse | null;
+  releaseOptionsLoadError?: string | null;
   workspace: TenantDouyinWorkspace | null;
 };
 
@@ -46,6 +48,8 @@ export function TenantDouyinMiniappWorkspace({
   loadError,
   readiness = null,
   readinessLoadError = null,
+  releaseOptions = null,
+  releaseOptionsLoadError = null,
   workspace,
 }: TenantDouyinMiniappWorkspaceProps) {
   return (
@@ -65,6 +69,8 @@ export function TenantDouyinMiniappWorkspace({
           canSubmitAudit={canSubmitAudit}
           readiness={readiness}
           readinessLoadError={readinessLoadError}
+          releaseOptions={releaseOptions}
+          releaseOptionsLoadError={releaseOptionsLoadError}
           workspace={workspace}
         />
       ) : null}
@@ -128,6 +134,8 @@ function WorkspaceOverview({
   canSubmitAudit,
   readiness,
   readinessLoadError,
+  releaseOptions,
+  releaseOptionsLoadError,
   workspace,
 }: {
   canManage: boolean;
@@ -135,6 +143,8 @@ function WorkspaceOverview({
   canSubmitAudit: boolean;
   readiness: DouyinReleaseReadiness | null;
   readinessLoadError: string | null;
+  releaseOptions: TenantDouyinReleaseOptionsResponse | null;
+  releaseOptionsLoadError: string | null;
   workspace: TenantDouyinWorkspace;
 }) {
   return (
@@ -160,6 +170,8 @@ function WorkspaceOverview({
           canSubmitAudit={canSubmitAudit}
           readiness={readiness}
           readinessLoadError={readinessLoadError}
+          releaseOptions={releaseOptions}
+          releaseOptionsLoadError={releaseOptionsLoadError}
           workspace={workspace}
         />
         <TemplateAvailabilityNotice workspace={workspace} />
@@ -236,27 +248,12 @@ function TemplateAvailabilityNotice({
   workspace: TenantDouyinWorkspace;
 }) {
   const template = workspace.available_template;
-  if (!template || template.state === "up_to_date" || template.state === "in_progress") return null;
-  const auditInProgress = template.state === "new_available"
-    && (workspace.latest_release?.status === "audit_pending"
-      || workspace.latest_release?.status === "audit_approved");
-  const content = template.state === "stale_version"
-    ? {
-      title: `当前可发布模板版本异常 ${template.version}`,
-      description: "平台当前模板不是该租户的新版本，请先在平台确认新的抖音模板版本。",
-      attention: true,
-    }
-    : auditInProgress
-    ? {
-      title: `另有可用新版 ${template.version}`,
-      description: "当前版本正在审核或等待发布，完成后即可生成新版体验版。",
-      attention: false,
-    }
-    : {
-      title: `发现可用新版 ${template.version}`,
-      description: `${template.description}。可生成体验版进行验收。`,
-      attention: false,
-    };
+  if (!template || template.state !== "stale_version") return null;
+  const content = {
+    title: `当前可发布模板版本异常 ${template.version}`,
+    description: "平台当前模板版本低于租户记录，请联系平台管理员核对。",
+    attention: true,
+  };
   return (
     <div className={`mt-5 border-l-2 pl-3 ${content.attention ? "border-destructive" : "border-primary/50"}`} role="status">
       <p className="text-sm font-medium">{content.title}</p>

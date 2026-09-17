@@ -6,7 +6,8 @@ import type {
   DouyinMiniappReleaseRecord,
   UpdateDouyinMiniappReleaseInput,
 } from "@/repositories/douyin-miniapp-releases";
-import { exactAuditStage, mapAuditStatus, safeAuditResult } from "./support";
+import { matchesDouyinDeliveryStage } from "./delivery-summary";
+import { auditVersionMismatch, mapAuditStatus, safeAuditResult } from "./support";
 
 export function auditPatch(
   release: DouyinMiniappReleaseRecord,
@@ -49,13 +50,13 @@ export function recoveryPatch(
   now: string,
   includeLatest = true,
 ): UpdateDouyinMiniappReleaseInput | null {
-  if (versions.current?.version === release.template_version) {
+  if (matchesDouyinDeliveryStage(release, versions.current)) {
     return releasedPatch(release, versions.logId, now);
   }
-  if (versions.audit?.version === release.template_version) {
-    return auditPatch(release, versions.audit, versions.logId, now);
+  if (matchesDouyinDeliveryStage(release, versions.audit)) {
+    return auditPatch(release, versions.audit!, versions.logId, now);
   }
-  if (includeLatest && versions.latest?.version === release.template_version) {
+  if (includeLatest && matchesDouyinDeliveryStage(release, versions.latest)) {
     return { status: "uploaded", auditResult: null, douyinLogId: versions.logId,
       platformOperatorId: release.platform_operator_id };
   }
@@ -67,7 +68,8 @@ export function syncStatusPatch(
   versions: DouyinVersionListResult,
   now: string,
 ): UpdateDouyinMiniappReleaseInput {
-  return recoveryPatch(release, versions, now, release.status === "failed")
-    ?? auditPatch(release, exactAuditStage(versions.audit, release.template_version),
-      versions.logId, now);
+  const recovered = recoveryPatch(release, versions, now, release.status === "failed");
+  if (recovered) return recovered;
+  if (!matchesDouyinDeliveryStage(release, versions.audit)) throw auditVersionMismatch();
+  return auditPatch(release, versions.audit!, versions.logId, now);
 }

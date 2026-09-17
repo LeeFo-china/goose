@@ -177,7 +177,7 @@ export function repositoryResponseError(): AppError {
   return Errors.business(500, "抖音小程序发布数据格式无效", "DOUYIN_RELEASE_RESPONSE_INVALID");
 }
 
-function auditVersionMismatch(): AppError {
+export function auditVersionMismatch(): AppError {
   return Errors.business(
     409,
     "抖音审核版本与发布记录不一致",

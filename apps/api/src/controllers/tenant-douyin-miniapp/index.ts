@@ -5,6 +5,7 @@ import {
   TenantDouyinAuthorizationLinkSchema,
   TenantDouyinLeadCaptureConfigUpdateSchema,
   TenantDouyinReleaseEmptyObjectSchema,
+  TenantDouyinCreateReleaseSchema,
   TenantDouyinReleaseListQuerySchema,
   TenantDouyinReleaseParamsSchema,
   TenantDouyinSubmitReleaseAuditSchema,
@@ -41,6 +42,7 @@ type AuthorizationServiceProvider = () => AuthorizationServicePort;
 type ReleaseServicePort = Pick<
   TenantDouyinMiniappReleasesService,
   | "list"
+  | "listOptions"
   | "createFromCurrentTemplate"
   | "getTestQr"
   | "getAuditQr"
@@ -136,14 +138,26 @@ export class TenantDouyinMiniappController extends TenantBaseController {
     );
   }
 
-  @Post("/tenant/douyin-miniapp/releases/from-current-template")
-  async createReleaseFromCurrentTemplate(request: FastifyRequest) {
-    this.parseEmptyPart(request.query);
-    this.parseEmptyPart(request.body);
+  @Get("/tenant/douyin-miniapp/release-options")
+  async listReleaseOptions(request: FastifyRequest) {
+    const queryResult = TenantDouyinReleaseListQuerySchema.safeParse(request.query || {});
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
     const authContext = await this.getRequiredTenantContext(request);
     const service = await this.releaseProvider();
     return ResponseHandler.success(
-      await service.createFromCurrentTemplate(authContext),
+      await service.listOptions(authContext, queryResult.data),
+    );
+  }
+
+  @Post("/tenant/douyin-miniapp/releases/from-current-template")
+  async createReleaseFromCurrentTemplate(request: FastifyRequest) {
+    this.parseEmptyPart(request.query);
+    const bodyResult = TenantDouyinCreateReleaseSchema.safeParse(request.body || {});
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+    const authContext = await this.getRequiredTenantContext(request);
+    const service = await this.releaseProvider();
+    return ResponseHandler.success(
+      await service.createFromCurrentTemplate(authContext, bodyResult.data),
     );
   }
 

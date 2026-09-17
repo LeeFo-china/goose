@@ -101,7 +101,7 @@ export type TenantDouyinWorkspace = {
     version: string;
     description: string;
     confirmed_at: string;
-    state: "new_available" | "in_progress" | "up_to_date" | "stale_version";
+    state: "new_available" | "revision_available" | "in_progress" | "up_to_date" | "stale_version";
   } | null;
   latest_release: {
     id: string;
@@ -135,4 +135,27 @@ export type TenantDouyinWorkspace = {
     created_at: string;
     updated_at: string;
   } | null;
+};
+
+export type TenantDouyinRelease = NonNullable<TenantDouyinWorkspace["latest_release"]>;
+export type TenantDouyinReleaseOptionAction = "create_test_version" | "generate_test_qr"
+  | "generate_audit_qr" | "submit_audit" | "sync_status" | "publish";
+export type TenantDouyinReleaseOption = {
+  id: string;
+  source: "confirmed_template" | "release";
+  release_id: string | null;
+  template_id: string;
+  template_version: string;
+  description: string;
+  stage: "ready_to_upload" | TenantDouyinRelease["status"];
+  actions: TenantDouyinReleaseOptionAction[];
+  test_qr_url: string | null;
+  updated_at: string;
+};
+export type TenantDouyinReleaseOptionsResponse = {
+  list: TenantDouyinReleaseOption[];
+  provider_state: "fresh" | "unavailable";
+  provider_message: string | null;
+  history: TenantDouyinRelease[];
+  pagination: { page: number; pageSize: number; total: number; totalPages: number };
 };

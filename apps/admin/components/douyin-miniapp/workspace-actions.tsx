@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   isDouyinTestQrUrlUsable,
   type DouyinReleaseReadiness,
@@ -33,7 +34,10 @@ import {
   type TenantDouyinWorkspaceAction,
 } from "./workspace-action-policy";
 import { ReleaseQrCard } from "./workspace-qr-card";
-import type { TenantDouyinWorkspace } from "./workspace-types";
+import { WorkspaceVersionPicker } from "./workspace-version-picker";
+import { selectDefaultReleaseOption, versionActionCopy } from "./workspace-version-policy";
+import type { TenantDouyinReleaseOption, TenantDouyinReleaseOptionsResponse,
+  TenantDouyinWorkspace } from "./workspace-types";
 
 export {
   availableWorkspaceActions,
@@ -86,6 +90,8 @@ type WorkspaceActionsProps = {
   canSubmitAudit: boolean;
   readiness?: DouyinReleaseReadiness | null;
   readinessLoadError?: string | null;
+  releaseOptions?: TenantDouyinReleaseOptionsResponse | null;
+  releaseOptionsLoadError?: string | null;
   workspace: TenantDouyinWorkspace;
 };
 
@@ -97,9 +103,20 @@ export function TenantDouyinMiniappWorkspaceActions({
   canSubmitAudit: canSubmitAuditPermission,
   readiness = null,
   readinessLoadError = null,
+  releaseOptions = null,
+  releaseOptionsLoadError = null,
   workspace,
 }: WorkspaceActionsProps) {
-  const [release, setRelease] = useState(workspace.latest_release);
+  const router = useRouter();
+  const initialOption = releaseOptions ? selectDefaultReleaseOption(releaseOptions.list) : null;
+  const [selectedOptionId, setSelectedOptionId] = useState(initialOption?.id ?? "");
+  const [localOverride, setLocalOverride] = useState(false);
+  const selectedOption = releaseOptions?.list.find((option) => option.id === selectedOptionId)
+    ?? initialOption;
+  const selectedRelease = selectedOption?.release_id
+    ? releaseOptions?.history.find((item) => item.id === selectedOption.release_id) ?? null
+    : null;
+  const [release, setRelease] = useState(initialOption ? selectedRelease : workspace.latest_release);
   const [pending, setPending] = useState<TenantDouyinWorkspaceAction | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [auditOpen, setAuditOpen] = useState(false);
@@ -113,12 +130,17 @@ export function TenantDouyinMiniappWorkspaceActions({
 
   const effectiveWorkspace = {
     ...workspace,
+    available_template: localOverride ? null : workspace.available_template,
     latest_release: release,
     release_state: release
       ? release.status === "failed" ? "sync_error" : release.status
       : workspace.release_state,
   } as TenantDouyinWorkspace;
-  const actions = availableWorkspaceActions(effectiveWorkspace);
+  const actions = workspace.authorization_state !== "active"
+    ? ["authorize" as const]
+    : releaseOptions && selectedOption && !localOverride
+    ? optionActions(selectedOption)
+    : availableWorkspaceActions(effectiveWorkspace);
   const hostNames = useMemo(
     () => parseAuditHostNames(hostNamesInput),
     [hostNamesInput],
@@ -199,9 +221,10 @@ export function TenantDouyinMiniappWorkspaceActions({
         fallbackMessage: `${successMessage}失败`,
       });
       setRelease(nextRelease);
+      setLocalOverride(true);
       if (action === "submit_audit") setAuditOpen(false);
       toast.success(successMessage);
-      window.setTimeout(() => window.location.reload(), 300);
+      window.setTimeout(() => router.refresh(), 300);
     } catch (actionError) {
       setError(actionError instanceof Error
         ? actionError.message
@@ -212,6 +235,7 @@ export function TenantDouyinMiniappWorkspaceActions({
   }
 
   async function createTestVersion() {
+    if (!selectedOption || selectedOption.source !== "confirmed_template") return;
     setError(null);
     setPending("create_test_version");
     try {
@@ -219,13 +243,17 @@ export function TenantDouyinMiniappWorkspaceActions({
         "/tenant/douyin-miniapp/releases/from-current-template",
         {
           method: "POST",
-          body: "{}",
+          body: JSON.stringify({
+            expected_template_record_id: selectedOption.id,
+            expected_template_id: selectedOption.template_id,
+          }),
           fallbackMessage: "生成体验版失败",
         },
       );
       setRelease(nextRelease);
+      setLocalOverride(true);
       toast.success("体验版已生成");
-      window.setTimeout(() => window.location.reload(), 300);
+      window.setTimeout(() => router.refresh(), 300);
     } catch (actionError) {
       setError(actionError instanceof Error
         ? actionError.message
@@ -241,6 +269,28 @@ export function TenantDouyinMiniappWorkspaceActions({
 
   return (
     <div className="flex flex-col gap-3">
+      {releaseOptions ? (
+        <WorkspaceVersionPicker
+          data={releaseOptions}
+          disabled={pending !== null}
+          onSelect={(id) => {
+            setSelectedOptionId(id);
+            setLocalOverride(false);
+            const option = releaseOptions.list.find((item) => item.id === id);
+            setRelease(option?.release_id
+              ? releaseOptions.history.find((item) => item.id === option.release_id) ?? null
+              : null);
+          }}
+          selected={selectedOption}
+        />
+      ) : null}
+      {releaseOptionsLoadError ? (
+        <Alert variant="destructive">
+          <ShieldAlert aria-hidden="true" />
+          <AlertTitle>版本列表加载失败</AlertTitle>
+          <AlertDescription>{releaseOptionsLoadError}</AlertDescription>
+        </Alert>
+      ) : null}
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
         <div className="min-w-0">
           <p className="text-xs font-medium text-muted-foreground">
@@ -272,7 +322,8 @@ export function TenantDouyinMiniappWorkspaceActions({
               {pending === "create_test_version"
                 ? <Loader2 className="animate-spin" data-icon="inline-start" />
                 : <UploadCloud data-icon="inline-start" />}
-              {release?.status === "created" ? "继续生成体验版" : "生成新版体验版"}
+              {selectedOption ? versionActionCopy(selectedOption).primaryLabel
+                : release?.status === "created" ? "继续生成体验版" : "生成新版体验版"}
             </Button>
           ) : null}
           {actions.includes("get_test_qr") ? (
@@ -436,4 +487,9 @@ export function TenantDouyinMiniappWorkspaceActions({
       />
     </div>
   );
+}
+
+function optionActions(option: TenantDouyinReleaseOption): TenantDouyinWorkspaceAction[] {
+  return option.actions.map((action) => action === "generate_test_qr" ? "get_test_qr"
+    : action === "generate_audit_qr" ? "get_audit_qr" : action);
 }

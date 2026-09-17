@@ -39,6 +39,7 @@ const release: DouyinMiniappReleaseRecord = {
   template_id: "9133504853504535288",
   template_version: "1.2.3-beta.1",
   description: "装修模板首发",
+  provider_summary: null,
   channel: "default" as const,
   ext_json: {
     extEnable: true as const,
@@ -200,7 +201,7 @@ describe("PlatformDouyinMiniappReleasesService", () => {
         appId: target.authorizer_appid,
         templateId: release.template_id,
         extJson: release.ext_json,
-        userDescription: release.description,
+        userDescription: `[#${release.template_id}] ${release.description}`,
         userVersion: release.template_version,
         ...(channel === "1" ? { tag: "1" } : {}),
       });
@@ -495,5 +496,4 @@ describe("PlatformDouyinMiniappReleasesService", () => {
       expect(deps.gateway.releaseVersion).not.toHaveBeenCalled();
     }
   });
-
 });

@@ -288,6 +288,36 @@ describe("TenantDouyinMiniappWorkspaceService", () => {
       });
   });
 
+  test("classifies a same-version template id change as a new revision", async () => {
+    const { service } = createService({
+      currentTemplate: {
+        ...deployableTemplate,
+        template_id: "78690",
+        template_version: "0.1.39",
+      },
+      latestRelease: {
+        ...tenantRelease,
+        template_id: "78689",
+        template_version: "0.1.39",
+      },
+    });
+
+    await expect(service.getWorkspace(tenantContext())).resolves.toMatchObject({
+      available_template: { state: "revision_available" },
+    });
+  });
+
+  test("ignores description edits when determining template identity", async () => {
+    const { service } = createService({
+      currentTemplate: { ...deployableTemplate, description: "更新后的说明" },
+      latestRelease: { ...tenantRelease, description: "旧说明" },
+    });
+
+    await expect(service.getWorkspace(tenantContext())).resolves.toMatchObject({
+      available_template: { state: "in_progress" },
+    });
+  });
+
   test("does not expose a template prompt before platform confirmation", async () => {
     const { service } = createService({ currentTemplate: null });
     await expect(service.getWorkspace(tenantContext())).resolves.toMatchObject({

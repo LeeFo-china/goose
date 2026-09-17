@@ -60,6 +60,8 @@ function createController() {
     list: mock(async () => ({ list: [], pagination: {
       page: 1, pageSize: 20, total: 0, totalPages: 0,
     } })),
+    listOptions: mock(async () => ({ list: [], history: [], provider_state: "fresh",
+      provider_message: null, pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 } })),
     createFromCurrentTemplate: mock(async () => ({
       id: "release-id", status: "testing",
     })),
@@ -136,6 +138,7 @@ describe("TenantDouyinMiniappController", () => {
         path: "/tenant/douyin-miniapp/authorization-callback",
       },
       { method: "GET", path: "/tenant/douyin-miniapp/releases" },
+      { method: "GET", path: "/tenant/douyin-miniapp/release-options" },
       {
         method: "POST",
         path: "/tenant/douyin-miniapp/releases/from-current-template",
@@ -269,13 +272,30 @@ describe("TenantDouyinMiniappController", () => {
     } as never)).rejects.toMatchObject({ statusCode: 400 });
   });
 
+  test("lists tenant release options with bounded pagination", async () => {
+    const { controller, releases } = createController();
+    await controller.listReleaseOptions({
+      query: { page: "1", pageSize: "20" },
+    } as never);
+    expect(releases.listOptions).toHaveBeenCalledWith(
+      authContext,
+      { page: 1, pageSize: 20 },
+    );
+    await expect(controller.listReleaseOptions({
+      query: { page: "1", pageSize: "101" },
+    } as never)).rejects.toMatchObject({ statusCode: 400 });
+  });
+
   test("validates and delegates the complete tenant release workflow", async () => {
     const { controller, releases } = createController();
     const params = { releaseId: "77777777-7777-4777-8777-777777777777" };
 
     await controller.createReleaseFromCurrentTemplate({
       query: {},
-      body: {},
+      body: {
+        expected_template_record_id: "88888888-8888-4888-8888-888888888888",
+        expected_template_id: "77596",
+      },
     } as never);
     await controller.getReleaseTestQr({ params, body: {} } as never);
     await controller.submitReleaseAudit({
@@ -290,6 +310,10 @@ describe("TenantDouyinMiniappController", () => {
 
     expect(releases.createFromCurrentTemplate).toHaveBeenCalledWith(
       authContext,
+      {
+        expected_template_record_id: "88888888-8888-4888-8888-888888888888",
+        expected_template_id: "77596",
+      },
     );
     expect(releases.getTestQr).toHaveBeenCalledWith(
       authContext,

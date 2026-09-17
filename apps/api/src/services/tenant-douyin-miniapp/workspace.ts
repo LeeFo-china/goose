@@ -156,18 +156,13 @@ function availableTemplate(
       ? "stale_version" as const
       : versionComparison > 0
       ? "new_available" as const
-      : versionComparison === 0
-        && release
-        && release.template_id === template.template_id
-        && release.description === template.description
-        && release.status === "released"
+      : versionComparison < 0
+      ? "stale_version" as const
+      : release && release.template_id !== template.template_id
+      ? "revision_available" as const
+      : release?.status === "released"
       ? "up_to_date" as const
-      : versionComparison === 0
-        && release
-        && release.template_id === template.template_id
-        && release.description === template.description
-      ? "in_progress" as const
-      : "stale_version" as const,
+      : "in_progress" as const,
   };
 }
 

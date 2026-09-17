@@ -1,34 +1,18 @@
 import { Errors } from "@/errors/error-factory";
 import type { DouyinMiniappReleaseGateway } from "@/gateways/douyin-open-platform/client";
 import type { DouyinMiniappReleaseTarget } from "@/repositories/douyin-miniapp-installations";
-import type {
-  DouyinMiniappClaimedUploadRelease,
-  DouyinMiniappReleaseOperation,
-  DouyinMiniappReleaseRecord,
-  DouyinMiniappReleaseStatus,
-  DouyinMiniappReleasesRepository,
-  UpdateDouyinMiniappReleaseInput,
-} from "@/repositories/douyin-miniapp-releases";
+import type { DouyinMiniappClaimedUploadRelease, DouyinMiniappReleaseOperation,
+  DouyinMiniappReleaseRecord, DouyinMiniappReleaseStatus, DouyinMiniappReleasesRepository,
+  UpdateDouyinMiniappReleaseInput } from "@/repositories/douyin-miniapp-releases";
 import type { DouyinMiniappAccessTokenService } from "@/services/douyin-miniapp/access-tokens";
 import type { DouyinDeploymentEnvironment } from "@/services/douyin-miniapp/deployment-environment";
-import {
-  clearedAuditRetryPatch,
-  hasRejectedAuditVersion,
-  isStoredExplicitAuditRejection,
-  sameAuditIntent,
-} from "./audit-retry";
-import {
-  exactAuditStage,
-  isExplicitOpenPlatformApiRejection,
-  isUncertainOpenPlatformOutcome,
-  publishStateConflict,
-  releaseStateConflict,
-  requestError,
-  retryUncertainReconciliation,
-  safeProviderFailure,
-  sanitizedProviderError,
-} from "./support";
+import { clearedAuditRetryPatch, hasRejectedAuditVersion, isStoredExplicitAuditRejection,
+  sameAuditIntent } from "./audit-retry";
+import { auditVersionMismatch, isExplicitOpenPlatformApiRejection,
+  isUncertainOpenPlatformOutcome, publishStateConflict, releaseStateConflict, requestError,
+  retryUncertainReconciliation, safeProviderFailure, sanitizedProviderError } from "./support";
 import { auditPatch, recoveryPatch, releasedPatch, syncStatusPatch } from "./operation-state";
+import { buildDouyinDeliverySummary, matchesDouyinDeliveryStage } from "./delivery-summary";
 type Installation = DouyinMiniappReleaseTarget & { readonly deployment_key: string };
 type ReleaseRepository = Pick<DouyinMiniappReleasesRepository,
   "findById" | "claimOperation" | "getOrCreateAndClaimUpload" | "patchClaimed" | "updateClaimed">;
@@ -54,12 +38,8 @@ const UPLOAD_TERMINAL: readonly DouyinMiniappReleaseStatus[] = [
   "uploaded", "testing", "audit_pending", "audit_rejected", "audit_approved", "released"];
 export class PlatformDouyinMiniappReleaseOperations {
   constructor(private readonly dependencies: Dependencies) {}
-  async upload(
-    installation: Installation,
-    installationId: string,
-    operatorId: string,
-    input: UploadInput,
-  ): Promise<DouyinMiniappReleaseRecord> {
+  async upload(installation: Installation, installationId: string, operatorId: string,
+    input: UploadInput): Promise<DouyinMiniappReleaseRecord> {
     const token = this.dependencies.claimToken();
     const extJson = {
       extEnable: true as const,
@@ -113,7 +93,8 @@ export class PlatformDouyinMiniappReleaseOperations {
         appId: installation.authorizer_appid,
         templateId: input.template_id,
         extJson,
-        userDescription: input.description,
+        userDescription: release.provider_summary
+          ?? buildDouyinDeliverySummary(input.template_id, input.description),
         userVersion: input.template_version,
         ...(input.channel === "1" ? { tag: "1" as const } : {}),
       }));
@@ -137,6 +118,8 @@ export class PlatformDouyinMiniappReleaseOperations {
     const authorizerAccessToken = await this.accessToken(release, claim, installation, {
       status: release.status, platformOperatorId: operatorId,
     });
+    await this.assertExactProviderStage(
+      release, claim, installation, authorizerAccessToken, "latest", operatorId);
     const result = await this.provider(
       release, claim, { status: release.status, platformOperatorId: operatorId },
       async () => this.dependencies.gateway.getTestQrCode({
@@ -202,6 +185,10 @@ export class PlatformDouyinMiniappReleaseOperations {
         : {}),
       platformOperatorId: operatorId,
     }, preservePreflightState || (hasIntent && current.audit_result !== null));
+    if (!retryRejectedAudit && current.status === "testing") {
+      await this.assertExactProviderStage(
+        current, claim, installation, authorizerAccessToken, "latest", operatorId);
+    }
     if (
       !retryRejectedAudit
       && !claim.recoveryRequired
@@ -333,7 +320,7 @@ export class PlatformDouyinMiniappReleaseOperations {
     }, async () => this.dependencies.gateway.getVersionList({
       authorizerAccessToken, appId: installation.authorizer_appid,
     }), claim.recoveryRequired);
-    if (versions.current?.version === release.template_version) {
+    if (matchesDouyinDeliveryStage(release, versions.current)) {
       const patch = releasedPatch(release, versions.logId, this.dependencies.now());
       return this.persistWithMetadata(release, claim, {
         ...patch, platformOperatorId: operatorId,
@@ -341,7 +328,8 @@ export class PlatformDouyinMiniappReleaseOperations {
     }
     let fresh: UpdateDouyinMiniappReleaseInput;
     try {
-      const audit = exactAuditStage(versions.audit, release.template_version);
+      if (!matchesDouyinDeliveryStage(release, versions.audit)) throw auditVersionMismatch();
+      const audit = versions.audit!;
       fresh = auditPatch(release, audit, versions.logId, this.dependencies.now());
     } catch (error) {
       if (claim.recoveryRequired) throw outcomeUncertain();
@@ -382,6 +370,21 @@ export class PlatformDouyinMiniappReleaseOperations {
       claim: { token, recoveryRequired: claim.recoveryRequired },
       release: fresh,
     };
+  }
+  private async assertExactProviderStage(release: DouyinMiniappReleaseRecord, claim: Claim,
+    installation: Installation, authorizerAccessToken: string, stage: "latest" | "audit",
+    operatorId: string): Promise<void> {
+    if (release.provider_summary == null) return;
+    const versions = await this.provider(release, claim, {
+      status: release.status, platformOperatorId: operatorId,
+    }, async () => this.dependencies.gateway.getVersionList({
+      authorizerAccessToken, appId: installation.authorizer_appid,
+    }));
+    if (matchesDouyinDeliveryStage(release, versions[stage])) return;
+    await this.finish(release, claim, {
+      status: release.status, platformOperatorId: operatorId,
+    });
+    throw auditVersionMismatch();
   }
   private async provider<Result>(
     release: DouyinMiniappReleaseRecord,
@@ -478,7 +481,6 @@ export class PlatformDouyinMiniappReleaseOperations {
     if (!allowed.includes(release.status)) throw releaseStateConflict();
   }
 }
-
 function publicRelease(release: DouyinMiniappClaimedUploadRelease): DouyinMiniappReleaseRecord {
   const {
     operation_name: _operationName,
@@ -490,10 +492,8 @@ function publicRelease(release: DouyinMiniappClaimedUploadRelease): DouyinMiniap
   return record;
 }
 
-function operationInProgress() {
-  return Errors.business(409, "抖音小程序发布操作正在处理中", "DOUYIN_RELEASE_OPERATION_IN_PROGRESS");
-}
+function operationInProgress() { return Errors.business(
+  409, "抖音小程序发布操作正在处理中", "DOUYIN_RELEASE_OPERATION_IN_PROGRESS"); }
 
-function outcomeUncertain() {
-  return Errors.business(409, "抖音小程序发布结果尚无法确认", "DOUYIN_RELEASE_OUTCOME_UNCERTAIN");
-}
+function outcomeUncertain() { return Errors.business(
+  409, "抖音小程序发布结果尚无法确认", "DOUYIN_RELEASE_OUTCOME_UNCERTAIN"); }

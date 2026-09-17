@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { isDouyinTestQrUrlUsable } from "@gooes/domain";
 
 import { Errors } from "@/errors/error-factory";
+import type { DouyinMiniappReleaseGateway } from "@/gateways/douyin-open-platform/client";
 import type {
   DouyinMiniappReleaseTarget,
 } from "@/repositories/douyin-miniapp-installations";
@@ -20,6 +21,8 @@ import {
 } from "@/repositories/tenant-douyin-miniapp-workspace";
 import type { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import type { DouyinMiniappAccessTokenService } from "@/services/douyin-miniapp/access-tokens";
+import type { TenantDouyinCreateReleaseInput } from "@/schema/tenant-douyin-miniapp";
 import {
   assertDouyinReleaseReady,
   douyinReleaseReadinessService,
@@ -40,6 +43,7 @@ import {
   type PlatformDouyinMiniappReleaseListQuery,
 } from "@/services/platform-douyin-miniapp-releases/support";
 import { compareDouyinTemplateVersion } from "./template-version";
+import { buildPagination, buildTenantDouyinReleaseOptions } from "./release-options";
 
 const READ_PERMISSION = "douyin_miniapp.read";
 const MANAGE_PERMISSION = "douyin_miniapp.manage";
@@ -80,6 +84,8 @@ export type TenantDouyinMiniappReleasesDependencies = {
   readonly accessPolicy: AccessPolicyPort;
   readonly operations: OperationsPort;
   readonly templates: TemplatePort;
+  readonly accessTokens: Pick<DouyinMiniappAccessTokenService, "getAuthorizerAccessToken">;
+  readonly gateway: Pick<DouyinMiniappReleaseGateway, "getVersionList">;
   readonly readiness?: ReadinessPort;
 };
 
@@ -111,18 +117,48 @@ export class TenantDouyinMiniappReleasesService {
     }
     return {
       list: result.list.map(sanitizeRelease),
-      pagination: {
-        page: query.page,
-        pageSize: query.pageSize,
-        total: result.total,
-        totalPages: result.total === 0
-          ? 0
-          : Math.ceil(result.total / query.pageSize),
-      },
+      pagination: buildPagination(query.page, query.pageSize, result.total),
     };
   }
 
-  async createFromCurrentTemplate(authContext: AuthContext) {
+  async listOptions(authContext: AuthContext, input: PlatformDouyinMiniappReleaseListQuery) {
+    const query = parseRequest(ListQuerySchema, input);
+    const context = await this.requireTenantTarget(authContext, READ_PERMISSION);
+    const [result, template] = await Promise.all([
+      this.dependencies.releases.listByInstallation({
+        installationId: context.installation.id, page: query.page, pageSize: query.pageSize,
+      }),
+      this.dependencies.templates.findCurrent("default"),
+    ]);
+    if (!Number.isInteger(result.total) || result.total < 0) throw repositoryResponseError();
+    let versions = null;
+    let providerState = "fresh" as "fresh" | "unavailable";
+    try {
+      const authorizerAccessToken = await this.dependencies.accessTokens
+        .getAuthorizerAccessToken({
+          authorizerAppId: context.installation.authorizer_appid,
+          deploymentKey: context.installation.deployment_key,
+        });
+      versions = await this.dependencies.gateway.getVersionList({
+        authorizerAccessToken, appId: context.installation.authorizer_appid,
+      });
+    } catch {
+      providerState = "unavailable";
+    }
+    return {
+      list: buildTenantDouyinReleaseOptions({ template, releases: result.list, versions }),
+      provider_state: providerState,
+      provider_message: providerState === "fresh"
+        ? null : "暂时无法同步抖音平台版本，仍可查看本地发布记录",
+      history: result.list.map(sanitizeRelease),
+      pagination: buildPagination(query.page, query.pageSize, result.total),
+    };
+  }
+
+  async createFromCurrentTemplate(
+    authContext: AuthContext,
+    input: TenantDouyinCreateReleaseInput,
+  ) {
     const context = await this.requireTenantTarget(
       authContext,
       MANAGE_PERMISSION,
@@ -130,6 +166,24 @@ export class TenantDouyinMiniappReleasesService {
     const latestRelease = await this.dependencies.workspace.findLatestRelease(
       context.installation.id,
     );
+    const template = await this.dependencies.templates.findCurrent("default");
+    if (!template) {
+      throw Errors.business(
+        409,
+        "平台尚未确认可发布的抖音模板",
+        "DOUYIN_DEPLOYABLE_TEMPLATE_NOT_FOUND",
+      );
+    }
+    if (
+      template.id !== input.expected_template_record_id
+      || template.template_id !== input.expected_template_id
+    ) {
+      throw Errors.business(
+        409,
+        "平台当前模板已更新，请刷新版本列表后重试",
+        "DOUYIN_DEPLOYABLE_TEMPLATE_CHANGED",
+      );
+    }
     let delivery;
     if (latestRelease?.status === "created") {
       const persistedRelease = await this.dependencies.releases.findById(
@@ -148,6 +202,10 @@ export class TenantDouyinMiniappReleasesService {
       ].includes(persistedRelease.status)) {
         throw tenantReleaseInProgress();
       }
+      if (persistedRelease.template_id !== template.template_id
+        || persistedRelease.template_version !== template.template_version) {
+        throw tenantReleaseInProgress();
+      }
       delivery = {
         template_id: persistedRelease.template_id,
         template_version: persistedRelease.template_version,
@@ -155,7 +213,7 @@ export class TenantDouyinMiniappReleasesService {
         channel: persistedRelease.channel,
       };
     } else {
-      delivery = await this.currentTemplateDelivery(latestRelease);
+      delivery = this.currentTemplateDelivery(template, latestRelease);
     }
     const uploaded = await this.dependencies.operations.upload(
       context.installation,
@@ -171,9 +229,11 @@ export class TenantDouyinMiniappReleasesService {
     return sanitizeRelease(testing);
   }
 
-  private async currentTemplateDelivery(
+  private currentTemplateDelivery(
+    template: Awaited<ReturnType<TemplatePort["findCurrent"]>>,
     latestRelease: {
       readonly status: DouyinMiniappReleaseRecord["status"];
+      readonly template_id: string;
       readonly template_version: string;
     } | null,
   ) {
@@ -183,26 +243,20 @@ export class TenantDouyinMiniappReleasesService {
     ].includes(latestRelease.status)) {
       throw tenantReleaseInProgress();
     }
-    const template = await this.dependencies.templates.findCurrent("default");
-    if (!template) {
-      throw Errors.business(
-        409,
-        "平台尚未确认可发布的抖音模板",
-        "DOUYIN_DEPLOYABLE_TEMPLATE_NOT_FOUND",
-      );
-    }
-    if (
-      latestRelease
-      && !isNewerTemplateVersion(
+    if (!template) throw tenantReleaseInProgress();
+    if (latestRelease) {
+      const compared = compareDouyinTemplateVersion(
         template.template_version,
         latestRelease.template_version,
-      )
-    ) {
-      throw Errors.business(
-        409,
-        "平台当前可发布模板不是新版，请先确认新的抖音模板版本",
-        "DOUYIN_DEPLOYABLE_TEMPLATE_VERSION_NOT_NEW",
       );
+      if (compared === null || compared < 0
+        || (compared === 0 && template.template_id === latestRelease.template_id)) {
+        throw Errors.business(
+          409,
+          "平台当前可发布模板不是新版，请先确认新的抖音模板版本",
+          "DOUYIN_DEPLOYABLE_TEMPLATE_VERSION_NOT_NEW",
+        );
+      }
     }
     return {
       template_id: template.template_id,
@@ -352,7 +406,6 @@ export class TenantDouyinMiniappReleasesService {
     };
   }
 }
-
 function tenantReleaseInProgress() {
   return Errors.business(
     409,
@@ -360,12 +413,10 @@ function tenantReleaseInProgress() {
     "DOUYIN_TENANT_RELEASE_IN_PROGRESS",
   );
 }
-
 function requireOperator(authContext: AuthContext): string {
   if (!authContext.employeeId) throw Errors.forbidden();
   return authContext.employeeId;
 }
-
 function assertActiveCurrentInstallation(
   installation: TenantDouyinMiniappWorkspaceInstallation,
 ): void {
@@ -438,14 +489,11 @@ Promise<TenantDouyinMiniappReleasesService> {
       accessPolicy: accessPolicyService,
       operations,
       templates: douyinDeployableTemplatesRepository,
+      accessTokens: dependencies.accessTokens,
+      gateway: dependencies.gateway,
     });
   }).catch((error: unknown) => {
     defaultServicePromise = undefined;
     throw error;
   });
-}
-
-function isNewerTemplateVersion(current: string, latest: string): boolean {
-  const compared = compareDouyinTemplateVersion(current, latest);
-  return compared !== null && compared > 0;
 }

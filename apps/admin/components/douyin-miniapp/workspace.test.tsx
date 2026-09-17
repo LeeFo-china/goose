@@ -1,9 +1,18 @@
-import { describe, expect, test } from "bun:test";
+import { beforeAll, describe, expect, mock, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { DouyinReleaseReadiness } from "@gooes/domain";
 
-import { TenantDouyinMiniappWorkspace } from "./workspace";
 import type { TenantDouyinWorkspace } from "./workspace-types";
+
+mock.module("next/navigation", () => ({
+  useRouter: () => ({ refresh: () => undefined }),
+}));
+
+let TenantDouyinMiniappWorkspace:
+  typeof import("./workspace").TenantDouyinMiniappWorkspace;
+beforeAll(async () => {
+  ({ TenantDouyinMiniappWorkspace } = await import("./workspace"));
+});
 
 const workspace: TenantDouyinWorkspace = {
   tenant: {
@@ -307,9 +316,8 @@ describe("TenantDouyinMiniappWorkspace", () => {
       />,
     );
 
-    expect(html).toContain("发现可用新版 0.1.4");
-    expect(html).toContain("优化工地卡片和图片展示");
     expect(html).toContain("生成新版体验版");
+    expect(html).not.toContain("发现可用新版");
   });
 
   test("keeps status sync visible beside a rejected release with a newer template", () => {
@@ -400,10 +408,51 @@ describe("TenantDouyinMiniappWorkspace", () => {
     );
 
     expect(html).toContain("当前可发布模板版本异常 0.1.2");
-    expect(html).toContain("请先在平台确认新的抖音模板版本");
+    expect(html).toContain("平台当前模板版本低于租户记录，请联系平台管理员核对");
     expect(html).not.toContain("生成新版体验版");
   });
+  test("renders a same-version template revision as the default test target", () => {
+    const html = renderToStaticMarkup(
+      <TenantDouyinMiniappWorkspace
+        canRead
+        canManage
+        loadError={null}
+        releaseOptions={{
+          provider_state: "fresh",
+          provider_message: null,
+          list: [{
+            id: "00000000-0000-4000-8000-000000000099",
+            source: "confirmed_template",
+            release_id: null,
+            template_id: "78690",
+            template_version: "0.1.39",
+            description: "新版装修模板",
+            stage: "ready_to_upload",
+            actions: ["create_test_version"],
+            test_qr_url: null,
+            updated_at: "2026-09-17T10:00:00.000Z",
+          }],
+          history: [workspace.latest_release!],
+          pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+        }}
+        workspace={{
+          ...workspace,
+          available_template: {
+            template_id: "78690",
+            version: "0.1.39",
+            description: "新版装修模板",
+            confirmed_at: "2026-09-17T10:00:00.000Z",
+            state: "revision_available",
+          },
+        }}
+      />,
+    );
 
+    expect(html).toContain("0.1.39 · 新模板修订");
+    expect(html).toContain("生成 0.1.39 测试码");
+    expect(html).not.toContain("当前可发布模板版本异常");
+    expect(html).not.toContain("平台当前模板不是该租户的新版本");
+  });
   test("surfaces a pending public profile instead of implying it is live", () => {
     const html = renderToStaticMarkup(
       <TenantDouyinMiniappWorkspace

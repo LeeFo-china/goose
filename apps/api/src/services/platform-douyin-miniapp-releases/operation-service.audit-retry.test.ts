@@ -54,6 +54,7 @@ function release(
     created_at: "2026-07-26T01:00:00.000Z",
     updated_at: "2026-07-26T01:00:00.000Z",
     ...overrides,
+    provider_summary: overrides.provider_summary ?? null,
   };
 }
 

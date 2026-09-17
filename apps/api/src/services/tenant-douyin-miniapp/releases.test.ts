@@ -1,209 +1,9 @@
-import { beforeAll, describe, expect, mock, test } from "bun:test";
-import type { DouyinReleaseReadiness } from "@gooes/domain";
+import { beforeAll, describe, expect, test } from "bun:test";
+import { blockedReadiness, deployableTemplate, EMPLOYEE_ID, fixture,
+  initializeReleaseService, INSTALLATION_ID, OTHER_INSTALLATION_ID, release, RELEASE_ID,
+  selectedTemplate, TENANT_ID, tenantContext } from "./releases.fixture";
 
-import type { AuthContext } from "@/services/authorization";
-
-process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
-process.env.SUPABASE_PUBLISH ??= "test-publish-key";
-process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
-
-let Service:
-  typeof import("./releases").TenantDouyinMiniappReleasesService;
-
-beforeAll(async () => {
-  ({ TenantDouyinMiniappReleasesService: Service } = await import(
-    "./releases"
-  ));
-});
-
-const TENANT_ID = "11111111-1111-4111-8111-111111111111";
-const EMPLOYEE_ID = "22222222-2222-4222-8222-222222222222";
-const INSTALLATION_ID = "33333333-3333-4333-8333-333333333333";
-const OTHER_INSTALLATION_ID = "44444444-4444-4444-8444-444444444444";
-const RELEASE_ID = "55555555-5555-4555-8555-555555555555";
-const deployableTemplate = {
-  template_id: "77596",
-  template_version: "0.1.4",
-  description: "租户发布闭环",
-  channel: "default" as const,
-};
-const readyReadiness: DouyinReleaseReadiness = {
-  ready: true,
-  checked_at: "2026-08-20T10:00:00.000Z",
-  tenant: { id: TENANT_ID, name: "验收租户" },
-  blockers: [],
-  warnings: [],
-  metrics: {},
-};
-const blockedReadiness: DouyinReleaseReadiness = {
-  ...readyReadiness,
-  ready: false,
-  blockers: [{
-    severity: "blocker" as const,
-    code: "BUDGET_PRICING_MISSING" as const,
-    message: "预算报价未启用",
-    details: {},
-  }],
-};
-
-function tenantContext(
-  permissions: string[] = [
-    "douyin_miniapp.read",
-    "douyin_miniapp.manage",
-    "douyin_miniapp.audit.submit",
-    "douyin_miniapp.publish",
-  ],
-): AuthContext {
-  return {
-    authUserId: "66666666-6666-4666-8666-666666666666",
-    employeeId: EMPLOYEE_ID,
-    tenantId: TENANT_ID,
-    tenantName: "验收租户",
-    tenantSlug: "acceptance",
-    tenantStatus: "active",
-    isPlatformAdmin: false,
-    employeeName: "管理员",
-    employeeStatus: "active",
-    departmentId: null,
-    tenantDepartmentId: null,
-    departmentCode: null,
-    departmentName: null,
-    postId: null,
-    postName: null,
-    avatar: null,
-    roleCodes: ["system_admin"],
-    roles: [],
-    permissions: permissions.map((code) => ({ code, scope: "all" })),
-  };
-}
-
-function release(overrides: Record<string, unknown> = {}) {
-  return {
-    id: RELEASE_ID,
-    installation_id: INSTALLATION_ID,
-    template_id: "77595",
-    template_version: "0.1.2",
-    description: "租户联调版本",
-    channel: "default" as const,
-    ext_json: {
-      extEnable: true as const,
-      extAppid: "tt-authorizer",
-      ext: { deployment_key: "secret-deployment-key" },
-    },
-    status: "testing" as const,
-    douyin_log_id: "provider-log",
-    test_qr_url: "https://example.test/test-qr.png",
-    latest_test_qr_url: "https://example.test/test-qr.png",
-    audit_qr_url: null,
-    audit_host_names: [],
-    audit_note: null,
-    audit_result: null,
-    submitted_at: null,
-    audited_at: null,
-    released_at: null,
-    platform_operator_id: EMPLOYEE_ID,
-    created_at: "2026-07-26T10:00:00.000Z",
-    updated_at: "2026-07-26T10:00:00.000Z",
-    ...overrides,
-  };
-}
-
-function fixture(options: {
-  readonly currentInstallation?: object | null;
-  readonly target?: object | null;
-  readonly profile?: object | null;
-  readonly foundRelease?: object | null;
-  readonly latestRelease?: object | null;
-} = {}) {
-  const currentInstallation = options.currentInstallation ?? {
-    id: INSTALLATION_ID,
-    authorizer_appid: "tt-authorizer",
-    installation_kind: "merchant",
-    authorization_status: "active",
-  };
-  const target = options.target ?? {
-    id: INSTALLATION_ID,
-    authorizer_appid: "tt-authorizer",
-    deployment_key: "secret-deployment-key",
-    installation_kind: "merchant",
-    authorization_status: "active",
-    permission_snapshot: [{ id: 1 }],
-  };
-  const workspace = {
-    findCurrentInstallation: mock(async (_tenantId: string) =>
-      currentInstallation),
-    findProfile: mock(async (_tenantId: string) =>
-      options.profile ?? { status: "published" }),
-    findLatestRelease: mock(async (_installationId: string) =>
-      options.latestRelease === undefined
-        ? null
-        : options.latestRelease),
-  };
-  const installations = {
-    findReleaseTargetById: mock(async (_id: string) => target),
-  };
-  const releases = {
-    listByInstallation: mock(async (_input: unknown) => ({
-      list: [release()],
-      total: 1,
-    })),
-    findById: mock(async (_id: string) =>
-      options.foundRelease === undefined
-        ? release()
-        : options.foundRelease),
-  };
-  const templates = {
-    findCurrent: mock(async (): Promise<typeof deployableTemplate | null> =>
-      deployableTemplate),
-  };
-  const accessPolicy = {
-    assertTenantContext: mock((context: AuthContext) => {
-      if (!context.tenantId) throw new TypeError("missing tenant");
-      return context.tenantId;
-    }),
-    assertPermission: mock((context: AuthContext, permission: string) => {
-      if (!context.permissions.some((item) => item.code === permission)) {
-        throw new TypeError("missing permission");
-      }
-      return "all";
-    }),
-  };
-  const operations = {
-    upload: mock(async () => release({
-      id: "77777777-7777-4777-8777-777777777777",
-      template_id: deployableTemplate.template_id,
-      template_version: deployableTemplate.template_version,
-      description: deployableTemplate.description,
-      status: "uploaded",
-    })),
-    getTestQr: mock(async () => release()),
-    submitAudit: mock(async () => release({ status: "audit_pending" })),
-    syncStatus: mock(async () => release({ status: "audit_approved" })),
-    publish: mock(async () => release({ status: "released" })),
-  };
-  const readiness = {
-    evaluateTenant: mock(async () => readyReadiness),
-  };
-  const service = new Service({
-    workspace: workspace as never,
-    installations: installations as never,
-    releases: releases as never,
-    accessPolicy: accessPolicy as never,
-    operations: operations as never,
-    templates: templates as never,
-    readiness: readiness as never,
-  });
-  return {
-    service,
-    workspace,
-    installations,
-    releases,
-    accessPolicy,
-    operations,
-    templates,
-    readiness,
-  };
-}
+beforeAll(initializeReleaseService);
 
 describe("TenantDouyinMiniappReleasesService", () => {
   test("lists only sanitized releases with bounded pagination", async () => {
@@ -228,6 +28,48 @@ describe("TenantDouyinMiniappReleasesService", () => {
     expect(result.list[0]).not.toHaveProperty("ext_json");
     expect(result.list[0]).not.toHaveProperty("douyin_log_id");
     expect(result.list[0]).not.toHaveProperty("platform_operator_id");
+  });
+
+  test("lists actionable versions and sanitized history", async () => {
+    const context = fixture({ latestRelease: release() });
+
+    const result = await context.service.listOptions(
+      tenantContext(["douyin_miniapp.read"]),
+      { page: 1, pageSize: 20 },
+    );
+
+    expect(result.provider_state).toBe("fresh");
+    expect(result.list[0]).toMatchObject({
+      source: "confirmed_template", actions: ["create_test_version"],
+    });
+    expect(result.pagination).toEqual({ page: 1, pageSize: 20, total: 1, totalPages: 1 });
+    expect(JSON.stringify(result.history)).not.toMatch(
+      /ext_json|douyin_log_id|platform_operator_id|provider_summary/,
+    );
+  });
+
+  test("keeps local history available when provider version loading fails", async () => {
+    const context = fixture();
+    context.gateway.getVersionList.mockRejectedValue(new Error("provider unavailable"));
+
+    const result = await context.service.listOptions(
+      tenantContext(["douyin_miniapp.read"]),
+      { page: 1, pageSize: 20 },
+    );
+
+    expect(result.provider_state).toBe("unavailable");
+    expect(result.provider_message).toBeTruthy();
+    expect(result.history).toHaveLength(1);
+  });
+
+  test("rejects invalid options pagination before repository access", async () => {
+    const context = fixture();
+
+    await expect(context.service.listOptions(
+      tenantContext(["douyin_miniapp.read"]),
+      { page: 1, pageSize: 101 },
+    )).rejects.toMatchObject({ statusCode: 400 });
+    expect(context.releases.listByInstallation).not.toHaveBeenCalled();
   });
 
   test("rejects a release owned by another tenant", async () => {
@@ -292,6 +134,7 @@ describe("TenantDouyinMiniappReleasesService", () => {
 
     const result = await context.service.createFromCurrentTemplate(
       tenantContext(["douyin_miniapp.manage"]),
+      selectedTemplate,
     );
 
     expect(context.templates.findCurrent).toHaveBeenCalledWith("default");
@@ -344,10 +187,52 @@ describe("TenantDouyinMiniappReleasesService", () => {
 
     await expect(context.service.createFromCurrentTemplate(
       tenantContext(["douyin_miniapp.manage"]),
+      {
+        expected_template_record_id: deployableTemplate.id,
+        expected_template_id: "78149",
+      },
     )).rejects.toMatchObject({
       code: "DOUYIN_DEPLOYABLE_TEMPLATE_NOT_FOUND",
     });
     expect(context.operations.upload).not.toHaveBeenCalled();
+  });
+
+  test("rejects a stale selected template before uploading", async () => {
+    const context = fixture();
+
+    await expect(context.service.createFromCurrentTemplate(
+      tenantContext(["douyin_miniapp.manage"]),
+      {
+        expected_template_record_id: "88888888-8888-4888-8888-888888888888",
+        expected_template_id: deployableTemplate.template_id,
+      },
+    )).rejects.toMatchObject({
+      statusCode: 409,
+      code: "DOUYIN_DEPLOYABLE_TEMPLATE_CHANGED",
+    });
+    expect(context.operations.upload).not.toHaveBeenCalled();
+  });
+
+  test("allows a confirmed same-version package revision", async () => {
+    const context = fixture({
+      latestRelease: release({
+        template_id: "77595",
+        template_version: deployableTemplate.template_version,
+        status: "testing",
+      }),
+    });
+
+    await context.service.createFromCurrentTemplate(
+      tenantContext(["douyin_miniapp.manage"]),
+      selectedTemplate,
+    );
+
+    expect(context.operations.upload).toHaveBeenCalledWith(
+      expect.anything(),
+      INSTALLATION_ID,
+      EMPLOYEE_ID,
+      expect.objectContaining({ template_id: deployableTemplate.template_id }),
+    );
   });
 
   test("rejects a current template version that is not newer than the latest release", async () => {
@@ -368,6 +253,10 @@ describe("TenantDouyinMiniappReleasesService", () => {
 
     await expect(context.service.createFromCurrentTemplate(
       tenantContext(["douyin_miniapp.manage"]),
+      {
+        expected_template_record_id: deployableTemplate.id,
+        expected_template_id: "78149",
+      },
     )).rejects.toMatchObject({
       statusCode: 409,
       code: "DOUYIN_DEPLOYABLE_TEMPLATE_VERSION_NOT_NEW",
@@ -376,7 +265,12 @@ describe("TenantDouyinMiniappReleasesService", () => {
   });
 
   test("recovers the tenant's created release before starting a newer template", async () => {
-    const createdRelease = release({ status: "created" });
+    const createdRelease = release({
+      status: "created",
+      template_id: deployableTemplate.template_id,
+      template_version: deployableTemplate.template_version,
+      description: deployableTemplate.description,
+    });
     const context = fixture({
       latestRelease: createdRelease,
       foundRelease: createdRelease,
@@ -384,6 +278,7 @@ describe("TenantDouyinMiniappReleasesService", () => {
 
     await context.service.createFromCurrentTemplate(
       tenantContext(["douyin_miniapp.manage"]),
+      selectedTemplate,
     );
 
     expect(context.operations.upload).toHaveBeenCalledWith(
@@ -398,7 +293,7 @@ describe("TenantDouyinMiniappReleasesService", () => {
       },
     );
     expect(context.releases.findById).toHaveBeenCalledWith(createdRelease.id);
-    expect(context.templates.findCurrent).not.toHaveBeenCalled();
+    expect(context.templates.findCurrent).toHaveBeenCalledWith("default");
   });
 
   test("allows a confirmed newer template to replace uploaded or testing builds", async () => {
@@ -407,6 +302,7 @@ describe("TenantDouyinMiniappReleasesService", () => {
 
       await context.service.createFromCurrentTemplate(
         tenantContext(["douyin_miniapp.manage"]),
+        selectedTemplate,
       );
 
       expect(context.operations.upload).toHaveBeenCalledWith(
@@ -429,6 +325,7 @@ describe("TenantDouyinMiniappReleasesService", () => {
 
       await expect(context.service.createFromCurrentTemplate(
         tenantContext(["douyin_miniapp.manage"]),
+        selectedTemplate,
       )).rejects.toMatchObject({
         statusCode: 409,
         code: "DOUYIN_TENANT_RELEASE_IN_PROGRESS",

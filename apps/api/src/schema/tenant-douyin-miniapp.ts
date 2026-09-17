@@ -50,6 +50,10 @@ export const TenantDouyinReleaseParamsSchema = z.strictObject({
   releaseId: z.uuid("无效的抖音小程序发布记录 ID"),
 });
 export const TenantDouyinReleaseEmptyObjectSchema = z.strictObject({});
+export const TenantDouyinCreateReleaseSchema = z.strictObject({
+  expected_template_record_id: z.uuid("无效的抖音模板记录 ID"),
+  expected_template_id: z.string().regex(/^[1-9][0-9]{0,18}$/),
+});
 export const TenantDouyinSubmitReleaseAuditSchema =
   SubmitPlatformDouyinMiniappReleaseAuditSchema;
 export const TenantDouyinReleaseReadinessResponseSchema =
@@ -117,6 +121,7 @@ export const TenantDouyinWorkspaceSchema = z.strictObject({
     confirmed_at: DateTimeSchema,
     state: z.enum([
       "new_available",
+      "revision_available",
       "in_progress",
       "up_to_date",
       "stale_version",
@@ -161,6 +166,9 @@ export type TenantDouyinWorkspace = z.infer<
 >;
 export type TenantDouyinAuthorizationCallbackInput = z.infer<
   typeof TenantDouyinAuthorizationCallbackSchema
+>;
+export type TenantDouyinCreateReleaseInput = z.infer<
+  typeof TenantDouyinCreateReleaseSchema
 >;
 export type TenantDouyinAuthorizationState = z.infer<
   typeof TenantDouyinAuthorizationStateSchema

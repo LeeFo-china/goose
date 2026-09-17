@@ -27,6 +27,7 @@ function release(status: DouyinMiniappReleaseRecord["status"]): DouyinMiniappRel
     template_id: "9133504853504535288",
     template_version: "1.2.3-beta.1",
     description: "装修模板首发",
+    provider_summary: null,
     channel: "default",
     ext_json: {
       extEnable: true,
@@ -459,7 +460,6 @@ describe("Douyin miniapp release operation recovery", () => {
     expect(h.releaseRepository.patchClaimed).toHaveBeenCalled();
     expect(h.releaseRepository.updateClaimed).not.toHaveBeenCalled();
   });
-
   test("upload timeout automatically reconciles the exact latest version", async () => {
     const h = harness("created");
     const claimTokens = [CLAIM_TOKEN, RETRY_CLAIM_TOKEN];

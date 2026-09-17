@@ -59,6 +59,7 @@ const release: DouyinMiniappReleaseRecord = {
   template_id: "9133504853504535288",
   template_version: "1.2.3-beta.1",
   description: "装修模板首发",
+  provider_summary: null,
   channel: "default",
   ext_json: {
     extEnable: true,
