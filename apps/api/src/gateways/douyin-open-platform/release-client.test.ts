@@ -33,7 +33,12 @@ describe("DouyinOpenPlatformClient release operations", () => {
       err_msg: "",
       log_id: "upload-log",
     }));
-    const client = new DouyinOpenPlatformClient({ fetch });
+    const setTimeout = mock((_handler: () => void, milliseconds: number) => {
+      expect(milliseconds).toBe(30_000);
+      return 29;
+    });
+    const clearTimeout = mock((_handle: unknown) => undefined);
+    const client = new DouyinOpenPlatformClient({ fetch, setTimeout, clearTimeout });
 
     await expect(client.uploadTemplateVersion({
       authorizerAccessToken: AUTHORIZER_TOKEN,
@@ -68,6 +73,7 @@ describe("DouyinOpenPlatformClient release operations", () => {
       "{\"ext_json\":\"{\\\"extEnable\\\":true,\\\"extAppid\\\":\\\"authorizer-appid\\\",\\\"ext\\\":{\\\"deployment_key\\\":\\\"deployment-key\\\",\\\"deployment_environment\\\":\\\"production\\\"}}\",\"template_id\":9133504853504535288,\"user_desc\":\"装修交付\\\"稳定版\",\"user_version\":\"1.2.3\",\"tag\":\"1\"}",
     );
     expect(body).not.toContain('"template_id":"9133504853504535288"');
+    expect(clearTimeout).toHaveBeenCalledWith(29);
   });
 
   test("rejects unsafe template IDs before making a request", async () => {

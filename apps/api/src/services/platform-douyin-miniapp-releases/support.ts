@@ -113,6 +113,32 @@ export function isExplicitOpenPlatformApiRejection(error: unknown): boolean {
     && error.code === "DOUYIN_OPEN_PLATFORM_API_ERROR";
 }
 
+export function isUncertainOpenPlatformOutcome(error: unknown): boolean {
+  return error instanceof AppError
+    && ["DOUYIN_OPEN_PLATFORM_TIMEOUT", "DOUYIN_OPEN_PLATFORM_NETWORK_ERROR"]
+      .includes(error.code);
+}
+
+const RECONCILIATION_RETRY_DELAYS_MS = [0, 750, 1_500] as const;
+
+export async function retryUncertainReconciliation<Result>(
+  operation: () => Promise<Result | null>,
+  wait: (milliseconds: number) => Promise<void> = (milliseconds) =>
+    new Promise((resolve) => setTimeout(resolve, milliseconds)),
+): Promise<Result | null> {
+  for (const [index, milliseconds] of RECONCILIATION_RETRY_DELAYS_MS.entries()) {
+    if (milliseconds > 0) await wait(milliseconds);
+    try {
+      const result = await operation();
+      if (result !== null) return result;
+    } catch (error) {
+      if (!isUncertainOpenPlatformOutcome(error)
+        || index === RECONCILIATION_RETRY_DELAYS_MS.length - 1) throw error;
+    }
+  }
+  return null;
+}
+
 export function sanitizedProviderError(error: unknown): AppError {
   const safe = safeProviderFailure(error);
   return Errors.business(

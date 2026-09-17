@@ -218,7 +218,7 @@ export class DouyinOpenPlatformClient
       globalThis.clearTimeout(handle as ReturnType<typeof globalThis.setTimeout>));
     this.retryAccessToken = options.retryAccessToken;
     this.releases = new DouyinMiniappReleaseClient({
-      request: (url, init) => this.request(url, init),
+      request: (url, init, timeoutMs) => this.request(url, init, timeoutMs),
       executeWithAuthorizerToken: (input, operation) =>
         this.withAuthorizerAccessToken(input, operation),
       assertSuccess: assertOpenApiSuccess,
@@ -422,9 +422,13 @@ export class DouyinOpenPlatformClient
     }
   }
 
-  private async request(url: string, init: RequestInit): Promise<Record<string, unknown>> {
+  private async request(
+    url: string,
+    init: RequestInit,
+    timeoutMs = REQUEST_TIMEOUT_MS,
+  ): Promise<Record<string, unknown>> {
     const controller = new AbortController();
-    const timer = this.startTimer(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const timer = this.startTimer(() => controller.abort(), timeoutMs);
     try {
       const response = await this.fetch(url, { ...init, signal: controller.signal });
       if (!response.ok) {
