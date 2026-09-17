@@ -5,6 +5,7 @@ import type {
   sendDouyinCustomerSmsCode,
   verifyDouyinCustomerSms,
 } from "../../api/customer-auth";
+import { ApiRequestError } from "../../api/request";
 import { resolveThemeColor } from "../../components/theme";
 import { resolvePhoneNumberCallback, type PhoneNumberCallbackEvent } from "../../platform/phone-number-callback";
 import type { CustomerIdentityCandidate, CustomerIdentitySelectionResult } from "../../models";
@@ -87,6 +88,7 @@ export function createCustomerLoginPageDefinition(dependencies: CustomerLoginPag
         phoneReady: /^1[3-9]\d{9}$/.test(phone),
         phoneError: "",
         formNotice: "",
+        loginError: "",
       });
     },
     onCodeInput(event: { detail: { value?: string } }) {
@@ -108,7 +110,8 @@ export function createCustomerLoginPageDefinition(dependencies: CustomerLoginPag
         () => dependencies.authorizeDouyinCustomerPhone(dependencies.getApp().api, code),
         "authorizing",
         "idle",
-        "客户登录失败，请重试",
+        "登录客户项目失败，请稍后重试",
+        resolveCustomerProjectLoginError,
       );
     },
     async onSendCode() {
@@ -159,7 +162,8 @@ export function createCustomerLoginPageDefinition(dependencies: CustomerLoginPag
         ),
         "verifying",
         "idle",
-        "客户登录失败，请检查验证码后重试",
+        "登录客户项目失败，请稍后重试",
+        resolveCustomerProjectLoginError,
       );
     },
     async onSelectCandidate(event: { currentTarget: { dataset: { id?: string } } }) {
@@ -181,6 +185,7 @@ export function createCustomerLoginPageDefinition(dependencies: CustomerLoginPag
       pendingStatus: Extract<LoginStatus, "authorizing" | "verifying" | "choosing">,
       failureStatus: Extract<LoginStatus, "idle" | "selecting">,
       failureMessage: string,
+      resolveFailure?: (error: unknown) => string | null,
     ) {
       this.setData({ status: pendingStatus, loginError: "", formNotice: "" });
       try {
@@ -198,11 +203,11 @@ export function createCustomerLoginPageDefinition(dependencies: CustomerLoginPag
           token: result.auth.token,
         });
         await dependencies.navigateToPage("pages/customer-projects/index");
-      } catch {
+      } catch (error) {
         this.setData({
           status: failureStatus,
           choosingCandidateId: "",
-          loginError: failureMessage,
+          loginError: resolveFailure?.(error) ?? failureMessage,
         });
       }
     },
@@ -225,6 +230,13 @@ export function createCustomerLoginPageDefinition(dependencies: CustomerLoginPag
       this.cooldownTimer = null;
     },
   });
+}
+
+function resolveCustomerProjectLoginError(error: unknown) {
+  if (error instanceof ApiRequestError && error.code === "CUSTOMER_CONTEXT_MISSING") {
+    return "未找到关联项目。该手机号尚未关联装修项目，请联系装修公司确认预留手机号。";
+  }
+  return null;
 }
 
 function definePage<TData extends Record<string, unknown>, TCustom extends Record<string, unknown>>(

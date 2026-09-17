@@ -1,5 +1,6 @@
 import { expect, mock, test } from "bun:test";
 
+import { ApiRequestError } from "../../api/request";
 import { createCustomerLoginPageDefinition } from "./page";
 
 test("customer login stores auth and navigates after Douyin phone login", async () => {
@@ -128,7 +129,11 @@ test("customer login keeps candidates visible when identity selection fails", as
     sendDouyinCustomerSmsCode: mock(async () => ({ success: true, cooldown_seconds: 60 })),
     verifyDouyinCustomerSms: mock(async () => ({ status: "authenticated", auth: auth() })),
     selectDouyinCustomerIdentity: mock(async () => {
-      throw new Error("network unavailable");
+      throw new ApiRequestError(
+        404,
+        "CUSTOMER_CONTEXT_MISSING",
+        "该手机号未匹配到客户项目，请联系装修公司确认预留手机号",
+      );
     }),
     navigateToPage: mock(async () => undefined),
   } as never));
@@ -150,6 +155,122 @@ test("customer login keeps candidates visible when identity selection fails", as
   expect(page.data.status).toBe("selecting");
   expect(page.data.candidates).toHaveLength(1);
   expect(page.data.loginError).toBe("身份选择失败，请重试");
+});
+
+test("editing the phone clears the prior project lookup error", () => {
+  const page = attachSetData(createCustomerLoginPageDefinition({
+    getApp: () => ({
+      api: {},
+      customerSession: { acceptAuth: mock(() => undefined) },
+      startup: Promise.resolve(null),
+    }),
+    authorizeDouyinCustomerPhone: mock(async () => ({ status: "authenticated", auth: auth() })),
+    sendDouyinCustomerSmsCode: mock(async () => ({ success: true, cooldown_seconds: 60 })),
+    verifyDouyinCustomerSms: mock(async () => ({ status: "authenticated", auth: auth() })),
+    selectDouyinCustomerIdentity: mock(async () => ({ status: "authenticated", auth: auth() })),
+    navigateToPage: mock(async () => undefined),
+  } as never));
+  page.data.loginError =
+    "未找到关联项目。该手机号尚未关联装修项目，请联系装修公司确认预留手机号。";
+
+  page.onPhoneInput({ detail: { value: "13900139000" } });
+
+  expect(page.data.loginError).toBe("");
+});
+
+test("customer login explains when the authorized phone has no linked project", async () => {
+  const page = attachSetData(createCustomerLoginPageDefinition({
+    getApp: () => ({
+      api: {},
+      customerSession: { acceptAuth: mock(() => undefined) },
+      startup: Promise.resolve(null),
+    }),
+    authorizeDouyinCustomerPhone: mock(async () => {
+      throw new ApiRequestError(
+        404,
+        "CUSTOMER_CONTEXT_MISSING",
+        "该手机号未匹配到客户项目，请联系装修公司确认预留手机号",
+      );
+    }),
+    sendDouyinCustomerSmsCode: mock(async () => ({ success: true, cooldown_seconds: 60 })),
+    verifyDouyinCustomerSms: mock(async () => ({ status: "authenticated", auth: auth() })),
+    selectDouyinCustomerIdentity: mock(async () => ({ status: "authenticated", auth: auth() })),
+    navigateToPage: mock(async () => undefined),
+  } as never));
+
+  await page.onDouyinPhone({ detail: { code: "phone-code" } });
+
+  expect(page.data.loginError).toBe(
+    "未找到关联项目。该手机号尚未关联装修项目，请联系装修公司确认预留手机号。",
+  );
+  expect(page.data.smsExpanded).toBe(false);
+});
+
+test("customer login hides unknown backend messages behind the safe fallback", async () => {
+  const page = attachSetData(createCustomerLoginPageDefinition({
+    getApp: () => ({
+      api: {},
+      customerSession: { acceptAuth: mock(() => undefined) },
+      startup: Promise.resolve(null),
+    }),
+    authorizeDouyinCustomerPhone: mock(async () => {
+      throw new ApiRequestError(500, "INTERNAL_ERROR", "private upstream detail");
+    }),
+    sendDouyinCustomerSmsCode: mock(async () => ({ success: true, cooldown_seconds: 60 })),
+    verifyDouyinCustomerSms: mock(async () => ({ status: "authenticated", auth: auth() })),
+    selectDouyinCustomerIdentity: mock(async () => ({ status: "authenticated", auth: auth() })),
+    navigateToPage: mock(async () => undefined),
+  } as never));
+
+  await page.onDouyinPhone({ detail: { code: "phone-code" } });
+
+  expect(page.data.loginError).toBe("登录客户项目失败，请稍后重试");
+  expect(page.data.loginError).not.toContain("private upstream detail");
+});
+
+test("SMS login uses the same no-linked-project explanation", async () => {
+  const page = attachSetData(createCustomerLoginPageDefinition({
+    getApp: () => ({
+      api: {},
+      customerSession: { acceptAuth: mock(() => undefined) },
+      startup: Promise.resolve(null),
+    }),
+    authorizeDouyinCustomerPhone: mock(async () => ({ status: "authenticated", auth: auth() })),
+    sendDouyinCustomerSmsCode: mock(async () => ({ success: true, cooldown_seconds: 60 })),
+    verifyDouyinCustomerSms: mock(async () => {
+      throw new ApiRequestError(
+        404,
+        "CUSTOMER_CONTEXT_MISSING",
+        "该手机号未匹配到客户项目，请联系装修公司确认预留手机号",
+      );
+    }),
+    selectDouyinCustomerIdentity: mock(async () => ({ status: "authenticated", auth: auth() })),
+    navigateToPage: mock(async () => undefined),
+  } as never));
+  page.onPhoneInput({ detail: { value: "13800138000" } });
+  page.onCodeInput({ detail: { value: "123456" } });
+
+  await page.onVerifySms();
+
+  expect(page.data.loginError).toBe(
+    "未找到关联项目。该手机号尚未关联装修项目，请联系装修公司确认预留手机号。",
+  );
+});
+
+test("customer project login copy makes the business destination explicit", async () => {
+  const [config, template] = await Promise.all([
+    Bun.file(`${__dirname}/index.json`).text(),
+    Bun.file(`${__dirname}/index.ttml`).text(),
+  ]);
+
+  expect(config).toContain('"navigationBarTitleText": "登录客户项目"');
+  expect(template).toContain("查看我的装修项目");
+  expect(template).toContain("使用装修公司预留的手机号，查找并登录您关联的装修项目");
+  expect(template).toContain("授权抖音手机号并登录项目");
+  expect(template).toContain("正在查找项目");
+  expect(template).toContain("使用其他手机号登录项目");
+  expect(template).toContain("手机号仅用于核验并查找您关联的装修项目");
+  expect(template).not.toContain("使用抖音手机号登录");
 });
 
 function attachSetData<T extends { data: Record<string, unknown> }>(definition: T) {

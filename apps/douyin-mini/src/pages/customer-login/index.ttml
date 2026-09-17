@@ -7,8 +7,8 @@
       </view>
       <view class="brand-name">{{brandName}}</view>
     </view>
-    <view class="welcome-title">查看我家的装修进度</view>
-    <view class="welcome-description">登录后查看项目进度、施工日志和现场照片</view>
+    <view class="welcome-title">查看我的装修项目</view>
+    <view class="welcome-description">使用装修公司预留的手机号，查找并登录您关联的装修项目</view>
   </view>
 
   <view tt:if="{{status === 'selecting' || status === 'choosing'}}" class="candidate-section">
@@ -43,7 +43,7 @@
       disabled="{{status !== 'idle' || !phoneLoginReady}}"
       loading="{{status === 'authorizing'}}"
       bindgetphonenumber="onDouyinPhone"
-    >{{status === 'authorizing' ? '正在登录' : '使用抖音手机号登录'}}</button>
+    >{{status === 'authorizing' ? '正在查找项目' : '授权抖音手机号并登录项目'}}</button>
 
     <view tt:if="{{loginError && !smsExpanded}}" class="inline-error" role="alert">{{loginError}}</view>
 
@@ -59,7 +59,7 @@
       disabled="{{status !== 'idle'}}"
       bindtap="onToggleSms"
     >
-      <text>使用短信验证码登录</text>
+      <text>使用其他手机号登录项目</text>
       <text class="toggle-symbol" aria-hidden="true">{{smsExpanded ? '−' : '+'}}</text>
     </button>
 
@@ -118,5 +118,5 @@
     </view>
   </view>
 
-  <view class="privacy-note">手机号仅用于核验您与装修项目的客户关系</view>
+  <view class="privacy-note">手机号仅用于核验并查找您关联的装修项目</view>
 </view>

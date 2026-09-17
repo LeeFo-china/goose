@@ -16,7 +16,7 @@
 - Modify: `apps/douyin-mini/src/pages/customer-login/page.test.ts`
 - Modify: `apps/douyin-mini/src/pages/customer-login/page.ts`
 
-- [ ] **Step 1: 写入未关联项目的失败测试**
+- [x] **Step 1: 写入未关联项目的失败测试**
 
 在页面测试中让抖音手机号授权和短信验证分别抛出：
 
@@ -34,13 +34,13 @@ new ApiRequestError(
 "未找到关联项目。该手机号尚未关联装修项目，请联系装修公司确认预留手机号。"
 ```
 
-- [ ] **Step 2: 运行测试并确认按旧通用提示失败**
+- [x] **Step 2: 运行测试并确认按旧通用提示失败**
 
 Run: `bun test apps/douyin-mini/src/pages/customer-login/page.test.ts`
 
 Expected: FAIL，实际值仍为“客户登录失败，请重试”或短信登录旧提示。
 
-- [ ] **Step 3: 实现稳定错误码映射**
+- [x] **Step 3: 实现稳定错误码映射**
 
 在 `page.ts` 中导入 `ApiRequestError`，增加纯函数：
 
@@ -55,7 +55,7 @@ function resolveCustomerProjectLoginError(error: unknown, fallback: string) {
 
 让 `runAuth` 的 `catch` 接收异常，并通过该函数设置 `loginError`。抖音授权和短信验证的兜底文案统一为“登录客户项目失败，请稍后重试”。身份选择继续保留现有提示。
 
-- [ ] **Step 4: 运行页面测试并确认通过**
+- [x] **Step 4: 运行页面测试并确认通过**
 
 Run: `bun test apps/douyin-mini/src/pages/customer-login/page.test.ts`
 
@@ -68,17 +68,17 @@ Expected: PASS，0 failures。
 - Modify: `apps/douyin-mini/src/pages/customer-login/index.ttml`
 - Modify: `apps/douyin-mini/src/pages/customer-login/page.test.ts`
 
-- [ ] **Step 1: 写入页面文案契约测试**
+- [x] **Step 1: 写入页面文案契约测试**
 
 读取 JSON 和 TTML 源文件，断言包含设计中的导航标题、页面标题、说明、按钮、短信入口和底部说明，并断言不再包含“使用抖音手机号登录”。
 
-- [ ] **Step 2: 运行测试并确认旧文案导致失败**
+- [x] **Step 2: 运行测试并确认旧文案导致失败**
 
 Run: `bun test apps/douyin-mini/src/pages/customer-login/page.test.ts`
 
 Expected: FAIL，缺少新的客户项目文案。
 
-- [ ] **Step 3: 修改页面文案**
+- [x] **Step 3: 修改页面文案**
 
 使用以下确定文案：
 
@@ -92,7 +92,7 @@ Expected: FAIL，缺少新的客户项目文案。
 手机号仅用于核验并查找您关联的装修项目
 ```
 
-- [ ] **Step 4: 运行页面测试并确认通过**
+- [x] **Step 4: 运行页面测试并确认通过**
 
 Run: `bun test apps/douyin-mini/src/pages/customer-login/page.test.ts`
 
@@ -104,19 +104,19 @@ Expected: PASS，0 failures。
 - Verify: `apps/douyin-mini`
 - Modify: `docs/superpowers/plans/2026-09-17-douyin-customer-project-login-copy.md`
 
-- [ ] **Step 1: 运行抖音小程序完整检查**
+- [x] **Step 1: 运行抖音小程序完整检查**
 
 Run: `bun run --cwd apps/douyin-mini check`
 
 Expected: 所有测试通过，TypeScript 类型检查通过。
 
-- [ ] **Step 2: 检查变更边界**
+- [x] **Step 2: 检查变更边界**
 
 Run: `git diff --check && git status --short && git diff --stat`
 
 Expected: 只包含客户登录页、测试和本计划文件，无空白错误，无 Orange 仓库改动。
 
-- [ ] **Step 3: 更新计划勾选状态并提交**
+- [x] **Step 3: 更新计划勾选状态并提交**
 
 Run:
 
