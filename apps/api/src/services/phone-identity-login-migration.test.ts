@@ -22,6 +22,13 @@ const selectionStatusFixSql = readFileSync(
   ),
   "utf8",
 );
+const platformAdminSql = readFileSync(
+  new URL(
+    "../../../../supabase/migrations/20260917113000_support_platform_admin_phone_login.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 describe("phone identity login migration", () => {
   test("adds the SMS scene without removing legacy scenes", () => {
@@ -140,6 +147,15 @@ describe("phone identity login migration", () => {
     );
     expect(selectionStatusFixSql).toContain(
       "AND session_row.status = 'binding'",
+    );
+  });
+
+  test("allows platform admin candidates backed by a global employee", () => {
+    expect(platformAdminSql).toContain(
+      "target_mode IN ('customer', 'tenant_employee', 'platform_partner', 'platform_admin')",
+    );
+    expect(platformAdminSql).toMatch(
+      /target_mode = 'platform_admin'[\s\S]*tenant_id IS NULL[\s\S]*employee_id IS NOT NULL[\s\S]*customer_id IS NULL[\s\S]*partner_id IS NULL[\s\S]*partner_member_id IS NULL/,
     );
   });
 });

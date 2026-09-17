@@ -173,6 +173,27 @@ class UserIdentityService {
     }
   }
 
+  async syncOauthIdentity(input: {
+    userId: string;
+    platform: OAuthPlatform;
+    openid: string;
+    unionid?: string | null;
+  }) {
+    this.clearOauthCache(input);
+    try {
+      const synced = await userIdentityRepository.syncOauthIdentity(input);
+      this.setCacheValue(
+        this.activeOauthCache,
+        this.oauthCacheKey(input.platform, input.openid),
+        synced,
+      );
+      return synced;
+    } catch (error) {
+      this.clearOauthCache(input);
+      throw error;
+    }
+  }
+
   async findActiveOauthIdentity(input: {
     platform: OAuthPlatform;
     openid: string;

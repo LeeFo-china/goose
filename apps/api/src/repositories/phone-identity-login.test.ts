@@ -260,6 +260,40 @@ describe("PhoneIdentityLoginRepository", () => {
     }
   });
 
+  test("parses a persisted platform administrator candidate", async () => {
+    const { PhoneIdentityLoginRepository } = await repositoryModule;
+    const repository = new PhoneIdentityLoginRepository({
+      rpc: async () => ({
+        data: [{
+          status: "reserved",
+          session_id: SESSION_ID,
+          verified_phone: "13800138000",
+          target_mode: "platform_admin",
+          tenant_id: null,
+          customer_id: null,
+          employee_id: EMPLOYEE_ID,
+          partner_id: null,
+          partner_member_id: null,
+        }],
+        error: null,
+      }),
+    });
+
+    await expect(repository.reserveSelection({
+      selectionTokenHash: "d".repeat(64),
+      candidateId: CANDIDATE_ID,
+      authUserId: AUTH_USER_ID,
+      openidHash: "e".repeat(64),
+      now: NOW,
+    })).resolves.toMatchObject({
+      candidate: {
+        targetMode: "platform_admin",
+        tenantId: null,
+        employeeId: EMPLOYEE_ID,
+      },
+    });
+  });
+
   test("finalizes and releases selected sessions", async () => {
     const { PhoneIdentityLoginRepository } = await repositoryModule;
     const finalizeRpc = mock(async (

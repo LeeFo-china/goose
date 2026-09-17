@@ -191,6 +191,36 @@ describe("PhoneIdentityLoginService", () => {
     }));
   });
 
+  test("one platform administrator candidate authenticates directly", async () => {
+    const authenticate = mock(async () => ({
+      mode: "platform_admin",
+      authMode: "platform_admin",
+      roles: ["platform_admin"],
+      tenant: null,
+    }));
+    const deps = dependencies({ employees: [platformAdminEmployee()], authenticate });
+
+    await expect(new PhoneIdentityLoginService(deps).verify({
+      input: { phone: PHONE, code: CODE },
+      request: request(),
+    })).resolves.toMatchObject({
+      status: "authenticated",
+      auth: {
+        mode: "platform_admin",
+        authMode: "platform_admin",
+        roles: ["platform_admin"],
+        tenant: null,
+      },
+    });
+    expect(authenticate).toHaveBeenCalledWith(expect.objectContaining({
+      targetMode: "platform_admin",
+      tenantId: null,
+      employeeId: EMPLOYEE_ID,
+      authUserId: AUTH_USER_ID,
+      openid: OPENID,
+    }));
+  });
+
   test("one rebind candidate propagates existing stable rebind error", async () => {
     const deps = dependencies({
       partnerMembers: [partnerMember({ auth_user_id: "other-user" })],
@@ -422,6 +452,23 @@ function employee(overrides: Partial<PhoneEmployeeRecord> = {}): PhoneEmployeeRe
     post: { name: "项目经理", code: "pm" },
     ...overrides,
   };
+}
+
+function platformAdminEmployee(overrides: Partial<PhoneEmployeeRecord> = {}) {
+  return employee({
+    tenant_id: null,
+    tenant: null,
+    tenant_department: null,
+    post: null,
+    employee_roles: [{
+      role: {
+        code: "platform_admin",
+        status: "active",
+        tenant_id: null,
+      },
+    }],
+    ...overrides,
+  });
 }
 
 function partnerMember(

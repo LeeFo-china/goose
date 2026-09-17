@@ -38,6 +38,13 @@ export type PhoneEmployeeRecord = {
     name: string | null;
     code: string | null;
   }>;
+  employee_roles?: Array<{
+    role: RelationOne<{
+      code: string | null;
+      status: string | null;
+      tenant_id: string | null;
+    }>;
+  }> | null;
 };
 
 type MembershipKeyRecord = {
@@ -82,6 +89,7 @@ const EMPLOYEE_SELECT = [
   "tenant:tenants!employees_tenant_id_fkey(id, name, status)",
   "tenant_department:tenant_departments!employees_tenant_department_id_fkey(alias_name, code)",
   "post:posts!employees_post_id_fkey(name, code)",
+  "employee_roles(role:roles!employee_roles_role_id_fkey(code, status, tenant_id))",
 ].join(", ");
 
 const PHONE_IDENTITY_UPPER_BOUND = 100;

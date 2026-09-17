@@ -33,6 +33,11 @@ type EmployeeBindingRecord = {
   tenant: RelationOne<BasicTenantRef>;
 };
 
+type PlatformAdminBindingRecord = EmployeeBindingRecord & {
+  roleCodes: string[];
+  adminAuthVersion: number;
+};
+
 type PartnerBindingRecord = {
   id: string;
   partner_id: string;
@@ -95,6 +100,24 @@ export type PhoneIdentityBindingsDependencies = {
     request?: FastifyRequest | null;
   }) => Promise<AuthOutput> | AuthOutput;
 
+  findPlatformAdmin: (input: {
+    employeeId: string;
+  }) => Promise<PlatformAdminBindingRecord | null>;
+  bindPlatformAdmin: (input: {
+    authUserId: string;
+    employee: PlatformAdminBindingRecord;
+    openid: string | null;
+    unionid?: string | null;
+    request?: FastifyRequest | null;
+  }) => Promise<PlatformAdminBindingRecord>;
+  signPlatformAdminAuth: (input: {
+    authUserId: string;
+    employee: PlatformAdminBindingRecord;
+    openid: string | null;
+    unionid?: string | null;
+    request?: FastifyRequest | null;
+  }) => Promise<AuthOutput> | AuthOutput;
+
   findPartnerMember: (input: {
     partnerMemberId: string;
   }) => Promise<PartnerBindingRecord | null>;
@@ -150,6 +173,24 @@ export class PhoneIdentityBindings {
       });
     }
 
+    if (input.targetMode === "platform_admin") {
+      const employee = await this.loadPlatformAdmin(input);
+      const boundEmployee = await this.dependencies.bindPlatformAdmin({
+        authUserId: input.authUserId,
+        employee,
+        openid: input.openid,
+        unionid: input.unionid ?? null,
+        request: input.request ?? null,
+      });
+      return this.dependencies.signPlatformAdminAuth({
+        authUserId: boundEmployee.user_id ?? input.authUserId,
+        employee: boundEmployee,
+        openid: input.openid,
+        unionid: input.unionid ?? null,
+        request: input.request ?? null,
+      });
+    }
+
     const member = await this.loadPartnerMember(input);
     const boundMember = await this.dependencies.bindPartnerMember({
       authUserId: input.authUserId,
@@ -187,6 +228,17 @@ export class PhoneIdentityBindings {
         authUserId: input.authUserId,
         employee,
         openid: input.openid,
+        request: input.request ?? null,
+      });
+    }
+
+    if (input.targetMode === "platform_admin") {
+      const employee = await this.loadPlatformAdmin(input);
+      return this.dependencies.signPlatformAdminAuth({
+        authUserId: input.authUserId,
+        employee,
+        openid: input.openid,
+        unionid: input.unionid ?? null,
         request: input.request ?? null,
       });
     }
@@ -251,6 +303,10 @@ export class PhoneIdentityBindings {
         return await this.loadEmployee(input);
       }
 
+      if (input.targetMode === "platform_admin") {
+        return await this.loadPlatformAdmin(input);
+      }
+
       return await this.loadPartnerMember(input);
     } catch (error) {
       if (
@@ -283,6 +339,30 @@ export class PhoneIdentityBindings {
       employee.status !== "active" ||
       !tenant?.id ||
       tenant.status !== "active"
+    ) {
+      throw optionUnavailable();
+    }
+
+    return employee;
+  }
+
+  private async loadPlatformAdmin(input: PhoneIdentityBindingSelection) {
+    if (input.tenantId !== null || !input.employeeId) {
+      throw optionUnavailable();
+    }
+
+    const employee = await this.dependencies.findPlatformAdmin({
+      employeeId: input.employeeId,
+    });
+    if (
+      !employee ||
+      employee.id !== input.employeeId ||
+      employee.tenant_id !== null ||
+      employee.phone !== input.phone ||
+      employee.status !== "active" ||
+      !employee.roleCodes.includes("platform_admin") ||
+      !Number.isInteger(employee.adminAuthVersion) ||
+      employee.adminAuthVersion < 1
     ) {
       throw optionUnavailable();
     }

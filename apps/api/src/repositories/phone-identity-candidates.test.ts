@@ -76,6 +76,8 @@ describe("PhoneIdentityCandidateRepository", () => {
     expect(client.from).toHaveBeenCalledWith("employees");
     expect(query.select).toHaveBeenCalledWith(expect.stringContaining("tenant_department"));
     expect(query.select).toHaveBeenCalledWith(expect.stringContaining("post:posts"));
+    expect(query.select).toHaveBeenCalledWith(expect.stringContaining("employee_roles"));
+    expect(query.select).toHaveBeenCalledWith(expect.stringContaining("role:roles"));
     expect(query.eq).toHaveBeenCalledWith("phone", "13800138000");
     expect(query.order).toHaveBeenCalledWith("tenant_id", { ascending: true });
     expect(query.order).toHaveBeenCalledWith("id", { ascending: true });

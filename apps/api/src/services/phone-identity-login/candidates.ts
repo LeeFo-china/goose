@@ -43,7 +43,8 @@ const BINDING_RANK: Record<PhoneIdentityBindingState, number> = {
 const MODE_RANK: Record<PhoneIdentityTargetMode, number> = {
   customer: 0,
   tenant_employee: 1,
-  platform_partner: 2,
+  platform_admin: 2,
+  platform_partner: 3,
 };
 
 const MAX_CANDIDATES = 100;
@@ -61,6 +62,9 @@ export function buildPhoneIdentityCandidates(
     ),
     ...withTargetMode(input, "tenant_employee", () =>
       buildEmployeeCandidates(input, createCandidateId)
+    ),
+    ...withTargetMode(input, "platform_admin", () =>
+      buildPlatformAdminCandidates(input, createCandidateId)
     ),
     ...withTargetMode(input, "platform_partner", () =>
       buildPartnerCandidates(input, createCandidateId)
@@ -80,6 +84,56 @@ export function buildPhoneIdentityCandidates(
     rawMatchCount,
     candidates: deduplicated.sort(compareCandidates),
   };
+}
+
+function buildPlatformAdminCandidates(
+  input: BuildPhoneIdentityCandidatesInput,
+  createCandidateId: () => string,
+): PhoneIdentityCandidate[] {
+  return input.employees.flatMap((record) => {
+    const hasActivePlatformAdminRole = record.employee_roles?.some((item) => {
+      const role = relationOne(item.role);
+      return role?.code === "platform_admin" &&
+        role.status === "active" &&
+        role.tenant_id === null;
+    }) ?? false;
+
+    if (
+      record.tenant_id !== null ||
+      record.status !== "active" ||
+      !hasActivePlatformAdminRole
+    ) {
+      return [];
+    }
+
+    const bindingState = resolveBindingState({
+      currentAuthUserId: input.currentAuthUserId,
+      recordUserId: record.user_id,
+      membershipCurrent: false,
+      recordUserHasActiveWechat: Boolean(
+        record.user_id && input.activeWechatOauthUserIds.has(record.user_id),
+      ),
+      activeOauthUserIds: input.activeOauthUserIds,
+    });
+
+    // 平台管理员账号不能通过手机号登录强制迁移已有的小程序身份。
+    if (bindingState === "rebind_required") return [];
+
+    return [{
+      candidateId: createCandidateId(),
+      targetMode: "platform_admin",
+      bindingState,
+      tenantId: null,
+      customerId: null,
+      employeeId: record.id,
+      partnerId: null,
+      partnerMemberId: null,
+      roleLabel: "平台管理员",
+      title: "平台管理",
+      subtitle: "超管账号",
+      sharePreferred: false,
+    }];
+  });
 }
 
 export function resolveBindingState(input: {
@@ -275,6 +329,9 @@ function candidateKey(candidate: PhoneIdentityCandidate): string {
   }
   if (candidate.targetMode === "tenant_employee") {
     return `employee:${candidate.tenantId ?? ""}:${candidate.employeeId}`;
+  }
+  if (candidate.targetMode === "platform_admin") {
+    return `platform_admin::${candidate.employeeId}`;
   }
   return `partner:${candidate.partnerId}:${candidate.partnerMemberId}`;
 }

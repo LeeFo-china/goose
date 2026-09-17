@@ -1,6 +1,7 @@
 export type PhoneIdentityTargetMode =
   | "customer"
   | "tenant_employee"
+  | "platform_admin"
   | "platform_partner";
 
 export type PhoneIdentityBindingState =

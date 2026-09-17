@@ -50,6 +50,80 @@ describe("buildPhoneIdentityCandidates", () => {
     }]);
   });
 
+  test("returns an active platform super admin as a platform candidate", () => {
+    const platformAdmin = {
+      ...employee({
+        id: "platform-admin-1",
+        tenant_id: null,
+        tenant: null,
+        name: "平台超管",
+      }),
+      employee_roles: [{
+        role: {
+          code: "platform_admin",
+          status: "active",
+          tenant_id: null,
+        },
+      }],
+    } as PhoneEmployeeRecord;
+    const result = buildPhoneIdentityCandidates(baseInput({
+      employees: [platformAdmin],
+    }));
+
+    expect(result.rawMatchCount).toBe(1);
+    expect(result.candidates).toMatchObject([{
+      targetMode: "platform_admin",
+      bindingState: "bindable",
+      tenantId: null,
+      employeeId: "platform-admin-1",
+      roleLabel: "平台管理员",
+      title: "平台管理",
+      subtitle: "超管账号",
+    }]);
+  });
+
+  test("rejects platform employees without an active platform admin role", () => {
+    const platformEmployee = {
+      ...employee({ tenant_id: null, tenant: null }),
+      employee_roles: [{
+        role: {
+          code: "platform_admin",
+          status: "disabled",
+          tenant_id: null,
+        },
+      }],
+    } as PhoneEmployeeRecord;
+    const result = buildPhoneIdentityCandidates(baseInput({
+      employees: [platformEmployee],
+    }));
+
+    expect(result).toEqual({ rawMatchCount: 1, candidates: [] });
+  });
+
+  test("does not offer a platform admin bound to another active WeChat", () => {
+    const platformAdmin = {
+      ...employee({
+        id: "platform-admin-1",
+        tenant_id: null,
+        tenant: null,
+        user_id: "other-user",
+      }),
+      employee_roles: [{
+        role: {
+          code: "platform_admin",
+          status: "active",
+          tenant_id: null,
+        },
+      }],
+    } as PhoneEmployeeRecord;
+    const result = buildPhoneIdentityCandidates(baseInput({
+      employees: [platformAdmin],
+      activeWechatOauthUserIds: new Set(["other-user"]),
+    }));
+
+    expect(result).toEqual({ rawMatchCount: 1, candidates: [] });
+  });
+
   test("deduplicates the same customer by tenant and customer ID", () => {
     const duplicate = customer({ id: "customer-1", tenant_id: "tenant-1" });
     const result = buildPhoneIdentityCandidates(baseInput({

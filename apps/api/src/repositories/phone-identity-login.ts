@@ -48,6 +48,7 @@ export type ReserveSelectionInput = {
 export type PhoneIdentityTargetMode =
   | "customer"
   | "tenant_employee"
+  | "platform_admin"
   | "platform_partner";
 
 export type ReserveSelectionResult =
@@ -111,6 +112,7 @@ const RESERVE_TERMINAL_STATUSES = [
 const TARGET_MODES = [
   "customer",
   "tenant_employee",
+  "platform_admin",
   "platform_partner",
 ] as const;
 const FINALIZE_STATUSES = ["consumed", "state_conflict"] as const;

@@ -110,6 +110,70 @@ describe("PhoneIdentityBindings", () => {
     }));
   });
 
+  test("reloads and binds a platform administrator before signing platform auth", async () => {
+    const findPlatformAdmin = mock(async () => platformAdmin());
+    const bindPlatformAdmin = mock(async () => platformAdmin({ user_id: AUTH_USER_ID }));
+    const signPlatformAdminAuth = mock(async () => ({
+      mode: "platform_admin",
+      authMode: "platform_admin",
+      roles: ["platform_admin"],
+      tenant: null,
+    }));
+    const bindings = new PhoneIdentityBindings({
+      ...baseDependencies(),
+      findPlatformAdmin,
+      bindPlatformAdmin,
+      signPlatformAdminAuth,
+    });
+
+    await expect(bindings.authenticate(platformAdminInput())).resolves.toEqual({
+      mode: "platform_admin",
+      authMode: "platform_admin",
+      roles: ["platform_admin"],
+      tenant: null,
+    });
+    expect(findPlatformAdmin).toHaveBeenCalledWith({ employeeId: "platform-admin-1" });
+    expect(bindPlatformAdmin).toHaveBeenCalledWith(expect.objectContaining({
+      authUserId: AUTH_USER_ID,
+      employee: platformAdmin(),
+      openid: OPENID,
+    }));
+    expect(signPlatformAdminAuth).toHaveBeenCalledWith(expect.objectContaining({
+      authUserId: AUTH_USER_ID,
+      employee: platformAdmin({ user_id: AUTH_USER_ID }),
+      openid: OPENID,
+    }));
+  });
+
+  test("rejects a platform administrator when the role is no longer active", async () => {
+    const bindings = new PhoneIdentityBindings({
+      ...baseDependencies(),
+      findPlatformAdmin: mock(async () => platformAdmin({ roleCodes: [] })),
+    });
+
+    await expect(bindings.authenticate(platformAdminInput()))
+      .rejects.toMatchObject({ code: ErrorCodes.IDENTITY_OPTION_UNAVAILABLE });
+  });
+
+  test("signs an already bound platform administrator without rebinding", async () => {
+    const bindPlatformAdmin = mock(async () => platformAdmin());
+    const signPlatformAdminAuth = mock(async () => ({ mode: "platform_admin" }));
+    const bindings = new PhoneIdentityBindings({
+      ...baseDependencies(),
+      findPlatformAdmin: mock(async () => platformAdmin({ user_id: AUTH_USER_ID })),
+      bindPlatformAdmin,
+      signPlatformAdminAuth,
+    });
+
+    await expect(bindings.buildCurrentAuth(platformAdminInput()))
+      .resolves.toEqual({ mode: "platform_admin" });
+    expect(bindPlatformAdmin).not.toHaveBeenCalled();
+    expect(signPlatformAdminAuth).toHaveBeenCalledWith(expect.objectContaining({
+      authUserId: AUTH_USER_ID,
+      openid: OPENID,
+    }));
+  });
+
   test("rejects changed phone and unavailable accounts", async () => {
     const customerBindings = new PhoneIdentityBindings({
       ...baseDependencies(),
@@ -217,9 +281,25 @@ function baseDependencies() {
     findEmployee: mock(async () => employee()),
     bindEmployee: mock(async () => AUTH_USER_ID),
     signEmployeeAuth: mock(async () => ({ mode: "tenant_employee", authMode: "tenant_employee" })),
+    findPlatformAdmin: mock(async () => platformAdmin()),
+    bindPlatformAdmin: mock(async () => platformAdmin({ user_id: AUTH_USER_ID })),
+    signPlatformAdminAuth: mock(async () => ({ mode: "platform_admin", authMode: "platform_admin" })),
     findPartnerMember: mock(async () => partnerMember()),
     bindPartnerMember: mock(async () => partnerMember({ auth_user_id: AUTH_USER_ID })),
     signPartnerAuth: mock(async () => ({ mode: "platform_partner", authMode: "platform_partner" })),
+  };
+}
+
+function platformAdminInput() {
+  return {
+    targetMode: "platform_admin" as const,
+    tenantId: null,
+    customerId: null,
+    employeeId: "platform-admin-1",
+    partnerMemberId: null,
+    authUserId: AUTH_USER_ID,
+    openid: OPENID,
+    phone: PHONE,
   };
 }
 
@@ -283,6 +363,21 @@ function employee(overrides: Record<string, unknown> = {}) {
     phone: PHONE,
     status: "active",
     tenant: { id: "tenant-1", status: "active" },
+    ...overrides,
+  };
+}
+
+function platformAdmin(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "platform-admin-1",
+    tenant_id: null,
+    user_id: null,
+    name: "平台管理员",
+    phone: PHONE,
+    status: "active",
+    tenant: null,
+    roleCodes: ["platform_admin"],
+    adminAuthVersion: 1,
     ...overrides,
   };
 }
