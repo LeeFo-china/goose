@@ -278,7 +278,7 @@ export class PlatformDouyinMiniappReleaseOperations {
   }
   async syncStatus(installation: Installation, installationId: string,
     snapshot: DouyinMiniappReleaseRecord, operatorId: string): Promise<DouyinMiniappReleaseRecord> {
-    const allowed = ["audit_pending", "audit_rejected", "audit_approved"] as const;
+    const allowed = ["audit_pending", "audit_rejected", "audit_approved", "failed"] as const;
     this.assertState(snapshot, allowed);
     const { claim, release } = await this.acquire(snapshot, "sync_status", allowed, operatorId);
     this.assertState(release, allowed);

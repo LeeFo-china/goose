@@ -360,6 +360,18 @@ describe("Douyin miniapp release operation recovery", () => {
     }
   });
 
+  test("sync recovers a failed release from its exact audit version", async () => {
+    const h = harness("failed");
+    await h.operations.syncStatus(installation, INSTALLATION_ID, h.current(), OPERATOR_ID);
+    expect(h.releaseRepository.claimOperation).toHaveBeenCalledWith(expect.objectContaining({
+      expectedStatuses: ["audit_pending", "audit_rejected", "audit_approved", "failed"],
+      operationName: "sync_status",
+    }));
+    expect(h.current()).toMatchObject({
+      status: "audit_approved", audit_result: { status: "approved" },
+    });
+  });
+
   test("stale publish without exact current or audit evidence stays uncertain and claimed", async () => {
     const h = harness("audit_approved", { initialRecovery: true });
     h.gateway.getVersionList = mock(async () => ({ logId: "versions-log" })) as never;
