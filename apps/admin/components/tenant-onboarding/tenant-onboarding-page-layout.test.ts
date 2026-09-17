@@ -93,6 +93,16 @@ describe("platform tenant onboarding page", () => {
     expect(filtersSource).toContain('aria-label={props.tab');
   });
 
+  test("shows an explicit fallback when the applicant omitted the credit code", () => {
+    const typeSource = readSource("./tenant-onboarding-types.ts");
+    const detailSource = readSource("./tenant-onboarding-detail-dialog.tsx");
+
+    expect(typeSource).toContain("unified_social_credit_code: string | null");
+    expect(detailSource).toContain(
+      'detail.unified_social_credit_code || "未填写"',
+    );
+  });
+
   test("exposes one platform tenant menu while keeping workflow permissions separate", () => {
     const menuSource = readSource("../layout/menu-config.ts");
     const tabsSource = readSource(

@@ -16,7 +16,7 @@ export function buildTenantOnboardingCreateRecord(input: {
   applicationNumber: string;
   visitorId: string;
   idempotencyKey: string;
-  normalizedCreditCode: string;
+  normalizedCreditCode: string | null;
   phone: string;
   resolution: TenantOnboardingPartnerResolution;
   inviteCodeId: string | null;
@@ -72,7 +72,9 @@ export function buildTenantOnboardingSupplementPatch(
   const result: TenantOnboardingSupplementPatch = {};
   if (patch.company_name !== undefined) result.company_name = patch.company_name.trim();
   if (patch.unified_social_credit_code !== undefined) {
-    result.unified_social_credit_code = patch.unified_social_credit_code.trim().toUpperCase();
+    result.unified_social_credit_code = patch.unified_social_credit_code
+      ?.trim()
+      .toUpperCase() || null;
   }
   if (patch.business_license_file_id !== undefined) {
     result.business_license_file_id = patch.business_license_file_id;

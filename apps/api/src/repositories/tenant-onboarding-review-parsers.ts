@@ -43,7 +43,7 @@ const ListRecordSchema = z.object({
 }).strict();
 
 const DetailRecordSchema = ListRecordSchema.extend({
-  unified_social_credit_code: z.string(),
+  unified_social_credit_code: NullableStringSchema,
   business_license_file_id: z.uuid(),
   admin_phone: z.string(),
   address_province: NullableStringSchema,

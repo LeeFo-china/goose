@@ -297,7 +297,7 @@ export function TenantOnboardingDetailDialog({
 function DetailList({ detail }: { detail: TenantOnboardingApplicationDetail }) {
   const partner = detail.final_partner ?? detail.candidate_partner;
   const rows = [
-    ["统一社会信用代码", detail.unified_social_credit_code],
+    ["统一社会信用代码", detail.unified_social_credit_code || "未填写"],
     ["管理员", `${detail.admin_name} ${detail.admin_phone}`],
     ["公司地址", `${formatRegion(detail)} ${detail.address}`.trim()],
     ["地址区域代码", detail.address_region_code],

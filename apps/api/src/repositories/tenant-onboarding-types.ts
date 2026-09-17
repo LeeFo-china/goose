@@ -35,7 +35,7 @@ export type TenantOnboardingApplicationRecord = {
   visitor_id: string;
   visitor_context_id: string | null;
   company_name: string;
-  unified_social_credit_code: string;
+  unified_social_credit_code: string | null;
   business_license_file_id: string;
   admin_name: string;
   admin_phone: string;

@@ -17352,7 +17352,7 @@ export type Database = {
           service_region_codes: string[]
           source_channel: string
           status: string
-          unified_social_credit_code: string
+          unified_social_credit_code: string | null
           updated_at: string
           version: number
           visitor_context_id: string | null
@@ -17394,7 +17394,7 @@ export type Database = {
           service_region_codes: string[]
           source_channel: string
           status?: string
-          unified_social_credit_code: string
+          unified_social_credit_code?: string | null
           updated_at?: string
           version?: number
           visitor_context_id?: string | null
@@ -17436,7 +17436,7 @@ export type Database = {
           service_region_codes?: string[]
           source_channel?: string
           status?: string
-          unified_social_credit_code?: string
+          unified_social_credit_code?: string | null
           updated_at?: string
           version?: number
           visitor_context_id?: string | null

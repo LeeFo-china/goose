@@ -29,7 +29,7 @@ const ApplicationSchema = z.object({
   visitor_id: z.string(),
   visitor_context_id: z.uuid().nullable(),
   company_name: z.string(),
-  unified_social_credit_code: z.string(),
+  unified_social_credit_code: NullableStringSchema,
   business_license_file_id: z.uuid(),
   admin_name: z.string(),
   admin_phone: z.string(),

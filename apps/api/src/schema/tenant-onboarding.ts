@@ -30,6 +30,15 @@ export const UnifiedSocialCreditCodeSchema = z
       ),
   );
 
+const OptionalUnifiedSocialCreditCodeSchema = z.preprocess(
+  (value) => {
+    if (value === undefined || value === null) return null;
+    if (typeof value === "string" && value.trim() === "") return null;
+    return value;
+  },
+  UnifiedSocialCreditCodeSchema.nullable(),
+).optional().transform((value) => value ?? null);
+
 export const MobilePhoneSchema = z
   .string()
   .trim()
@@ -122,7 +131,7 @@ const ServiceRegionCodesSchema = z
 const ApplicantEditableFieldsSchema = z
   .object({
     company_name: z.string().trim().min(1, "请填写企业名称").max(120),
-    unified_social_credit_code: UnifiedSocialCreditCodeSchema,
+    unified_social_credit_code: OptionalUnifiedSocialCreditCodeSchema,
     business_license_file_id: z.uuid("无效的营业执照文件 ID"),
     admin_name: z.string().trim().min(1, "请填写负责人姓名").max(60),
     company_location: CompanyLocationSchema,

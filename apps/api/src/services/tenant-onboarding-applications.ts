@@ -153,14 +153,16 @@ export class TenantOnboardingApplicationsService {
     if (existing) return this.response(existing, false, true);
 
     const phone = input.admin_phone.trim();
-    const normalizedCreditCode = input.unified_social_credit_code.trim().toUpperCase();
+    const normalizedCreditCode = input.unified_social_credit_code
+      ?.trim()
+      .toUpperCase() || null;
     const verificationCode = await this.verifySmsCode(phone, input.sms_code);
     await this.assertOwnedLocationContext(input.visitor_context_id, visitorId);
     await this.assertPrivateBusinessLicense(
       input.business_license_file_id,
       visitorId,
     );
-    await this.assertNoOpenSubject(normalizedCreditCode);
+    if (normalizedCreditCode) await this.assertNoOpenSubject(normalizedCreditCode);
     const { resolution, inviteCodeId } = await resolveTenantOnboardingSubmissionPartner({
       serviceRegionCodes: input.service_region_codes,
       submittedInviteCode: input.invite_code,
@@ -335,7 +337,7 @@ export class TenantOnboardingApplicationsService {
     input: SubmitTenantOnboardingApplicationInput;
     visitorId: string;
     idempotencyKey: string;
-    normalizedCreditCode: string;
+    normalizedCreditCode: string | null;
     phone: string;
     resolution: TenantOnboardingPartnerResolution;
     inviteCodeId: string | null;

@@ -97,6 +97,16 @@ describe("tenant onboarding repository runtime parsers", () => {
     }, "bad")).toMatchObject({ id: ID, admin_phone: "13900139000" });
   });
 
+  test("parses an application without a unified social credit code", () => {
+    const withoutCreditCode = {
+      ...application,
+      unified_social_credit_code: null,
+    };
+
+    expect(parseTenantOnboardingApplication(withoutCreditCode, "bad"))
+      .toEqual(withoutCreditCode);
+  });
+
   test("parses ownership, region, partner, and invite rows", () => {
     expect(parseTenantOnboardingLocationContext({ id: ID, visitor_id: "visitor-1" }, "bad"))
       .toMatchObject({ visitor_id: "visitor-1" });

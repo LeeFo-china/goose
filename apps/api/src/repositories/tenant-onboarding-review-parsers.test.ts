@@ -75,6 +75,16 @@ describe("tenant onboarding review repository parsers", () => {
     expect(parseNullablePlatformApplication(null)).toBeNull();
   });
 
+  test("parses a platform application without a unified social credit code", () => {
+    const withoutCreditCode = {
+      ...detailRecord,
+      unified_social_credit_code: null,
+    };
+
+    expect(parseNullablePlatformApplication(withoutCreditCode))
+      .toEqual(withoutCreditCode);
+  });
+
   test("parses paginated review rows without embedding them in detail", () => {
     const review: TenantOnboardingApplicationReviewRecord = {
       id: OTHER_ID,

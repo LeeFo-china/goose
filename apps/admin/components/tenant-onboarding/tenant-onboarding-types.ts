@@ -63,7 +63,7 @@ export type TenantOnboardingApplicationListRecord = {
 
 export type TenantOnboardingApplicationDetail =
   TenantOnboardingApplicationListRecord & {
-    unified_social_credit_code: string;
+    unified_social_credit_code: string | null;
     business_license_file_id: string;
     admin_phone: string;
     address_province: string | null;

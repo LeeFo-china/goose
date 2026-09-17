@@ -65,9 +65,9 @@ export function defaultTenantSlug(
   attempt: number,
 ) {
   const subject = application.unified_social_credit_code
-    .toLowerCase()
+    ?.toLowerCase()
     .replace(/[^a-z0-9]/g, "")
-    .slice(-8);
+    .slice(-8) || "nocredit";
   const applicationPart = application.id.replaceAll("-", "").slice(0, 8);
   return `zq-${subject}-${applicationPart}-${attempt}`;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const migrationSql = readFileSync(
@@ -9,6 +9,7 @@ const migrationSql = readFileSync(
   ),
   "utf8",
 );
+const migrationsDirectory = join(import.meta.dir, "../../../../supabase/migrations");
 
 describe("tenant onboarding migration contract", () => {
   test("contains the shared workflow database contracts", () => {
@@ -68,6 +69,23 @@ describe("tenant onboarding migration contract", () => {
   test("indexes globally due pending partner assists", () => {
     expect(migrationSql).toMatch(
       /CREATE INDEX IF NOT EXISTS tenant_onboarding_applications_pending_assist_due_idx\s+ON public\.tenant_onboarding_applications\(\s*partner_assist_due_at,\s*id\s*\)\s+WHERE partner_assist_status = 'pending'\s+AND partner_assist_due_at IS NOT NULL\s+AND status IN \('submitted', 'reviewing', 'supplement_required'\)/,
+    );
+  });
+
+  test("makes the application credit code nullable through a forward migration", () => {
+    const files = readdirSync(migrationsDirectory).filter((file) =>
+      file.endsWith("_tenant_onboarding_optional_credit_code.sql")
+    );
+
+    expect(files).toHaveLength(1);
+    const file = files[0];
+    if (!file) return;
+    const sql = readFileSync(join(migrationsDirectory, file), "utf8");
+
+    expect(sql).toContain("SET LOCAL lock_timeout = '5s'");
+    expect(sql).toContain("SET LOCAL statement_timeout = '1min'");
+    expect(sql).toMatch(
+      /ALTER TABLE public\.tenant_onboarding_applications[\s\S]*?ALTER COLUMN unified_social_credit_code DROP NOT NULL/,
     );
   });
 });
