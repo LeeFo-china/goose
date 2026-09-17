@@ -1,3 +1,4 @@
+import { effectiveProductPage } from "../services/tenant-platform-service-orders.test-fixtures";
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import {
   acceptedRpcEnvelope,
@@ -108,22 +109,38 @@ describe("PlatformServiceOrderRepository", () => {
     client.rpc.mockClear();
   });
 
-  test("lists enabled products with range pagination and selected columns", async () => {
-    const { PlatformServiceOrderRepository } = await import(
-      "./platform-service-orders"
-    );
+  test("lists effective products through the bounded RPC without direct table reads", async () => {
+    const { PlatformServiceOrderRepository } = await import("./platform-service-orders");
     const repository = new PlatformServiceOrderRepository(() => client);
+    const expected = effectiveProductPage();
+    rpcResult.data = expected;
+    expect(await repository.listEnabledProducts({ page: 2, pageSize: 1000 }))
+      .toEqual(expected);
+    expect(calls).toEqual([["rpc", "platform_service_list_effective_products", {
+      p_page: 2, p_page_size: 100,
+    }]]);
+  });
 
-    await repository.listEnabledProducts({ page: 2, pageSize: 20 });
-
-    expect(calls).toContainEqual(["from", "platform_service_products"]);
-    expect(calls).toContainEqual(["eq", "status", "enabled"]);
-    expect(calls).toContainEqual(["range", 20, 39]);
-    const selectCall = calls.find(([method]) => method === "select");
-    expect(selectCall?.[1]).toContain("published_version");
-    expect(selectCall?.[1]).not.toBe("*");
-    expect(selectCall?.[1]).not.toContain("created_by_employee_id");
-    expect(selectCall?.[1]).not.toContain("updated_by_employee_id");
+  test("rejects malformed effective product envelopes and fields without money coercion", async () => {
+    const { PlatformServiceOrderRepository } = await import("./platform-service-orders");
+    const repository = new PlatformServiceOrderRepository(() => client);
+    const valid = effectiveProductPage();
+    const item = valid.list[0]!;
+    const malformed = [null, [], {}, { ...valid, list: null },
+      { ...valid, pagination: { ...valid.pagination, pageSize: 101 } },
+      { ...valid, pagination: { ...valid.pagination, total: "1" } },
+      { ...valid, server_time: "invalid" }, { ...valid, list: [null] },
+      ...[{ amount_fen: "196000" }, { amount_fen: -1 }, { effective_amount_fen: 1.2 },
+        { terms_version: 0 }, { service_scope: [1] }, { promotion: {} },
+        { promotion: { ...item.promotion, discount_rate_basis_points: "2000" } },
+        { promotion: { ...item.promotion, discount_rate_basis_points: 10000 } },
+      ].map((patch) => ({ ...valid, list: [{ ...item, ...patch }] })),
+    ];
+    for (const data of malformed) {
+      rpcResult.data = data;
+      await expect(repository.listEnabledProducts({ page: 2, pageSize: 100 }))
+        .rejects.toMatchObject({ code: "DB_ERROR", message: "查询平台技术服务商品失败" });
+    }
   });
 
   test("lists orders by tenant without internal payment binding fields", async () => {
@@ -449,19 +466,23 @@ describe("PlatformServiceOrderRepository", () => {
     );
   });
 
-  test("maps database errors with Errors.dbError", async () => {
+  test("maps RPC database failures without exposing SQL details", async () => {
     const { PlatformServiceOrderRepository } = await import(
       "./platform-service-orders"
     );
     const repository = new PlatformServiceOrderRepository(() => client);
-    listResult = {
-      data: null,
-      error: { message: "db failed" },
-      count: null,
+    rpcResult = {
+      data: effectiveProductPage(),
+      error: { code: "XX000", message: "SELECT secret FROM private" },
     };
 
     await expect(
       repository.listEnabledProducts({ page: 1, pageSize: 20 }),
-    ).rejects.toMatchObject({ statusCode: 500 });
+    ).rejects.toMatchObject({
+      statusCode: 500,
+      code: "DB_ERROR",
+      message: "查询平台技术服务商品失败",
+      details: undefined,
+    });
   });
 });

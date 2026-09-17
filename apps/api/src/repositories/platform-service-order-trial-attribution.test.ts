@@ -54,3 +54,21 @@ describe("pending platform service order trial attribution boundary", () => {
     })).toThrow(expect.objectContaining({ code: "DB_ERROR" }));
   });
 });
+
+for (const [code, statusCode, message] of [
+  ["SERVICE_TERMS_VERSION_STALE", 409, "服务条款已更新，请重新确认后下单"],
+  ["SERVICE_PRODUCT_NOT_FOUND", 404, "平台技术服务商品不存在"],
+] as const) {
+  test(`maps ${code} to the stable business response`, () => {
+    expect(() => throwPendingOrderCreationError({ code: "P0001", message: code }))
+      .toThrow(expect.objectContaining({ code, statusCode, message }));
+  });
+}
+test("does not expose SQL details from unknown pending order failures", () => {
+  try {
+    throwPendingOrderCreationError({ code: "XX000", message: "SELECT secret FROM private" });
+  } catch (error) {
+    expect(error).toMatchObject({ code: "DB_ERROR", message: "创建平台技术服务订单失败" });
+    expect(error).not.toHaveProperty("details", expect.anything());
+  }
+});

@@ -254,3 +254,52 @@ describe("platform service order views", () => {
     expect(view.published?.price_rate_basis_points).toBe(10000);
   });
 });
+
+const frozenProduct = {
+  product_id: "00000000-0000-4000-8000-000000000101",
+  product_version_id: "00000000-0000-4000-8000-000000000201",
+  code: "platform_service_1y", title: "已下单服务", pricing_version: 3, term_years: 1,
+  list_amount_fen: 980000, base_amount_fen: 980000, amount_fen: 196000,
+  effective_amount_fen: 196000, base_price_rate_basis_points: 10000 as const,
+  price_rate_basis_points: 2000, service_scope: ["部署"], terms_version: 1,
+  terms_content: "已确认条款", promotion: {
+    id: "00000000-0000-4000-8000-000000000301",
+    version_id: "00000000-0000-4000-8000-000000000401",
+    version: 2, name: "活动", badge_text: "限时2折", title: "标题", summary: "摘要",
+    rules_text: "规则", discount_rate_basis_points: 2000,
+    starts_at: "2026-08-01T00:00:00+00:00", ends_at: "2026-08-02T00:00:00+00:00",
+    base_amount_fen: 980000, effective_amount_fen: 196000,
+  },
+};
+
+test("preserves all RPC effective product fields and existing public aliases", async () => {
+  const { serializeTenantServiceProduct } = await import("./platform-service-order-views");
+  const record = { ...frozenProduct, id: frozenProduct.product_id };
+  expect(serializeTenantServiceProduct(record)).toEqual({
+    ...record, status: "enabled", published_version_id: record.product_version_id,
+  });
+  const ordinary = { ...record, promotion: null, amount_fen: 980000,
+    effective_amount_fen: 980000, price_rate_basis_points: 10000 };
+  expect(serializeTenantServiceProduct(ordinary)).toMatchObject(ordinary);
+});
+
+test("serializes committed promotion snapshot without current product or clock", async () => {
+  const views = await import("./platform-service-order-views");
+  expect(views.serializeTenantServiceProductSnapshot).toBeFunction();
+  expect(views.serializeTenantServiceProductSnapshot(frozenProduct)).toEqual({
+    ...frozenProduct, id: frozenProduct.product_id, status: "enabled",
+    published_version_id: frozenProduct.product_version_id,
+  });
+});
+
+test("serializes legacy pending order daily price from its own snapshot", async () => {
+  const views = await import("./platform-service-order-views");
+  expect(views.serializeTenantServiceProductSnapshot).toBeFunction();
+  const { promotion, base_amount_fen, effective_amount_fen, base_price_rate_basis_points,
+    price_rate_basis_points, ...legacy } = frozenProduct;
+  expect(views.serializeTenantServiceProductSnapshot({ ...legacy, amount_fen: 880000 }))
+    .toMatchObject({ amount_fen: 880000, base_amount_fen: 880000,
+      effective_amount_fen: 880000, base_price_rate_basis_points: 10000,
+      price_rate_basis_points: 10000, promotion: null, pricing_version: 3 });
+  expect(views.serializeTenantServiceProductSnapshot(undefined)).toBeNull();
+});

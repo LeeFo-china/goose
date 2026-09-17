@@ -1,160 +1,37 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import type { PlatformPaymentConfigRecord } from "@/repositories/platform-payment-configs";
 import type {
   OrderRecord,
   ProductRecord,
 } from "@/repositories/platform-service-order-records";
 import type { AuthContext } from "@/services/authorization";
-import type { WechatPayMiniProgramPaymentRequest } from "@/services/wechat-pay-signatures";
+import {
+  tenantId,
+  orderId,
+  productVersionId,
+  sourceTrialId,
+  now,
+  tenantAuth,
+  product,
+  order,
+  refundRequest,
+  paymentConfig,
+  secretBundle,
+  newPaymentRequest,
+  existingPaymentRequest,
+  effectiveProduct,
+  promotion,
+} from "./tenant-platform-service-orders.test-fixtures";
+
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
-const tenantId = "00000000-0000-4000-8000-000000000011";
-const employeeId = "00000000-0000-4000-8000-000000000012";
-const orderId = "00000000-0000-4000-8000-000000000301";
-const productId = "00000000-0000-4000-8000-000000000101";
-const productVersionId = "00000000-0000-4000-8000-000000000201";
-const configId = "00000000-0000-4000-8000-000000000401";
-const sourceTrialId = "00000000-0000-4000-8000-000000000501";
-const now = new Date("2026-08-03T12:00:00.000Z");
-const tenantAuth = {
-  authUserId: "auth-tenant",
-  employeeId,
-  tenantId,
-  tenantName: "装企",
-  tenantSlug: "tenant",
-  tenantStatus: "active",
-  isPlatformAdmin: false,
-  employeeName: "采购员",
-  employeeStatus: "active",
-  departmentId: null,
-  tenantDepartmentId: null,
-  departmentCode: null,
-  departmentName: null,
-  postId: null,
-  postName: null,
-  avatar: null,
-  roleCodes: ["system_admin"],
-  roles: [],
-  permissions: [
-    { code: "billing.service_order.create", scope: "all" },
-    { code: "billing.service_order.read", scope: "all" },
-    { code: "billing.service_order.refund.request", scope: "all" },
-  ],
-} satisfies AuthContext;
-
-const product = {
-  id: productId,
-  code: "platform_service_1y",
-  status: "enabled",
-  published_version_id: productVersionId,
-  published_version: {
-    id: productVersionId,
-    version: 1,
-    title: "平台部署及年度技术服务（1年）",
-    term_years: 1,
-    list_amount_fen: 980000,
-    amount_fen: 980000,
-    service_scope: ["部署", "培训"],
-    terms_version: 1,
-    terms_content: "服务条款",
-  },
-} satisfies ProductRecord;
-
-const order = {
-  id: orderId,
-  tenant_id: tenantId,
-  order_no: "TSO202608030001",
-  out_trade_no: "TSO202608030001",
-  product_code: "platform_service_1y",
-  product_snapshot: { pricing_version: 3 },
-  term_years: 1,
-  amount_fen: 980000,
-  payment_status: "pending",
-  service_status: "waiting_payment",
-  payment_config_id: configId,
-  payment_config_guard_version: 7,
-  payer_openid: "openid-user",
-  prepay_id: "prepay-existing",
-  payment_expires_at: "2026-08-03T12:05:00.000Z",
-  paid_at: null,
-  closed_at: null,
-  terms_version: 1,
-  version: 1,
-  created_at: "2026-08-03T12:00:00.000Z",
-  updated_at: "2026-08-03T12:00:00.000Z",
-} satisfies OrderRecord;
-
-const refundRequest = {
-  id: "refund-1",
-  tenant_id: tenantId,
-  service_order_id: orderId,
-  idempotency_key: "00000000-0000-4000-8000-000000000911",
-  reason: "暂不需要服务",
-  status: "reviewing",
-  created_by_employee_id: employeeId,
-  created_at: "2026-08-03T12:01:00.000Z",
-  updated_at: "2026-08-03T12:01:00.000Z",
-};
-
-const paymentConfig = {
-  id: configId,
-  provider: "wechat_pay",
-  profile_code: "platform_direct_recharge",
-  principal_type: "platform",
-  merchant_mode: "direct_merchant",
-  merchant_name: "平台商户",
-  merchant_id: "1900000001",
-  sub_merchant_id: null,
-  app_id: "wx-platform",
-  sub_app_id: null,
-  encrypted_config_ref: "secret://wechat",
-  secret_bundle_revision: "secret-rev-1",
-  serial_no: "SERIAL",
-  notify_url: "https://api.example.com/wechat/pay/callback",
-  enabled_channels: ["platform_service"],
-  status: "active",
-  validation_status: "valid",
-  recharge_guard_version: 7,
-  last_validated_at: null,
-  risk_switches: {},
-  created_by_employee_id: null,
-  updated_by_employee_id: null,
-  created_at: "2026-08-03T00:00:00.000Z",
-  updated_at: "2026-08-03T00:00:00.000Z",
-} satisfies PlatformPaymentConfigRecord;
-
-const secretBundle = {
-  privateKeyPem: "private-key",
-  apiV3Key: "api-v3-key",
-  wechatPayPublicKeyId: null,
-  wechatPayPublicKeyPem: null,
-  baseUrl: "https://api.mch.weixin.qq.com",
-  revision: "secret-rev-1",
-};
-
-const newPaymentRequest = {
-  timeStamp: "1",
-  nonceStr: "nonce-new",
-  package: "prepay_id=prepay-new",
-  signType: "RSA",
-  paySign: "sign-new",
-} satisfies WechatPayMiniProgramPaymentRequest;
-
-const existingPaymentRequest = {
-  timeStamp: "1",
-  nonceStr: "nonce-existing",
-  package: "prepay_id=prepay-existing",
-  signType: "RSA",
-  paySign: "sign-existing",
-} satisfies WechatPayMiniProgramPaymentRequest;
-
 function createRepository() {
   return {
     listEnabledProducts: mock(async (_input: unknown) => ({
-      list: [product],
+      list: [effectiveProduct],
+      server_time: "2026-08-01T00:00:00+00:00",
       pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
     })),
     listOrders: mock(async (_input: unknown) => ({
@@ -427,6 +304,7 @@ describe("TenantPlatformServiceOrderService", () => {
     }, "openid-user");
 
     expect(result.idempotent).toBe(true);
+    expect(result.product).toMatchObject({ amount_fen: 980000, promotion: null });
     expect(result.payment_request).toMatchObject({
       package: "prepay_id=prepay-existing",
     });
@@ -493,6 +371,69 @@ describe("TenantPlatformServiceOrderService", () => {
     }, "openid-user")).rejects.toMatchObject({
       code: "SERVICE_ORDER_INVALID_STATE",
     });
+  });
+
+  test.each([
+    ["active", "2026-08-01T12:00:00Z", true],
+    ["no promotion", "2026-07-01T00:00:00Z", false],
+    ["scheduled", "2026-07-31T23:59:59Z", false],
+    ["exact start", promotion.starts_at, true],
+    ["exact end", promotion.ends_at, false],
+    ["stopped", "2026-08-01T12:00:00Z", false],
+  ])("preserves database %s pricing and server_time despite local clock", async (_state, serverTime, active) => {
+    const item = {
+      ...effectiveProduct,
+      promotion: active ? promotion : null,
+      amount_fen: active ? 196000 : 980000,
+      effective_amount_fen: active ? 196000 : 980000,
+      price_rate_basis_points: active ? 2000 : 10000,
+    };
+    dependencies.repository.listEnabledProducts.mockResolvedValueOnce({
+      list: [item], server_time: String(serverTime),
+      pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+    });
+    const { TenantPlatformServiceOrderService } = await import("./tenant-platform-service-orders");
+    const result = await new TenantPlatformServiceOrderService(dependencies).listProducts(tenantAuth);
+    expect(result.server_time).toBe(serverTime);
+    expect(result.list[0]).toMatchObject(item);
+  });
+
+  test.each([false, true])("uses the committed snapshot for first create/replay=%s", async (replay) => {
+    const committed = {
+      ...order,
+      prepay_id: replay ? order.prepay_id : null,
+      amount_fen: 196000,
+      product_snapshot: {
+        ...order.product_snapshot,
+        title: "并发发布后锁定标题",
+        amount_fen: 196000,
+        base_amount_fen: 980000,
+        effective_amount_fen: 196000,
+        base_price_rate_basis_points: 10000,
+        price_rate_basis_points: 2000,
+        promotion,
+      },
+    };
+    if (replay) {
+      dependencies.repository.findOrderByIdempotencyKey.mockResolvedValueOnce(committed);
+    } else {
+      dependencies.repository.createPendingOrder.mockResolvedValueOnce(committed);
+    }
+    const { TenantPlatformServiceOrderService } = await import("./tenant-platform-service-orders");
+    const result = await new TenantPlatformServiceOrderService(dependencies).createOrder(tenantAuth, {
+      product_code: product.code, terms_version: 1, terms_accepted: true,
+      idempotency_key: sourceTrialId,
+    }, "openid-user");
+    expect(result.order.amount_fen).toBe(196000);
+    expect(result.product).toMatchObject({ title: "并发发布后锁定标题", amount_fen: 196000,
+      promotion: { version_id: sourceTrialId }, pricing_version: 3 });
+    expect(result.server_time).toBe(now.toISOString());
+    if (replay) {
+      expect(dependencies.repository.findEnabledProductByCode).not.toHaveBeenCalled();
+    } else {
+      expect(dependencies.wechatPayGateway.createJsapiPrepay.mock.calls[0]?.[0])
+        .toMatchObject({ order: { amount: 1960 }, description: "并发发布后锁定标题" });
+    }
   });
 
 });

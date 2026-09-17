@@ -1,9 +1,9 @@
+export type { EffectiveProductRecord, PlatformServicePromotionSnapshot, PlatformServiceProductSnapshot } from "./platform-service-effective-product-records";
 export {
   buildIlikePattern,
   normalizePagination,
   pageResult,
 } from "./platform-service-order-pagination";
-
 export type ProductVersionRecord = {
   id: string;
   version: number;

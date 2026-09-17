@@ -1,4 +1,5 @@
 import { Errors } from "@/errors/error-factory";
+import { matchesPostgresError } from "@/errors/postgres-error-details";
 import {
   platformServiceOrderRepository,
   type PlatformServiceOrderRepository,
@@ -141,6 +142,15 @@ export class PlatformServiceProductService {
       termsVersion: product.terms_version,
       termsContent: product.terms_content,
       employeeId,
+    }).catch((error: unknown) => {
+      if (matchesPostgresError(error, "P0001", "SERVICE_PROMOTION_PRICE_NOT_LOWER")) {
+        throw Errors.business(
+          422,
+          "新价格会使已发布限时活动失去折扣，请先调整或停止活动",
+          "SERVICE_PROMOTION_PRICE_NOT_LOWER",
+        );
+      }
+      throw error;
     });
     if (!publishedVersion) {
       throw Errors.business(

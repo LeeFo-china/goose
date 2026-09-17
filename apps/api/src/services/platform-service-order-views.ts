@@ -1,4 +1,6 @@
+import { platformServiceProductSnapshotSchema } from "../repositories/platform-service-effective-product-records";
 import type {
+  EffectiveProductRecord,
   OrderRecord,
   PlatformProductRecord,
   ProductRecord,
@@ -13,7 +15,16 @@ type ActionView = {
 
 type TenantServiceOrderInput = OrderRecord & Record<string, unknown>;
 
-export function serializeTenantServiceProduct(record: ProductRecord) {
+export function serializeTenantServiceProduct(
+  record: ProductRecord | EffectiveProductRecord,
+) {
+  if ("effective_amount_fen" in record) {
+    return {
+      ...record,
+      status: "enabled" as const,
+      published_version_id: record.product_version_id,
+    };
+  }
   const publishedVersion = firstVersion(record.published_version);
   if (!publishedVersion) {
     return null;
@@ -32,6 +43,23 @@ export function serializeTenantServiceProduct(record: ProductRecord) {
     service_scope: publishedVersion.service_scope,
     terms_version: publishedVersion.terms_version,
     terms_content: publishedVersion.terms_content,
+  };
+}
+
+export function serializeTenantServiceProductSnapshot(snapshot: unknown) {
+  const parsed = platformServiceProductSnapshotSchema.safeParse(snapshot);
+  if (!parsed.success) return null;
+  const product = parsed.data;
+  return {
+    ...product,
+    id: product.product_id,
+    status: "enabled" as const,
+    published_version_id: product.product_version_id,
+    base_amount_fen: product.base_amount_fen ?? product.amount_fen,
+    effective_amount_fen: product.effective_amount_fen ?? product.amount_fen,
+    base_price_rate_basis_points: product.base_price_rate_basis_points ?? 10000,
+    price_rate_basis_points: product.price_rate_basis_points ?? 10000,
+    promotion: product.promotion ?? null,
   };
 }
 
