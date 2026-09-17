@@ -2,6 +2,7 @@ import { z } from "zod";
 import { Errors } from "@/errors/error-factory";
 
 const TEMPLATE_UPLOAD_URL = "https://open.douyin.com/api/apps/v1/package_version/upload/";
+const TEMPLATE_UPLOAD_TIMEOUT_MS = 30_000;
 const TEST_QR_CODE_URL = "https://open.douyin.com/api/apps/v2/basic_info/get_qr_code/";
 const AVAILABLE_AUDIT_HOSTS_URL =
   "https://open.douyin.com/api/apps/v1/package_version/get_audit_hosts/";
@@ -141,6 +142,7 @@ export type DouyinReleaseTransport = {
   readonly request: (
     url: string,
     init: RequestInit,
+    timeoutMs?: number,
   ) => Promise<Record<string, unknown>>;
   readonly executeWithAuthorizerToken: <Result>(
     input: AuthorizerRequestInput,
@@ -162,7 +164,7 @@ export class DouyinMiniappReleaseClient implements DouyinMiniappReleaseGateway {
         method: "POST",
         headers: { "access-token": accessToken, "content-type": "application/json" },
         body: requestBody,
-      });
+      }, TEMPLATE_UPLOAD_TIMEOUT_MS);
       const parsed = this.parseSuccess(body, TemplateUploadSuccessSchema);
       return { logId: parsed.log_id };
     });

@@ -20,14 +20,15 @@ import {
 import {
   exactAuditStage,
   isExplicitOpenPlatformApiRejection,
+  isUncertainOpenPlatformOutcome,
   publishStateConflict,
   releaseStateConflict,
   requestError,
+  retryUncertainReconciliation,
   safeProviderFailure,
   sanitizedProviderError,
 } from "./support";
 import { auditPatch, recoveryPatch, releasedPatch, syncStatusPatch } from "./operation-state";
-
 type Installation = DouyinMiniappReleaseTarget & { readonly deployment_key: string };
 type ReleaseRepository = Pick<DouyinMiniappReleasesRepository,
   "findById" | "claimOperation" | "getOrCreateAndClaimUpload" | "patchClaimed" | "updateClaimed">;
@@ -41,17 +42,16 @@ type Dependencies = {
   readonly now: () => string;
   readonly claimToken: () => string;
   readonly deploymentEnvironment: () => DouyinDeploymentEnvironment;
+  readonly wait?: (milliseconds: number) => Promise<void>;
 };
 type Claim = { readonly token: string; readonly recoveryRequired: boolean };
 type Acquired = { readonly claim: Claim; readonly release: DouyinMiniappReleaseRecord };
 type UploadInput = { readonly template_id: string; readonly template_version: string;
   readonly description: string; readonly channel: "default" | "1" };
 type AuditInput = { readonly host_names: string[]; readonly audit_note: string };
-
 const CLAIM_TTL_MS = 120_000;
 const UPLOAD_TERMINAL: readonly DouyinMiniappReleaseStatus[] = [
   "uploaded", "testing", "audit_pending", "audit_rejected", "audit_approved", "released"];
-
 export class PlatformDouyinMiniappReleaseOperations {
   constructor(private readonly dependencies: Dependencies) {}
   async upload(
@@ -91,29 +91,38 @@ export class PlatformDouyinMiniappReleaseOperations {
       status: release.status, platformOperatorId: operatorId,
     });
     if (release.status === "failed" || claim.recoveryRequired) {
-      const versions = await this.provider(release, claim, {
-        status: release.status, platformOperatorId: operatorId,
-      }, async () => this.dependencies.gateway.getVersionList({
-        authorizerAccessToken, appId: installation.authorizer_appid,
-      }), true);
-      const recovered = recoveryPatch(release, versions, this.dependencies.now());
+      const recovered = await retryUncertainReconciliation(async () => {
+        const versions = await this.provider(release, claim, {
+          status: release.status, platformOperatorId: operatorId,
+        }, async () => this.dependencies.gateway.getVersionList({
+          authorizerAccessToken, appId: installation.authorizer_appid,
+        }), true);
+        return recoveryPatch(release, versions, this.dependencies.now());
+      }, this.dependencies.wait);
       if (!recovered) throw outcomeUncertain();
       return this.persistWithMetadata(release, claim, {
         ...recovered, platformOperatorId: operatorId,
       }, installationId);
     }
-
-    const uploaded = await this.provider(release, claim, {
-      status: "failed", auditResult: { status: "failed" }, platformOperatorId: operatorId,
-    }, async () => this.dependencies.gateway.uploadTemplateVersion({
-      authorizerAccessToken,
-      appId: installation.authorizer_appid,
-      templateId: input.template_id,
-      extJson,
-      userDescription: input.description,
-      userVersion: input.template_version,
-      ...(input.channel === "1" ? { tag: "1" as const } : {}),
-    }));
+    let uploaded;
+    try {
+      uploaded = await this.provider(release, claim, {
+        status: "failed", auditResult: { status: "failed" }, platformOperatorId: operatorId,
+      }, async () => this.dependencies.gateway.uploadTemplateVersion({
+        authorizerAccessToken,
+        appId: installation.authorizer_appid,
+        templateId: input.template_id,
+        extJson,
+        userDescription: input.description,
+        userVersion: input.template_version,
+        ...(input.channel === "1" ? { tag: "1" as const } : {}),
+      }));
+    } catch (error) {
+      if (isUncertainOpenPlatformOutcome(error)) {
+        return this.upload(installation, installationId, operatorId, input);
+      }
+      throw error;
+    }
     return this.persistWithMetadata(release, claim, {
       status: "uploaded", auditResult: null,
       douyinLogId: uploaded.logId, platformOperatorId: operatorId,
@@ -314,7 +323,6 @@ export class PlatformDouyinMiniappReleaseOperations {
         status: "released", platformOperatorId: operatorId,
       }, installationId);
     }
-
     const authorizerAccessToken = await this.accessToken(release, claim, installation, {
       status: release.status, auditResult: release.audit_result,
       submittedAt: release.submitted_at, auditedAt: release.audited_at,
@@ -413,7 +421,6 @@ export class PlatformDouyinMiniappReleaseOperations {
       throw sanitizedProviderError(error);
     }
   }
-
   private async persistWithMetadata(
     release: DouyinMiniappReleaseRecord,
     claim: Claim,
@@ -428,28 +435,24 @@ export class PlatformDouyinMiniappReleaseOperations {
     );
     return this.finish(release, claim, patch);
   }
-
   private async patch(release: DouyinMiniappReleaseRecord, claim: Claim,
     patch: UpdateDouyinMiniappReleaseInput): Promise<DouyinMiniappReleaseRecord> {
     const updated = await this.dependencies.releaseRepository.patchClaimed(release.id, claim.token, patch);
     if (!updated) throw releaseStateConflict();
     return updated;
   }
-
   private async finish(release: DouyinMiniappReleaseRecord, claim: Claim,
     patch: UpdateDouyinMiniappReleaseInput): Promise<DouyinMiniappReleaseRecord> {
     const updated = await this.dependencies.releaseRepository.updateClaimed(release.id, claim.token, patch);
     if (!updated) throw releaseStateConflict();
     return updated;
   }
-
   private freshAccessToken(installation: Installation): Promise<string> {
     return this.dependencies.accessTokens.getAuthorizerAccessToken({
       authorizerAppId: installation.authorizer_appid,
       deploymentKey: installation.deployment_key,
     });
   }
-
   private accessToken(
     release: DouyinMiniappReleaseRecord,
     claim: Claim,
@@ -467,11 +470,9 @@ export class PlatformDouyinMiniappReleaseOperations {
       preserveFailureAuditResult,
     );
   }
-
   private claimExpiresAt(): string {
     return new Date(Date.parse(this.dependencies.now()) + CLAIM_TTL_MS).toISOString();
   }
-
   private assertState(release: DouyinMiniappReleaseRecord,
     allowed: readonly DouyinMiniappReleaseStatus[]): void {
     if (!allowed.includes(release.status)) throw releaseStateConflict();

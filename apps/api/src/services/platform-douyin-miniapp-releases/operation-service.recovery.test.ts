@@ -5,14 +5,13 @@ import type {
   UpdateDouyinMiniappReleaseInput,
 } from "@/repositories/douyin-miniapp-releases";
 import { PlatformDouyinMiniappReleaseOperations } from "./operation-service";
-
 const INSTALLATION_ID = "22222222-2222-4222-8222-222222222222";
 const RELEASE_ID = "11111111-1111-4111-8111-111111111111";
 const OPERATOR_ID = "55555555-5555-4555-8555-555555555555";
 const CLAIM_TOKEN = "77777777-7777-4777-8777-777777777777";
+const RETRY_CLAIM_TOKEN = "88888888-8888-4888-8888-888888888888";
 const NOW = "2026-07-20T03:00:00.000Z";
 const LOCAL_ERROR = new AppError(500, "local write failed", "LOCAL_WRITE_FAILED");
-
 const installation = {
   id: INSTALLATION_ID,
   authorizer_appid: "tt-authorizer-1",
@@ -21,7 +20,6 @@ const installation = {
   authorization_status: "active" as const,
   permission_snapshot: [{ id: 1 }],
 };
-
 function release(status: DouyinMiniappReleaseRecord["status"]): DouyinMiniappReleaseRecord {
   return {
     id: RELEASE_ID,
@@ -51,7 +49,6 @@ function release(status: DouyinMiniappReleaseRecord["status"]): DouyinMiniappRel
     updated_at: "2026-07-20T01:00:00.000Z",
   };
 }
-
 function applyPatch(
   current: DouyinMiniappReleaseRecord,
   patch: UpdateDouyinMiniappReleaseInput,
@@ -70,7 +67,6 @@ function applyPatch(
     platform_operator_id: patch.platformOperatorId,
   };
 }
-
 function harness(
   status: DouyinMiniappReleaseRecord["status"],
   options: {
@@ -152,6 +148,7 @@ function harness(
     releaseVersion: mock(async () => ({ logId: "release-log" })),
   };
   const claimToken = mock(() => CLAIM_TOKEN);
+  const wait = mock(async (_milliseconds: number) => undefined);
   const operations = new PlatformDouyinMiniappReleaseOperations({
     installationRepository,
     releaseRepository,
@@ -159,6 +156,7 @@ function harness(
     gateway,
     now: () => NOW,
     claimToken,
+    wait,
     deploymentEnvironment: () => "production",
   } as never);
   return {
@@ -168,10 +166,10 @@ function harness(
     accessTokens,
     gateway,
     claimToken,
+    wait,
     current: () => current,
   };
 }
-
 async function caught(operation: () => Promise<unknown>): Promise<unknown> {
   try {
     await operation();
@@ -179,7 +177,6 @@ async function caught(operation: () => Promise<unknown>): Promise<unknown> {
     return error;
   }
 }
-
 const uploadInput = {
   template_id: "9133504853504535288",
   template_version: "1.2.3-beta.1",
@@ -187,7 +184,6 @@ const uploadInput = {
   channel: "default" as const,
 };
 const auditInput = { host_names: ["douyin", "toutiao"], audit_note: "装修模板提审" };
-
 describe("Douyin miniapp release operation recovery", () => {
   test("upload reconciles after its successful mutator final patch failed", async () => {
     const h = harness("created", { patchFailureAt: 1 });
@@ -199,7 +195,6 @@ describe("Douyin miniapp release operation recovery", () => {
     expect(h.gateway.getVersionList).toHaveBeenCalledTimes(1);
     expect(h.current().status).toBe("audit_approved");
   });
-
   test("submit reconciles after its successful mutator final patch failed", async () => {
     const h = harness("testing", { patchFailureAt: 2 });
     expect(await caught(() => h.operations.submitAudit(
@@ -212,7 +207,6 @@ describe("Douyin miniapp release operation recovery", () => {
     expect(h.gateway.getVersionList).toHaveBeenCalledTimes(1);
     expect(h.current().status).toBe("audit_approved");
   });
-
   test("publish reconciles current after its successful mutator final patch failed", async () => {
     const h = harness("audit_pending", { patchFailureAt: 2 });
     let versionCalls = 0;
@@ -230,7 +224,6 @@ describe("Douyin miniapp release operation recovery", () => {
     expect(h.gateway.getVersionList).toHaveBeenCalledTimes(2);
     expect(h.current().status).toBe("released");
   });
-
   test("upload provider success followed by local failure retries without re-upload", async () => {
     const h = harness("created", { metadataFailures: 1 });
     expect(await caught(() => h.operations.upload(
@@ -241,7 +234,6 @@ describe("Douyin miniapp release operation recovery", () => {
     expect(h.accessTokens.getAuthorizerAccessToken).toHaveBeenCalledTimes(1);
     expect(h.releaseRepository.updateClaimed).toHaveBeenCalledTimes(1);
   });
-
   test("metadata persistence uses release identity and exact claim token", async () => {
     const h = harness("created");
     await h.operations.upload(installation, INSTALLATION_ID, OPERATOR_ID, uploadInput);
@@ -251,7 +243,6 @@ describe("Douyin miniapp release operation recovery", () => {
       CLAIM_TOKEN,
     );
   });
-
   test("submit provider success followed by local failure retries without re-submit", async () => {
     const h = harness("testing", { metadataFailures: 1 });
     expect(await caught(() => h.operations.submitAudit(
@@ -264,7 +255,6 @@ describe("Douyin miniapp release operation recovery", () => {
     expect(h.gateway.getAvailableAuditHosts).toHaveBeenCalledTimes(1);
     expect(h.accessTokens.getAuthorizerAccessToken).toHaveBeenCalledTimes(1);
   });
-
   test("publish provider success followed by local failure retries without re-release", async () => {
     const h = harness("audit_pending", { metadataFailures: 1 });
     expect(await caught(() => h.operations.publish(
@@ -275,7 +265,6 @@ describe("Douyin miniapp release operation recovery", () => {
     expect(h.gateway.getVersionList).toHaveBeenCalledTimes(1);
     expect(h.accessTokens.getAuthorizerAccessToken).toHaveBeenCalledTimes(1);
   });
-
   test("upload reconciliation to current repairs every applicable installation timestamp", async () => {
     const h = harness("created", { initialRecovery: true });
     h.gateway.getVersionList = mock(async () => ({
@@ -288,7 +277,6 @@ describe("Douyin miniapp release operation recovery", () => {
     );
     expect(h.current()).toMatchObject({ submitted_at: NOW, audited_at: NOW, released_at: NOW });
   });
-
   test("submit reconciliation accepts host sets in any order and repairs current metadata", async () => {
     const h = harness("testing", { initialRecovery: true });
     await h.releaseRepository.patchClaimed(RELEASE_ID, CLAIM_TOKEN, {
@@ -309,7 +297,6 @@ describe("Douyin miniapp release operation recovery", () => {
     );
     expect(h.current()).toMatchObject({ submitted_at: NOW, audited_at: NOW, released_at: NOW });
   });
-
   test("access token failure clears a normal claim and retains a recovery claim", async () => {
     const normal = harness("uploaded");
     normal.accessTokens.getAuthorizerAccessToken = mock(async () => { throw LOCAL_ERROR; }) as never;
@@ -473,27 +460,40 @@ describe("Douyin miniapp release operation recovery", () => {
     expect(h.releaseRepository.updateClaimed).not.toHaveBeenCalled();
   });
 
-  test("upload access token failure keeps created retryable and next attempt uploads once", async () => {
+  test("upload timeout automatically reconciles the exact latest version", async () => {
     const h = harness("created");
-    let tokenCalls = 0;
-    h.accessTokens.getAuthorizerAccessToken = mock(async () => {
-      tokenCalls += 1;
-      if (tokenCalls === 1) throw LOCAL_ERROR;
-      return "authorizer-access-token";
+    const claimTokens = [CLAIM_TOKEN, RETRY_CLAIM_TOKEN];
+    h.claimToken.mockImplementation(() => claimTokens.shift() ?? RETRY_CLAIM_TOKEN);
+    let activeClaim: string | null = null;
+    const updateClaimed = h.releaseRepository.updateClaimed;
+    h.releaseRepository.updateClaimed = mock(async (...args: Parameters<typeof updateClaimed>) => {
+      const updated = await updateClaimed(...args);
+      if (updated) activeClaim = null;
+      return updated;
     }) as never;
-    h.releaseRepository.getOrCreateAndClaimUpload = mock(async () => ({
-      ...h.current(),
-      operation_name: "upload" as const,
-      operation_claim_token: CLAIM_TOKEN,
-      operation_claim_expires_at: "2026-07-20T03:02:00.000Z",
-      recovery_required: false,
-    }));
-    await caught(() => h.operations.upload(
-      installation, INSTALLATION_ID, OPERATOR_ID, uploadInput,
-    ));
-    expect(h.current().status).toBe("created");
+    h.releaseRepository.getOrCreateAndClaimUpload = mock(async (input) => {
+      if (activeClaim) return null;
+      activeClaim = input.claimToken;
+      return { ...h.current(), operation_name: "upload" as const,
+        operation_claim_token: input.claimToken,
+        operation_claim_expires_at: "2026-07-20T03:02:00.000Z",
+        recovery_required: input.claimToken === RETRY_CLAIM_TOKEN };
+    }) as never;
+    h.gateway.uploadTemplateVersion = mock(async () => {
+      throw new AppError(502, "timeout", "DOUYIN_OPEN_PLATFORM_TIMEOUT");
+    }) as never;
+    let versionReads = 0;
+    h.gateway.getVersionList = mock(async () => ({
+      latest: { version: ++versionReads === 3 ? uploadInput.template_version : "1.2.2" },
+      logId: "recovered-log",
+    })) as never;
     await h.operations.upload(installation, INSTALLATION_ID, OPERATOR_ID, uploadInput);
     expect(h.gateway.uploadTemplateVersion).toHaveBeenCalledTimes(1);
-    expect(h.current()).toMatchObject({ status: "uploaded", audit_result: null });
+    expect(h.gateway.getVersionList).toHaveBeenCalledTimes(3);
+    expect(h.claimToken).toHaveBeenCalledTimes(2);
+    expect(h.wait.mock.calls.map(([milliseconds]) => milliseconds)).toEqual([750, 1_500]);
+    expect(h.current()).toMatchObject({
+      status: "uploaded", audit_result: null, douyin_log_id: "recovered-log",
+    });
   });
 });
