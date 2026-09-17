@@ -247,6 +247,10 @@ class UserIdentityService {
     return userIdentityRepository.findActiveOauthIdentityByUserId(input);
   }
 
+  invalidateOauthIdentityCache(input: {
+    platform?: OAuthPlatform | null; openid?: string | null; userId?: string | null;
+  }) { this.clearOauthCache(input); }
+
   async unbindOauthIdentityBestEffort(input: {
     userId: string;
     platform: OAuthPlatform;
