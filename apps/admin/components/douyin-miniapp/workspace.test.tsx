@@ -349,6 +349,27 @@ describe("TenantDouyinMiniappWorkspace", () => {
     expect(html).toContain("小程序功能不完整且可用性低");
   });
 
+  test("labels a failed release as version recovery instead of audit sync", () => {
+    const html = renderToStaticMarkup(
+      <TenantDouyinMiniappWorkspace
+        canRead
+        canManage
+        canSubmitAudit
+        loadError={null}
+        workspace={{
+          ...workspace,
+          release_state: "sync_error",
+          latest_release: workspace.latest_release
+            ? { ...workspace.latest_release, status: "failed" }
+            : null,
+        }}
+      />,
+    );
+
+    expect(html).toContain("恢复发布状态");
+    expect(html).not.toContain(">同步审核状态<");
+  });
+
   test("surfaces a stale platform template without offering test version creation", () => {
     const html = renderToStaticMarkup(
       <TenantDouyinMiniappWorkspace

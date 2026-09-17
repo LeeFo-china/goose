@@ -26,7 +26,7 @@ import {
   safeProviderFailure,
   sanitizedProviderError,
 } from "./support";
-import { auditPatch, recoveryPatch, releasedPatch } from "./operation-state";
+import { auditPatch, recoveryPatch, releasedPatch, syncStatusPatch } from "./operation-state";
 
 type Installation = DouyinMiniappReleaseTarget & { readonly deployment_key: string };
 type ReleaseRepository = Pick<DouyinMiniappReleasesRepository,
@@ -292,8 +292,7 @@ export class PlatformDouyinMiniappReleaseOperations {
     }));
     let patch: UpdateDouyinMiniappReleaseInput;
     try {
-      const audit = exactAuditStage(versions.audit, release.template_version);
-      patch = auditPatch(release, audit, versions.logId, this.dependencies.now());
+      patch = syncStatusPatch(release, versions, this.dependencies.now());
     } catch (error) {
       if (!claim.recoveryRequired) await this.finish(release, claim, {
         status: release.status, platformOperatorId: operatorId,
