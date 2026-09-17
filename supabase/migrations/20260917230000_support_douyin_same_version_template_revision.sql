@@ -48,7 +48,7 @@ CREATE OR REPLACE FUNCTION public.get_or_create_and_claim_douyin_miniapp_release
 )
 RETURNS TABLE(
   id uuid, installation_id uuid, template_id text, template_version text,
-  description text, provider_summary text, channel text, ext_json jsonb, status text,
+  description text, channel text, ext_json jsonb, status text,
   douyin_log_id text, test_qr_url text, audit_host_names text[], audit_note text,
   audit_result jsonb, submitted_at timestamptz, audited_at timestamptz,
   released_at timestamptz, platform_operator_id uuid, created_at timestamptz,
@@ -202,8 +202,7 @@ BEGIN
 
   RETURN QUERY SELECT
     v_release.id, v_release.installation_id, v_release.template_id,
-    v_release.template_version, v_release.description, v_release.provider_summary,
-    v_release.channel,
+    v_release.template_version, v_release.description, v_release.channel,
     v_release.ext_json, v_release.status, v_release.douyin_log_id,
     v_release.test_qr_url, v_release.audit_host_names, v_release.audit_note,
     v_release.audit_result, v_release.submitted_at, v_release.audited_at,

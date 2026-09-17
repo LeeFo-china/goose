@@ -28,4 +28,10 @@ describe("Douyin same-version template revision migration", () => {
     );
     expect(sql).toContain("Rollback:");
   });
+
+  test("keeps the legacy RPC return type stable", () => {
+    expect(sql).toMatch(
+      /CREATE OR REPLACE FUNCTION public\.get_or_create_and_claim_douyin_miniapp_release_upload\([\s\S]*?RETURNS TABLE\(\s*id uuid, installation_id uuid, template_id text, template_version text,\s*description text, channel text/,
+    );
+  });
 });
