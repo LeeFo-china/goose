@@ -10,7 +10,7 @@ const STYLE = {
   style: "modern_simple",
   color_notes: "暖白墙面",
   material_notes: "浅木饰面",
-  source_type: "ai_concept",
+  source_type: "design",
   image_url: "https://cdn.example.com/rendering.webp",
   published_at: "2026-09-13T08:00:00.000Z",
 } as const;
@@ -38,6 +38,20 @@ test("published style API validates detail identity and public HTTPS image", asy
   await expect(fetchPublishedStyleDetail(client, "bad-id")).rejects.toMatchObject({
     code: "INVALID_RENDERING_ID",
   });
+});
+
+test("published style API rejects AI concept rows outside the Douyin review scope", async () => {
+  const aiConcept = { ...STYLE, source_type: "ai_concept" };
+  const listClient = { request: async () => ({
+    list: [aiConcept],
+    pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+  }) } as unknown as ApiClient;
+  await expect(fetchPublishedStyles(listClient, { page: 1, pageSize: 20 }))
+    .rejects.toMatchObject({ code: "INVALID_API_RESPONSE" });
+
+  const detailClient = { request: async () => aiConcept } as unknown as ApiClient;
+  await expect(fetchPublishedStyleDetail(detailClient, STYLE_ID))
+    .rejects.toMatchObject({ code: "INVALID_API_RESPONSE" });
 });
 
 test("published style API rejects invalid pagination before calling the server", async () => {

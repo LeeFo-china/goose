@@ -15,6 +15,10 @@ export interface CustomerRenderingCatalogRows {
   readonly total: number;
 }
 
+export interface CustomerRenderingCatalogVisibility {
+  readonly sourceTypes: RenderingPublishedStyle['source_type'][];
+}
+
 const PUBLIC_FIELDS = 'id,published_title,published_space,published_style,'
   + 'published_color_notes,published_material_notes,published_source_type,'
   + 'published_at,published_file:platform_file_objects!tenant_rendering_styles_published_file_fkey(public_url)';
@@ -55,12 +59,14 @@ function parsePublishedStyle(raw: unknown, id?: string): RenderingPublishedStyle
 export class CustomerRenderingCatalogRepository {
   constructor(private readonly client: CustomerRenderingCatalogDatabaseClient = SupabaseDB.getAdminClient()) {}
 
-  async list(tenantId: string, input: RenderingListQuery): Promise<CustomerRenderingCatalogRows> {
+  async list(tenantId: string, input: RenderingListQuery,
+    visibility?: CustomerRenderingCatalogVisibility): Promise<CustomerRenderingCatalogRows> {
     try {
       let query = this.client.from('tenant_rendering_styles').select(PUBLIC_FIELDS, { count: 'exact' })
         .eq('tenant_id', tenantId).eq('status', 'published').is('deleted_at', null);
       if (input.space) query = query.eq('published_space', input.space);
       if (input.style) query = query.eq('published_style', input.style);
+      if (visibility) query = query.in('published_source_type', visibility.sourceTypes);
       const offset = (input.page - 1) * input.pageSize;
       const { data, error, count } = await query.order('sort_order', { ascending: true })
         .order('id', { ascending: true }).range(offset, offset + input.pageSize - 1);
@@ -80,11 +86,14 @@ export class CustomerRenderingCatalogRepository {
     }
   }
 
-  async find(tenantId: string, id: string): Promise<RenderingPublishedStyle | null> {
+  async find(tenantId: string, id: string,
+    visibility?: CustomerRenderingCatalogVisibility): Promise<RenderingPublishedStyle | null> {
     try {
-      const { data, error } = await this.client.from('tenant_rendering_styles').select(PUBLIC_FIELDS)
+      let query = this.client.from('tenant_rendering_styles').select(PUBLIC_FIELDS)
         .eq('tenant_id', tenantId).eq('id', id).eq('status', 'published')
-        .is('deleted_at', null).maybeSingle();
+        .is('deleted_at', null);
+      if (visibility) query = query.in('published_source_type', visibility.sourceTypes);
+      const { data, error } = await query.maybeSingle();
       if (error) throw Errors.dbError('读取公开装修效果素材失败');
       return data === null ? null : parsePublishedStyle(data, id);
     } catch (error) {

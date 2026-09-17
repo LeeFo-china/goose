@@ -25,12 +25,12 @@ async function fixture(options: { style?: RenderingPublishedStyle | null; total?
       async resolveDouyin(user) { calls.push({ operation: 'douyin', args: [user] }); return { ...actor, channel: 'douyin' }; },
     },
     repository: {
-      async list(scopedTenantId, input) {
-        calls.push({ operation: 'list', args: [scopedTenantId, input] });
+      async list(scopedTenantId, input, visibility) {
+        calls.push({ operation: 'list', args: [scopedTenantId, input, visibility] });
         return { rows: result ? [result] : [], total: options.total ?? (result ? 1 : 0) };
       },
-      async find(scopedTenantId, id) {
-        calls.push({ operation: 'find', args: [scopedTenantId, id] });
+      async find(scopedTenantId, id, visibility) {
+        calls.push({ operation: 'find', args: [scopedTenantId, id, visibility] });
         return result;
       },
     },
@@ -46,7 +46,7 @@ test('WeChat list resolves trusted actor before querying and applies shared defa
   });
   expect(calls).toEqual([
     { operation: 'wechat', args: [user] },
-    { operation: 'list', args: [tenantId, { page: 1, pageSize: 20 }] },
+    { operation: 'list', args: [tenantId, { page: 1, pageSize: 20 }, undefined] },
   ]);
 });
 
@@ -60,7 +60,7 @@ test('Douyin list uses only Douyin resolver and passes published filters and pag
   expect(calls.map((call) => call.operation)).toEqual(['douyin', 'list']);
   expect(calls[1]?.args).toEqual([tenantId, {
     page: 2, pageSize: 20, space: 'living_room', style: 'cream',
-  }]);
+  }, { sourceTypes: ['real_case', 'design'] }]);
 });
 
 test('detail validates id, uses trusted tenant and returns only public fields', async () => {
@@ -69,7 +69,17 @@ test('detail validates id, uses trusted tenant and returns only public fields', 
   expect(result).toEqual(publicStyle);
   expect(JSON.stringify(result)).not.toMatch(/tenant|file_id|object|employee|version|private-subject/);
   expect(calls.map((call) => call.operation)).toEqual(['wechat', 'find']);
-  expect(calls[1]?.args).toEqual([tenantId, styleId]);
+  expect(calls[1]?.args).toEqual([tenantId, styleId, undefined]);
+});
+
+test('Douyin detail restricts direct links to review-safe published sources', async () => {
+  const { service, calls } = await fixture();
+  expect(await service.getStyle(undefined, 'douyin', styleId)).toEqual(publicStyle);
+  expect(calls[1]?.args).toEqual([
+    tenantId,
+    styleId,
+    { sourceTypes: ['real_case', 'design'] },
+  ]);
 });
 
 test('hidden or nonexistent detail becomes stable 404', async () => {

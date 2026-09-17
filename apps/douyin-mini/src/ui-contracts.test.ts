@@ -55,7 +55,8 @@ test("home keeps one lead intent and uses direct Chinese section headings", asyn
   expect(template.match(/开始预算初算/g)).toHaveLength(1);
   expect(template).not.toContain("先算预算，再规划装修");
   expect(template).toContain('tt:if="{{metrics.length}}"');
-  expect(template).toContain("AI 装修问题助手");
+  expect(template).toContain("装修问答");
+  expect(template).not.toContain("AI 装修问题助手");
   expect(template).not.toContain("qa-card ui-card");
   expect(template).not.toContain("customer-entry-action");
   expect(style).not.toContain(".qa-card");
@@ -64,13 +65,13 @@ test("home keeps one lead intent and uses direct Chinese section headings", asyn
   expect(style).not.toMatch(/\.material-module-loading\s*\{[^}]*border-radius/);
 
   const projectsTool = template.indexOf("我的项目");
-  const aiTool = template.indexOf("AI 装修问题助手");
+  const qaTool = template.indexOf("装修问答");
   const materials = template.indexOf("装修资料");
   const projects = template.indexOf("项目实景");
   const metrics = template.indexOf("<trust-metrics");
   expect(projectsTool).toBeGreaterThan(-1);
-  expect(aiTool).toBeGreaterThan(projectsTool);
-  expect(materials).toBeGreaterThan(aiTool);
+  expect(qaTool).toBeGreaterThan(projectsTool);
+  expect(materials).toBeGreaterThan(qaTool);
   expect(projects).toBeGreaterThan(materials);
   expect(metrics).toBeGreaterThan(projects);
 });
@@ -380,39 +381,41 @@ test("rendering catalog has a home entry and separate list and detail pages", as
   expect(app.pages).toContain("pages/rendering-styles/index");
   expect(app.pages).toContain("pages/rendering-style-detail/index");
   expect(home).toContain('bindtap="onViewRenderingStyles"');
-  expect(list).toContain("AI 概念图");
+  expect(list).not.toContain("AI 概念图");
   expect(detail).toContain("sourceLabel");
   expect(list + detail).not.toMatch(/立即生成|开始生图/);
 });
 
-test("rendering detail exposes ready uploads and a clearly labelled AI reference action", async () => {
-  const [template, style] = await Promise.all([
+test("rendering detail is a read-only published image surface", async () => {
+  const [template, style, entry, page] = await Promise.all([
     readSource("pages/rendering-style-detail/index.ttml"),
     readSource("pages/rendering-style-detail/index.ttss"),
+    readSource("pages/rendering-style-detail/index.ts"),
+    readSource("pages/rendering-style-detail/page.ts"),
   ]);
-  expect(template).toContain('bindtap="onChooseRoom"');
-  expect(template).toContain('bindtap="onChooseFloorPlan"');
-  expect(template).toContain('bindtap="onRetryRoomComplete"');
-  expect(template).toContain('bindtap="onRetryFloorComplete"');
-  expect(template).toContain("房间照（必传）");
-  expect(template).toContain("户型图（可选）");
-  expect(template).not.toContain("!roomFileId || floorUploadStatus");
-  expect(template).toContain("roomUploadStatus === 'ready'");
-  expect(template).toContain('bindtap="onGenerate"');
-  expect(template).toContain('tt:if="{{!jobId && phoneAuthorizationRequired}}"');
-  expect(template).toContain('!jobSubmitting && !phoneAuthorizationRequired}}"');
-  expect(template).not.toContain('!jobConfirmationPending && phoneAuthorizationRequired');
-  expect(template).toContain('class="detail-notes-grid"');
-  expect(template).toContain('class="private-input-preview');
-  expect(template).not.toContain('bindtap="onCheckUploadStatus"');
-  expect(template).not.toContain("检查图片状态");
-  expect(template).toContain('class="generation-activity-bar"');
-  expect(template).toContain("jobSubmitting || jobStatus === 'queued' || jobStatus === 'processing'");
-  expect(template).toContain("原始房间");
-  expect(template).toContain("AI 效果图");
-  expect(template).toContain('bindtap="onPreviewOriginal"');
-  expect(template).toContain('bindtap="onPreviewResult"');
-  expect(style).toContain("@keyframes generation-activity");
-  expect(style).toMatch(/@media \(prefers-reduced-motion: reduce\)/);
-  expect(template).toContain("AI 参考效果图");
+  expect(template).toContain('src="{{style.image_url}}"');
+  expect(template).toContain("配色说明");
+  expect(template).toContain("材质说明");
+  expect(template).toContain("sourceLabel");
+  expect(template).toContain('bindtap="onBackToList"');
+  for (const source of [template, style, entry, page]) {
+    expect(source).not.toMatch(/上传|房间照|户型图|手机号验证|AI 概念图|AI 效果图|AI 参考|生成任务|onGenerate|onChooseRoom|onChooseFloorPlan/);
+  }
+});
+
+test("Douyin source package contains no rendering upload or generation client", async () => {
+  const removed = [
+    "api/rendering-jobs.ts",
+    "api/rendering-uploads.ts",
+    "platform/private-image.ts",
+    "platform/rendering-recovery.ts",
+  ];
+  for (const path of removed) {
+    expect(await Bun.file(`${__dirname}/${path}`).exists()).toBe(false);
+  }
+  const [app, session] = await Promise.all([
+    readSource("app.ts"),
+    readSource("state/session.ts"),
+  ]);
+  expect(app + session).not.toMatch(/getRenderingRecoveryIdentity|acceptVerifiedSession|rendering-recovery/);
 });

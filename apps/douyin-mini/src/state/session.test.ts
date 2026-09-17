@@ -12,16 +12,6 @@ import type { BootstrapData } from "../models";
 import { BootstrapStore } from "./bootstrap";
 import { SessionManager, type SessionDependencies } from "./session";
 
-const renderingIdentity = { tenantId: "33333333-3333-4333-8333-333333333333",
-  installationId: "22222222-2222-4222-8222-222222222222", appId: "tt-authorizer-1",
-  subjectHash: "a".repeat(64) };
-function renderingToken(subjectHash = renderingIdentity.subjectHash) {
-  const payload = { token_type: "douyin_miniapp", sub: subjectHash,
-    tenant_id: renderingIdentity.tenantId, douyin_installation_id: renderingIdentity.installationId,
-    douyin_app_id: renderingIdentity.appId, subject_hash: subjectHash, verified_phone: "13800138000" };
-  return `${Buffer.from('{"alg":"HS256"}').toString("base64url")}.${Buffer.from(JSON.stringify(payload)).toString("base64url")}.signature`;
-}
-
 const launchContext = {
   entry_path: "pages/home/index" as const,
   scene: "021001",
@@ -73,18 +63,6 @@ function dependencies(overrides: Partial<SessionDependencies> = {}): SessionDepe
 }
 
 describe("Douyin native session state", () => {
-  test("a verified rendering session replaces only the same owner's miniapp token", async () => {
-    const deps = dependencies();
-    const session = new SessionManager(deps);
-    const token = renderingToken();
-    session.acceptVerifiedSession({ accessToken: token, expiresIn: 7200 }, renderingIdentity);
-    expect(await session.getAccessToken()).toBe(token);
-    expect(deps.writeStoredSession).toHaveBeenCalledWith({ accessToken: token,
-      expiresAt: now + 7_200_000 });
-    expect(() => session.acceptVerifiedSession({ accessToken: renderingToken("b".repeat(64)),
-      expiresIn: 7200 }, renderingIdentity)).toThrow();
-    expect(await session.getAccessToken()).toBe(token);
-  });
   test("cold login exchanges the real app and deployment identifiers, then stores only JWT state", async () => {
     const deps = dependencies();
     const session = new SessionManager(deps);

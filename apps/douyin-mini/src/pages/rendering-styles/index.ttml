@@ -12,7 +12,6 @@
   <scroll-view scroll-x class="filter-scroll"><view class="filter-options"><button tt:for="{{spaceFilters}}" tt:key="value" class="filter-chip ui-pressable" hover-class="ui-pressable--pressed" style="{{selectedSpace === item.value ? activeFilterStyle : ''}}" data-value="{{item.value}}" bindtap="onSelectSpace">{{item.label}}</button></view></scroll-view>
   <view class="filter-heading">风格</view>
   <scroll-view scroll-x class="filter-scroll"><view class="filter-options"><button tt:for="{{styleFilters}}" tt:key="value" class="filter-chip ui-pressable" hover-class="ui-pressable--pressed" style="{{selectedStyle === item.value ? activeFilterStyle : ''}}" data-value="{{item.value}}" bindtap="onSelectStyle">{{item.label}}</button></view></scroll-view>
-  <view class="rendering-hint">AI 概念图仅供风格参考，不代表已落地实景。</view>
   <view tt:if="{{items.length}}" class="rendering-list">
     <button tt:for="{{items}}" tt:key="id" class="rendering-card ui-card ui-pressable" hover-class="ui-pressable--pressed" data-id="{{item.id}}" bindtap="onSelect" aria-label="查看{{item.title}}">
       <image tt:if="{{!item.imageFailed}}" class="rendering-image" src="{{item.image_url}}" mode="aspectFill" lazy-load="true" data-id="{{item.id}}" binderror="onImageError" />

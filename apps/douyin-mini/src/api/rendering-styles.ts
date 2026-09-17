@@ -6,7 +6,7 @@ export const RENDERING_STYLES = [
   "modern_simple", "cream", "new_chinese", "nordic", "light_luxury",
   "natural_wood", "american", "french", "wabi_sabi",
 ] as const;
-export const RENDERING_SOURCES = ["real_case", "design", "ai_concept"] as const;
+export const RENDERING_SOURCES = ["real_case", "design"] as const;
 
 export type RenderingSpace = (typeof RENDERING_SPACES)[number];
 export type RenderingStyle = (typeof RENDERING_STYLES)[number];

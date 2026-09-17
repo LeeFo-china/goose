@@ -41,6 +41,7 @@ async function fixture(data: unknown, count: unknown = 1, error: unknown = null)
   const query = {
     select: (...args: unknown[]) => { calls.push(['select', ...args]); return query; },
     eq: (...args: unknown[]) => { calls.push(['eq', ...args]); return query; },
+    in: (...args: unknown[]) => { calls.push(['in', ...args]); return query; },
     is: (...args: unknown[]) => { calls.push(['is', ...args]); return query; },
     order: (...args: unknown[]) => { calls.push(['order', ...args]); return query; },
     range: (...args: unknown[]) => { calls.push(['range', ...args]); return query; },
@@ -53,7 +54,8 @@ async function fixture(data: unknown, count: unknown = 1, error: unknown = null)
 
 test('list uses one explicit relation query, published snapshot filters and database pagination', async () => {
   const { repository, calls } = await fixture([row]);
-  expect(await repository.list(tenantId, { page: 2, pageSize: 20, space: 'living_room', style: 'cream' }))
+  expect(await repository.list(tenantId, { page: 2, pageSize: 20, space: 'living_room', style: 'cream' },
+    { sourceTypes: ['real_case', 'design'] }))
     .toEqual({ rows: [style], total: 1 });
   expect(calls.filter(([name]) => name === 'from')).toEqual([['from', 'tenant_rendering_styles']]);
   expect(calls).toContainEqual(['select',
@@ -61,7 +63,9 @@ test('list uses one explicit relation query, published snapshot filters and data
     { count: 'exact' }]);
   for (const call of [['eq', 'tenant_id', tenantId], ['eq', 'status', 'published'],
     ['is', 'deleted_at', null], ['eq', 'published_space', 'living_room'],
-    ['eq', 'published_style', 'cream'], ['range', 20, 39]]) expect(calls).toContainEqual(call);
+    ['eq', 'published_style', 'cream'],
+    ['in', 'published_source_type', ['real_case', 'design']],
+    ['range', 20, 39]]) expect(calls).toContainEqual(call);
   expect(calls.filter(([name]) => name === 'order')).toEqual([
     ['order', 'sort_order', { ascending: true }], ['order', 'id', { ascending: true }],
   ]);
@@ -78,9 +82,11 @@ test('list omits absent filters and defaults to first bounded page supplied by c
 
 test('detail has same visibility and tenant filters and returns only public DTO', async () => {
   const { repository, calls, result } = await fixture(row);
-  expect(await repository.find(tenantId, styleId)).toEqual(style);
+  expect(await repository.find(tenantId, styleId,
+    { sourceTypes: ['real_case', 'design'] })).toEqual(style);
   for (const call of [['eq', 'tenant_id', tenantId], ['eq', 'id', styleId],
-    ['eq', 'status', 'published'], ['is', 'deleted_at', null]]) expect(calls).toContainEqual(call);
+    ['eq', 'status', 'published'], ['is', 'deleted_at', null],
+    ['in', 'published_source_type', ['real_case', 'design']]]) expect(calls).toContainEqual(call);
   expect(calls.filter(([name]) => name === 'from')).toEqual([['from', 'tenant_rendering_styles']]);
   result.data = null;
   expect(await repository.find(tenantId, styleId)).toBeNull();

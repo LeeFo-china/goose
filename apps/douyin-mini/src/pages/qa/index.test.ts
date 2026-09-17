@@ -33,7 +33,8 @@ describe("Douyin Q&A page", () => {
     expect(pageSource).toContain("typingTimer");
     expect(pageSource).toContain("clearTypingTimer()");
     expect(pageSource).toContain("onUnload()");
-    expect(template).toContain("AI 装修问题助手");
+    expect(template).toContain("装修问答");
+    expect(template).not.toContain("AI 装修问题助手");
     expect(template).toContain("qa-chat");
     expect(template).toContain("qa-composer");
     expect(template).toContain('maxlength="120"');
@@ -59,7 +60,8 @@ describe("Douyin Q&A page", () => {
     expect(template).not.toContain("ui-card");
     expect(template).not.toContain("15518591857");
     expect(template).not.toContain("直接联系公司");
-    expect(config).toContain('"navigationBarTitleText": "AI 装修问题助手"');
+    expect(config).toContain('"navigationBarTitleText": "装修问答"');
+    expect(config).not.toContain("AI 装修问题助手");
     expect(style).toContain(".message--assistant");
     expect(style).toContain(".qa-composer");
     expect(style).toContain(".qa-composer--keyboard");
@@ -69,7 +71,7 @@ describe("Douyin Q&A page", () => {
     expect(style).not.toContain(":nth-child");
   });
 
-  test("home exposes one flat AI Q&A tool below customer projects", async () => {
+  test("home exposes one flat decoration Q&A tool below customer projects", async () => {
     const [homeEntrySource, homePageSource, homeTemplate, homeStyle] = await Promise.all([
       Bun.file(`${__dirname}/../home/index.ts`).text(),
       Bun.file(`${__dirname}/../home/page.ts`).text(),
@@ -80,8 +82,9 @@ describe("Douyin Q&A page", () => {
 
     expect(homeSource).toContain("onAskQuestion()");
     expect(homeSource).toContain('navigateToPage("pages/qa/index")');
-    expect(homeTemplate).toContain("AI 装修问题助手");
-    expect(homeTemplate.indexOf("AI 装修问题助手"))
+    expect(homeTemplate).toContain("装修问答");
+    expect(homeTemplate).not.toContain("AI 装修问题助手");
+    expect(homeTemplate.indexOf("装修问答"))
       .toBeGreaterThan(homeTemplate.indexOf("我的项目"));
     expect(homeTemplate.match(/开始预算初算/g)).toHaveLength(1);
     expect(homeTemplate).not.toContain("更多服务数据正在完善");

@@ -1,5 +1,5 @@
 {
-  "navigationBarTitleText": "AI 装修问题助手",
+  "navigationBarTitleText": "装修问答",
   "usingComponents": {
     "page-skeleton": "../../components/page-skeleton/index",
     "error-state": "../../components/error-state/index"

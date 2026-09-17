@@ -11,5 +11,5 @@ export const STYLE_LABELS: Record<RenderingStyle, string> = {
 };
 
 export const SOURCE_LABELS: Record<RenderingSource, string> = {
-  real_case: "实景", design: "设计图", ai_concept: "AI 概念图",
+  real_case: "实景", design: "设计图",
 };

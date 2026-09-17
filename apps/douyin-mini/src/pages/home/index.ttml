@@ -15,7 +15,7 @@
       <view class="home-tool-arrow" style="color: {{primaryColor}}" aria-hidden="true">›</view>
     </button>
     <button class="home-tool-link ui-pressable" hover-class="ui-pressable--pressed" bindtap="onAskQuestion">
-      <view class="home-tool-copy"><view class="home-tool-title">AI 装修问题助手</view><view class="home-tool-description">咨询预算、翻新、量房和施工问题</view></view>
+      <view class="home-tool-copy"><view class="home-tool-title">装修问答</view><view class="home-tool-description">咨询预算、翻新、量房和施工问题</view></view>
       <view class="home-tool-arrow" style="color: {{primaryColor}}" aria-hidden="true">›</view>
     </button>
   </view>

@@ -21,6 +21,9 @@ type Channel = CustomerRenderingActor['channel'];
 type ContextService = Pick<CustomerRenderingContextService, 'resolveWechat' | 'resolveDouyin'>;
 type CatalogRepository = Pick<CustomerRenderingCatalogRepository, 'list' | 'find'>;
 const IdSchema = z.uuid('无效的素材 ID');
+const DOUYIN_CATALOG_VISIBILITY = {
+  sourceTypes: ['real_case', 'design'],
+} satisfies Parameters<CustomerRenderingCatalogRepository['list']>[2];
 
 export class CustomerRenderingCatalogService {
   private readonly contextService: ContextService;
@@ -38,7 +41,11 @@ export class CustomerRenderingCatalogService {
     const actor = await this.resolveActor(user, channel);
     const parsed = RenderingListQuerySchema.safeParse(input);
     if (!parsed.success) throw Errors.fromZod(parsed.error);
-    const { rows, total } = await this.repository.list(actor.tenantId, parsed.data);
+    const { rows, total } = await this.repository.list(
+      actor.tenantId,
+      parsed.data,
+      channel === 'douyin' ? DOUYIN_CATALOG_VISIBILITY : undefined,
+    );
     const result = {
       list: rows,
       pagination: {
@@ -57,7 +64,11 @@ export class CustomerRenderingCatalogService {
     const actor = await this.resolveActor(user, channel);
     const parsed = IdSchema.safeParse(idInput);
     if (!parsed.success) throw Errors.fromZod(parsed.error);
-    const style = await this.repository.find(actor.tenantId, parsed.data);
+    const style = await this.repository.find(
+      actor.tenantId,
+      parsed.data,
+      channel === 'douyin' ? DOUYIN_CATALOG_VISIBILITY : undefined,
+    );
     if (!style) throw Errors.business(404, '装修效果素材不存在', 'RENDERING_STYLE_NOT_FOUND');
     return style;
   }
