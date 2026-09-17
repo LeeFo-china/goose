@@ -2542,16 +2542,51 @@ describe("reusable build workflow", () => {
       "run-name: ${{ github.event_name == 'push' && inputs.target_environment == '' && inputs.service == '' && 'Build development affected services' || format('Build {0} {1}', inputs.target_environment, inputs.service || 'all') }}",
     );
     expect(buildWorkflow).toContain(
-      "group: ${{ github.event_name == 'push' && inputs.target_environment == '' && inputs.service == '' && 'build-docker-images-development-push' || format('build-docker-images-{0}-{1}', inputs.target_environment, inputs.service) }}",
+      "group: ${{ (github.event_name == 'push' || inputs.target_environment == 'development') && 'build-docker-images-development' || format('build-docker-images-{0}-{1}', inputs.target_environment, inputs.service) }}",
     );
     expect(buildWorkflow).toContain(
-      "cancel-in-progress: ${{ github.event_name != 'push' || inputs.target_environment != '' || inputs.service != '' }}",
+      "cancel-in-progress: ${{ github.event_name != 'push' && inputs.target_environment != 'development' }}",
     );
     expect(buildWorkflow).toContain(
       "DIRECT_PUSH: ${{ github.event_name == 'push' && inputs.target_environment == '' && inputs.service == '' }}",
     );
     expect(buildWorkflow).toContain('if [ "${DIRECT_PUSH}" = "true" ]; then');
     expect(buildWorkflow).not.toContain('if [ "${GITHUB_EVENT_NAME}" = "push" ]; then');
+  });
+
+  test("serializes development builds and reclaims only disposable Docker data", () => {
+    const preflightStep = sliceWorkflowStep(
+      buildWorkflow,
+      "Prepare development runner disk",
+    );
+    const cleanupStep = sliceWorkflowStep(
+      buildWorkflow,
+      "Cleanup development build cache",
+    );
+
+    expect(preflightStep).toContain(
+      "needs.validate-request.outputs.target_environment == 'development'",
+    );
+    expect(preflightStep).toContain("docker builder prune --all --force");
+    expect(preflightStep).toContain(
+      'docker image prune --all --force --filter "until=24h"',
+    );
+    expect(preflightStep.match(/>\/dev\/null/g)).toHaveLength(2);
+    expect(preflightStep).toContain('MIN_FREE_BYTES=$((8 * 1024 * 1024 * 1024))');
+    expect(preflightStep).toContain('df --output=avail -B1 /');
+    expect(preflightStep).not.toContain("docker container prune");
+    expect(preflightStep).not.toContain("docker volume prune");
+    expect(preflightStep).not.toContain("docker system prune");
+
+    expect(cleanupStep).toContain("if: ${{ always()");
+    expect(cleanupStep).toContain("docker builder prune --all --force");
+    expect(cleanupStep).toContain(">/dev/null");
+    expect(cleanupStep).not.toContain("docker image prune");
+    expect(cleanupStep).not.toContain("docker volume prune");
+    expect(buildWorkflow.indexOf("Prepare development runner disk"))
+      .toBeLessThan(buildWorkflow.indexOf("docker/setup-buildx-action@v3"));
+    expect(buildWorkflow.indexOf("Cleanup development build cache"))
+      .toBeGreaterThan(buildWorkflow.indexOf("Upload image manifest"));
   });
 
   test("rejects production builds before service resolution and matrix push", () => {

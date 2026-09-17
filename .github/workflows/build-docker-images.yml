@@ -1,9 +1,9 @@
 name: Build Docker Images
 run-name: ${{ github.event_name == 'push' && inputs.target_environment == '' && inputs.service == '' && 'Build development affected services' || format('Build {0} {1}', inputs.target_environment, inputs.service || 'all') }}
 
-# Builds immutable application images on GitHub-hosted runners and publishes
-# them to Tencent CCR. Deployment is intentionally handled by environment-
-# specific workflows after this workflow succeeds.
+# Builds immutable application images on environment-specific runners and
+# publishes them to Tencent CCR. Deployment is intentionally handled by
+# environment-specific workflows after this workflow succeeds.
 
 on:
   push:
@@ -46,8 +46,8 @@ permissions:
   actions: read
 
 concurrency:
-  group: ${{ github.event_name == 'push' && inputs.target_environment == '' && inputs.service == '' && 'build-docker-images-development-push' || format('build-docker-images-{0}-{1}', inputs.target_environment, inputs.service) }}
-  cancel-in-progress: ${{ github.event_name != 'push' || inputs.target_environment != '' || inputs.service != '' }}
+  group: ${{ (github.event_name == 'push' || inputs.target_environment == 'development') && 'build-docker-images-development' || format('build-docker-images-{0}-{1}', inputs.target_environment, inputs.service) }}
+  cancel-in-progress: ${{ github.event_name != 'push' && inputs.target_environment != 'development' }}
 
 env:
   TENCENT_CCR_REGISTRY: ${{ vars.TENCENT_CCR_REGISTRY }}
@@ -270,6 +270,29 @@ jobs:
         if: ${{ contains(format(' {0} ', needs.validate-request.outputs.build_services), format(' {0} ', matrix.service)) }}
         uses: actions/checkout@v6
 
+      - name: Prepare development runner disk
+        if: ${{ needs.validate-request.outputs.target_environment == 'development' && contains(format(' {0} ', needs.validate-request.outputs.build_services), format(' {0} ', matrix.service)) }}
+        run: |
+          set -euo pipefail
+          MIN_FREE_BYTES=$((8 * 1024 * 1024 * 1024))
+
+          available_bytes() {
+            df --output=avail -B1 / | tail -n 1 | tr -d ' '
+          }
+
+          docker builder prune --all --force >/dev/null
+          if [ "$(available_bytes)" -lt "${MIN_FREE_BYTES}" ]; then
+            docker image prune --all --force --filter "until=24h" >/dev/null
+          fi
+
+          free_bytes="$(available_bytes)"
+          df -h /
+          docker system df
+          if [ "${free_bytes}" -lt "${MIN_FREE_BYTES}" ]; then
+            echo "::error::Development runner requires at least 8 GiB free before building; found ${free_bytes} bytes."
+            exit 1
+          fi
+
       - uses: docker/setup-buildx-action@v3
         if: ${{ contains(format(' {0} ', needs.validate-request.outputs.build_services), format(' {0} ', matrix.service)) }}
 
@@ -477,6 +500,14 @@ jobs:
           path: image-manifest-${{ matrix.service }}.json
           if-no-files-found: error
           retention-days: 30
+
+      - name: Cleanup development build cache
+        if: ${{ always() && needs.validate-request.outputs.target_environment == 'development' && contains(format(' {0} ', needs.validate-request.outputs.build_services), format(' {0} ', matrix.service)) }}
+        run: |
+          set -euo pipefail
+          docker builder prune --all --force >/dev/null
+          df -h /
+          docker system df
 
   verify-production-pull:
     name: Verify production images from production runner
