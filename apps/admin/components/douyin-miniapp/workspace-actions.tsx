@@ -336,7 +336,7 @@ export function TenantDouyinMiniappWorkspaceActions({
                   "sync_status",
                   `${releaseBasePath}/sync-status`,
                   "{}",
-                  "审核状态已同步",
+                  release?.status === "failed" ? "发布状态已恢复" : "审核状态已同步",
                 )}
               size="sm"
               variant="outline"
@@ -344,7 +344,7 @@ export function TenantDouyinMiniappWorkspaceActions({
               {pending === "sync_status"
                 ? <Loader2 className="animate-spin" data-icon="inline-start" />
                 : <RefreshCw data-icon="inline-start" />}
-              同步审核状态
+              {release?.status === "failed" ? "恢复发布状态" : "同步审核状态"}
             </Button>
           ) : null}
           {actions.includes("publish") ? (

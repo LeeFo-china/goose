@@ -6,7 +6,7 @@ import type {
   DouyinMiniappReleaseRecord,
   UpdateDouyinMiniappReleaseInput,
 } from "@/repositories/douyin-miniapp-releases";
-import { mapAuditStatus, safeAuditResult } from "./support";
+import { exactAuditStage, mapAuditStatus, safeAuditResult } from "./support";
 
 export function auditPatch(
   release: DouyinMiniappReleaseRecord,
@@ -56,8 +56,18 @@ export function recoveryPatch(
     return auditPatch(release, versions.audit, versions.logId, now);
   }
   if (includeLatest && versions.latest?.version === release.template_version) {
-    return { status: "uploaded", douyinLogId: versions.logId,
+    return { status: "uploaded", auditResult: null, douyinLogId: versions.logId,
       platformOperatorId: release.platform_operator_id };
   }
   return null;
+}
+
+export function syncStatusPatch(
+  release: DouyinMiniappReleaseRecord,
+  versions: DouyinVersionListResult,
+  now: string,
+): UpdateDouyinMiniappReleaseInput {
+  return recoveryPatch(release, versions, now, release.status === "failed")
+    ?? auditPatch(release, exactAuditStage(versions.audit, release.template_version),
+      versions.logId, now);
 }
