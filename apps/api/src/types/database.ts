@@ -17329,7 +17329,7 @@ export type Database = {
           admin_phone: string
           application_no: string
           attribution_source_type: string | null
-          business_license_file_id: string
+          business_license_file_id: string | null
           candidate_match_reason: string | null
           candidate_partner_id: string | null
           candidate_snapshot: Json
@@ -17371,7 +17371,7 @@ export type Database = {
           admin_phone: string
           application_no: string
           attribution_source_type?: string | null
-          business_license_file_id: string
+          business_license_file_id?: string | null
           candidate_match_reason?: string | null
           candidate_partner_id?: string | null
           candidate_snapshot?: Json
@@ -17413,7 +17413,7 @@ export type Database = {
           admin_phone?: string
           application_no?: string
           attribution_source_type?: string | null
-          business_license_file_id?: string
+          business_license_file_id?: string | null
           candidate_match_reason?: string | null
           candidate_partner_id?: string | null
           candidate_snapshot?: Json
