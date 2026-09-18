@@ -294,7 +294,7 @@ export type TenantOnboardingPlatformReviewMutationResult =
 export type TenantOnboardingLicenseAccessRecord = {
   application_id: string;
   visitor_id: string;
-  business_license_file_id: string;
+  business_license_file_id: string | null;
   file: {
     id: string;
     owner_type: string;

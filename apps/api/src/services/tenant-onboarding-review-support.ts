@@ -167,6 +167,12 @@ export const documentForbiddenError = () => Errors.business(
   ErrorCodes.TENANT_ONBOARDING_DOCUMENT_FORBIDDEN,
 );
 
+export const documentNotUploadedError = () => Errors.business(
+  404,
+  "营业执照未上传",
+  ErrorCodes.TENANT_ONBOARDING_DOCUMENT_NOT_UPLOADED,
+);
+
 export const tenantSlugConflictError = () => Errors.business(
   409,
   "租户标识已被占用，请重试",

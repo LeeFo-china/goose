@@ -44,7 +44,7 @@ const ListRecordSchema = z.object({
 
 const DetailRecordSchema = ListRecordSchema.extend({
   unified_social_credit_code: NullableStringSchema,
-  business_license_file_id: z.uuid(),
+  business_license_file_id: z.uuid().nullable(),
   admin_phone: z.string(),
   address_province: NullableStringSchema,
   address: z.string(),
@@ -121,7 +121,7 @@ const MutationResultSchema = z.discriminatedUnion("status", [
 const LicenseAccessSchema = z.object({
   application_id: z.uuid(),
   visitor_id: z.string(),
-  business_license_file_id: z.uuid(),
+  business_license_file_id: z.uuid().nullable(),
   file: z.object({
     id: z.uuid(),
     owner_type: z.string(),
