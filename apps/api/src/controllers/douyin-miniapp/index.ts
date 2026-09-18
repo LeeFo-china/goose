@@ -39,6 +39,7 @@ import {
 } from "@/services/douyin-miniapp/material-notes";
 import { DouyinCustomerAuthController } from "./customer-auth-controller";
 import { DouyinRenderingsController } from "./renderings-controller";
+import { resolveDouyinBootstrapFeatureContract } from "./bootstrap-client-contract";
 import { ResponseHandler } from "@/utils/response";
 import { resolveTrustedClientIp } from "@/utils/trusted-proxy-client-ip";
 
@@ -106,9 +107,15 @@ export class DouyinMiniappController {
     return ResponseHandler.success(await service.exchange(result.data));
   };
 
-  bootstrap = async (request: FastifyRequest) => ResponseHandler.success(
-    await this.content().bootstrap(request.user),
-  );
+  bootstrap = async (request: FastifyRequest) => {
+    const featureContract = resolveDouyinBootstrapFeatureContract(
+      request.headers?.referer,
+      request.user?.douyin_app_id,
+    );
+    return ResponseHandler.success(await this.content().bootstrap(request.user, {
+      featureContract,
+    }));
+  };
 
   company = async (request: FastifyRequest) => ResponseHandler.success(
     await this.content().company(request.user),
