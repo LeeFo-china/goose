@@ -1,6 +1,6 @@
 # Douyin 0.1.10 Bootstrap Compatibility Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Restore the published Douyin mini-program 0.1.10 without changing the 0.1.39 review package or disabling modern Douyin phone authorization for newer versions.
 
@@ -13,10 +13,16 @@
 ### Task 1: Add the content-service feature contract
 
 **Files:**
+- Create: `apps/api/src/services/douyin-miniapp/bootstrap-feature-contract.ts`
+- Test: `apps/api/src/services/douyin-miniapp/bootstrap-feature-contract.test.ts`
 - Modify: `apps/api/src/services/douyin-miniapp/content.ts`
-- Test: `apps/api/src/services/douyin-miniapp/content.test.ts`
+- Verify: `apps/api/src/services/douyin-miniapp/content.test.ts`
 
-- [ ] **Step 1: Write the failing service tests**
+**Execution adjustment:** `content.ts` and `content.test.ts` were already at 494 and 499
+lines. The contract mapper and its focused tests live in separate files so all API source files
+remain within the enforced 500-line limit.
+
+- [x] **Step 1: Write the failing service tests**
 
 Add tests that build an installation with modern phone features, call both contracts, and verify that the legacy response is a copy:
 
@@ -66,17 +72,17 @@ test("keeps runtime phone features for the current bootstrap contract", async ()
 });
 ```
 
-- [ ] **Step 2: Run the service tests and verify the new calls fail**
+- [x] **Step 2: Run the service tests and verify the new calls fail**
 
 Run:
 
 ```bash
-bun test apps/api/src/services/douyin-miniapp/content.test.ts
+bun test --cwd apps/api src/services/douyin-miniapp/content.test.ts
 ```
 
 Expected: FAIL because `bootstrap` does not accept the contract options and still returns modern fields.
 
-- [ ] **Step 3: Implement the minimal service contract**
+- [x] **Step 3: Implement the minimal service contract**
 
 Add the exported option types and use a focused mapper:
 
@@ -109,21 +115,22 @@ function bootstrapFeatures(
 
 Keep the existing bootstrap response fields and repository calls exactly as they are; replace only the current `features: context.runtime.features` expression.
 
-- [ ] **Step 4: Run the focused service tests**
+- [x] **Step 4: Run the focused service tests**
 
 Run:
 
 ```bash
-bun test apps/api/src/services/douyin-miniapp/content.test.ts
+bun test --cwd apps/api src/services/douyin-miniapp/content.test.ts
 ```
 
 Expected: all tests PASS.
 
-- [ ] **Step 5: Commit the service contract**
+- [x] **Step 5: Commit the service contract**
 
 ```bash
 git add apps/api/src/services/douyin-miniapp/content.ts \
-  apps/api/src/services/douyin-miniapp/content.test.ts
+  apps/api/src/services/douyin-miniapp/bootstrap-feature-contract.ts \
+  apps/api/src/services/douyin-miniapp/bootstrap-feature-contract.test.ts
 git commit -m "fix(douyin): 支持旧版 bootstrap 功能合同"
 ```
 
@@ -132,10 +139,14 @@ git commit -m "fix(douyin): 支持旧版 bootstrap 功能合同"
 **Files:**
 - Create: `apps/api/src/controllers/douyin-miniapp/bootstrap-client-contract.ts`
 - Create: `apps/api/src/controllers/douyin-miniapp/bootstrap-client-contract.test.ts`
+- Create: `apps/api/src/controllers/douyin-miniapp/bootstrap.test.ts`
 - Modify: `apps/api/src/controllers/douyin-miniapp/index.ts`
-- Test: `apps/api/src/controllers/douyin-miniapp/index.test.ts`
+- Verify: `apps/api/src/controllers/douyin-miniapp/index.test.ts`
 
-- [ ] **Step 1: Write failing Referer resolver tests**
+**Execution adjustment:** the new controller dispatch test lives in `bootstrap.test.ts` because
+the existing controller test was already 492 lines.
+
+- [x] **Step 1: Write failing Referer resolver tests**
 
 Create the resolver test with the exact compatibility boundary:
 
@@ -169,23 +180,23 @@ describe("resolveDouyinBootstrapFeatureContract", () => {
 });
 ```
 
-- [ ] **Step 2: Run the resolver test and verify the module is missing**
+- [x] **Step 2: Run the resolver test and verify the module is missing**
 
 Run:
 
 ```bash
-bun test apps/api/src/controllers/douyin-miniapp/bootstrap-client-contract.test.ts
+bun test --cwd apps/api src/controllers/douyin-miniapp/bootstrap-client-contract.test.ts
 ```
 
 Expected: FAIL because `bootstrap-client-contract.ts` does not exist.
 
-- [ ] **Step 3: Implement the strict Referer resolver**
+- [x] **Step 3: Implement the strict Referer resolver**
 
 Create the focused pure function:
 
 ```ts
 import type { DouyinBootstrapFeatureContract } from
-  "@/services/douyin-miniapp/content";
+  "@/services/douyin-miniapp/bootstrap-feature-contract";
 
 const DOUYIN_REFERER_HOST = "tmaservice.developer.toutiao.com";
 const LEGACY_APP_ID = "ttd033a68e4e56ccd301";
@@ -213,17 +224,17 @@ export function resolveDouyinBootstrapFeatureContract(
 }
 ```
 
-- [ ] **Step 4: Run the resolver test**
+- [x] **Step 4: Run the resolver test**
 
 Run:
 
 ```bash
-bun test apps/api/src/controllers/douyin-miniapp/bootstrap-client-contract.test.ts
+bun test --cwd apps/api src/controllers/douyin-miniapp/bootstrap-client-contract.test.ts
 ```
 
 Expected: all tests PASS.
 
-- [ ] **Step 5: Write the failing controller dispatch test**
+- [x] **Step 5: Write the failing controller dispatch test**
 
 Add a test that calls the public controller handler directly:
 
@@ -262,17 +273,17 @@ test("dispatches the 0.1.10 feature contract from the authenticated Referer", as
 });
 ```
 
-- [ ] **Step 6: Run the controller test and verify it fails**
+- [x] **Step 6: Run the controller test and verify it fails**
 
 Run:
 
 ```bash
-bun test apps/api/src/controllers/douyin-miniapp/index.test.ts
+bun test --cwd apps/api src/controllers/douyin-miniapp/index.test.ts
 ```
 
 Expected: FAIL because the controller currently calls `bootstrap(request.user)` without a contract.
 
-- [ ] **Step 7: Wire the resolver into the controller**
+- [x] **Step 7: Wire the resolver into the controller**
 
 Import the resolver and replace the expression-bodied handler:
 
@@ -291,24 +302,25 @@ bootstrap = async (request: FastifyRequest) => {
 };
 ```
 
-- [ ] **Step 8: Run controller and resolver tests**
+- [x] **Step 8: Run controller and resolver tests**
 
 Run:
 
 ```bash
-bun test apps/api/src/controllers/douyin-miniapp/bootstrap-client-contract.test.ts \
-  apps/api/src/controllers/douyin-miniapp/index.test.ts
+bun test --cwd apps/api src/controllers/douyin-miniapp/bootstrap-client-contract.test.ts \
+  src/controllers/douyin-miniapp/bootstrap.test.ts \
+  src/controllers/douyin-miniapp/index.test.ts
 ```
 
 Expected: all tests PASS.
 
-- [ ] **Step 9: Commit the HTTP compatibility boundary**
+- [x] **Step 9: Commit the HTTP compatibility boundary**
 
 ```bash
 git add apps/api/src/controllers/douyin-miniapp/bootstrap-client-contract.ts \
   apps/api/src/controllers/douyin-miniapp/bootstrap-client-contract.test.ts \
-  apps/api/src/controllers/douyin-miniapp/index.ts \
-  apps/api/src/controllers/douyin-miniapp/index.test.ts
+  apps/api/src/controllers/douyin-miniapp/bootstrap.test.ts \
+  apps/api/src/controllers/douyin-miniapp/index.ts
 git commit -m "fix(douyin): 按线上版本兼容 bootstrap"
 ```
 
@@ -317,17 +329,19 @@ git commit -m "fix(douyin): 按线上版本兼容 bootstrap"
 **Files:**
 - Verify only; no source changes expected.
 
-- [ ] **Step 1: Run all focused Douyin content and controller tests**
+- [x] **Step 1: Run all focused Douyin content and controller tests**
 
 ```bash
-bun test apps/api/src/services/douyin-miniapp/content.test.ts \
-  apps/api/src/controllers/douyin-miniapp/bootstrap-client-contract.test.ts \
-  apps/api/src/controllers/douyin-miniapp/index.test.ts
+bun test --cwd apps/api src/services/douyin-miniapp/bootstrap-feature-contract.test.ts \
+  src/services/douyin-miniapp/content.test.ts \
+  src/controllers/douyin-miniapp/bootstrap-client-contract.test.ts \
+  src/controllers/douyin-miniapp/bootstrap.test.ts \
+  src/controllers/douyin-miniapp/index.test.ts
 ```
 
 Expected: all tests PASS.
 
-- [ ] **Step 2: Run the API type check**
+- [x] **Step 2: Run the API type check**
 
 ```bash
 bun run --cwd apps/api typecheck
@@ -335,7 +349,7 @@ bun run --cwd apps/api typecheck
 
 Expected: exit code 0 with no TypeScript errors.
 
-- [ ] **Step 3: Build the API**
+- [x] **Step 3: Build the API**
 
 ```bash
 bun run api:build
@@ -343,7 +357,7 @@ bun run api:build
 
 Expected: exit code 0.
 
-- [ ] **Step 4: Confirm the worktree is clean and inspect the final diff**
+- [x] **Step 4: Confirm the worktree is clean and inspect the final diff**
 
 ```bash
 git status --short

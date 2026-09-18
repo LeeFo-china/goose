@@ -5,9 +5,9 @@ const modernFeatures = {
   cases: true,
   sites: true,
   sms_lead: true,
-  douyin_phone: true as const,
-  phone_capture_mode: "douyin_phone" as const,
-};
+  douyin_phone: true,
+  phone_capture_mode: "douyin_phone",
+} as const;
 
 describe("bootstrapFeatures", () => {
   test("downgrades only phone fields for the 0.1.10 contract", () => {
