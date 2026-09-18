@@ -30,7 +30,7 @@ export function buildTenantOnboardingCreateRecord(input: {
     visitor_context_id: input.input.visitor_context_id,
     company_name: input.input.company_name.trim(),
     unified_social_credit_code: input.normalizedCreditCode,
-    business_license_file_id: input.input.business_license_file_id,
+    business_license_file_id: input.input.business_license_file_id ?? null,
     admin_name: input.input.admin_name.trim(),
     admin_phone: input.phone,
     address_province: input.input.company_location.province ?? null,

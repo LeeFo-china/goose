@@ -158,10 +158,12 @@ export class TenantOnboardingApplicationsService {
       .toUpperCase() || null;
     const verificationCode = await this.verifySmsCode(phone, input.sms_code);
     await this.assertOwnedLocationContext(input.visitor_context_id, visitorId);
-    await this.assertPrivateBusinessLicense(
-      input.business_license_file_id,
-      visitorId,
-    );
+    if (input.business_license_file_id) {
+      await this.assertPrivateBusinessLicense(
+        input.business_license_file_id,
+        visitorId,
+      );
+    }
     if (normalizedCreditCode) await this.assertNoOpenSubject(normalizedCreditCode);
     const { resolution, inviteCodeId } = await resolveTenantOnboardingSubmissionPartner({
       serviceRegionCodes: input.service_region_codes,

@@ -15,6 +15,14 @@ const OptionalReviewRemarkSchema = z
   .max(500, "审核说明不能超过 500 个字符")
   .optional();
 const OptionalLocationTextSchema = z.string().trim().min(1).max(40).optional();
+const OptionalBusinessLicenseFileIdSchema = z.preprocess(
+  (value) => {
+    if (value === null) return null;
+    if (typeof value === "string" && value.trim() === "") return null;
+    return value;
+  },
+  z.uuid("无效的营业执照文件 ID").nullable().optional(),
+);
 const hasUniqueValues = (values: readonly string[]) =>
   new Set(values).size === values.length;
 
@@ -133,7 +141,7 @@ const ApplicantEditableFieldsSchema = z
   .object({
     company_name: z.string().trim().min(1, "请填写企业名称").max(120),
     unified_social_credit_code: OptionalUnifiedSocialCreditCodeSchema,
-    business_license_file_id: z.uuid("无效的营业执照文件 ID"),
+    business_license_file_id: OptionalBusinessLicenseFileIdSchema,
     admin_name: z.string().trim().min(1, "请填写负责人姓名").max(60),
     company_location: CompanyLocationSchema,
     service_region_codes: ServiceRegionCodesSchema,
