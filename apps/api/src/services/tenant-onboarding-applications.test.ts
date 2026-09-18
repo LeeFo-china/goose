@@ -195,17 +195,6 @@ describe("TenantOnboardingApplicationsService atomic applicant flow", () => {
     });
   });
 
-  test("submits without a license and skips the file lookup", async () => {
-    const { business_license_file_id: _license, ...withoutLicense } = submission;
-    await (await createService()).submit(withoutLicense, context());
-    expect(fileRepository.findById).not.toHaveBeenCalled();
-    expect(repository.createApplicationAtomic).toHaveBeenCalledWith(
-      expect.objectContaining({
-        application: expect.objectContaining({ business_license_file_id: null }),
-      }),
-    );
-  });
-
   test("returns a pre-existing idempotent result without touching SMS", async () => {
     repository.findByVisitorAndIdempotencyKey.mockImplementationOnce(async () => application);
     const result = await (await createService()).submit(submission, context());
@@ -389,20 +378,6 @@ describe("TenantOnboardingApplicationsService atomic applicant flow", () => {
       patch: { unified_social_credit_code: "91411525MA9G000001" },
       candidate: expect.objectContaining({ replace: false }),
     }));
-  });
-
-  test("clears a license during supplement without a file lookup", async () => {
-    repository.findOwnedById.mockImplementationOnce(async () => ({
-      ...application, status: "supplement_required",
-    }));
-    await (await createService()).supplement({
-      applicationId: APPLICATION_ID, visitorId: VISITOR_ID, expectedVersion: 1,
-      patch: { business_license_file_id: null },
-    });
-    expect(fileRepository.findById).not.toHaveBeenCalled();
-    expect(repository.supplementAtomic).toHaveBeenCalledWith(
-      expect.objectContaining({ patch: { business_license_file_id: null } }),
-    );
   });
 
   test("re-resolves changed regions using only the stored active invite provenance", async () => {

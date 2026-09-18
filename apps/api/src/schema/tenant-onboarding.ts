@@ -1,7 +1,15 @@
 import { z } from "zod";
 
 import { PaginationQuerySchema } from "@/schema/request";
+import {
+  OptionalBusinessLicenseFileIdSchema,
+  OptionalLocationTextSchema,
+  OptionalUnifiedSocialCreditCodeSchema,
+  UnifiedSocialCreditCodeSchema,
+} from "@/schema/tenant-onboarding-applicant-fields";
 import { TenantOnboardingShareTokenSchema } from "@/schema/tenant-onboarding-share-links";
+
+export { UnifiedSocialCreditCodeSchema };
 
 const PositiveVersionSchema = z.number().int().positive("版本号必须为正整数");
 const ReviewRemarkSchema = z
@@ -14,39 +22,8 @@ const OptionalReviewRemarkSchema = z
   .trim()
   .max(500, "审核说明不能超过 500 个字符")
   .optional();
-const OptionalLocationTextSchema = z.string().trim().min(1).max(40).optional();
-const OptionalBusinessLicenseFileIdSchema = z.preprocess(
-  (value) => {
-    if (value === null) return null;
-    if (typeof value === "string" && value.trim() === "") return null;
-    return value;
-  },
-  z.uuid("无效的营业执照文件 ID").nullable().optional(),
-);
 const hasUniqueValues = (values: readonly string[]) =>
   new Set(values).size === values.length;
-
-export const UnifiedSocialCreditCodeSchema = z
-  .string()
-  .trim()
-  .transform((value) => value.toUpperCase())
-  .pipe(
-    z
-      .string()
-      .regex(
-        /^[0-9A-HJ-NPQRTUWXY]{18}$/,
-        "统一社会信用代码格式不正确",
-      ),
-  );
-
-const OptionalUnifiedSocialCreditCodeSchema = z.preprocess(
-  (value) => {
-    if (value === undefined || value === null) return null;
-    if (typeof value === "string" && value.trim() === "") return null;
-    return value;
-  },
-  UnifiedSocialCreditCodeSchema.nullable(),
-).optional().transform((value) => value ?? null);
 
 export const MobilePhoneSchema = z
   .string()

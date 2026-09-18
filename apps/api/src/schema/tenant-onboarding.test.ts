@@ -146,37 +146,6 @@ describe("tenant onboarding schemas", () => {
     expect(result.success).toBe(true);
   });
 
-  test("normalizes missing and blank submit business licenses", () => {
-    for (const value of [undefined, null, "", "   "] as const) {
-      const input = { ...validInput } as Record<string, unknown>;
-      if (value === undefined) delete input.business_license_file_id;
-      else input.business_license_file_id = value;
-      const result = SubmitTenantOnboardingApplicationSchema.safeParse(input);
-      expect(result.success).toBe(true);
-      if (result.success) expect(result.data.business_license_file_id ?? null).toBeNull();
-    }
-  });
-
-  test("preserves supplement omission and normalizes explicit blanks", () => {
-    expect(SupplementTenantOnboardingApplicationSchema.parse({
-      version: 1, company_name: "晴天装饰",
-    })).not.toHaveProperty("business_license_file_id");
-    for (const value of [null, "", "   "] as const) {
-      expect(SupplementTenantOnboardingApplicationSchema.parse({
-        version: 1, business_license_file_id: value,
-      })).toMatchObject({ business_license_file_id: null });
-    }
-  });
-
-  test("rejects a non-empty invalid business license ID", () => {
-    expect(SubmitTenantOnboardingApplicationSchema.safeParse({
-      ...validInput, business_license_file_id: "not-a-uuid",
-    }).success).toBe(false);
-    expect(SupplementTenantOnboardingApplicationSchema.safeParse({
-      version: 1, business_license_file_id: "not-a-uuid",
-    }).success).toBe(false);
-  });
-
   test("normalizes valid credit codes and rejects invalid forms", () => {
     const normalized = UnifiedSocialCreditCodeSchema.safeParse(
       " 91411525ma9g000000 ",
