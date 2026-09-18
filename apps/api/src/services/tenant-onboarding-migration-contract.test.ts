@@ -88,4 +88,27 @@ describe("tenant onboarding migration contract", () => {
       /ALTER TABLE public\.tenant_onboarding_applications[\s\S]*?ALTER COLUMN unified_social_credit_code DROP NOT NULL/,
     );
   });
+
+  test("makes the application business license nullable through one forward migration", () => {
+    const files = readdirSync(migrationsDirectory).filter((file) =>
+      file.endsWith("_tenant_onboarding_optional_business_license.sql"),
+    );
+
+    expect(files).toHaveLength(1);
+    const file = files[0];
+    if (!file) return;
+    const sql = readFileSync(join(migrationsDirectory, file), "utf8");
+
+    expect(sql).toContain("SET LOCAL lock_timeout = '5s'");
+    expect(sql).toContain("SET LOCAL statement_timeout = '1min'");
+    expect(sql).toMatch(
+      /ALTER TABLE public\.tenant_onboarding_applications[\s\S]*?ALTER COLUMN business_license_file_id DROP NOT NULL/,
+    );
+    expect(sql).toContain(
+      "CREATE OR REPLACE FUNCTION public.submit_tenant_onboarding_application",
+    );
+    expect(sql).toContain(
+      "CREATE OR REPLACE FUNCTION public.supplement_tenant_onboarding_application",
+    );
+  });
 });

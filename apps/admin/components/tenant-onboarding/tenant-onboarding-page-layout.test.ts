@@ -103,6 +103,25 @@ describe("platform tenant onboarding page", () => {
     );
   });
 
+  test("shows the business license action only when a file was uploaded", () => {
+    const typeSource = readSource("./tenant-onboarding-types.ts");
+    const detailSource = readSource("./tenant-onboarding-detail-dialog.tsx");
+
+    expect(typeSource).toContain("business_license_file_id: string | null");
+    expect(detailSource).toMatch(
+      /\{detail\.business_license_file_id \? \(\s*<Button[\s\S]*?获取营业执照[\s\S]*?<\/Button>\s*\) : \(\s*<span[^>]*>营业执照未上传<\/span>\s*\)\}/,
+    );
+    expect(detailSource).toContain(
+      "if (!detail?.business_license_file_id) return;",
+    );
+    expect(detailSource).toContain(
+      "detail.business_license_file_id && license ?",
+    );
+    expect(detailSource).toContain(
+      '["营业执照", detail.business_license_file_id ? "已上传" : "未上传"]',
+    );
+  });
+
   test("exposes one platform tenant menu while keeping workflow permissions separate", () => {
     const menuSource = readSource("../layout/menu-config.ts");
     const tabsSource = readSource(

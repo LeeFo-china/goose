@@ -107,6 +107,16 @@ describe("tenant onboarding repository runtime parsers", () => {
       .toEqual(withoutCreditCode);
   });
 
+  test("parses a complete application without a business license", () => {
+    const withoutBusinessLicense = {
+      ...application,
+      business_license_file_id: null,
+    };
+
+    expect(parseTenantOnboardingApplication(withoutBusinessLicense, "bad"))
+      .toEqual(withoutBusinessLicense);
+  });
+
   test("parses ownership, region, partner, and invite rows", () => {
     expect(parseTenantOnboardingLocationContext({ id: ID, visitor_id: "visitor-1" }, "bad"))
       .toMatchObject({ visitor_id: "visitor-1" });

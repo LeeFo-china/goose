@@ -40,6 +40,7 @@ import {
   auditSummary,
   defaultTenantSlug,
   documentForbiddenError,
+  documentNotUploadedError,
   LICENSE_TTL_SECONDS,
   MAX_SLUG_ATTEMPTS,
   notificationDeliverySummary,
@@ -336,6 +337,7 @@ export class TenantOnboardingReviewService {
     this.assertReviewPermission(authContext);
     const record = await this.repository.findLicenseAccessRecord(applicationId);
     if (!record) throw applicationNotFoundError();
+    if (record.business_license_file_id === null) throw documentNotUploadedError();
     const file = record.file;
     if (
       !file || file.id !== record.business_license_file_id ||

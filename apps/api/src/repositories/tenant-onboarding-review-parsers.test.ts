@@ -90,6 +90,16 @@ describe("tenant onboarding review repository parsers", () => {
       .toEqual(withoutCreditCode);
   });
 
+  test("parses a platform application without a business license", () => {
+    const withoutBusinessLicense = {
+      ...detailRecord,
+      business_license_file_id: null,
+    };
+
+    expect(parseNullablePlatformApplication(withoutBusinessLicense))
+      .toEqual(withoutBusinessLicense);
+  });
+
   test("parses paginated review rows without embedding them in detail", () => {
     const review: TenantOnboardingApplicationReviewRecord = {
       id: OTHER_ID,
@@ -154,6 +164,25 @@ describe("tenant onboarding review repository parsers", () => {
     })).toThrow();
   });
 
+  test("parses an updated mutation snapshot without a business license", () => {
+    const mutationApplication = Object.fromEntries(
+      Object.entries({ ...detailRecord, business_license_file_id: null }).filter(
+        ([key]) => key !== "candidate_partner" && key !== "final_partner",
+      ),
+    );
+
+    expect(parsePlatformReviewMutation({
+      status: "updated",
+      application_id: ID,
+      application_version: 2,
+      application: mutationApplication,
+      idempotent: false,
+    })).toMatchObject({
+      status: "updated",
+      application: { business_license_file_id: null },
+    });
+  });
+
   test("parses the internal license relation while keeping it out of API DTOs", () => {
     const record = {
       application_id: ID,
@@ -174,6 +203,17 @@ describe("tenant onboarding review repository parsers", () => {
     };
     expect(parseNullableLicenseAccess(record)).toEqual(record);
     expect(parseNullableLicenseAccess(null)).toBeNull();
+  });
+
+  test("parses an existing application without a license-access document", () => {
+    const record = {
+      application_id: ID,
+      visitor_id: "visitor-1",
+      business_license_file_id: null,
+      file: null,
+    };
+
+    expect(parseNullableLicenseAccess(record)).toEqual(record);
   });
 
   test("fails unknown repository fields closed", () => {

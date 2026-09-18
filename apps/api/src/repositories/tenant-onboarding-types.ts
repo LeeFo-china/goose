@@ -36,7 +36,7 @@ export type TenantOnboardingApplicationRecord = {
   visitor_context_id: string | null;
   company_name: string;
   unified_social_credit_code: string | null;
-  business_license_file_id: string;
+  business_license_file_id: string | null;
   admin_name: string;
   admin_phone: string;
   address_province: string | null;
@@ -294,7 +294,7 @@ export type TenantOnboardingPlatformReviewMutationResult =
 export type TenantOnboardingLicenseAccessRecord = {
   application_id: string;
   visitor_id: string;
-  business_license_file_id: string;
+  business_license_file_id: string | null;
   file: {
     id: string;
     owner_type: string;
