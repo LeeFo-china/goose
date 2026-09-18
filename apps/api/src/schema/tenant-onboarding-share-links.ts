@@ -6,8 +6,16 @@ export const TenantOnboardingShareTokenSchema = z
   .trim()
   .regex(/^tnob_[A-Za-z0-9_-]{24,96}$/, "装企入驻分享 token 格式不正确");
 
+export const PresentedTenantOnboardingShareTokenSchema = z
+  .string()
+  .trim()
+  .transform((value) => {
+    const result = TenantOnboardingShareTokenSchema.safeParse(value);
+    return result.success ? result.data : null;
+  });
+
 export const TenantOnboardingShareTokenParamSchema = z
-  .object({ token: TenantOnboardingShareTokenSchema })
+  .object({ token: PresentedTenantOnboardingShareTokenSchema })
   .strict();
 
 export const TenantOnboardingShareLinkIdParamSchema = z

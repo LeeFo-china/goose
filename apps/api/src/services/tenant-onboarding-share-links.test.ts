@@ -121,6 +121,11 @@ describe("TenantOnboardingShareLinksService", () => {
     }));
     expect(await service.recordOpen({ token: TOKEN, visitorId: "visitor-1" }))
       .toEqual({ valid: false, share_token: null, sharer_display_name: null });
+
+    const callsBeforeMalformedToken = repository.recordOpen.mock.calls.length;
+    expect(await service.recordOpen({ token: null, visitorId: "visitor-1" }))
+      .toEqual({ valid: false, share_token: null, sharer_display_name: null });
+    expect(repository.recordOpen.mock.calls).toHaveLength(callsBeforeMalformedToken);
   });
 
   test("scopes paginated statistics and applications to the current sharer", async () => {

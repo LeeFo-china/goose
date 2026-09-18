@@ -60,9 +60,17 @@ export class TenantOnboardingShareLinksService {
     };
   }
 
-  async recordOpen(input: { token: string; visitorId: string }) {
+  async recordOpen(input: { token: string | null; visitorId: string }) {
+    if (!input.token) {
+      return {
+        valid: false,
+        share_token: null,
+        sharer_display_name: null,
+      };
+    }
     const result = await this.repository.recordOpen({
-      ...input,
+      token: input.token,
+      visitorId: input.visitorId,
       now: this.clock().toISOString(),
     });
     return {

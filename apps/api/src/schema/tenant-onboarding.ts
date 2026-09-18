@@ -7,7 +7,7 @@ import {
   OptionalUnifiedSocialCreditCodeSchema,
   UnifiedSocialCreditCodeSchema,
 } from "@/schema/tenant-onboarding-applicant-fields";
-import { TenantOnboardingShareTokenSchema } from "@/schema/tenant-onboarding-share-links";
+import { PresentedTenantOnboardingShareTokenSchema } from "@/schema/tenant-onboarding-share-links";
 
 export { UnifiedSocialCreditCodeSchema };
 
@@ -143,7 +143,7 @@ export const SubmitTenantOnboardingApplicationSchema =
       .nullable()
       .optional(),
     source_channel: TenantOnboardingSourceChannelSchema,
-    share_token: TenantOnboardingShareTokenSchema.optional(),
+    share_token: PresentedTenantOnboardingShareTokenSchema.optional(),
     privacy_policy_version: z
       .string()
       .trim()

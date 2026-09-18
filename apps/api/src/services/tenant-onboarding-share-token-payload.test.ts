@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import type { SubmitTenantOnboardingApplicationInput } from "@/schema/tenant-onboarding";
+import {
+  SubmitTenantOnboardingApplicationSchema,
+  type SubmitTenantOnboardingApplicationInput,
+} from "@/schema/tenant-onboarding";
 import { buildTenantOnboardingCreateRecord } from "./tenant-onboarding-applicant-payloads";
 
 const input: SubmitTenantOnboardingApplicationInput = {
@@ -46,5 +49,31 @@ describe("tenant onboarding share-token payload", () => {
     expect(payload.share_token).toBe("tnob_abcdefghijklmnopqrstuvwxyz");
     expect(payload).not.toHaveProperty("referred_by_user_id");
     expect(payload).not.toHaveProperty("share_link_id");
+  });
+
+  test("drops a malformed presented token instead of blocking submission", () => {
+    const parsed = SubmitTenantOnboardingApplicationSchema.parse({
+      ...input,
+      share_token: "forged-token",
+    });
+    const payload = buildTenantOnboardingCreateRecord({
+      input: parsed,
+      applicationNumber: "ZQ-20260918-C3D4",
+      visitorId: "visitor-1",
+      idempotencyKey: "request-2",
+      normalizedCreditCode: null,
+      phone: parsed.admin_phone,
+      resolution: {
+        kind: "none",
+        partnerIds: [],
+        selectedPartner: null,
+        reason: "no_eligible_partner",
+      },
+      inviteCodeId: null,
+      now: new Date("2026-09-18T08:00:00.000Z"),
+    });
+
+    expect(parsed.share_token).toBeNull();
+    expect(payload).not.toHaveProperty("share_token");
   });
 });

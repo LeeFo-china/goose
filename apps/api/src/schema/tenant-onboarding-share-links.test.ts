@@ -34,6 +34,9 @@ describe("tenant onboarding share-link schemas", () => {
     expect(TenantOnboardingShareTokenParamSchema.safeParse({
       token: "tnob_0123456789abcdef0123456789abcdef",
     }).success).toBe(true);
+    expect(TenantOnboardingShareTokenParamSchema.parse({
+      token: "forged-token",
+    })).toEqual({ token: null });
     expect(TenantOnboardingShareLinkIdParamSchema.safeParse({
       id: "00000000-0000-4000-8000-000000000001",
     }).success).toBe(true);
@@ -58,6 +61,10 @@ describe("tenant onboarding share-link schemas", () => {
       ...submission,
       share_token: "tnob_0123456789abcdef0123456789abcdef",
     }).success).toBe(true);
+    expect(SubmitTenantOnboardingApplicationSchema.parse({
+      ...submission,
+      share_token: "forged-token",
+    }).share_token).toBeNull();
     for (const field of [
       "share_link_id",
       "referred_by_user_id",
