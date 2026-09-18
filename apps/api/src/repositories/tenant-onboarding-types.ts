@@ -259,7 +259,13 @@ export type TenantOnboardingPlatformApplicationRecord =
     | "onboarding_terms_version"
     | "consented_at"
     | "withdrawn_at"
-  >;
+  > & {
+    share_link_id: string | null;
+    referred_by_user_id: string | null;
+    referred_by_openid: string | null;
+    referred_by_employee_id: string | null;
+    referral_source: "tenant_onboarding_share" | null;
+  };
 
 export type TenantOnboardingPlatformReviewMutationErrorStatus =
   | "application_not_found"

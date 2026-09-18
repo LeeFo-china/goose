@@ -42,6 +42,7 @@ describe("isVisitorSessionRoute", () => {
       ["GET", "/tenant-onboarding/applications/application-id"],
       ["PATCH", "/tenant-onboarding/applications/application-id/supplement"],
       ["POST", "/tenant-onboarding/applications/application-id/withdraw"],
+      ["POST", "/tenant-onboarding/share-links/tnob_token/open"],
       ["GET", "/tenant-onboarding/ocr/capabilities"],
       ["HEAD", "/tenant-onboarding/ocr/capabilities"],
       ["POST", "/tenant-onboarding/ocr/recognitions"],

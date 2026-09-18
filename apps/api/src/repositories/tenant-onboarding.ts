@@ -64,7 +64,7 @@ export type TenantOnboardingCreateApplicationInput = Omit<
   | "updated_at"
   | "candidate_partner"
   | "final_partner"
->;
+> & { share_token?: string };
 
 export type TenantOnboardingSupplementPatch = Partial<Pick<
   TenantOnboardingApplicationRecord,

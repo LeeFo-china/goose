@@ -4,7 +4,7 @@ import type {
   TenantOnboardingApplicationRecord,
   TenantOnboardingApprovalRpcResult,
   TenantOnboardingLicenseAccessRecord,
-  TenantOnboardingNotificationDeliveryRecord,
+  TenantOnboardingNotificationDeliveryRecord, TenantOnboardingPlatformApplicationRecord,
 } from "@/repositories/tenant-onboarding-types";
 import type { TenantOnboardingPartnerResolution } from "@/services/tenant-onboarding-region-match";
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
@@ -45,8 +45,7 @@ const auth = (input: {
     scope: "all",
   }],
 });
-
-const application: TenantOnboardingApplicationRecord = {
+const application: TenantOnboardingApplicationRecord & TenantOnboardingPlatformApplicationRecord = {
   id: APPLICATION_ID, application_no: "ZQ-20260714-A1B2C3",
   visitor_id: "visitor-1", visitor_context_id: null, company_name: "晴天装饰",
   unified_social_credit_code: "91411525MA9G000000",
@@ -56,6 +55,7 @@ const application: TenantOnboardingApplicationRecord = {
   address_region_code: "411525", address: "详细地址",
   address_latitude: null, address_longitude: null,
   service_region_codes: ["411525"], source_channel: "local_services",
+  share_link_id: null, referred_by_user_id: null, referred_by_openid: null, referred_by_employee_id: null, referral_source: null,
   invite_code_id: null, candidate_partner_id: PARTNER_ID,
   candidate_match_reason: "region", candidate_snapshot: {},
   final_partner_id: null, attribution_source_type: null,
@@ -91,7 +91,7 @@ const repository = {
     list: [],
     pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
   })),
-  findApplicationById: mock(async () => application as TenantOnboardingApplicationRecord | null),
+  findApplicationById: mock(async () => application as TenantOnboardingPlatformApplicationRecord | null),
   listReviews: mock(async (input: unknown) => ({
     input,
     list: [],

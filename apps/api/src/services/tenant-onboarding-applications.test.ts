@@ -27,7 +27,6 @@ const APP_NO_CONSTRAINT = "tenant_onboarding_applications_application_no_key";
 const OPEN_CONSTRAINT = "tenant_onboarding_applications_open_subject_unique_idx";
 const IDEMPOTENCY_CONSTRAINT =
   "tenant_onboarding_applications_visitor_idempotency_unique";
-
 const application: TenantOnboardingApplicationRecord = {
   id: APPLICATION_ID, application_no: "ZQ-20260714-A1B2", visitor_id: VISITOR_ID,
   visitor_context_id: CONTEXT_ID, company_name: "晴天装饰",

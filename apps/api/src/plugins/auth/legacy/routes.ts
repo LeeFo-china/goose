@@ -461,6 +461,7 @@ function isTenantOnboardingApplicantRoute(method: string, url: string) {
   if (
     method === "POST" &&
     (
+      /^\/tenant-onboarding\/share-links\/[^/]+\/open$/.test(url) ||
       url === "/tenant-onboarding/applications/send-code" ||
       url === "/tenant-onboarding/applications"
     )
@@ -484,7 +485,6 @@ function isTenantOnboardingApplicantRoute(method: string, url: string) {
     /^\/tenant-onboarding\/applications\/[^/]+\/withdraw$/.test(url)
   );
 }
-
 function isEffectiveBrandingRoute(method: string, url: string) {
   return (method === "GET" || method === "HEAD") && url === "/branding/effective";
 }

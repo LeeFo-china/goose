@@ -42,6 +42,9 @@ export function buildTenantOnboardingCreateRecord(input: {
     address_longitude: input.input.company_location.longitude ?? null,
     service_region_codes: [...input.input.service_region_codes],
     source_channel: input.input.source_channel,
+    ...(input.input.share_token
+      ? { share_token: input.input.share_token }
+      : {}),
     invite_code_id: input.inviteCodeId,
     candidate_partner_id: selected?.id ?? null,
     candidate_match_reason: input.resolution.reason,

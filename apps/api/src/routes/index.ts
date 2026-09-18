@@ -113,6 +113,7 @@ import PlatformCustomerRenderingSettingsController from "@/controllers/platform-
 import SiteContentController from "@/controllers/site-content";
 import ProjectHealthController from "@/controllers/project-health";
 import TenantOnboardingController from "@/controllers/tenant-onboarding";
+import TenantOnboardingShareLinksController from "@/controllers/tenant-onboarding-share-links";
 import PlatformTenantOnboardingController from "@/controllers/platform-tenant-onboarding";
 import PartnerOnboardingApplicationsController from "@/controllers/partner-onboarding-applications";
 import TenantServiceProviderController from "@/controllers/tenant-service-provider";
@@ -255,6 +256,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   SiteContentController.registerExtraRoutes(app);
   ProjectHealthController.registerExtraRoutes(app);
   TenantOnboardingController.registerExtraRoutes(app);
+  TenantOnboardingShareLinksController.registerExtraRoutes(app);
   PlatformTenantOnboardingController.registerExtraRoutes(app);
   PartnerOnboardingApplicationsController.registerExtraRoutes(app);
   TenantServiceProviderController.registerExtraRoutes(app);

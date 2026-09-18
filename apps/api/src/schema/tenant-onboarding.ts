@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { PaginationQuerySchema } from "@/schema/request";
+import { TenantOnboardingShareTokenSchema } from "@/schema/tenant-onboarding-share-links";
 
 const PositiveVersionSchema = z.number().int().positive("版本号必须为正整数");
 const ReviewRemarkSchema = z
@@ -157,6 +158,7 @@ export const SubmitTenantOnboardingApplicationSchema =
       .nullable()
       .optional(),
     source_channel: TenantOnboardingSourceChannelSchema,
+    share_token: TenantOnboardingShareTokenSchema.optional(),
     privacy_policy_version: z
       .string()
       .trim()

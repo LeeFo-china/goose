@@ -30,6 +30,8 @@ const DETAIL_SELECT = [
   LIST_SELECT, "unified_social_credit_code", "business_license_file_id",
   "admin_phone", "address_province", "address", "address_latitude",
   "address_longitude", "invite_code_id", "candidate_snapshot",
+  "share_link_id", "referred_by_user_id", "referred_by_openid",
+  "referred_by_employee_id", "referral_source",
   "final_partner_id", "attribution_source_type", "partner_assist_requested_at",
   "converted_tenant_id", "reviewed_by_employee_id", "reviewed_at",
   "review_remark", "privacy_policy_version", "onboarding_terms_version",
