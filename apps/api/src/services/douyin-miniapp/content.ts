@@ -23,6 +23,8 @@ import {
   ensurePlatformCosAccessConfigCache,
   resolveStoredFileUrlList,
 } from "@/services/files/file-url-resolver";
+import { bootstrapFeatures, type DouyinBootstrapOptions } from
+  "./bootstrap-feature-contract";
 import { mapDouyinContentLog } from "./content-log";
 
 type RepositoryPort = Pick<DouyinMiniappContentRepository,
@@ -52,7 +54,10 @@ export class DouyinMiniappContentService {
     this.resolveImageUrls = dependencies.resolveImageUrls ?? resolveStoredFileUrlList;
   }
 
-  async bootstrap(user?: JwtPayload) {
+  async bootstrap(
+    user?: JwtPayload,
+    options: DouyinBootstrapOptions = { featureContract: "runtime" },
+  ) {
     const context = await this.loadContext(user);
     const emptyProjects = Promise.resolve({ rows: [] as DouyinContentProject[], count: 0 });
     const [profile, areas, projects, activeSites] = await Promise.all([
@@ -82,7 +87,7 @@ export class DouyinMiniappContentService {
       },
       company,
       theme: context.runtime.theme,
-      features: context.runtime.features,
+      features: bootstrapFeatures(context.runtime.features, options.featureContract),
       content: {
         home_banners: context.runtime.home_banners,
         trust_metrics: context.runtime.trust_metrics,
