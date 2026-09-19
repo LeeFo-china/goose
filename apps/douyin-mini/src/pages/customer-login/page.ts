@@ -9,7 +9,7 @@ import { ApiRequestError } from "../../api/request";
 import { resolveThemeColor } from "../../components/theme";
 import { resolvePhoneNumberCallback, type PhoneNumberCallbackEvent } from "../../platform/phone-number-callback";
 import type { CustomerIdentityCandidate, CustomerIdentitySelectionResult } from "../../models";
-import type { navigateToPage } from "../../platform/navigation";
+import type { navigateToPage, switchToTab } from "../../platform/navigation";
 
 type LoginStatus =
   | "idle"
@@ -26,6 +26,7 @@ export type CustomerLoginPageDependencies = {
   verifyDouyinCustomerSms: typeof verifyDouyinCustomerSms;
   selectDouyinCustomerIdentity: typeof selectDouyinCustomerIdentity;
   navigateToPage: typeof navigateToPage;
+  switchToTab: typeof switchToTab;
 };
 
 export function createCustomerLoginPageDefinition(dependencies: CustomerLoginPageDependencies) {
@@ -52,8 +53,19 @@ export function createCustomerLoginPageDefinition(dependencies: CustomerLoginPag
       selectionToken: "",
       choosingCandidateId: "",
       candidates: [] as CustomerIdentityCandidate[],
+      consented: false,
+      consentError: "",
+      authenticatedVisitor: false,
+      phoneMasked: "",
     },
     async onLoad() {
+      const authState = dependencies.getApp().customerSession.getAuthState?.();
+      if (authState?.mode === "platform_visitor") {
+        this.setData({
+          authenticatedVisitor: true,
+          phoneMasked: authState.phoneMasked,
+        });
+      }
       try {
         const bootstrap = await dependencies.getApp().startup;
         if (!bootstrap) return;
@@ -74,6 +86,15 @@ export function createCustomerLoginPageDefinition(dependencies: CustomerLoginPag
     onHide() { this.stopCooldown(); },
     onUnload() { this.stopCooldown(); },
     onLogoError() { this.setData({ logoFailed: true }); },
+    onConsentChange(event: { detail: { checked: boolean } }) {
+      this.setData({
+        consented: event.detail.checked,
+        consentError: "",
+      });
+    },
+    onOpenPolicy() {
+      void dependencies.navigateToPage("pages/privacy/index");
+    },
     onToggleSms() {
       if (this.data.status !== "idle") return;
       this.setData({
@@ -100,6 +121,7 @@ export function createCustomerLoginPageDefinition(dependencies: CustomerLoginPag
     },
     async onDouyinPhone(event: PhoneNumberCallbackEvent) {
       if (this.data.status !== "idle") return;
+      if (!this.requireConsent()) return;
       const result = resolvePhoneNumberCallback(event);
       const code = result.code;
       if (!code) {
@@ -116,6 +138,7 @@ export function createCustomerLoginPageDefinition(dependencies: CustomerLoginPag
     },
     async onSendCode() {
       if (this.data.status !== "idle" || this.data.smsCooldown > 0) return;
+      if (!this.requireConsent()) return;
       if (!/^1[3-9]\d{9}$/.test(this.data.phone)) {
         this.setData({ phoneError: "请输入正确的手机号", formNotice: "" });
         return;
@@ -145,6 +168,7 @@ export function createCustomerLoginPageDefinition(dependencies: CustomerLoginPag
     },
     async onVerifySms() {
       if (this.data.status !== "idle") return;
+      if (!this.requireConsent()) return;
       const phoneValid = /^1[3-9]\d{9}$/.test(this.data.phone);
       const codeValid = /^\d{4,6}$/.test(this.data.code);
       if (!phoneValid || !codeValid) {
@@ -206,6 +230,16 @@ export function createCustomerLoginPageDefinition(dependencies: CustomerLoginPag
             ? { phoneMasked: result.auth.phone_masked }
             : {}),
         });
+        if (result.auth.mode === "platform_visitor") {
+          this.setData({
+            status: "idle",
+            authenticatedVisitor: true,
+            phoneMasked: result.auth.phone_masked,
+            loginError: "",
+            formNotice: "",
+          });
+          return;
+        }
         await dependencies.navigateToPage("pages/customer-projects/index");
       } catch (error) {
         this.setData({
@@ -214,6 +248,38 @@ export function createCustomerLoginPageDefinition(dependencies: CustomerLoginPag
           loginError: resolveFailure?.(error) ?? failureMessage,
         });
       }
+    },
+    requireConsent() {
+      if (this.data.consented) return true;
+      this.setData({ consentError: "请先阅读并同意隐私政策与用户协议" });
+      return false;
+    },
+    onBookMeasurement() {
+      void dependencies.switchToTab("lead");
+    },
+    onLogout() {
+      this.stopCooldown();
+      dependencies.getApp().customerSession.clear();
+      this.cooldownUntil = 0;
+      this.setData({
+        status: "idle",
+        smsExpanded: false,
+        smsCooldown: 0,
+        phone: "",
+        phoneReady: false,
+        code: "",
+        phoneError: "",
+        codeError: "",
+        loginError: "",
+        formNotice: "",
+        selectionToken: "",
+        choosingCandidateId: "",
+        candidates: [],
+        consented: false,
+        consentError: "",
+        authenticatedVisitor: false,
+        phoneMasked: "",
+      });
     },
     startCooldown(seconds: number) {
       this.cooldownUntil = Date.now() + seconds * 1_000;

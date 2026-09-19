@@ -19,13 +19,117 @@ test("customer login stores auth and navigates after Douyin phone login", async 
     verifyDouyinCustomerSms: mock(async () => ({ status: "authenticated", auth: auth() })),
     selectDouyinCustomerIdentity: mock(async () => ({ status: "authenticated", auth: auth() })),
     navigateToPage,
+    switchToTab: mock(async () => undefined),
     showToast: mock(() => undefined),
   } as never));
 
+  page.onConsentChange({ detail: { checked: true } });
   await page.onDouyinPhone({ detail: { code: "phone-code" } });
 
-  expect(acceptAuth).toHaveBeenCalledWith({ token: "customer-token" });
+  expect(acceptAuth).toHaveBeenCalledWith({ token: "customer-token", mode: "customer" });
   expect(navigateToPage).toHaveBeenCalledWith("pages/customer-projects/index");
+});
+
+test("customer login requires privacy consent before every login method", async () => {
+  const authorizeDouyinCustomerPhone = mock(async () => ({ status: "authenticated" as const, auth: auth() }));
+  const sendDouyinCustomerSmsCode = mock(async () => ({ success: true as const, cooldown_seconds: 60 }));
+  const verifyDouyinCustomerSms = mock(async () => ({ status: "authenticated" as const, auth: auth() }));
+  const page = attachSetData(createCustomerLoginPageDefinition({
+    getApp: () => ({
+      api: {},
+      customerSession: {
+        acceptAuth: mock(() => undefined),
+        getAuthState: mock(() => null),
+        clear: mock(() => undefined),
+      },
+    }),
+    authorizeDouyinCustomerPhone,
+    sendDouyinCustomerSmsCode,
+    verifyDouyinCustomerSms,
+    selectDouyinCustomerIdentity: mock(async () => ({ status: "authenticated", auth: auth() })),
+    navigateToPage: mock(async () => undefined),
+    switchToTab: mock(async () => undefined),
+  } as never));
+  page.onPhoneInput({ detail: { value: "13800138000" } });
+  page.onCodeInput({ detail: { value: "123456" } });
+
+  await page.onDouyinPhone({ detail: { code: "phone-code" } });
+  await page.onSendCode();
+  await page.onVerifySms();
+
+  expect(authorizeDouyinCustomerPhone).not.toHaveBeenCalled();
+  expect(sendDouyinCustomerSmsCode).not.toHaveBeenCalled();
+  expect(verifyDouyinCustomerSms).not.toHaveBeenCalled();
+  expect(page.data.consentError).toBe("请先阅读并同意隐私政策与用户协议");
+});
+
+test("customer login shows a successful empty state for a visitor without projects", async () => {
+  const acceptAuth = mock(() => undefined);
+  const navigateToPage = mock(async () => undefined);
+  const switchToTab = mock(async () => undefined);
+  const page = attachSetData(createCustomerLoginPageDefinition({
+    getApp: () => ({
+      api: {},
+      customerSession: {
+        acceptAuth,
+        getAuthState: mock(() => null),
+        clear: mock(() => undefined),
+      },
+    }),
+    authorizeDouyinCustomerPhone: mock(async () => ({
+      status: "authenticated",
+      auth: visitorAuth(),
+    })),
+    sendDouyinCustomerSmsCode: mock(async () => ({ success: true, cooldown_seconds: 60 })),
+    verifyDouyinCustomerSms: mock(async () => ({ status: "authenticated", auth: auth() })),
+    selectDouyinCustomerIdentity: mock(async () => ({ status: "authenticated", auth: auth() })),
+    navigateToPage,
+    switchToTab,
+  } as never));
+
+  page.onConsentChange({ detail: { checked: true } });
+  await page.onDouyinPhone({ detail: { code: "phone-code" } });
+
+  expect(acceptAuth).toHaveBeenCalledWith({
+    token: "visitor-token",
+    mode: "platform_visitor",
+    phoneMasked: "138****8000",
+  });
+  expect(navigateToPage).not.toHaveBeenCalledWith("pages/customer-projects/index");
+  expect(page.data.authenticatedVisitor).toBe(true);
+  expect(page.data.phoneMasked).toBe("138****8000");
+
+  page.onBookMeasurement();
+  expect(switchToTab).toHaveBeenCalledWith("lead");
+});
+
+test("customer login restores and clears a persisted visitor session", async () => {
+  const clear = mock(() => undefined);
+  const page = attachSetData(createCustomerLoginPageDefinition({
+    getApp: () => ({
+      api: {},
+      customerSession: {
+        acceptAuth: mock(() => undefined),
+        getAuthState: mock(() => ({ mode: "platform_visitor", phoneMasked: "138****8000" })),
+        clear,
+      },
+      startup: Promise.resolve(null),
+    }),
+    authorizeDouyinCustomerPhone: mock(async () => ({ status: "authenticated", auth: auth() })),
+    sendDouyinCustomerSmsCode: mock(async () => ({ success: true, cooldown_seconds: 60 })),
+    verifyDouyinCustomerSms: mock(async () => ({ status: "authenticated", auth: auth() })),
+    selectDouyinCustomerIdentity: mock(async () => ({ status: "authenticated", auth: auth() })),
+    navigateToPage: mock(async () => undefined),
+    switchToTab: mock(async () => undefined),
+  } as never));
+
+  await page.onLoad();
+  expect(page.data.authenticatedVisitor).toBe(true);
+
+  page.onLogout();
+  expect(clear).toHaveBeenCalledTimes(1);
+  expect(page.data.authenticatedVisitor).toBe(false);
+  expect(page.data.consented).toBe(false);
 });
 
 test("customer login expands SMS on demand and adopts the tenant theme", async () => {
@@ -76,6 +180,7 @@ test("customer login records the SMS cooldown without shifting back to another f
   } as never));
 
   page.onToggleSms();
+  page.onConsentChange({ detail: { checked: true } });
   page.onPhoneInput({ detail: { value: "13800138000" } });
   await page.onSendCode();
 
@@ -110,6 +215,7 @@ test("customer login shows customer candidates after SMS verify", async () => {
     showToast: mock(() => undefined),
   } as never));
 
+  page.onConsentChange({ detail: { checked: true } });
   page.onPhoneInput({ detail: { value: "13800138000" } });
   page.onCodeInput({ detail: { value: "123456" } });
   await page.onVerifySms();
@@ -198,6 +304,7 @@ test("customer login explains when the authorized phone has no linked project", 
     navigateToPage: mock(async () => undefined),
   } as never));
 
+  page.onConsentChange({ detail: { checked: true } });
   await page.onDouyinPhone({ detail: { code: "phone-code" } });
 
   expect(page.data.loginError).toBe(
@@ -222,6 +329,7 @@ test("customer login hides unknown backend messages behind the safe fallback", a
     navigateToPage: mock(async () => undefined),
   } as never));
 
+  page.onConsentChange({ detail: { checked: true } });
   await page.onDouyinPhone({ detail: { code: "phone-code" } });
 
   expect(page.data.loginError).toBe("登录客户项目失败，请稍后重试");
@@ -247,6 +355,7 @@ test("SMS login uses the same no-linked-project explanation", async () => {
     selectDouyinCustomerIdentity: mock(async () => ({ status: "authenticated", auth: auth() })),
     navigateToPage: mock(async () => undefined),
   } as never));
+  page.onConsentChange({ detail: { checked: true } });
   page.onPhoneInput({ detail: { value: "13800138000" } });
   page.onCodeInput({ detail: { value: "123456" } });
 
@@ -266,11 +375,12 @@ test("customer project login copy makes the business destination explicit", asyn
   expect(config).toContain('"navigationBarTitleText": "登录客户项目"');
   expect(template).toContain("查看我的装修项目");
   expect(template).toContain("使用装修公司预留的手机号，查找并登录您关联的装修项目");
-  expect(template).toContain("授权抖音手机号并登录项目");
-  expect(template).toContain("正在查找项目");
+  expect(template).toContain("抖音手机号快捷登录");
+  expect(template).toContain("正在登录");
   expect(template).toContain("使用其他手机号登录项目");
   expect(template).toContain("手机号仅用于核验并查找您关联的装修项目");
-  expect(template).not.toContain("使用抖音手机号登录");
+  expect(template).toContain("当前手机号暂未关联装修项目");
+  expect(template).toContain("privacy-consent");
 });
 
 function attachSetData<T extends { data: Record<string, unknown> }>(definition: T) {
@@ -279,6 +389,19 @@ function attachSetData<T extends { data: Record<string, unknown> }>(definition: 
       Object.assign(definition.data, patch);
     },
   });
+}
+
+function visitorAuth() {
+  return {
+    token: "visitor-token",
+    user_id: "auth-user",
+    mode: "platform_visitor",
+    authMode: "platform_visitor",
+    roles: ["visitor"],
+    verified_phone: "13800138000",
+    phone_masked: "138****8000",
+    has_customer_profile: false,
+  };
 }
 
 function auth() {

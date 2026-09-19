@@ -25,7 +25,8 @@
 .welcome-description { margin-top: 14rpx; font-size: 25rpx; line-height: 1.6; opacity: .82; }
 
 .login-section,
-.candidate-section {
+.candidate-section,
+.visitor-section {
   box-sizing: border-box;
   margin-top: 24rpx;
   padding: 30rpx;
@@ -33,6 +34,16 @@
   border-radius: 16rpx;
   background: #fff;
 }
+
+.consent-block { margin-bottom: 24rpx; }
+
+.visitor-section { text-align: center; }
+.visitor-icon { display: flex; width: 72rpx; height: 72rpx; align-items: center; justify-content: center; margin: 0 auto; border-radius: 999rpx; font-size: 36rpx; font-weight: 700; }
+.visitor-title { margin-top: 20rpx; }
+.visitor-phone { margin-top: 10rpx; color: #625f5b; font-size: 24rpx; line-height: 1.5; }
+.visitor-description { max-width: 560rpx; margin: 18rpx auto 0; }
+.visitor-primary { margin-top: 30rpx; }
+.secondary-action { box-sizing: border-box; width: 100%; min-height: 88rpx; margin: 16rpx 0 0; border: 1rpx solid #dedbd6; border-radius: 16rpx; background: #fff; color: #625f5b; font-size: 26rpx; line-height: 86rpx; }
 
 .primary-action,
 .verify-action {

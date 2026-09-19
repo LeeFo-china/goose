@@ -5,7 +5,7 @@ import {
   sendDouyinCustomerSmsCode,
   verifyDouyinCustomerSms,
 } from "../../api/customer-auth";
-import { navigateToPage } from "../../platform/navigation";
+import { navigateToPage, switchToTab } from "../../platform/navigation";
 import { createCustomerLoginPageDefinition } from "./page";
 
 Page(createCustomerLoginPageDefinition({
@@ -15,4 +15,5 @@ Page(createCustomerLoginPageDefinition({
   verifyDouyinCustomerSms,
   selectDouyinCustomerIdentity,
   navigateToPage,
+  switchToTab,
 }));

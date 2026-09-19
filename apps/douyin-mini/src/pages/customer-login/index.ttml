@@ -11,7 +11,16 @@
     <view class="welcome-description">使用装修公司预留的手机号，查找并登录您关联的装修项目</view>
   </view>
 
-  <view tt:if="{{status === 'selecting' || status === 'choosing'}}" class="candidate-section">
+  <view tt:if="{{authenticatedVisitor}}" class="visitor-section">
+    <view class="visitor-icon" style="background-color: {{primaryColor}}; color: {{primaryTextColor}}">✓</view>
+    <view class="section-title visitor-title">登录成功</view>
+    <view class="visitor-phone">{{phoneMasked}}</view>
+    <view class="section-description visitor-description">当前手机号暂未关联装修项目。您可以先预约免费量房，装修公司会在建立项目后同步进度。</view>
+    <button class="primary-action ui-pressable visitor-primary" hover-class="ui-pressable--pressed" style="background-color: {{primaryColor}}; color: {{primaryTextColor}}" bindtap="onBookMeasurement">预约免费量房</button>
+    <button class="secondary-action ui-pressable" hover-class="ui-pressable--pressed" bindtap="onLogout">退出当前账号</button>
+  </view>
+
+  <view tt:elif="{{status === 'selecting' || status === 'choosing'}}" class="candidate-section">
     <view class="section-kicker">已找到多个客户身份</view>
     <view class="section-title">选择装修公司</view>
     <view class="section-description">请选择本次要查看的项目所属公司</view>
@@ -35,15 +44,28 @@
   </view>
 
   <view tt:else class="login-section">
+    <view class="consent-block">
+      <privacy-consent
+        checked="{{consented}}"
+        company-name="{{brandName}}"
+        primary-color="{{primaryColor}}"
+        primary-text-color="{{primaryTextColor}}"
+        error="{{consentError}}"
+        disabled="{{status !== 'idle'}}"
+        scene="customer_login"
+        bindchange="onConsentChange"
+        bindopenpolicy="onOpenPolicy"
+      />
+    </view>
     <button
       class="primary-action ui-pressable"
       hover-class="ui-pressable--pressed"
       style="background-color: {{primaryColor}}; color: {{primaryTextColor}}"
       open-type="getPhoneNumber"
-      disabled="{{status !== 'idle' || !phoneLoginReady}}"
+      disabled="{{status !== 'idle' || !phoneLoginReady || !consented}}"
       loading="{{status === 'authorizing'}}"
       bindgetphonenumber="onDouyinPhone"
-    >{{status === 'authorizing' ? '正在查找项目' : '授权抖音手机号并登录项目'}}</button>
+    >{{status === 'authorizing' ? '正在登录' : '抖音手机号快捷登录'}}</button>
 
     <view tt:if="{{loginError && !smsExpanded}}" class="inline-error" role="alert">{{loginError}}</view>
 
@@ -118,5 +140,5 @@
     </view>
   </view>
 
-  <view class="privacy-note">手机号仅用于核验并查找您关联的装修项目</view>
+  <view tt:if="{{!authenticatedVisitor}}" class="privacy-note">手机号仅用于核验并查找您关联的装修项目</view>
 </view>

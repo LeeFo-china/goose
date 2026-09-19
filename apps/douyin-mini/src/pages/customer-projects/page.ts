@@ -6,7 +6,7 @@ import type { navigateToCustomerProjectDetail, navigateToPage } from "../../plat
 type LoadMode = "refresh" | "loadMore" | "retry";
 
 export type CustomerProjectsPageDependencies = {
-  getApp(): Pick<DouyinAppContext, "customerApi">;
+  getApp(): Pick<DouyinAppContext, "customerApi" | "customerSession">;
   fetchCustomerProjects: typeof fetchCustomerProjects;
   navigateToCustomerProjectDetail: typeof navigateToCustomerProjectDetail;
   navigateToPage: typeof navigateToPage;
@@ -27,10 +27,17 @@ export function createCustomerProjectsPageDefinition(dependencies: CustomerProje
       empty: false,
       paginationStatus: "idle" as "idle" | "loading" | "nomore" | "error",
     },
-    onLoad() { void this.load("refresh"); },
+    onLoad() {
+      if (!this.ensureCustomerSession()) return;
+      void this.load("refresh");
+    },
     onPullDownRefresh() { void this.load("refresh", true); },
     onReachBottom() { void this.load("loadMore"); },
     async load(mode: LoadMode, stopRefresh = false) {
+      if (!this.ensureCustomerSession()) {
+        if (stopRefresh) dependencies.stopPullDownRefresh();
+        return;
+      }
       if (this.loading) return;
       const nextPage = mode === "loadMore" ? this.page + 1 : 1;
       if (mode === "loadMore" && !this.hasMore) return;
@@ -75,6 +82,15 @@ export function createCustomerProjectsPageDefinition(dependencies: CustomerProje
       );
     },
     onLogin() { void dependencies.navigateToPage("pages/customer-login/index"); },
+    onLogout() {
+      dependencies.getApp().customerSession.clear();
+      void dependencies.navigateToPage("pages/customer-login/index");
+    },
+    ensureCustomerSession() {
+      if (dependencies.getApp().customerSession.hasCustomerProfile()) return true;
+      void dependencies.navigateToPage("pages/customer-login/index");
+      return false;
+    },
     onRetry() { void this.load("retry"); },
     onLoadMore() { void this.load("loadMore"); },
   });

@@ -6,6 +6,7 @@ Component({
     primaryColor: { type: String, value: "#191817" },
     primaryTextColor: { type: String, value: "#FFFFFF" },
     error: { type: String, value: "" },
+    scene: { type: String, value: "lead" },
   },
   methods: {
     onToggle() {
