@@ -142,6 +142,7 @@ import WarehouseTransfersController from "@/controllers/warehouse-transfers";
 import WarehouseStocktakesController from "@/controllers/warehouse-stocktakes";
 import PlatformUploadPreviewsController from "@/controllers/platform-upload-previews";
 import PlatformSupplierOnboardingController from "@/controllers/platform-supplier-onboarding";
+import PlatformAdminReviewWorkbenchController from "@/controllers/platform-admin-review-workbench";
 import BrandingController from "@/controllers/branding";
 import BrandingAddonController from "@/controllers/branding-addon";
 import TenantOnboardingOcrController from "@/controllers/tenant-onboarding-ocr";
@@ -285,6 +286,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   WarehouseStocktakesController.registerExtraRoutes(app);
   PlatformUploadPreviewsController.registerExtraRoutes(app);
   PlatformSupplierOnboardingController.registerExtraRoutes(app);
+  PlatformAdminReviewWorkbenchController.registerExtraRoutes(app);
   BrandingController.registerExtraRoutes(app);
   BrandingAddonController.registerExtraRoutes(app);
   TenantOnboardingOcrController.registerExtraRoutes(app);

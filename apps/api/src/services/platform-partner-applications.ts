@@ -4,8 +4,15 @@ import {
   type PlatformPartnerApplicationApprovedRecordInput,
   type PlatformPartnerApplicationCreateRecordInput,
   type PlatformPartnerApplicationRecord,
+  type PlatformPartnerApplicationReviewCommandInput,
+  type PlatformPartnerApplicationReviewCommandResult,
   type PlatformPartnerApplicationStatusRecordInput,
 } from "@/repositories/platform-partner-applications";
+import type {
+  PlatformAdminPartnerApproveInput,
+  PlatformAdminPartnerRejectInput,
+  PlatformAdminPartnerRequestSupplementInput,
+} from "@/schema/platform-admin-review-workbench";
 import {
   platformPartnersRepository,
   type PlatformPartnerCreateRecordInput,
@@ -21,6 +28,7 @@ import type { AuthContext } from "@/services/authorization";
 import { platformAuditLogService } from "@/services/platform-audit-logs";
 import { platformPartnerRegionPolicyService } from "@/services/platform-partner-regions";
 import { smsVerificationCodeService } from "@/services/sms-verification-codes";
+import { createHash } from "node:crypto";
 
 type PlatformPartnerApplicationsRepositoryPort = Pick<
   typeof platformPartnerApplicationsRepository,
@@ -30,6 +38,7 @@ type PlatformPartnerApplicationsRepositoryPort = Pick<
   | "findApplicationById"
   | "updateApplicationStatus"
   | "markApplicationApproved"
+  | "reviewApplicationAtomic"
 >;
 
 type PlatformPartnersRepositoryPort = Pick<
@@ -208,9 +217,7 @@ export class PlatformPartnerApplicationsService {
     }
 
     const reviewRemark = input.review_remark ?? "官网申请审核通过";
-    const regionCodes = await this.regionPolicy.assertAssignableDistricts(
-      input.region_codes,
-    );
+    const regionCodes = await this.regionPolicy.assertAssignableDistricts(input.region_codes);
     const partner = await this.partnerRepository.createPartner({
       name: input.partner_name ?? application.applicant_name,
       subject_type: application.subject_type,
@@ -273,6 +280,73 @@ export class PlatformPartnerApplicationsService {
     };
   }
 
+  async approveMobileApplication(
+    authContext: AuthContext,
+    applicationId: string,
+    input: PlatformAdminPartnerApproveInput,
+    idempotencyKey: string,
+  ) {
+    this.assertCanManagePartners(authContext);
+    const actorEmployeeId = this.requireEmployeeId(authContext);
+    const regionCodes = await this.regionPolicy.assertAssignableDistricts(
+      input.region_codes,
+    );
+    return this.executeMobileReview({
+      applicationId,
+      expectedVersion: input.expected_version,
+      action: "approve",
+      remark: input.remark,
+      requiredFields: [],
+      partnerLevelCode: input.partner_level_code === "city" ? "city_partner" : input.partner_level_code,
+      regionCodes,
+      generateDefaultInviteCode: input.generate_default_invite_code,
+      actorEmployeeId,
+      idempotencyKey,
+    });
+  }
+
+  rejectMobileApplication(
+    authContext: AuthContext,
+    applicationId: string,
+    input: PlatformAdminPartnerRejectInput,
+    idempotencyKey: string,
+  ) {
+    this.assertCanManagePartners(authContext);
+    return this.executeMobileReview({
+      applicationId,
+      expectedVersion: input.expected_version,
+      action: "reject",
+      remark: input.remark,
+      requiredFields: [],
+      partnerLevelCode: null,
+      regionCodes: [],
+      generateDefaultInviteCode: false,
+      actorEmployeeId: this.requireEmployeeId(authContext),
+      idempotencyKey,
+    });
+  }
+
+  requestMobileSupplement(
+    authContext: AuthContext,
+    applicationId: string,
+    input: PlatformAdminPartnerRequestSupplementInput,
+    idempotencyKey: string,
+  ) {
+    this.assertCanManagePartners(authContext);
+    return this.executeMobileReview({
+      applicationId,
+      expectedVersion: input.expected_version,
+      action: "request_supplement",
+      remark: input.remark,
+      requiredFields: [...input.required_fields],
+      partnerLevelCode: null,
+      regionCodes: [],
+      generateDefaultInviteCode: false,
+      actorEmployeeId: this.requireEmployeeId(authContext),
+      idempotencyKey,
+    });
+  }
+
   private async requireApplication(applicationId: string) {
     const application = await this.applicationRepository.findApplicationById(
       applicationId,
@@ -285,6 +359,53 @@ export class PlatformPartnerApplicationsService {
       );
     }
     return application;
+  }
+
+  private async executeMobileReview(
+    input: Omit<PlatformPartnerApplicationReviewCommandInput, "requestHash">,
+  ) {
+    const result = await this.applicationRepository.reviewApplicationAtomic({
+      ...input,
+      requestHash: createHash("sha256")
+        .update(JSON.stringify({
+          application_id: input.applicationId,
+          expected_version: input.expectedVersion,
+          action: input.action,
+          remark: input.remark,
+          required_fields: input.requiredFields,
+          partner_level_code: input.partnerLevelCode,
+          region_codes: input.regionCodes,
+          generate_default_invite_code: input.generateDefaultInviteCode,
+        }))
+        .digest("hex"),
+    });
+    return this.requireMobileReviewResult(result);
+  }
+
+  private requireMobileReviewResult(
+    result: PlatformPartnerApplicationReviewCommandResult,
+  ) {
+    switch (result.status) {
+      case "updated":
+        return result;
+      case "application_not_found":
+        throw Errors.business(404, "城市合伙人申请不存在", "PARTNER_APPLICATION_NOT_FOUND");
+      case "version_conflict":
+        throw Errors.business(409, "申请版本已变化，请刷新后重试", "VERSION_CONFLICT", {
+          current_version: result.current_version,
+        });
+      case "already_reviewed":
+        throw Errors.business(409, "申请已被处理，请刷新详情", "ALREADY_REVIEWED", {
+          current_status: result.current_status,
+          current_version: result.current_version,
+        });
+      case "idempotency_conflict":
+        throw Errors.business(409, "幂等键已用于其他审核请求", "IDEMPOTENCY_CONFLICT");
+      case "partner_level_not_found":
+        throw Errors.business(422, "城市合伙人等级无效或已停用", "VALIDATION_ERROR");
+      case "validation_error":
+        throw Errors.business(422, "城市合伙人审核参数无效", "VALIDATION_ERROR");
+    }
   }
 
   private requiresSmsVerification(input: SubmitPlatformPartnerApplicationInput) {
@@ -341,7 +462,7 @@ export class PlatformPartnerApplicationsService {
     if (
       !isPlatformIdentity ||
       authContext.tenantId !== null ||
-      !this.hasPermission(authContext, permissionCode)
+      (!authContext.isPlatformAdmin && !this.hasPermission(authContext, permissionCode))
     ) {
       throw Errors.forbidden();
     }

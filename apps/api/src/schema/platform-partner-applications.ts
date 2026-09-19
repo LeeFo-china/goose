@@ -5,8 +5,10 @@ import { z } from "zod";
 export const PlatformPartnerApplicationStatusSchema = z.enum([
   "submitted",
   "reviewing",
+  "supplement_required",
   "approved",
   "rejected",
+  "withdrawn",
 ]);
 
 export const PlatformPartnerApplicationIdParamSchema = z.object({
