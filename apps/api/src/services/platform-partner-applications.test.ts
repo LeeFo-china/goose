@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type {
   PlatformPartnerApplicationRecord,
+  PlatformPartnerApplicationReviewCommandResult,
   PlatformPartnerApplicationStatus,
 } from "@/repositories/platform-partner-applications";
 import type {
@@ -14,22 +15,11 @@ process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 const platformAuthContext = {
-  authUserId: "auth-platform",
-  employeeId: "employee-platform",
-  tenantId: null,
-  tenantName: null,
-  tenantSlug: null,
-  tenantStatus: null,
-  isPlatformAdmin: true,
-  employeeName: "平台超管",
-  employeeStatus: "active",
-  departmentId: null,
-  tenantDepartmentId: null,
-  departmentCode: null,
-  departmentName: null,
-  postId: null,
-  postName: null,
-  avatar: null,
+  authUserId: "auth-platform", employeeId: "employee-platform", tenantId: null,
+  tenantName: null, tenantSlug: null, tenantStatus: null, isPlatformAdmin: true,
+  employeeName: "平台超管", employeeStatus: "active", departmentId: null,
+  tenantDepartmentId: null, departmentCode: null, departmentName: null,
+  postId: null, postName: null, avatar: null,
   roleCodes: ["platform_admin"],
   roles: [],
   permissions: [{ code: "platform.partner.read", scope: "all" }, { code: "platform.partner.manage", scope: "all" }],
@@ -42,51 +32,26 @@ const tenantAuthContext = {
 } satisfies AuthContext;
 
 const level = {
-  id: "00000000-0000-4000-8000-000000000101",
-  code: "city_partner",
-  name: "城市合伙人",
-  status: "active",
-  tenant_recharge_commission_bps: 1500,
-  lead_service_fee_commission_bps: 3500,
-  lead_service_fee_default_rate_bps: 250,
-  settlement_cycle: "monthly",
-  settlement_method: "manual",
-  requirements: {},
-  sort_order: 20,
-  version: 1,
-  effective_at: "2026-07-05T10:00:00.000Z",
-  expired_at: null,
-  created_at: "2026-07-05T10:00:00.000Z",
+  id: "00000000-0000-4000-8000-000000000101", code: "city_partner",
+  name: "城市合伙人", status: "active", tenant_recharge_commission_bps: 1500,
+  lead_service_fee_commission_bps: 3500, lead_service_fee_default_rate_bps: 250,
+  settlement_cycle: "monthly", settlement_method: "manual", requirements: {},
+  sort_order: 20, version: 1, effective_at: "2026-07-05T10:00:00.000Z",
+  expired_at: null, created_at: "2026-07-05T10:00:00.000Z",
   updated_at: "2026-07-05T10:00:00.000Z",
 } satisfies PlatformPartnerLevelRecord;
-
 const application = {
-  id: "00000000-0000-4000-8000-000000000601",
-  application_no: "CPA-20260705-0001",
-  applicant_name: "信阳星河装饰运营中心",
-  subject_type: "company",
-  contact_name: "李经理",
-  phone: "13800138000",
-  region_codes: ["411500"],
-  region_name: "河南省信阳市",
-  business_description: "本地装修公司渠道资源",
-  resource_description: "10 家意向装企",
-  message: "希望代理信阳市场",
-  source_channel: "official_website",
-  source_url: "https://www.goodcms.cn/partners",
-  utm_source: "website",
-  utm_medium: null,
-  utm_campaign: null,
-  status: "submitted",
-  reviewed_by_employee_id: null,
-  reviewed_at: null,
-  review_remark: null,
-  converted_partner_id: null,
-  metadata: {},
-  created_at: "2026-07-05T10:00:00.000Z",
-  updated_at: "2026-07-05T10:00:00.000Z",
+  id: "00000000-0000-4000-8000-000000000601", application_no: "CPA-20260705-0001",
+  applicant_name: "信阳星河装饰运营中心", subject_type: "company",
+  contact_name: "李经理", phone: "13800138000", region_codes: ["411500"],
+  region_name: "河南省信阳市", business_description: "本地装修公司渠道资源",
+  resource_description: "10 家意向装企", message: "希望代理信阳市场",
+  source_channel: "official_website", source_url: "https://www.goodcms.cn/partners",
+  utm_source: "website", utm_medium: null, utm_campaign: null,
+  status: "submitted", version: 1, reviewed_by_employee_id: null,
+  reviewed_at: null, review_remark: null, converted_partner_id: null, metadata: {},
+  created_at: "2026-07-05T10:00:00.000Z", updated_at: "2026-07-05T10:00:00.000Z",
 } satisfies PlatformPartnerApplicationRecord;
-
 const partner = {
   id: "00000000-0000-4000-8000-000000000201",
   name: application.applicant_name,
@@ -107,10 +72,10 @@ const partner = {
   updated_at: "2026-07-05T10:00:00.000Z",
   level,
 } satisfies PlatformPartnerRecord;
-
 const approvedApplication = {
   ...application,
   status: "approved" as PlatformPartnerApplicationStatus,
+  version: 2,
   reviewed_by_employee_id: "employee-platform",
   reviewed_at: "2026-07-05T10:10:00.000Z",
   review_remark: "官网申请审核通过",
@@ -121,7 +86,6 @@ const approvedApplication = {
     status: partner.status,
   },
 } satisfies PlatformPartnerApplicationRecord;
-
 const pendingBindMember = {
   id: "00000000-0000-4000-8000-000000000701",
   partner_id: partner.id,
@@ -156,6 +120,22 @@ const applicationRepository = {
     reviewed_by_employee_id: "employee-platform",
   })),
   markApplicationApproved: mock(async (): Promise<PlatformPartnerApplicationRecord> => approvedApplication),
+  reviewApplicationAtomic: mock(async (): Promise<PlatformPartnerApplicationReviewCommandResult> => ({
+    status: "updated" as const,
+    idempotent: false,
+    application: {
+      id: application.id,
+      status: "approved" as const,
+      version: 2,
+      converted_partner_id: partner.id,
+    },
+    partner: {
+      id: partner.id,
+      name: partner.name,
+      status: "active" as const,
+      default_invite_code: "CP-411502-000000000201",
+    },
+  })),
 };
 
 const partnerRepository = {
@@ -219,6 +199,22 @@ describe("PlatformPartnerApplicationsService", () => {
     applicationRepository.findApplicationById.mockImplementation(async () => application);
     applicationRepository.findActiveApplicationByPhone.mockImplementation(async () => null);
     applicationRepository.markApplicationApproved.mockImplementation(async () => approvedApplication);
+    applicationRepository.reviewApplicationAtomic.mockImplementation(async () => ({
+      status: "updated" as const,
+      idempotent: false,
+      application: {
+        id: application.id,
+        status: "approved" as const,
+        version: 2,
+        converted_partner_id: partner.id,
+      },
+      partner: {
+        id: partner.id,
+        name: partner.name,
+        status: "active" as const,
+        default_invite_code: "CP-411502-000000000201",
+      },
+    }));
     smsService.findValidPending.mockImplementation(async () => verificationCode);
   });
 

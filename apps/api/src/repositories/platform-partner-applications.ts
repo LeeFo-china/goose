@@ -26,6 +26,7 @@ export type PlatformPartnerApplicationRecord = {
   utm_medium: string | null;
   utm_campaign: string | null;
   status: PlatformPartnerApplicationStatus;
+  version: number;
   reviewed_by_employee_id: string | null;
   reviewed_at: string | null;
   review_remark: string | null;
@@ -34,6 +35,7 @@ export type PlatformPartnerApplicationRecord = {
   created_at: string;
   updated_at: string;
   converted_partner?: Pick<PlatformPartnerRecord, "id" | "name" | "status"> | null;
+  reviewer?: { id: string; name: string | null } | null;
 };
 
 export type PlatformPartnerApplicationCreateRecordInput = Omit<
@@ -43,9 +45,11 @@ export type PlatformPartnerApplicationCreateRecordInput = Omit<
   | "reviewed_at"
   | "review_remark"
   | "converted_partner_id"
+  | "version"
   | "created_at"
   | "updated_at"
   | "converted_partner"
+  | "reviewer"
 >;
 
 export type PlatformPartnerApplicationStatusRecordInput = {
@@ -82,11 +86,54 @@ type UntypedTable = {
 
 type UntypedClient = {
   from: (table: "platform_partner_applications") => UntypedTable;
+  rpc: (
+    functionName: "review_platform_partner_application",
+    args: Record<string, unknown>,
+  ) => Promise<{ data: unknown; error: unknown }>;
 };
+
+export type PlatformPartnerApplicationReviewCommandInput = {
+  applicationId: string;
+  expectedVersion: number;
+  action: "approve" | "reject" | "request_supplement";
+  remark: string;
+  requiredFields: string[];
+  partnerLevelCode: string | null;
+  regionCodes: string[];
+  generateDefaultInviteCode: boolean;
+  actorEmployeeId: string;
+  idempotencyKey: string;
+  requestHash: string;
+};
+
+export type PlatformPartnerApplicationReviewCommandResult =
+  | {
+      status: "updated";
+      idempotent: boolean;
+      application: {
+        id: string;
+        status: PlatformPartnerApplicationStatus;
+        version: number;
+        converted_partner_id: string | null;
+      };
+      partner: {
+        id: string;
+        name: string;
+        status: "active";
+        default_invite_code: string | null;
+      } | null;
+    }
+  | { status: "application_not_found" }
+  | { status: "version_conflict"; current_version: number }
+  | { status: "already_reviewed"; current_status: string; current_version: number }
+  | { status: "partner_level_not_found" }
+  | { status: "idempotency_conflict" }
+  | { status: "validation_error" };
 
 const APPLICATION_SELECT = [
   "*",
   "converted_partner:platform_partners!platform_partner_applications_converted_partner_id_fkey(id, name, status)",
+  "reviewer:employees!platform_partner_applications_reviewed_by_employee_id_fkey(id, name)",
 ].join(", ");
 
 class PlatformPartnerApplicationsRepository {
@@ -138,7 +185,12 @@ class PlatformPartnerApplicationsRepository {
 
     const { data, error, count } = await request;
     if (error) throw Errors.dbError("查询城市合伙人申请失败", error);
-    return this.buildPage(data, count, query.page, query.pageSize);
+    return this.buildPage<PlatformPartnerApplicationRecord>(
+      data,
+      count,
+      query.page,
+      query.pageSize,
+    );
   }
 
   async findApplicationById(applicationId: string) {
@@ -188,6 +240,29 @@ class PlatformPartnerApplicationsRepository {
 
     if (error) throw Errors.dbError("标记城市合伙人申请通过失败", error);
     return data as PlatformPartnerApplicationRecord;
+  }
+
+  async reviewApplicationAtomic(
+    input: PlatformPartnerApplicationReviewCommandInput,
+  ): Promise<PlatformPartnerApplicationReviewCommandResult> {
+    const { data, error } = await (
+      SupabaseDB.getAdminClient() as unknown as UntypedClient
+    ).rpc("review_platform_partner_application", {
+      p_application_id: input.applicationId,
+      p_expected_version: input.expectedVersion,
+      p_action: input.action,
+      p_remark: input.remark,
+      p_required_fields: input.requiredFields,
+      p_partner_level_code: input.partnerLevelCode,
+      p_region_codes: input.regionCodes,
+      p_generate_default_invite_code: input.generateDefaultInviteCode,
+      p_actor_employee_id: input.actorEmployeeId,
+      p_idempotency_key: input.idempotencyKey,
+      p_request_hash: input.requestHash,
+    });
+
+    if (error) throw Errors.dbError("审核城市合伙人申请失败", error);
+    return data as PlatformPartnerApplicationReviewCommandResult;
   }
 
   private buildPage<T>(

@@ -16,10 +16,10 @@
 - Create: `apps/api/src/schema/platform-admin-review-workbench.ts`
 - Create: `apps/api/src/schema/platform-admin-review-workbench.test.ts`
 
-- [ ] Write failing schema tests for page defaults, `pageSize <= 50`, target types, UUID idempotency header, `expected_version`, required remarks, partner level code, region codes, and unsupported automatic service-provider publication.
-- [ ] Run `cd apps/api && bun test src/schema/platform-admin-review-workbench.test.ts` and confirm the module is missing.
-- [ ] Implement strict Zod schemas and inferred input types; validation errors remain compatible with `Errors.fromZod`.
-- [ ] Re-run the schema test and confirm it passes.
+- [x] Write failing schema tests for page defaults, `pageSize <= 50`, target types, UUID idempotency header, `expected_version`, required remarks, partner level code, region codes, and unsupported automatic service-provider publication.
+- [x] Run `cd apps/api && bun test src/schema/platform-admin-review-workbench.test.ts` and confirm the module is missing.
+- [x] Implement strict Zod schemas and inferred input types; validation errors remain compatible with `Errors.fromZod`.
+- [x] Re-run the schema test and confirm it passes.
 
 ### Task 2: Add the partner review database contract
 
@@ -27,10 +27,10 @@
 - Create: `supabase/migrations/20260919120000_platform_admin_mobile_review_workbench.sql`
 - Create: `apps/api/src/services/platform-admin-review-workbench-migration-contract.test.ts`
 
-- [ ] Write a failing SQL contract test that requires the version column, six-state constraint, review table, bounded indexes, row lock, idempotency lookup before state/version checks, request-hash conflict, version increment, review insert, and atomic partner/member/invite creation.
-- [ ] Run the contract test and confirm it fails because the migration does not exist.
-- [ ] Add the migration with additive schema changes and an admin-client-only RPC returning structured status/result JSON.
-- [ ] Run the contract test and confirm it passes.
+- [x] Write a failing SQL contract test that requires the version column, six-state constraint, review table, bounded indexes, row lock, idempotency lookup before state/version checks, request-hash conflict, version increment, review insert, and atomic partner/member/invite creation.
+- [x] Run the contract test and confirm it fails because the migration does not exist.
+- [x] Add the migration with additive schema changes and an admin-client-only RPC returning structured status/result JSON.
+- [x] Run the contract test and confirm it passes.
 
 ### Task 3: Implement partner review repository and service behavior
 
@@ -40,10 +40,10 @@
 - Modify: `apps/api/src/services/platform-partner-applications.test.ts`
 - Modify: `apps/api/src/schema/platform-partner-applications.ts`
 
-- [ ] Add failing tests for masked list/detail DTOs, `supplement_required`, version conflict, terminal conflict, idempotent approval replay, required supplement fields, level-code resolution, and default invite-code result.
-- [ ] Run the focused service test and verify the new cases fail for missing behavior.
-- [ ] Add minimal repository RPC/list/detail/review methods and service mappings; keep current Web Admin signatures working.
-- [ ] Re-run the focused tests and confirm all pass.
+- [x] Add failing tests for masked list/detail DTOs, `supplement_required`, version conflict, terminal conflict, idempotent approval replay, required supplement fields, level-code resolution, and default invite-code result.
+- [x] Run the focused service test and verify the new cases fail for missing behavior.
+- [x] Add minimal repository RPC/list/detail/review methods and service mappings; keep current Web Admin signatures working.
+- [x] Re-run the focused tests and confirm all pass.
 
 ### Task 4: Implement mobile read models and tenant adapters
 
@@ -53,11 +53,11 @@
 - Create: `apps/api/src/services/platform-admin-review-workbench.test.ts`
 - Modify: `apps/api/src/services/tenant-onboarding-review.ts`
 
-- [ ] Add failing tests for summary totals/latest limit, phone masking, source filter, tenant approve/reject/supplement input mapping, no auto-publish, private license preview, and unified log pagination without N+1.
-- [ ] Run the focused tests and verify they fail because the facade is missing.
-- [ ] Implement the read repository with explicit selects, `.range()`/`.limit()`, parallel aggregate queries, and batched reviewer hydration.
-- [ ] Implement the service facade with super-admin authorization assumed from the controller context, exact response DTOs, existing tenant service delegation, and partner service delegation.
-- [ ] Re-run the tests and confirm all pass.
+- [x] Add failing tests for summary totals/latest limit, phone masking, source filter, tenant approve/reject/supplement input mapping, no auto-publish, private license preview, and unified log pagination without N+1.
+- [x] Run the focused tests and verify they fail because the facade is missing.
+- [x] Implement the read repository with explicit selects, `.range()`/`.limit()`, parallel aggregate queries, and batched reviewer hydration.
+- [x] Implement the service facade with super-admin authorization assumed from the controller context, exact response DTOs, existing tenant service delegation, and partner service delegation.
+- [x] Re-run the tests and confirm all pass.
 
 ### Task 5: Register super-admin-only routes
 
@@ -66,10 +66,10 @@
 - Create: `apps/api/src/controllers/platform-admin-review-workbench/routes.test.ts`
 - Modify: `apps/api/src/routes/index.ts`
 
-- [ ] Add a failing route test enumerating the 13 handoff routes and checking that no route is public or scoped.
-- [ ] Run the route test and confirm it fails because the controller is missing.
-- [ ] Implement thin controller methods that parse params/query/body/header, call `getRequiredPlatformSuperAdminContext()`, delegate to the service, and wrap with `ResponseHandler.success`.
-- [ ] Register the controller and rerun the route test.
+- [x] Add a failing route test enumerating the 13 handoff routes and checking that no route is public or scoped.
+- [x] Run the route test and confirm it fails because the controller is missing.
+- [x] Implement thin controller methods that parse params/query/body/header, call `getRequiredPlatformSuperAdminContext()`, delegate to the service, and wrap with `ResponseHandler.success`.
+- [x] Register the controller and rerun the route test.
 
 ### Task 6: Preserve Web Admin compatibility and error codes
 
@@ -79,18 +79,20 @@
 - Modify: `apps/api/src/controllers/platform-partner-applications/routes.test.ts`
 - Modify: `apps/api/src/controllers/platform-tenant-onboarding/routes.test.ts`
 
-- [ ] Add failing assertions for `VERSION_CONFLICT`, `ALREADY_REVIEWED`, `DUPLICATED_SUBJECT`, and unchanged existing route lists.
-- [ ] Implement only the missing error constants/mappings and compatibility adapters.
-- [ ] Run both old and new controller/service suites and confirm all pass.
+- [x] Add failing assertions for `VERSION_CONFLICT`, `ALREADY_REVIEWED`, `DUPLICATED_SUBJECT`, and unchanged existing route lists.
+- [x] Implement only the missing error constants/mappings and compatibility adapters.
+- [x] Run both old and new controller/service suites and confirm all pass.
 
 ### Task 7: Verify, document, and prepare integration
 
 **Files:**
 - Modify: `docs/superpowers/plans/2026-09-19-platform-admin-review-workbench.md`
 
-- [ ] Run focused tests for schema, migration contract, services, repositories, and routes.
-- [ ] Run `cd apps/api && bun run typecheck` or the package's actual typecheck command discovered from `package.json`.
-- [ ] Run `bun run api:build` from the repository root.
-- [ ] Run `supabase migration list` and record whether Local/Remote align; do not apply a remote migration without a separate deployment request.
-- [ ] Inspect `git diff --check`, `git status --short`, and the final diff for Orange writes, unrelated files, secrets, unbounded list queries, and direct `throw new Error()`.
-- [ ] Update this checklist, commit the feature with a Conventional Commit message, and report the exact verification evidence and any deployment dependency.
+- [x] Run focused tests for schema, migration contract, services, repositories, and routes.
+- [x] Run `cd apps/api && bun run typecheck` or the package's actual typecheck command discovered from `package.json`.
+- [x] Run `bun run api:build` from the repository root.
+- [x] Run `supabase migration list` and record whether Local/Remote align; do not apply a remote migration without a separate deployment request.
+- [x] Inspect `git diff --check`, `git status --short`, and the final diff for Orange writes, unrelated files, secrets, unbounded list queries, and direct `throw new Error()`.
+- [x] Update this checklist, commit the feature with a Conventional Commit message, and report the exact verification evidence and any deployment dependency.
+
+Verification note: the focused suite passed 83 tests across 17 files; `bun run api:check` passed typecheck, build, and the 500-line size gate. The new migration executed successfully against the local Supabase PostgreSQL container inside a transaction and was rolled back. `supabase migration list --local` shows `20260919120000` only in Local, so deployment must apply the pending migration before the API routes are released.
