@@ -1,6 +1,6 @@
 # Douyin Phone One-Click Login Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Turn Douyin phone authorization into a complete customer-account login flow while removing phone authorization from free-measurement form filling.
 
@@ -17,7 +17,7 @@
 - Modify: `apps/api/src/utils/jwt-douyin-miniapp.test.ts`
 - Modify: `apps/api/src/plugins/auth/legacy-plugin-douyin.test.ts`
 
-- [ ] **Step 1: Write failing JWT tests**
+- [x] **Step 1: Write failing JWT tests**
 
 Add tests that call a new `signDouyinVisitorSessionToken` with a complete actor and verified phone, then assert the decoded payload contains only the intended visitor identity:
 
@@ -47,7 +47,7 @@ expect(verifyToken(token)).toMatchObject({
 
 Add table cases that mutate each required Douyin visitor claim and expect `verifyTokenDetailed` to return `invalid`. Add an auth-plugin test proving the token is rejected from customer self-service routes rather than reaching customer-binding assertions.
 
-- [ ] **Step 2: Run the focused tests and confirm failure**
+- [x] **Step 2: Run the focused tests and confirm failure**
 
 Run:
 
@@ -58,7 +58,7 @@ bun test src/utils/jwt-douyin-miniapp.test.ts src/plugins/auth/legacy-plugin-dou
 
 Expected: FAIL because `signDouyinVisitorSessionToken` and strict Douyin visitor validation do not exist.
 
-- [ ] **Step 3: Implement the signer and validator**
+- [x] **Step 3: Implement the signer and validator**
 
 Add a focused input type and signer without changing the existing WeChat signer:
 
@@ -93,11 +93,11 @@ export function signDouyinVisitorSessionToken(
 
 In `verifyTokenDetailed`, route `visitor_session + login_channel=douyin` through a validator that requires UUID user/tenant/installation identifiers, the 64-character subject hash, matching `openid`, one `visitor` role, non-empty App ID, and a mainland mobile number. Keep the existing WeChat visitor rule unchanged.
 
-- [ ] **Step 4: Re-run the tests**
+- [x] **Step 4: Re-run the tests**
 
 Run the command from Step 2. Expected: all focused JWT/auth-plugin tests PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api/src/utils/jwt.ts apps/api/src/utils/jwt-douyin-miniapp.test.ts apps/api/src/plugins/auth/legacy-plugin-douyin.test.ts
@@ -111,7 +111,7 @@ git commit -m "feat(douyin): add restricted visitor login token"
 - Modify: `apps/api/src/services/douyin-miniapp/customer-auth.ts`
 - Modify: `apps/api/src/services/douyin-miniapp/customer-auth.test.ts`
 
-- [ ] **Step 1: Write failing service tests**
+- [x] **Step 1: Write failing service tests**
 
 Replace the existing zero-candidate `CUSTOMER_CONTEXT_MISSING` expectation with two explicit cases:
 
@@ -151,7 +151,7 @@ test("authorized phone without a customer returns an authenticated visitor", asy
 
 Add the equivalent `verifySms` test. Both tests must assert that the resolved local user is synchronized with the `douyin_mini` OAuth identity and that no customer binding or customer token signer runs. Preserve the single- and multi-candidate tests.
 
-- [ ] **Step 2: Run the service test and confirm failure**
+- [x] **Step 2: Run the service test and confirm failure**
 
 Run:
 
@@ -162,7 +162,7 @@ bun test src/services/douyin-miniapp/customer-auth.test.ts
 
 Expected: FAIL because zero candidates still throw `CUSTOMER_CONTEXT_MISSING`.
 
-- [ ] **Step 3: Add a separate visitor signer dependency**
+- [x] **Step 3: Add a separate visitor signer dependency**
 
 Extend `DouyinCustomerAuthDependencies` with:
 
@@ -172,7 +172,7 @@ visitorTokenSigner?: (input: DouyinVisitorSessionTokenInput) => string;
 
 Default it to `signDouyinVisitorSessionToken` in the service constructor. Do not overload the existing customer `TokenSigner` because the payloads have different security boundaries.
 
-- [ ] **Step 4: Implement the zero-candidate result**
+- [x] **Step 4: Implement the zero-candidate result**
 
 Replace the zero-candidate throw with a private `buildVerifiedVisitorAuth` flow:
 
@@ -213,7 +213,7 @@ return {
 
 Do not query again, create a CRM customer, or loosen candidate filters.
 
-- [ ] **Step 5: Re-run the service tests and API typecheck**
+- [x] **Step 5: Re-run the service tests and API typecheck**
 
 Run:
 
@@ -225,7 +225,7 @@ bun run typecheck
 
 Expected: tests and typecheck PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/api/src/services/douyin-miniapp/customer-auth-ports.ts apps/api/src/services/douyin-miniapp/customer-auth.ts apps/api/src/services/douyin-miniapp/customer-auth.test.ts
@@ -242,7 +242,7 @@ git commit -m "fix(douyin): complete phone login without project"
 - Modify: `apps/douyin-mini/src/pages/home/page.ts`
 - Modify: `apps/douyin-mini/src/pages/home/material-controller.test.ts`
 
-- [ ] **Step 1: Write failing model/session/navigation tests**
+- [x] **Step 1: Write failing model/session/navigation tests**
 
 Add a visitor branch to the auth-result fixture and test:
 
@@ -262,7 +262,7 @@ expect(manager.getAuthState()).toEqual({
 
 Add migration coverage proving a stored legacy session without `mode` is treated as `customer`. Update the home-page test so an authenticated visitor navigates to `pages/customer-login/index`, while a customer navigates to `pages/customer-projects/index`.
 
-- [ ] **Step 2: Run focused mini-program tests and confirm failure**
+- [x] **Step 2: Run focused mini-program tests and confirm failure**
 
 Run:
 
@@ -273,7 +273,7 @@ bun test src/state/customer-session.test.ts src/pages/home/material-controller.t
 
 Expected: FAIL because session mode APIs do not exist.
 
-- [ ] **Step 3: Extend the stored session and auth union**
+- [x] **Step 3: Extend the stored session and auth union**
 
 Define:
 
@@ -304,7 +304,7 @@ export type StoredSession = {
 
 Keep `mode` optional only for legacy storage compatibility.
 
-- [ ] **Step 4: Implement session mode methods and guarded home navigation**
+- [x] **Step 4: Implement session mode methods and guarded home navigation**
 
 `CustomerSessionManager.acceptAuth` accepts `mode` and `phoneMasked`. Add:
 
@@ -323,7 +323,7 @@ hasCustomerProfile() {
 
 Use `hasCustomerProfile()` in `onMyProjects`. Keep `isAuthenticated()` true for either valid mode.
 
-- [ ] **Step 5: Re-run focused tests and typecheck**
+- [x] **Step 5: Re-run focused tests and typecheck**
 
 Run:
 
@@ -335,7 +335,7 @@ bun run typecheck
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/douyin-mini/src/models/index.ts apps/douyin-mini/src/state/customer-session.ts apps/douyin-mini/src/state/customer-session.test.ts apps/douyin-mini/src/platform/storage.ts apps/douyin-mini/src/pages/home/page.ts apps/douyin-mini/src/pages/home/material-controller.test.ts
@@ -357,7 +357,7 @@ git commit -m "feat(douyin): persist visitor login mode"
 - Modify: `apps/douyin-mini/src/pages/customer-projects/page.ts`
 - Modify or create: `apps/douyin-mini/src/pages/customer-projects/page.test.ts`
 
-- [ ] **Step 1: Write failing login-page tests**
+- [x] **Step 1: Write failing login-page tests**
 
 Cover these observable behaviors:
 
@@ -381,11 +381,11 @@ expect(page.data.authenticatedVisitor).toBe(true);
 
 Also test that SMS send/verify require consent, a customer result still navigates, reload restores a visitor empty state, “申请免费量房” navigates to the lead page, and logout clears the session and returns to the login form.
 
-- [ ] **Step 2: Write failing project-page tests**
+- [x] **Step 2: Write failing project-page tests**
 
 Assert that `onLoad` redirects a visitor to the login page before `fetchCustomerProjects` runs, and that `onLogout` clears the session and navigates to the login page.
 
-- [ ] **Step 3: Run focused tests and confirm failure**
+- [x] **Step 3: Run focused tests and confirm failure**
 
 Run:
 
@@ -396,7 +396,7 @@ bun test src/pages/customer-login/page.test.ts src/pages/customer-projects/page.
 
 Expected: FAIL for missing consent, visitor empty state, mode guard, and logout.
 
-- [ ] **Step 4: Reuse privacy consent with a login scene**
+- [x] **Step 4: Reuse privacy consent with a login scene**
 
 Add a typed `scene` property with default `lead`. Render:
 
@@ -410,7 +410,7 @@ Add a typed `scene` property with default `lead`. Render:
 
 Register the existing component in the customer-login page JSON and navigate policy clicks to `pages/privacy/index`.
 
-- [ ] **Step 5: Implement login state transitions**
+- [x] **Step 5: Implement login state transitions**
 
 Add `consented`, `consentError`, `authenticatedVisitor`, and `phoneMasked` page state. Before phone authorization, SMS sending, or SMS verification, call a shared guard:
 
@@ -431,7 +431,7 @@ In `runAuth`, persist the discriminated mode. Navigate only for `customer`; for 
 
 Add loading text “正在登录” to the primary button. Keep rejection and platform errors distinct from successful no-project state.
 
-- [ ] **Step 6: Guard projects and add logout**
+- [x] **Step 6: Guard projects and add logout**
 
 Before loading projects:
 
@@ -444,7 +444,7 @@ if (!dependencies.getApp().customerSession.hasCustomerProfile()) {
 
 Add a visible “退出登录” button. Its handler clears the session and navigates to the login page.
 
-- [ ] **Step 7: Re-run tests and typecheck**
+- [x] **Step 7: Re-run tests and typecheck**
 
 Run:
 
@@ -456,7 +456,7 @@ bun run typecheck
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add apps/douyin-mini/src/components/privacy-consent apps/douyin-mini/src/pages/customer-login apps/douyin-mini/src/pages/customer-projects
@@ -475,7 +475,7 @@ git commit -m "feat(douyin): complete phone login experience"
 - Modify: `apps/douyin-mini/src/pages/lead/form-model.ts`
 - Modify: `apps/douyin-mini/src/pages/lead/form-model.test.ts`
 
-- [ ] **Step 1: Write failing lead tests**
+- [x] **Step 1: Write failing lead tests**
 
 Change fixtures with `douyin_phone: true` to prove the UI still behaves as SMS-only. Assert the page model no longer exposes `douyinPhoneEnabled`/`douyinPhoneAuthorized`, submissions always use:
 
@@ -486,7 +486,7 @@ sms_code: "123456",
 
 and the TTML contains no `open-type="getPhoneNumber"` or `binddouyinphone`.
 
-- [ ] **Step 2: Run focused tests and static scan**
+- [x] **Step 2: Run focused tests and static scan**
 
 Run:
 
@@ -498,13 +498,13 @@ rg -n 'getPhoneNumber|binddouyinphone|douyinPhone' src/pages/lead src/components
 
 Expected: tests or assertions FAIL and the scan finds the old authorization path.
 
-- [ ] **Step 3: Delete the lead-only authorization state and event path**
+- [x] **Step 3: Delete the lead-only authorization state and event path**
 
 Remove `DOUYIN_PHONE_AUTHORIZATION_TTL_MS`, `douyinPhoneAuthorization`, related data properties, `onDouyinPhoneNumber`, and all submission branching based on a Douyin phone code. Keep SMS cooldown, editable phone, privacy consent, idempotency, and attribution unchanged.
 
 Pass no Douyin-phone properties/events from `pages/lead/index.ttml`. In the form component always render the editable phone field and the SMS verification row.
 
-- [ ] **Step 4: Re-run tests, scan, and typecheck**
+- [x] **Step 4: Re-run tests, scan, and typecheck**
 
 Run:
 
@@ -517,7 +517,7 @@ bun run typecheck
 
 Expected: tests PASS, scan exits successfully with no matches, typecheck PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/douyin-mini/src/components/lead-form apps/douyin-mini/src/pages/lead
@@ -536,7 +536,7 @@ git commit -m "fix(douyin): keep free measurement on sms"
 - Modify: `apps/admin/components/douyin-miniapp/workspace-lead-capture-config.tsx`
 - Modify: `apps/admin/components/douyin-miniapp/workspace-lead-capture-config.test.tsx`
 
-- [ ] **Step 1: Write failing migration and service contract tests**
+- [x] **Step 1: Write failing migration and service contract tests**
 
 Require the migration to:
 
@@ -548,7 +548,7 @@ Require the migration to:
 
 Update bootstrap tests so both `legacy_0_1_10` and `runtime` contracts return SMS mode without mutating their input. Add a service test that rejects attempts to enable Douyin phone capture through `Errors.business`.
 
-- [ ] **Step 2: Run focused tests and confirm failure**
+- [x] **Step 2: Run focused tests and confirm failure**
 
 Run:
 
@@ -559,7 +559,7 @@ bun test src/services/tenant-douyin-miniapp/disable-lead-phone-migration-contrac
 
 Expected: FAIL because runtime still passes through Douyin phone mode and no migration exists.
 
-- [ ] **Step 3: Add the migration**
+- [x] **Step 3: Add the migration**
 
 Use `jsonb_set` to preserve unrelated runtime configuration:
 
@@ -587,7 +587,7 @@ jsonb_build_object('error', jsonb_build_object(
 
 For `p_enabled=false` retain optimistic `updated_at` handling and return an idempotent disabled result.
 
-- [ ] **Step 4: Harden runtime bootstrap and service behavior**
+- [x] **Step 4: Harden runtime bootstrap and service behavior**
 
 Make `bootstrapFeatures` always return a copy with SMS phone fields:
 
@@ -602,7 +602,7 @@ export function bootstrapFeatures(
 
 Reject `enabled=true` in the service before the repository call with `Errors.business` and `DOUYIN_LEAD_PHONE_MODE_UNAVAILABLE`. Add the error code to the existing error-code registry if absent.
 
-- [ ] **Step 5: Replace the admin toggle with an informational SMS-only state**
+- [x] **Step 5: Replace the admin toggle with an informational SMS-only state**
 
 Remove the switch, save request, pending state, and response parser. Render:
 
@@ -620,7 +620,7 @@ Remove the switch, save request, pending state, and response parser. Render:
 
 Update the component test to assert no switch or save button is rendered.
 
-- [ ] **Step 6: Run API/admin checks**
+- [x] **Step 6: Run API/admin checks**
 
 Run:
 
@@ -635,7 +635,7 @@ pnpm run typecheck
 
 Expected: the focused Bun test and both package typechecks PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add supabase/migrations/20260919160000_disable_douyin_lead_phone_capture.sql apps/api/src/services apps/api/src/errors apps/admin/components/douyin-miniapp/workspace-lead-capture-config.tsx apps/admin/components/douyin-miniapp/workspace-lead-capture-config.test.tsx
@@ -647,7 +647,7 @@ git commit -m "fix(douyin): restrict lead capture to sms"
 **Files:**
 - Modify: `docs/superpowers/plans/2026-09-19-douyin-phone-one-click-login.md`
 
-- [ ] **Step 1: Run focused regression suites**
+- [x] **Step 1: Run focused regression suites**
 
 ```bash
 cd apps/api
@@ -658,7 +658,7 @@ bun test src/state/customer-session.test.ts src/pages/home/material-controller.t
 
 Expected: all tests PASS.
 
-- [ ] **Step 2: Run package checks**
+- [x] **Step 2: Run package checks**
 
 ```bash
 cd /Users/leefo/Public/work/gooes
@@ -673,7 +673,7 @@ Expected: typechecks, builds, tests, and file-size guards PASS.
 
 Run `supabase migration list` with the repository's configured project context and verify the new migration is Local-only before deployment. If the local Supabase database is available, execute the migration inside a transaction and roll it back after contract validation. Do not run production DDL manually.
 
-- [ ] **Step 4: Perform static release scans**
+- [x] **Step 4: Perform static release scans**
 
 ```bash
 ! rg -n 'getPhoneNumber|binddouyinphone|douyinPhone' apps/douyin-mini/src/pages/lead apps/douyin-mini/src/components/lead-form
@@ -685,7 +685,7 @@ git status --short
 
 Expected: no lead-page phone authorization, exactly one customer-login authorization entry, no AI rendering UI, and no whitespace errors.
 
-- [ ] **Step 5: Review security and repository boundaries**
+- [x] **Step 5: Review security and repository boundaries**
 
 Inspect the final diff and confirm:
 
@@ -697,7 +697,7 @@ Inspect the final diff and confirm:
 - no dependency was added;
 - no unrelated refactor was introduced.
 
-- [ ] **Step 6: Commit plan verification and report deployment order**
+- [x] **Step 6: Commit plan verification and report deployment order**
 
 Update this file with commands and exact results, then:
 
@@ -707,3 +707,16 @@ git commit -m "docs(douyin): record phone login verification"
 ```
 
 The release report must state: deploy API, apply the tracked production migration, verify bootstrap SMS mode, build/upload template `0.1.40`, generate an experience version, run two real-device login cases, then submit review.
+
+
+#### Verification record — 2026-09-19
+
+- Focused API regression: 41 passed, 0 failed before review; review-fix suite: 10 passed, 0 failed.
+- Full API check: typecheck passed, 985 modules built, 5.14 MB bundle, file-size guard passed.
+- Full Douyin mini-program check: 373 passed, 0 failed, 1,743 assertions; typecheck passed.
+- Admin check: file-size guard and Next.js/TypeScript typecheck passed.
+- Static scan: no lead-page phone authorization; exactly one customer-login `getPhoneNumber`; no AI rendering UI in non-test source; `git diff --check` passed.
+- Independent re-review: no remaining Critical or Important findings; 33 API and 50 mini-program focused tests passed.
+- Security review: visitor token is claim-restricted and rejected from customer routes; its frontend cache uses the server-provided expiry; logout clears cached project rows and replaces history; no sensitive auth logging or new dependency was added.
+- Migration validation: `supabase migration list --local` succeeded and shows `20260919160000` Local-only. The repository is not linked for direct remote listing, and the local database has an older pre-existing migration backlog, so the new migration was not applied out of order. Production validation must use the repository workflow plan before apply.
+- Repository boundary: no files under `/Users/leefo/Public/work/orange` were changed.
