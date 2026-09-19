@@ -181,26 +181,95 @@ describe("DouyinCustomerAuthService", () => {
     }
   });
 
-  test("zero customer match does not create a customer profile", async () => {
+  test("authorized phone without a customer returns an authenticated visitor", async () => {
     const createLocalPlatformUser = mock(async () =>
       "77777777-7777-4777-8777-777777777777"
     );
+    const syncOauthIdentityBestEffort = mock(async () => undefined);
+    const bindCustomerAuthUser = mock(async () => undefined);
+    const tokenSigner = mock(() => "customer-auth-token");
+    const visitorTokenSigner = mock(() => "douyin-visitor-token");
     const service = makeService({
       authUsers: { createLocalPlatformUser },
+      userIdentities: {
+        findActiveOauthIdentity: mock(async () => null),
+        syncOauthIdentityBestEffort,
+        syncBusinessMembershipBestEffort: mock(async () => undefined),
+      },
+      customerIdentity: {
+        getCustomerTenantOptionById: mock(async () => activeCustomer),
+        bindCustomerAuthUser,
+      },
+      candidateRepository: {
+        ...baseCandidateRepository(),
+        listCustomersByPhone: mock(async () => []),
+      },
+      tokenSigner,
+      visitorTokenSigner,
+    });
+
+    await expect(service.authorizePhone({
+      request: { user: douyinUser, id: "req-4", log: testLog() },
+      input: { douyin_phone_code: "official-phone-code" },
+    })).resolves.toMatchObject({
+      status: "authenticated",
+      auth: {
+        token: "douyin-visitor-token",
+        user_id: "77777777-7777-4777-8777-777777777777",
+        visitor_id: "77777777-7777-4777-8777-777777777777",
+        mode: "platform_visitor",
+        authMode: "platform_visitor",
+        roles: ["visitor"],
+        verified_phone: "13800138000",
+        phone_masked: "138****8000",
+        has_customer_profile: false,
+        tenant: null,
+        customer: null,
+      },
+    });
+    expect(createLocalPlatformUser).toHaveBeenCalledTimes(1);
+    expect(syncOauthIdentityBestEffort).toHaveBeenCalledWith({
+      userId: "77777777-7777-4777-8777-777777777777",
+      platform: "douyin_mini",
+      openid: douyinUser.subject_hash,
+      unionid: null,
+      source: "douyin_customer_auth",
+    });
+    expect(visitorTokenSigner).toHaveBeenCalledWith({
+      userId: "77777777-7777-4777-8777-777777777777",
+      tenantId: douyinUser.tenant_id,
+      installationId: douyinUser.douyin_installation_id,
+      appId: douyinUser.douyin_app_id,
+      subjectHash: douyinUser.subject_hash,
+      verifiedPhone: "13800138000",
+    });
+    expect(tokenSigner).not.toHaveBeenCalled();
+    expect(bindCustomerAuthUser).not.toHaveBeenCalled();
+  });
+
+  test("SMS login without a customer returns the same authenticated visitor", async () => {
+    const visitorTokenSigner = mock(() => "douyin-sms-visitor-token");
+    const service = makeService({
+      visitorTokenSigner,
       candidateRepository: {
         ...baseCandidateRepository(),
         listCustomersByPhone: mock(async () => []),
       },
     });
 
-    await expect(service.authorizePhone({
-      request: { user: douyinUser, id: "req-4", log: testLog() },
-      input: { douyin_phone_code: "official-phone-code" },
-    })).rejects.toMatchObject({
-      statusCode: 404,
-      code: ErrorCodes.CUSTOMER_CONTEXT_MISSING,
+    await expect(service.verifySms({
+      request: { user: douyinUser, id: "req-5", log: testLog() },
+      input: { phone: "13800138000", code: "123456" },
+    })).resolves.toMatchObject({
+      status: "authenticated",
+      auth: {
+        token: "douyin-sms-visitor-token",
+        mode: "platform_visitor",
+        has_customer_profile: false,
+        phone_masked: "138****8000",
+      },
     });
-    expect(createLocalPlatformUser).not.toHaveBeenCalled();
+    expect(visitorTokenSigner).toHaveBeenCalledTimes(1);
   });
 });
 

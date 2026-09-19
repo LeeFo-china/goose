@@ -1,23 +1,18 @@
 import { createHash, randomBytes } from "node:crypto";
 import { ErrorCodes } from "@/errors/error-codes";
 import { Errors } from "@/errors/error-factory";
-import {
-  type ClaimVerificationResult,
-} from "@/repositories/phone-identity-login";
-import {
-  type CustomerTenantOption,
-} from "@/services/wechat-customer-identities/legacy-service";
+import type { ClaimVerificationResult } from "@/repositories/phone-identity-login";
+import type { CustomerTenantOption } from "@/services/wechat-customer-identities/legacy-service";
 import type {
-  DouyinCustomerAuthAuthorizeInput,
-  DouyinCustomerAuthSelectInput,
-  DouyinCustomerAuthSendCodeInput,
-  DouyinCustomerAuthVerifyInput,
+  DouyinCustomerAuthAuthorizeInput, DouyinCustomerAuthSelectInput,
+  DouyinCustomerAuthSendCodeInput, DouyinCustomerAuthVerifyInput,
 } from "@/schema/douyin-customer-auth";
 import { isPhoneLoginWithoutCodeEnabled } from "@/utils/auth/test-login";
-import { signToken, type JwtPayload } from "@/utils/jwt";
 import {
-  buildPhoneIdentityCandidates,
-} from "@/services/phone-identity-login/candidates";
+  signDouyinVisitorSessionToken,
+  signToken, type JwtPayload,
+} from "@/utils/jwt";
+import { buildPhoneIdentityCandidates } from "@/services/phone-identity-login/candidates";
 import {
   hashToken,
   maskPhone,
@@ -27,12 +22,10 @@ import {
 import { selectionError } from "@/services/phone-identity-login/helpers";
 import type { PhoneIdentityCandidate } from "@/services/phone-identity-login/types";
 import type {
-  AccessTokenPort,
-  DouyinCustomerAuthDependencies,
-  DouyinCustomerAuthRequestLike as RequestLike,
-  PhoneGateway,
-  TokenSigner,
+  AccessTokenPort, DouyinCustomerAuthDependencies,
+  DouyinCustomerAuthRequestLike as RequestLike, PhoneGateway, TokenSigner,
 } from "./customer-auth-ports";
+import { buildDouyinVerifiedVisitorAuth } from "./customer-auth-visitor";
 import { signRenderingPhone, verifyRenderingSmsCode } from "./rendering-phone";
 
 const SELECTION_TTL_SECONDS = 5 * 60;
@@ -188,11 +181,20 @@ export class DouyinCustomerAuthService {
   ) {
     const discovery = await this.discoverCustomerCandidates(actor, phone, existing?.authUserId ?? null);
     if (discovery.candidates.length === 0) {
-      throw Errors.business(
-        404,
-        "该手机号未匹配到客户项目，请联系装修公司确认预留手机号",
-        ErrorCodes.CUSTOMER_CONTEXT_MISSING,
-      );
+      const authUserId = existing?.authUserId ??
+        await this.resolveAuthUserId(actor, null);
+      return {
+        status: "authenticated" as const,
+        auth: await buildDouyinVerifiedVisitorAuth({
+          actor,
+          authUserId,
+          verifiedPhone: phone,
+          syncOauthIdentity: (input) =>
+            this.dependencies.userIdentities.syncOauthIdentityBestEffort(input),
+          tokenSigner: this.dependencies.visitorTokenSigner ??
+            signDouyinVisitorSessionToken,
+        }),
+      };
     }
     if (discovery.candidates.length === 1) {
       const candidate = discovery.candidates[0]!;
