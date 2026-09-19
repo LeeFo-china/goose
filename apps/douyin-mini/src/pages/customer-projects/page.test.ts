@@ -59,7 +59,7 @@ test("customer projects redirects visitor sessions without fetching customer dat
 
 test("customer projects logout clears the session and returns to login", async () => {
   const clear = mock(() => undefined);
-  const navigateToPage = mock(async () => undefined);
+  const replacePage = mock(async () => undefined);
   const page = attachSetData(createCustomerProjectsPageDefinition({
     getApp: () => ({
       customerApi: {},
@@ -70,7 +70,8 @@ test("customer projects logout clears the session and returns to login", async (
       pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
     })),
     navigateToCustomerProjectDetail: mock(async () => undefined),
-    navigateToPage,
+    navigateToPage: mock(async () => undefined),
+    replacePage,
     showToast: mock(() => undefined),
     stopPullDownRefresh: mock(() => undefined),
   } as never));
@@ -79,7 +80,36 @@ test("customer projects logout clears the session and returns to login", async (
   await Promise.resolve();
 
   expect(clear).toHaveBeenCalledTimes(1);
-  expect(navigateToPage).toHaveBeenCalledWith("pages/customer-login/index");
+  expect(page.data.items).toEqual([]);
+  expect(replacePage).toHaveBeenCalledWith("pages/customer-login/index");
+});
+
+test("customer projects clears cached rows when a returning page has no customer session", () => {
+  const replacePage = mock(async () => undefined);
+  const page = attachSetData(createCustomerProjectsPageDefinition({
+    getApp: () => ({
+      customerApi: {},
+      customerSession: {
+        hasCustomerProfile: () => false,
+        clear: mock(() => undefined),
+      },
+    }),
+    fetchCustomerProjects: mock(async () => ({
+      list: [],
+      pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+    })),
+    navigateToCustomerProjectDetail: mock(async () => undefined),
+    navigateToPage: mock(async () => undefined),
+    replacePage,
+    showToast: mock(() => undefined),
+    stopPullDownRefresh: mock(() => undefined),
+  } as never));
+  page.data.items = [project()];
+
+  page.onShow();
+
+  expect(page.data.items).toEqual([]);
+  expect(replacePage).toHaveBeenCalledWith("pages/customer-login/index");
 });
 
 function attachSetData<T extends { data: Record<string, unknown> }>(definition: T) {

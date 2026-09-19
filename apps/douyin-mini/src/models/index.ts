@@ -264,6 +264,7 @@ export type CustomerVisitorAuthResult = {
   roles: ["visitor"];
   verified_phone: string;
   phone_masked: string;
+  expires_in: number;
   has_customer_profile: false;
   tenant: null;
   customer: null;

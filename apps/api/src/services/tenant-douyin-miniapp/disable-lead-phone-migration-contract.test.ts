@@ -22,8 +22,9 @@ describe("disable Douyin lead phone capture migration", () => {
     expect(sql).toContain("SET LOCAL lock_timeout = '5s'");
     expect(sql).toContain("SET LOCAL statement_timeout = '30s'");
     expect(sql).toContain("UPDATE public.douyin_miniapp_installations AS installation");
-    expect(sql).toContain("'{features,douyin_phone}', 'false'::jsonb, true");
-    expect(sql).toContain("'{features,phone_capture_mode}', '\"sms\"'::jsonb, true");
+    expect(sql).toContain("'{features}'");
+    expect(sql).toContain("jsonb_typeof(installation.runtime_config -> 'features') = 'object'");
+    expect(sql).toContain("jsonb_build_object( 'douyin_phone', false, 'phone_capture_mode', 'sms' )");
     expect(sql).not.toContain("jsonb_build_object( 'cases'");
     expect(raw).toContain("Rollback");
   });
@@ -33,6 +34,9 @@ describe("disable Douyin lead phone capture migration", () => {
     const signature = "public.update_douyin_miniapp_lead_capture_config( uuid, uuid, text, timestamptz, boolean )";
     expect(sql).toContain("CREATE OR REPLACE FUNCTION public.update_douyin_miniapp_lead_capture_config(");
     expect(sql).toContain("IF p_enabled THEN");
+    expect(sql).toContain("jsonb_typeof(v_features -> 'cases') IS DISTINCT FROM 'boolean'");
+    expect(sql).toContain("jsonb_typeof(v_features -> 'sites') IS DISTINCT FROM 'boolean'");
+    expect(sql).toContain("'DOUYIN_RUNTIME_CONFIG_INVALID'");
     expect(sql).toContain("'DOUYIN_LEAD_PHONE_MODE_UNAVAILABLE'");
     expect(sql).toContain("'enabled', false");
     expect(sql).toContain(`REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC, anon, authenticated`);

@@ -100,10 +100,29 @@ function parseSmsSend(value: unknown): CustomerSmsSendResult | null {
 }
 
 function parseCustomerAuth(value: unknown): CustomerAuthResult | null {
-  if (!isRecord(value) || value.mode !== "customer" || !Array.isArray(value.roles)) return null;
+  if (!isRecord(value) || !Array.isArray(value.roles) || typeof value.token !== "string") return null;
+  if (value.mode === "platform_visitor") {
+    if (
+      value.authMode !== "platform_visitor" ||
+      value.has_customer_profile !== false ||
+      value.tenant !== null ||
+      value.customer !== null ||
+      typeof value.user_id !== "string" ||
+      typeof value.visitor_id !== "string" ||
+      typeof value.verified_phone !== "string" ||
+      typeof value.phone_masked !== "string" ||
+      !Number.isInteger(value.expires_in) ||
+      (value.expires_in as number) <= 0 ||
+      (value.expires_in as number) > 86_400 ||
+      value.roles.length !== 1 ||
+      value.roles[0] !== "visitor"
+    ) return null;
+    return value as CustomerAuthResult;
+  }
+  if (value.mode !== "customer") return null;
   const tenant = isRecord(value.tenant) ? value.tenant : null;
   const customer = isRecord(value.customer) ? value.customer : null;
-  if (!tenant || !customer || typeof value.token !== "string") return null;
+  if (!tenant || !customer) return null;
   if (typeof customer.id !== "string" || typeof tenant.id !== "string") return null;
   return value as CustomerAuthResult;
 }

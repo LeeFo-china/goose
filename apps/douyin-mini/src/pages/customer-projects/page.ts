@@ -1,7 +1,11 @@
 import type { DouyinAppContext } from "../../app";
 import type { fetchCustomerProjects } from "../../api/customer";
 import type { CustomerProject } from "../../models";
-import type { navigateToCustomerProjectDetail, navigateToPage } from "../../platform/navigation";
+import type {
+  navigateToCustomerProjectDetail,
+  navigateToPage,
+  replacePage,
+} from "../../platform/navigation";
 
 type LoadMode = "refresh" | "loadMore" | "retry";
 
@@ -10,6 +14,7 @@ export type CustomerProjectsPageDependencies = {
   fetchCustomerProjects: typeof fetchCustomerProjects;
   navigateToCustomerProjectDetail: typeof navigateToCustomerProjectDetail;
   navigateToPage: typeof navigateToPage;
+  replacePage: typeof replacePage;
   showToast(options: { title: string; icon: "none" }): void;
   stopPullDownRefresh(): void;
 };
@@ -30,6 +35,11 @@ export function createCustomerProjectsPageDefinition(dependencies: CustomerProje
     onLoad() {
       if (!this.ensureCustomerSession()) return;
       void this.load("refresh");
+    },
+    onShow() {
+      if (dependencies.getApp().customerSession.hasCustomerProfile()) return;
+      this.clearPrivateState();
+      void dependencies.replacePage("pages/customer-login/index");
     },
     onPullDownRefresh() { void this.load("refresh", true); },
     onReachBottom() { void this.load("loadMore"); },
@@ -84,7 +94,8 @@ export function createCustomerProjectsPageDefinition(dependencies: CustomerProje
     onLogin() { void dependencies.navigateToPage("pages/customer-login/index"); },
     onLogout() {
       dependencies.getApp().customerSession.clear();
-      void dependencies.navigateToPage("pages/customer-login/index");
+      this.clearPrivateState();
+      void dependencies.replacePage("pages/customer-login/index");
     },
     ensureCustomerSession() {
       if (dependencies.getApp().customerSession.hasCustomerProfile()) return true;
@@ -93,6 +104,18 @@ export function createCustomerProjectsPageDefinition(dependencies: CustomerProje
     },
     onRetry() { void this.load("retry"); },
     onLoadMore() { void this.load("loadMore"); },
+    clearPrivateState() {
+      this.page = 1;
+      this.hasMore = true;
+      this.loading = false;
+      this.setData({
+        items: [],
+        firstLoading: false,
+        firstError: false,
+        empty: false,
+        paginationStatus: "idle",
+      });
+    },
   });
 }
 

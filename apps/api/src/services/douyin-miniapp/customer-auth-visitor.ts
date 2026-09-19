@@ -1,5 +1,8 @@
 import { maskPhone } from "@/services/phone-identity-login/helpers";
-import type { DouyinVisitorSessionTokenInput } from "@/utils/jwt";
+import {
+  getDouyinVisitorSessionExpiresInSeconds,
+  type DouyinVisitorSessionTokenInput,
+} from "@/utils/jwt";
 
 type DouyinVisitorActor = {
   tenantId: string;
@@ -46,6 +49,7 @@ export async function buildDouyinVerifiedVisitorAuth(input: {
     roles: ["visitor"] as ["visitor"],
     verified_phone: input.verifiedPhone,
     phone_masked: maskPhone(input.verifiedPhone),
+    expires_in: getDouyinVisitorSessionExpiresInSeconds(),
     has_customer_profile: false as const,
     tenant: null,
     customer: null,

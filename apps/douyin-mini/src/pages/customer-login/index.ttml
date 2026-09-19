@@ -58,14 +58,23 @@
       />
     </view>
     <button
+      tt:if="{{consented}}"
       class="primary-action ui-pressable"
       hover-class="ui-pressable--pressed"
       style="background-color: {{primaryColor}}; color: {{primaryTextColor}}"
       open-type="getPhoneNumber"
-      disabled="{{status !== 'idle' || !phoneLoginReady || !consented}}"
+      disabled="{{status !== 'idle' || !phoneLoginReady}}"
       loading="{{status === 'authorizing'}}"
       bindgetphonenumber="onDouyinPhone"
     >{{status === 'authorizing' ? '正在登录' : '抖音手机号快捷登录'}}</button>
+    <button
+      tt:else
+      class="primary-action ui-pressable"
+      hover-class="ui-pressable--pressed"
+      style="background-color: {{primaryColor}}; color: {{primaryTextColor}}"
+      disabled="{{status !== 'idle' || !phoneLoginReady}}"
+      bindtap="onDouyinPhone"
+    >抖音手机号快捷登录</button>
 
     <view tt:if="{{loginError && !smsExpanded}}" class="inline-error" role="alert">{{loginError}}</view>
 

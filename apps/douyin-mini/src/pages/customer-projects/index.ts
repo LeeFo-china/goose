@@ -3,6 +3,7 @@ import { fetchCustomerProjects } from "../../api/customer";
 import {
   navigateToCustomerProjectDetail,
   navigateToPage,
+  replacePage,
 } from "../../platform/navigation";
 import { createCustomerProjectsPageDefinition } from "./page";
 
@@ -11,6 +12,7 @@ Page(createCustomerProjectsPageDefinition({
   fetchCustomerProjects,
   navigateToCustomerProjectDetail,
   navigateToPage,
+  replacePage,
   showToast: (options) => { void tt.showToast(options); },
   stopPullDownRefresh: () => { void tt.stopPullDownRefresh({}); },
 }));

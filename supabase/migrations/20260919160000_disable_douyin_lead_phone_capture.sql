@@ -12,14 +12,18 @@ LOCK TABLE public.douyin_miniapp_installations IN SHARE ROW EXCLUSIVE MODE;
 
 UPDATE public.douyin_miniapp_installations AS installation
 SET runtime_config = pg_catalog.jsonb_set(
-      pg_catalog.jsonb_set(
-        installation.runtime_config,
-        '{features,douyin_phone}',
-        'false'::jsonb,
-        true
+      installation.runtime_config,
+      '{features}',
+      (
+        CASE
+          WHEN pg_catalog.jsonb_typeof(installation.runtime_config -> 'features') = 'object'
+            THEN installation.runtime_config -> 'features'
+          ELSE '{}'::jsonb
+        END
+      ) || pg_catalog.jsonb_build_object(
+        'douyin_phone', false,
+        'phone_capture_mode', 'sms'
       ),
-      '{features,phone_capture_mode}',
-      '"sms"'::jsonb,
       true
     ),
     updated_at = GREATEST(
@@ -43,6 +47,8 @@ SET search_path = pg_catalog, public
 AS $function$
 DECLARE
   v_installation public.douyin_miniapp_installations%ROWTYPE;
+  v_features jsonb;
+  v_next_features jsonb;
   v_updated_at timestamptz;
 BEGIN
   IF p_tenant_id IS NULL
@@ -97,16 +103,29 @@ BEGIN
     );
   END IF;
 
+  v_features := v_installation.runtime_config -> 'features';
+  IF pg_catalog.jsonb_typeof(v_features) IS DISTINCT FROM 'object'
+    OR pg_catalog.jsonb_typeof(v_features -> 'cases') IS DISTINCT FROM 'boolean'
+    OR pg_catalog.jsonb_typeof(v_features -> 'sites') IS DISTINCT FROM 'boolean'
+  THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'error', pg_catalog.jsonb_build_object(
+        'status_code', 409,
+        'code', 'DOUYIN_RUNTIME_CONFIG_INVALID'
+      )
+    );
+  END IF;
+
+  v_next_features := v_features || pg_catalog.jsonb_build_object(
+    'douyin_phone', false,
+    'phone_capture_mode', 'sms'
+  );
+
   UPDATE public.douyin_miniapp_installations AS installation
   SET runtime_config = pg_catalog.jsonb_set(
-        pg_catalog.jsonb_set(
-          v_installation.runtime_config,
-          '{features,douyin_phone}',
-          'false'::jsonb,
-          true
-        ),
-        '{features,phone_capture_mode}',
-        '"sms"'::jsonb,
+        v_installation.runtime_config,
+        '{features}',
+        v_next_features,
         true
       ),
       updated_at = GREATEST(

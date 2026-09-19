@@ -227,7 +227,10 @@ export function createCustomerLoginPageDefinition(dependencies: CustomerLoginPag
           token: result.auth.token,
           mode: result.auth.mode,
           ...(result.auth.mode === "platform_visitor"
-            ? { phoneMasked: result.auth.phone_masked }
+            ? {
+              phoneMasked: result.auth.phone_masked,
+              expiresIn: result.auth.expires_in,
+            }
             : {}),
         });
         if (result.auth.mode === "platform_visitor") {

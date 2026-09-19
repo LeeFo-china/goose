@@ -79,6 +79,34 @@ describe("Douyin customer auth API client", () => {
       candidateId: "11111111-1111-4111-8111-111111111111",
     })).resolves.toMatchObject({ status: "authenticated" });
   });
+
+  test("parses an authenticated visitor with the server session lifetime", async () => {
+    const client = clientWith(() => ({
+      status: "authenticated",
+      auth: {
+        token: "visitor-token",
+        user_id: "77777777-7777-4777-8777-777777777777",
+        visitor_id: "77777777-7777-4777-8777-777777777777",
+        mode: "platform_visitor",
+        authMode: "platform_visitor",
+        roles: ["visitor"],
+        verified_phone: "13800138000",
+        phone_masked: "138****8000",
+        expires_in: 7200,
+        has_customer_profile: false,
+        tenant: null,
+        customer: null,
+      },
+    }));
+
+    await expect(authorizeDouyinCustomerPhone(client, "official-code")).resolves.toEqual({
+      status: "authenticated",
+      auth: expect.objectContaining({
+        mode: "platform_visitor",
+        expires_in: 7200,
+      }),
+    });
+  });
 });
 
 function customerAuth() {

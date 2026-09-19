@@ -222,6 +222,7 @@ describe("DouyinCustomerAuthService", () => {
         roles: ["visitor"],
         verified_phone: "13800138000",
         phone_masked: "138****8000",
+        expires_in: 7200,
         has_customer_profile: false,
         tenant: null,
         customer: null,

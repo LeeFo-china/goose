@@ -401,7 +401,7 @@ export function getDouyinMiniappTokenExpiresInSeconds() {
     : DOUYIN_MINIAPP_DEFAULT_EXPIRES_IN_SECONDS;
 }
 
-function getDouyinVisitorSessionExpiresInSeconds() {
+export function getDouyinVisitorSessionExpiresInSeconds() {
   const configured = process.env.VISITOR_SESSION_JWT_EXPIRES_IN;
   const parsed = configured
     ? parseJwtExpiresIn(configured)

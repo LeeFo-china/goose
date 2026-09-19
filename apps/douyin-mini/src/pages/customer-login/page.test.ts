@@ -94,6 +94,7 @@ test("customer login shows a successful empty state for a visitor without projec
     token: "visitor-token",
     mode: "platform_visitor",
     phoneMasked: "138****8000",
+    expiresIn: 7200,
   });
   expect(navigateToPage).not.toHaveBeenCalledWith("pages/customer-projects/index");
   expect(page.data.authenticatedVisitor).toBe(true);
@@ -381,6 +382,10 @@ test("customer project login copy makes the business destination explicit", asyn
   expect(template).toContain("手机号仅用于核验并查找您关联的装修项目");
   expect(template).toContain("当前手机号暂未关联装修项目");
   expect(template).toContain("privacy-consent");
+  expect(template).toContain('tt:if="{{consented}}"');
+  expect(template).toContain('tt:else');
+  expect(template.match(/open-type="getPhoneNumber"/g)).toHaveLength(1);
+  expect(template).toContain('bindtap="onDouyinPhone"');
 });
 
 function attachSetData<T extends { data: Record<string, unknown> }>(definition: T) {
@@ -400,6 +405,7 @@ function visitorAuth() {
     roles: ["visitor"],
     verified_phone: "13800138000",
     phone_masked: "138****8000",
+    expires_in: 7200,
     has_customer_profile: false,
   };
 }
