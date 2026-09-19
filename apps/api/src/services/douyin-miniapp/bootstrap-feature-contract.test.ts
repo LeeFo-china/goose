@@ -22,7 +22,13 @@ describe("bootstrapFeatures", () => {
     });
   });
 
-  test("keeps modern phone fields for the runtime contract", () => {
-    expect(bootstrapFeatures(modernFeatures, "runtime")).toBe(modernFeatures);
+  test("forces SMS mode for the runtime contract without mutating input", () => {
+    expect(bootstrapFeatures(modernFeatures, "runtime")).toEqual({
+      ...modernFeatures,
+      douyin_phone: false,
+      phone_capture_mode: "sms",
+    });
+    expect(bootstrapFeatures(modernFeatures, "runtime")).not.toBe(modernFeatures);
+    expect(modernFeatures.phone_capture_mode).toBe("douyin_phone");
   });
 });

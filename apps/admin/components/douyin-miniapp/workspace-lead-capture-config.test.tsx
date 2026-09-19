@@ -2,11 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import {
-  buildLeadCaptureConfigRequest,
-  parseLeadCaptureConfigResponse,
-  TenantDouyinLeadCaptureConfig,
-} from "./workspace-lead-capture-config";
+import { TenantDouyinLeadCaptureConfig } from "./workspace-lead-capture-config";
 import type { TenantDouyinWorkspace } from "./workspace-types";
 
 const installation: NonNullable<TenantDouyinWorkspace["installation"]> = {
@@ -36,42 +32,7 @@ const installation: NonNullable<TenantDouyinWorkspace["installation"]> = {
 };
 
 describe("TenantDouyinLeadCaptureConfig", () => {
-  test("builds exact requests without a clue component ID", () => {
-    expect(buildLeadCaptureConfigRequest(installation, false)).toEqual({
-      data: {
-        authorizer_appid: installation.authorizer_appid,
-        enabled: false,
-        expected_updated_at: installation.updated_at,
-      },
-      error: null,
-    });
-    expect(buildLeadCaptureConfigRequest(installation, true)).toEqual({
-      data: {
-        authorizer_appid: installation.authorizer_appid,
-        enabled: true,
-        expected_updated_at: installation.updated_at,
-      },
-      error: null,
-    });
-  });
-
-  test("strictly parses the public response and rejects extra fields", () => {
-    const response = {
-      installation_id: installation.id,
-      authorizer_appid: installation.authorizer_appid,
-      enabled: true,
-      updated_at: "2026-09-06T00:00:02.000Z",
-    };
-    expect(parseLeadCaptureConfigResponse(response)).toEqual(response);
-    expect(() => parseLeadCaptureConfigResponse({ ...response, secret: true }))
-      .toThrow("手机号留资配置响应格式无效");
-    expect(() => parseLeadCaptureConfigResponse({
-      ...response,
-      clue_component_id: "legacy-component-id",
-    })).toThrow("手机号留资配置响应格式无效");
-  });
-
-  test("renders current AppID and a permission-aware switch without component ID", () => {
+  test("renders an informational SMS-only state without mutable controls", () => {
     const editable = renderToStaticMarkup(createElement(
       TenantDouyinLeadCaptureConfig,
       { canManage: true, installation },
@@ -80,35 +41,27 @@ describe("TenantDouyinLeadCaptureConfig", () => {
     expect(editable).toContain(installation.authorizer_appid);
     expect(editable).not.toContain("legacy-component-id");
     expect(editable).not.toContain("线索组件 ID");
-    expect(editable).toContain("抖音官方手机号快捷留资");
-    expect(editable).toContain("保存留资配置");
+    expect(editable).toContain("短信验证码模式");
+    expect(editable).toContain("免费量房由用户填写手机号并完成短信验证");
+    expect(editable).toContain("抖音手机号快捷登录仅用于客户账号登录");
+    expect(editable).not.toContain("抖音官方手机号快捷留资");
+    expect(editable).not.toContain("保存留资配置");
+    expect(editable).not.toContain('role="switch"');
 
     const readonly = renderToStaticMarkup(createElement(
       TenantDouyinLeadCaptureConfig,
       { canManage: false, installation },
     ));
-    expect(readonly).toContain("只读模式");
-    expect(readonly).toContain("disabled");
-
-    const inactive = renderToStaticMarkup(createElement(
-      TenantDouyinLeadCaptureConfig,
-      {
-        canManage: true,
-        installation: { ...installation, authorization_status: "disabled" },
-      },
-    ));
-    expect(inactive).toContain("小程序授权未启用");
-    expect(inactive).toContain("disabled");
+    expect(readonly).toContain("短信验证码模式");
   });
 
-  test("uses the tenant PATCH endpoint and refreshes stale workspaces", async () => {
+  test("contains no client mutation path", async () => {
     const source = await Bun.file(new URL(
       "./workspace-lead-capture-config.tsx",
       import.meta.url,
     )).text();
-    expect(source).toContain('"/tenant/douyin-miniapp/lead-capture-config"');
-    expect(source).toContain('method: "PATCH"');
-    expect(source).toContain('code === "DOUYIN_LEAD_CAPTURE_CONFIG_STALE"');
-    expect(source).toContain("window.location.reload()");
+    expect(source).not.toContain("requestBackendJson");
+    expect(source).not.toContain("<Switch");
+    expect(source).not.toContain("useState");
   });
 });

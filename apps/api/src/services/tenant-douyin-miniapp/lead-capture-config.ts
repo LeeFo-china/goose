@@ -50,6 +50,13 @@ export class TenantDouyinMiniappLeadCaptureConfigService {
   ) {
     const tenantId = this.accessPolicy.assertTenantContext(authContext);
     this.accessPolicy.assertPermission(authContext, MANAGE_PERMISSION);
+    if (input.enabled) {
+      throw Errors.business(
+        409,
+        "免费量房仅支持短信验证码，抖音手机号快捷登录仅用于客户账号登录",
+        "DOUYIN_LEAD_PHONE_MODE_UNAVAILABLE",
+      );
+    }
     const installation = await this.workspace.findCurrentInstallation(tenantId);
     if (!installation) {
       throw Errors.business(

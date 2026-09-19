@@ -15,6 +15,7 @@ const RpcErrorSchema = z.strictObject({
     ) }),
     z.strictObject({ status_code: z.literal(409), code: z.enum([
       "DOUYIN_LEAD_CAPTURE_CONFIG_STALE",
+      "DOUYIN_LEAD_PHONE_MODE_UNAVAILABLE",
       "DOUYIN_RUNTIME_CONFIG_INVALID",
     ]) }),
   ]),
@@ -85,6 +86,7 @@ function businessError(error: z.infer<typeof RpcErrorSchema>["error"]) {
     DOUYIN_LEAD_CAPTURE_CONFIG_INVALID: "手机号留资配置参数无效",
     DOUYIN_ACTIVE_INSTALLATION_NOT_FOUND: "当前已授权小程序不存在",
     DOUYIN_LEAD_CAPTURE_CONFIG_STALE: "配置已更新，请刷新后重试",
+    DOUYIN_LEAD_PHONE_MODE_UNAVAILABLE: "免费量房仅支持短信验证码",
     DOUYIN_RUNTIME_CONFIG_INVALID: "当前小程序运行配置无效",
   };
   return Errors.business(error.status_code, messages[error.code], error.code);
