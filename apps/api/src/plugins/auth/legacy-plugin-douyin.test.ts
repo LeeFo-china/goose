@@ -12,12 +12,15 @@ process.env.JWT_SECRET = JWT_SECRET;
 
 let authPlugin: typeof import("./legacy-plugin").default;
 let signDouyinMiniappToken: typeof import("@/utils/jwt").signDouyinMiniappToken;
+let signDouyinVisitorSessionToken:
+  typeof import("@/utils/jwt").signDouyinVisitorSessionToken;
 let signToken: typeof import("@/utils/jwt").signToken;
 let userIdentityService: typeof import("@/services/user-identities").userIdentityService;
 
 beforeAll(async () => {
   ({ default: authPlugin } = await import("./legacy-plugin"));
-  ({ signDouyinMiniappToken, signToken } = await import("@/utils/jwt"));
+  ({ signDouyinMiniappToken, signDouyinVisitorSessionToken, signToken } =
+    await import("@/utils/jwt"));
   ({ userIdentityService } = await import("@/services/user-identities"));
 });
 
@@ -67,6 +70,28 @@ function signExpiredToken(payload: Record<string, unknown>) {
 }
 
 describe("auth plugin Douyin miniapp isolation", () => {
+  test("rejects a Douyin visitor session from customer project routes", async () => {
+    const app = await createApp();
+    const token = signDouyinVisitorSessionToken({
+      userId: "77777777-7777-4777-8777-777777777777",
+      tenantId: douyinPayload.tenant_id,
+      installationId: douyinPayload.douyin_installation_id,
+      appId: douyinPayload.douyin_app_id,
+      subjectHash: douyinPayload.subject_hash,
+      verifiedPhone: "13800138000",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/customer/projects",
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toMatchObject({ code: "TOKEN_INVALID" });
+    await app.close();
+  });
+
   test("bypasses auth only for the exact session exchange POST", async () => {
     const app = await createApp();
     expect((await app.inject({ method: "POST", url: "/douyin-mini/auth/session" })).statusCode)

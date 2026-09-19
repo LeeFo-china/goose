@@ -15,7 +15,71 @@ const payload = {
   subject_hash: "a".repeat(64),
 };
 
+const visitorPayload = {
+  userId: "77777777-7777-4777-8777-777777777777",
+  tenantId: payload.tenant_id,
+  installationId: payload.douyin_installation_id,
+  appId: payload.douyin_app_id,
+  subjectHash: payload.subject_hash,
+  verifiedPhone: "13800138000",
+};
+
 describe("Douyin miniapp JWT", () => {
+  test("signs a restricted Douyin visitor session after phone login", () => {
+    const token = jwt.signDouyinVisitorSessionToken(visitorPayload);
+    const result = jwt.verifyTokenDetailed(token);
+
+    expect(result.reason).toBe("valid");
+    expect(result.payload).toMatchObject({
+      sub: visitorPayload.userId,
+      token_type: "visitor_session",
+      login_channel: "douyin",
+      roles: ["visitor"],
+      tenant_id: visitorPayload.tenantId,
+      douyin_installation_id: visitorPayload.installationId,
+      douyin_app_id: visitorPayload.appId,
+      subject_hash: visitorPayload.subjectHash,
+      openid: visitorPayload.subjectHash,
+      visitor_id: visitorPayload.userId,
+      verified_phone: visitorPayload.verifiedPhone,
+    });
+    expect(result.payload!.exp! - result.payload!.iat!).toBe(7200);
+  });
+
+  test("rejects incomplete or cross-role Douyin visitor sessions", () => {
+    const complete = {
+      sub: visitorPayload.userId,
+      token_type: "visitor_session",
+      login_channel: "douyin",
+      roles: ["visitor"],
+      tenant_id: visitorPayload.tenantId,
+      douyin_installation_id: visitorPayload.installationId,
+      douyin_app_id: visitorPayload.appId,
+      subject_hash: visitorPayload.subjectHash,
+      openid: visitorPayload.subjectHash,
+      visitor_id: visitorPayload.userId,
+      verified_phone: visitorPayload.verifiedPhone,
+    } as const;
+    const invalidPayloads = [
+      { ...complete, sub: undefined },
+      { ...complete, tenant_id: undefined },
+      { ...complete, douyin_installation_id: undefined },
+      { ...complete, douyin_app_id: undefined },
+      { ...complete, subject_hash: undefined },
+      { ...complete, openid: "different-subject" },
+      { ...complete, visitor_id: "invalid-user-id" },
+      { ...complete, verified_phone: "not-a-phone" },
+      { ...complete, roles: ["customer"] },
+    ];
+
+    for (const invalid of invalidPayloads) {
+      expect(jwt.verifyTokenDetailed(jwt.signToken(invalid as never))).toMatchObject({
+        payload: null,
+        reason: "invalid",
+      });
+    }
+  });
+
   test("signs a tenant-bound two-hour session without raw Douyin identity", () => {
     const token = jwt.signDouyinMiniappToken(payload);
     const result = jwt.verifyTokenDetailed(token);
