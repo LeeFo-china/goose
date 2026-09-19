@@ -55,6 +55,8 @@ export type DeploymentConfig = {
 export type StoredSession = {
   accessToken: string;
   expiresAt: number;
+  mode?: "customer" | "platform_visitor";
+  phoneMasked?: string;
 };
 
 type SessionCredential =
@@ -241,7 +243,7 @@ export type PublicSiteLog = {
 
 export type PublicSiteLogPage = { items: PublicSiteLog[]; pagination: PaginationMeta };
 
-export type CustomerAuthResult = {
+export type CustomerProfileAuthResult = {
   token: string;
   user_id: string;
   mode: "customer";
@@ -252,6 +254,24 @@ export type CustomerAuthResult = {
   tenant: { id: string; name: string | null; slug: string | null };
   customer: { id: string; name: string | null; phone: string | null };
 };
+
+export type CustomerVisitorAuthResult = {
+  token: string;
+  user_id: string;
+  visitor_id: string;
+  mode: "platform_visitor";
+  authMode?: "platform_visitor";
+  roles: ["visitor"];
+  verified_phone: string;
+  phone_masked: string;
+  has_customer_profile: false;
+  tenant: null;
+  customer: null;
+};
+
+export type CustomerAuthResult =
+  | CustomerProfileAuthResult
+  | CustomerVisitorAuthResult;
 
 export type CustomerIdentityCandidate = {
   candidate_id: string;

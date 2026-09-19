@@ -56,7 +56,7 @@ test("home caps the module at three and ignores its old response after hide-show
 test("home opens customer projects when customer session is authenticated", async () => {
   const navigated: string[] = [];
   const page = makePage(mock(async () => response([])), {
-    isCustomerAuthenticated: true,
+    hasCustomerProfile: true,
     navigateToPage: async (path: string) => { navigated.push(path); },
   });
 
@@ -69,7 +69,20 @@ test("home opens customer projects when customer session is authenticated", asyn
 test("home opens customer login before customer session is authenticated", async () => {
   const navigated: string[] = [];
   const page = makePage(mock(async () => response([])), {
-    isCustomerAuthenticated: false,
+    hasCustomerProfile: false,
+    navigateToPage: async (path: string) => { navigated.push(path); },
+  });
+
+  (page as { onMyProjects(): void }).onMyProjects();
+  await flush();
+
+  expect(navigated).toEqual(["pages/customer-login/index"]);
+});
+
+test("home opens the login state for an authenticated visitor without a project", async () => {
+  const navigated: string[] = [];
+  const page = makePage(mock(async () => response([])), {
+    hasCustomerProfile: false,
     navigateToPage: async (path: string) => { navigated.push(path); },
   });
 
@@ -92,7 +105,7 @@ test("home opens the published rendering style list", async () => {
 function makePage(
   fetchMaterials: ReturnType<typeof mock>,
   options: {
-    isCustomerAuthenticated?: boolean;
+    hasCustomerProfile?: boolean;
     navigateToPage?: (path: string) => Promise<void>;
   } = {},
 ) {
@@ -100,7 +113,7 @@ function makePage(
     getApp: () => ({
       api: {},
       customerSession: {
-        isAuthenticated: () => options.isCustomerAuthenticated ?? false,
+        hasCustomerProfile: () => options.hasCustomerProfile ?? false,
       },
       startup: Promise.resolve(bootstrap()),
       recordAnalytics: () => undefined,

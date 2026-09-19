@@ -113,7 +113,7 @@ export function createHomePageDefinition(dependencies: HomePageDependencies) {
     },
     onViewMyMaterials() { this.navigateWithFeedback(dependencies.navigateToPage("pages/my-materials/index")); },
     onMyProjects() {
-      const path = dependencies.getApp().customerSession.isAuthenticated()
+      const path = dependencies.getApp().customerSession.hasCustomerProfile()
         ? "pages/customer-projects/index"
         : "pages/customer-login/index";
       this.navigateWithFeedback(dependencies.navigateToPage(path));

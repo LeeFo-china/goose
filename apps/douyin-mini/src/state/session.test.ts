@@ -357,6 +357,13 @@ describe("Douyin native session state", () => {
     expect(parseStoredSession({ accessToken: "jwt", expiresAt: now })).toEqual({
       accessToken: "jwt", expiresAt: now,
     });
+    expect(parseStoredSession({ accessToken: "visitor", expiresAt: now,
+      mode: "platform_visitor", phoneMasked: "138****8000" })).toEqual({
+      accessToken: "visitor", expiresAt: now,
+      mode: "platform_visitor", phoneMasked: "138****8000",
+    });
+    expect(parseStoredSession({ accessToken: "jwt", expiresAt: now,
+      mode: "platform_admin" })).toBeNull();
     expect(parseStoredSession({ accessToken: "jwt", expiresAt: now, tenant_id: "forged" }))
       .toBeNull();
 

@@ -18,6 +18,8 @@ describe("CustomerSessionManager", () => {
 
     await expect(session.getAccessToken()).resolves.toBe("customer-token");
     expect(session.isAuthenticated()).toBe(true);
+    expect(session.hasCustomerProfile()).toBe(true);
+    expect(session.getAuthState()).toEqual({ mode: "customer", phoneMasked: "" });
   });
 
   test("clears and rejects expired or rejected customer tokens", async () => {
@@ -47,11 +49,36 @@ describe("CustomerSessionManager", () => {
       clearStoredCustomerSession: () => { stored.length = 0; },
     });
 
-    session.acceptAuth({ token: "new-token", expiresIn: 7200 });
+    session.acceptAuth({ token: "new-token", expiresIn: 7200, mode: "customer" });
 
     const storedSession = stored[0];
     expect(storedSession).toBeDefined();
     expect(storedSession.accessToken).toBe("new-token");
     expect(storedSession.expiresAt).toBe(7_201_000);
+    expect(storedSession.mode).toBe("customer");
+  });
+
+  test("stores and restores a visitor login without customer access", () => {
+    const stored: StoredSession[] = [];
+    const session = new CustomerSessionManager({
+      now: () => 1_000,
+      readStoredCustomerSession: () => stored[0] ?? null,
+      writeStoredCustomerSession: (value) => { stored[0] = value; },
+      clearStoredCustomerSession: () => { stored.length = 0; },
+    });
+
+    session.acceptAuth({
+      token: "visitor-token",
+      expiresIn: 7200,
+      mode: "platform_visitor",
+      phoneMasked: "138****8000",
+    });
+
+    expect(session.isAuthenticated()).toBe(true);
+    expect(session.hasCustomerProfile()).toBe(false);
+    expect(session.getAuthState()).toEqual({
+      mode: "platform_visitor",
+      phoneMasked: "138****8000",
+    });
   });
 });

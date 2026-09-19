@@ -28,10 +28,17 @@ export class CustomerSessionManager implements SessionTokenProvider {
     throw customerAuthRequired();
   }
 
-  acceptAuth(input: { token: string; expiresIn?: number }): void {
+  acceptAuth(input: {
+    token: string;
+    expiresIn?: number;
+    mode: "customer" | "platform_visitor";
+    phoneMasked?: string;
+  }): void {
     const session = {
       accessToken: input.token,
       expiresAt: this.dependencies.now() + (input.expiresIn ?? 7 * 24 * 60 * 60) * 1_000,
+      mode: input.mode,
+      ...(input.phoneMasked ? { phoneMasked: input.phoneMasked } : {}),
     };
     this.currentSession = session;
     this.hydrated = true;
@@ -45,8 +52,23 @@ export class CustomerSessionManager implements SessionTokenProvider {
   }
 
   isAuthenticated(): boolean {
+    return this.getAuthState() !== null;
+  }
+
+  hasCustomerProfile(): boolean {
+    return this.getAuthState()?.mode === "customer";
+  }
+
+  getAuthState(): {
+    mode: "customer" | "platform_visitor";
+    phoneMasked: string;
+  } | null {
     const session = this.getCurrentSession();
-    return Boolean(session && this.isUsable(session));
+    if (!session || !this.isUsable(session)) return null;
+    return {
+      mode: session.mode ?? "customer",
+      phoneMasked: session.phoneMasked ?? "",
+    };
   }
 
   private getCurrentSession(): StoredSession | null {

@@ -201,6 +201,10 @@ export function createCustomerLoginPageDefinition(dependencies: CustomerLoginPag
         }
         dependencies.getApp().customerSession.acceptAuth({
           token: result.auth.token,
+          mode: result.auth.mode,
+          ...(result.auth.mode === "platform_visitor"
+            ? { phoneMasked: result.auth.phone_masked }
+            : {}),
         });
         await dependencies.navigateToPage("pages/customer-projects/index");
       } catch (error) {

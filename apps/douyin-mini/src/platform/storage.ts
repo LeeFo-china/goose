@@ -10,14 +10,23 @@ export function readStoredSession(): StoredSession | null {
 
 export function parseStoredSession(value: unknown): StoredSession | null {
   if (!isRecord(value)) return null;
-  if (Object.keys(value).some((key) => key !== "accessToken" && key !== "expiresAt")) {
+  const allowedKeys = new Set(["accessToken", "expiresAt", "mode", "phoneMasked"]);
+  if (Object.keys(value).some((key) => !allowedKeys.has(key))) {
     return null;
   }
-  return typeof value.accessToken === "string" && value.accessToken.length > 0
-    && value.accessToken.length <= 8_192
-    && typeof value.expiresAt === "number" && Number.isFinite(value.expiresAt)
-    ? { accessToken: value.accessToken, expiresAt: value.expiresAt }
-    : null;
+  if (typeof value.accessToken !== "string" || value.accessToken.length === 0
+    || value.accessToken.length > 8_192
+    || typeof value.expiresAt !== "number" || !Number.isFinite(value.expiresAt)) return null;
+  if (value.mode !== undefined && value.mode !== "customer"
+    && value.mode !== "platform_visitor") return null;
+  if (value.phoneMasked !== undefined && (typeof value.phoneMasked !== "string"
+    || value.phoneMasked.length > 32)) return null;
+  return {
+    accessToken: value.accessToken,
+    expiresAt: value.expiresAt,
+    ...(value.mode ? { mode: value.mode } : {}),
+    ...(value.phoneMasked ? { phoneMasked: value.phoneMasked } : {}),
+  };
 }
 
 export function writeStoredSession(session: StoredSession): void {
@@ -39,6 +48,8 @@ export function writeStoredCustomerSession(session: StoredSession): void {
   tt.setStorageSync(CUSTOMER_SESSION_STORAGE_KEY, {
     accessToken: session.accessToken,
     expiresAt: session.expiresAt,
+    ...(session.mode ? { mode: session.mode } : {}),
+    ...(session.phoneMasked ? { phoneMasked: session.phoneMasked } : {}),
   });
 }
 
