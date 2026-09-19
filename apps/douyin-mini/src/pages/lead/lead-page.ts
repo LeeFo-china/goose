@@ -43,9 +43,6 @@ import {
 import { isPrivacyVersionMismatch, readableError } from "./lead-page-errors";
 import { runPolicyNavigation, runPrivacyPolicyRefresh } from "./lead-page-operations";
 
-// The platform code lasts five minutes; keep a one-minute delivery margin.
-const DOUYIN_PHONE_AUTHORIZATION_TTL_MS = 4 * 60 * 1000;
-
 export type LeadPageDependencies = {
   getApp(): DouyinAppContext;
   sendLeadSms: typeof sendLeadSms;
@@ -70,7 +67,6 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
   attributionEntryVersion: 0,
   submissionAttribution: null as { key: string; value: LaunchContext } | null,
   successNavigationInFlight: false,
-  douyinPhoneAuthorization: null as { code: string; expiresAt: number } | null,
   data: {
     loading: true,
     error: false,
@@ -94,8 +90,6 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
     fieldErrors: {} as LeadFieldErrors,
     focusedField: "",
     optionalDetailsExpanded: false,
-    douyinPhoneEnabled: false,
-    douyinPhoneAuthorized: false,
   },
   onLoad() {
     this.lifecycle.onLoad();
@@ -112,7 +106,6 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
     this.setData({
       smsSending: false,
       submitting: false,
-      douyinPhoneAuthorized: this.douyinPhoneAuthorization !== null,
     });
     this.syncBudgetContext();
     this.resumeCooldown();
@@ -124,13 +117,11 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
   onHide() {
     if (!this.lifecycle.onHide()) return;
     this.idempotency = failIdempotentSubmission(this.idempotency);
-    this.douyinPhoneAuthorization = null;
     this.stopCooldown();
   },
   onUnload() {
     this.lifecycle.onUnload();
     this.idempotency = failIdempotentSubmission(this.idempotency);
-    this.douyinPhoneAuthorization = null;
     this.stopCooldown();
     this.cooldownUntil = 0;
   },
@@ -164,7 +155,6 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
         this.linkedBudget,
       ),
     );
-    this.douyinPhoneAuthorization = null;
     this.setData({
       loading: false,
       error: false,
@@ -174,8 +164,6 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
       primaryColor: theme.primaryColor,
       primaryTextColor: theme.primaryTextColor,
       privacyPolicyVersion: bootstrap.privacy_policy_version,
-      douyinPhoneEnabled: bootstrap.features.douyin_phone,
-      douyinPhoneAuthorized: false,
     });
     dependencies.getApp().recordAnalytics("page_view");
   },
@@ -206,7 +194,6 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
       || typeof event.detail.value !== "string") return;
     const value = sanitizeLeadField(field, event.detail.value);
     const form = { ...this.data.form, [field]: value } as LeadFormValue;
-    if (field === "phone") this.douyinPhoneAuthorization = null;
     this.idempotency = updateIdempotencyDraft(
       this.idempotency,
       toLeadIdempotencyDraft(form, this.data.privacyPolicyVersion, this.linkedBudget),
@@ -216,7 +203,6 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
       fieldErrors: clearLeadFieldError(this.data.fieldErrors, field),
       focusedField: "",
       phoneReady: /^1[3-9][0-9]{9}$/.test(form.phone),
-      ...(field === "phone" ? { douyinPhoneAuthorized: false } : {}),
       formError: "",
     });
   },
@@ -293,60 +279,7 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
       optionalDetailsExpanded: toggleOptionalDetails(this.data.optionalDetailsExpanded),
     });
   },
-  onDouyinPhoneNumber(event: { detail?: { douyin_phone_code?: string; authorization_error?: string } }) {
-    if (!this.data.douyinPhoneEnabled || this.data.submitting) return;
-    const code = typeof event.detail?.douyin_phone_code === "string"
-      ? event.detail.douyin_phone_code.trim()
-      : "";
-    if (!code) {
-      this.douyinPhoneAuthorization = null;
-      const withoutPhoneError = clearLeadFieldError(this.data.fieldErrors, "phone");
-      this.setData({
-        douyinPhoneAuthorized: false,
-        fieldErrors: clearLeadFieldError(withoutPhoneError, "sms_code"),
-        focusedField: "phone",
-        formError: `${event.detail?.authorization_error || "抖音未返回手机号令牌"}；请手动输入手机号并使用短信验证码`,
-      });
-      return;
-    }
-    const form = { ...this.data.form, phone: "", sms_code: "" };
-    this.douyinPhoneAuthorization = {
-      code,
-      expiresAt: Date.now() + DOUYIN_PHONE_AUTHORIZATION_TTL_MS,
-    };
-    this.idempotency = updateIdempotencyDraft(
-      this.idempotency,
-      toLeadIdempotencyDraft(form, this.data.privacyPolicyVersion, this.linkedBudget),
-    );
-    this.setData({
-      form,
-      phoneReady: false,
-      douyinPhoneAuthorized: true,
-      fieldErrors: clearLeadFieldError(
-        clearLeadFieldError(this.data.fieldErrors, "phone"),
-        "sms_code",
-      ),
-      focusedField: "",
-      formError: "",
-    });
-  },
   async onSubmit() {
-    const phoneCaptureMode = this.data.douyinPhoneEnabled
-        && this.douyinPhoneAuthorization !== null
-      ? "douyin_phone"
-      : "sms";
-    const douyinPhoneAuthorization = this.douyinPhoneAuthorization;
-    if (phoneCaptureMode === "douyin_phone"
-      && douyinPhoneAuthorization!.expiresAt <= Date.now()) {
-      const message = "手机号授权已过期，请重新获取";
-      this.douyinPhoneAuthorization = null;
-      this.setData({
-        douyinPhoneAuthorized: false,
-        fieldErrors: { ...this.data.fieldErrors, phone: message },
-        formError: message,
-      });
-      return;
-    }
     const linkedBudget = this.syncBudgetContext();
     const minimumVisitDate = getShanghaiNaturalDate();
     this.setData({ minVisitDate: minimumVisitDate });
@@ -354,7 +287,6 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
       this.data.form,
       this.data.consented,
       minimumVisitDate,
-      phoneCaptureMode,
     );
     if (validation.summary) {
       this.setData({
@@ -399,16 +331,6 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
       if (!this.lifecycle.canPresentSubmitContinuation(authority)) return;
       this.submissionAttribution = { key: decision.key, value: attribution };
       const form = this.data.form;
-      const verification = phoneCaptureMode === "douyin_phone"
-        ? {
-          verification_method: "douyin_phone" as const,
-          douyin_phone_code: douyinPhoneAuthorization!.code,
-        }
-        : {
-          verification_method: "sms" as const,
-          phone: form.phone.trim(),
-          sms_code: form.sms_code.trim(),
-        };
       const result = await dependencies.submitLead(app.api, {
         name: form.name.trim(),
         community: form.community.trim(),
@@ -420,7 +342,9 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
         consented_at: form.consented_at,
         idempotency_key: decision.key,
         attribution,
-        ...verification,
+        verification_method: "sms",
+        phone: form.phone.trim(),
+        sms_code: form.sms_code.trim(),
       });
       const succeeded = succeedIdempotentSubmission(this.idempotency, decision.key);
       const acceptedAttempt = succeeded.key === decision.key
@@ -450,21 +374,13 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
         return;
       }
       if (isPrivacyVersionMismatch(error)) {
-        if (phoneCaptureMode === "douyin_phone") {
-          this.douyinPhoneAuthorization = null;
-          this.setData({ douyinPhoneAuthorized: false });
-        }
         await this.refreshPrivacyPolicy(authority);
         return;
       }
       if (!this.lifecycle.finishSubmit(authority)) return;
       this.idempotency = failIdempotentSubmission(this.idempotency);
-      if (phoneCaptureMode === "douyin_phone") this.douyinPhoneAuthorization = null;
       this.setData({
         submitting: false,
-        ...(phoneCaptureMode === "douyin_phone"
-          ? { douyinPhoneAuthorized: false }
-          : {}),
         formError: readableError(error, "提交失败，请检查网络后重试"),
       });
       return;

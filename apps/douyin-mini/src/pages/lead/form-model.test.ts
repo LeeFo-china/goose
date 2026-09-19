@@ -95,16 +95,19 @@ describe("lead form model", () => {
     });
   });
 
-  test("does not require manual phone or SMS when Douyin official phone capture is enabled", () => {
+  test("always requires manual phone and SMS verification", () => {
     expect(validateLeadForm({
       ...VALID_FORM,
       phone: "",
       sms_code: "",
       preferred_visit_date: "2026-08-22",
-    }, true, "2026-08-22", "douyin_phone")).toEqual({
-      fieldErrors: {},
-      firstField: null,
-      summary: null,
+    }, true, "2026-08-22")).toEqual({
+      fieldErrors: {
+        phone: "请填写正确的手机号",
+        sms_code: "请填写6位短信验证码",
+      },
+      firstField: "phone",
+      summary: "请填写正确的手机号",
     });
   });
 
@@ -216,12 +219,10 @@ describe("lead form model", () => {
     expect(template).toContain('mode="date"');
     expect(template).not.toContain("conversion-target");
     expect(template).not.toContain("clue-component-id");
-    expect(template).toContain("获取抖音绑定手机号");
-    expect(template).toContain("已获取抖音绑定手机号");
     expect(template).toContain('class="phone-input-shell');
-    expect(template).toContain("!douyinPhoneEnabled || value.phone");
-    expect(template).toContain('open-type="getPhoneNumber"');
-    expect(template).toContain('bindgetphonenumber="onDouyinPhoneNumber"');
+    expect(template).not.toContain("douyinPhone");
+    expect(template).not.toContain('open-type="getPhoneNumber"');
+    expect(template).not.toContain("bindgetphonenumber");
     expect(template).toContain("提交量房申请");
     expect(template).not.toContain("phone-method-toggle");
     expect(template).not.toContain("无法授权？使用短信验证码");
