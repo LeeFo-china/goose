@@ -384,6 +384,57 @@ describe("lead page definition", () => {
     repeatNavigation.resolve();
   });
 
+  test("recovers hidden success after the external entry version changes", async () => {
+    const harness = createHarness(BOOTSTRAP, { trackSuccessContext: true });
+    harness.page.onLoad();
+    await flushPromises();
+    harness.page.onShow();
+    setValidForm(harness.page);
+    const submit = harness.deferredSubmit();
+    const operation = harness.page.onSubmit();
+    await flushPromises();
+
+    harness.page.onHide();
+    submit.resolve(publicAppointment());
+    await operation;
+    expect(harness.navigateToPage).not.toHaveBeenCalled();
+
+    const recoveryNavigation = harness.deferredNavigation();
+    harness.app.attributionEntryVersion = 2;
+    harness.page.onShow();
+
+    expect(harness.navigateToPage).toHaveBeenCalledWith("pages/lead-success/index");
+    expect(harness.submitLead).toHaveBeenCalledTimes(1);
+    recoveryNavigation.resolve();
+  });
+
+  test("keeps a sent submit single-flight when a new entry appears before success", async () => {
+    const harness = createHarness(BOOTSTRAP, { trackSuccessContext: true });
+    harness.page.onLoad();
+    await flushPromises();
+    harness.page.onShow();
+    setValidForm(harness.page);
+    const submit = harness.deferredSubmit();
+    const operation = harness.page.onSubmit();
+    await flushPromises();
+    expect(harness.submitLead).toHaveBeenCalledTimes(1);
+
+    harness.page.onHide();
+    harness.app.attributionEntryVersion = 2;
+    harness.page.onShow();
+    expect(harness.page.data.submitting).toBe(true);
+    await harness.page.onSubmit();
+    expect(harness.submitLead).toHaveBeenCalledTimes(1);
+
+    const recoveryNavigation = harness.deferredNavigation();
+    submit.resolve(publicAppointment());
+    await operation;
+
+    expect(harness.navigateToPage).toHaveBeenCalledWith("pages/lead-success/index");
+    expect(harness.page.data.submitting).toBe(false);
+    recoveryNavigation.resolve();
+  });
+
   test("does not reuse an unrelated success context for a new page draft", async () => {
     const harness = createHarness(BOOTSTRAP, {
       trackSuccessContext: true,

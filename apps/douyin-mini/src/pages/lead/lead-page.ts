@@ -72,6 +72,7 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
   successNavigationInFlight: false,
   successPresentationPending: false,
   successfulSubmissionKey: null as string | null,
+  activeSubmissionKey: null as string | null,
   douyinPhoneAuthorization: null as { code: string; expiresAt: number } | null,
   data: {
     loading: true,
@@ -113,7 +114,7 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
     this.attributionEntryVersion = entryVersion;
     this.setData({
       smsSending: false,
-      submitting: false,
+      submitting: this.activeSubmissionKey !== null,
       douyinPhoneAuthorized: this.douyinPhoneAuthorization !== null,
     });
     this.syncBudgetContext();
@@ -338,6 +339,7 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
       this.openSuccessPage();
       return;
     }
+    if (this.activeSubmissionKey !== null) return;
     const phoneCaptureMode = this.data.douyinPhoneEnabled
         && this.douyinPhoneAuthorization !== null
       ? "douyin_phone"
@@ -416,6 +418,7 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
           phone: form.phone.trim(),
           sms_code: form.sms_code.trim(),
         };
+      this.activeSubmissionKey = decision.key;
       const result = await dependencies.submitLead(app.api, {
         name: form.name.trim(),
         community: form.community.trim(),
@@ -429,10 +432,14 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
         attribution,
         ...verification,
       });
-      const succeeded = succeedIdempotentSubmission(this.idempotency, decision.key);
-      const acceptedAttempt = succeeded.key === decision.key
-        && succeeded.status === "succeeded";
-      if (acceptedAttempt) this.idempotency = succeeded;
+      this.finishSubmissionFlight(decision.key);
+      const completedAttempt = succeedIdempotentSubmission(decision.state, decision.key);
+      const acceptedAttempt = completedAttempt.key === decision.key
+        && completedAttempt.status === "succeeded";
+      const currentState = succeedIdempotentSubmission(this.idempotency, decision.key);
+      if (currentState.key === decision.key && currentState.status === "succeeded") {
+        this.idempotency = currentState;
+      }
       const recorded = acceptedAttempt && dependencies.writeMeasurementSuccessContext({
         appointmentNo: result.appointment_no,
         preferredVisitDate: form.preferred_visit_date,
@@ -457,6 +464,7 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
         return;
       }
     } catch (error) {
+      this.finishSubmissionFlight(decision.key);
       if (this.hasCurrentSuccessContext()) {
         if (!this.lifecycle.finishSubmit(authority)) return;
         this.setData({ submitting: false });
@@ -464,6 +472,10 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
         return;
       }
       if (isPrivacyVersionMismatch(error)) {
+        if (!this.lifecycle.canPresentSubmitContinuation(authority)) {
+          if (this.lifecycle.isVisible()) this.setData({ submitting: false });
+          return;
+        }
         if (phoneCaptureMode === "douyin_phone") {
           this.douyinPhoneAuthorization = null;
           this.setData({ douyinPhoneAuthorized: false });
@@ -471,7 +483,10 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
         await this.refreshPrivacyPolicy(authority);
         return;
       }
-      if (!this.lifecycle.finishSubmit(authority)) return;
+      if (!this.lifecycle.finishSubmit(authority)) {
+        if (this.lifecycle.isVisible()) this.setData({ submitting: false });
+        return;
+      }
       this.idempotency = failIdempotentSubmission(this.idempotency);
       if (phoneCaptureMode === "douyin_phone") this.douyinPhoneAuthorization = null;
       this.setData({
@@ -491,11 +506,18 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
       && this.successfulSubmissionKey === this.idempotency.key
       && dependencies.readMeasurementSuccessContext() !== null;
   },
+  hasPageSuccessContext() {
+    return this.successfulSubmissionKey !== null
+      && dependencies.readMeasurementSuccessContext() !== null;
+  },
+  finishSubmissionFlight(key: string) {
+    if (this.activeSubmissionKey === key) this.activeSubmissionKey = null;
+  },
   presentPendingSuccess() {
     if (!this.successPresentationPending || !this.lifecycle.isVisible()) return;
     this.successPresentationPending = false;
     this.setData({ submitting: false });
-    this.openSuccessPage();
+    this.openSuccessPage(true);
   },
   async refreshPrivacyPolicy(authority: LeadOperationAuthority) {
     const app = dependencies.getApp();
@@ -527,9 +549,11 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
       }),
     });
   },
-  openSuccessPage() {
+  openSuccessPage(allowDetachedSuccess = false) {
     if (this.successNavigationInFlight || !this.lifecycle.isVisible()
-      || !this.hasCurrentSuccessContext()) return;
+      || !(allowDetachedSuccess
+        ? this.hasPageSuccessContext()
+        : this.hasCurrentSuccessContext())) return;
     this.successNavigationInFlight = true;
     void dependencies.navigateToPage("pages/lead-success/index")
       .catch(() => {
