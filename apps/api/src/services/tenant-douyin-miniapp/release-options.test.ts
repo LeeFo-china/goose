@@ -11,8 +11,11 @@ const template = {
   description: "新版模板",
   channel: "default" as const,
   is_current: true,
+  is_tenant_selectable: true,
   confirmed_by_employee_id: "22222222-2222-4222-8222-222222222222",
   confirmed_at: "2026-09-17T10:00:00.000Z",
+  selectability_updated_at: "2026-09-17T10:00:00.000Z",
+  selectability_updated_by_employee_id: "22222222-2222-4222-8222-222222222222",
   created_at: "2026-09-17T10:00:00.000Z",
 };
 const release: DouyinMiniappReleaseRecord = {

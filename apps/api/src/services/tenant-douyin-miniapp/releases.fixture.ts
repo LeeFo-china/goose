@@ -30,8 +30,11 @@ export const deployableTemplate = {
   description: "租户发布闭环",
   channel: "default" as const,
   is_current: true,
+  is_tenant_selectable: true,
   confirmed_by_employee_id: EMPLOYEE_ID,
   confirmed_at: "2026-09-17T10:00:00.000Z",
+  selectability_updated_at: "2026-09-17T10:00:00.000Z",
+  selectability_updated_by_employee_id: EMPLOYEE_ID,
   created_at: "2026-09-17T10:00:00.000Z",
 };
 export const selectedTemplate = {

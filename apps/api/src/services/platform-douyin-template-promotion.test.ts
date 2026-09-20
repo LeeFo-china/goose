@@ -40,8 +40,11 @@ const currentTemplate = {
   description: providerTemplate.description,
   channel: "default" as const,
   is_current: true,
+  is_tenant_selectable: true,
   confirmed_by_employee_id: OPERATOR_ID,
   confirmed_at: "2026-08-13T08:00:00.000Z",
+  selectability_updated_at: "2026-08-13T08:00:00.000Z",
+  selectability_updated_by_employee_id: OPERATOR_ID,
   created_at: "2026-08-13T08:00:00.000Z",
 };
 

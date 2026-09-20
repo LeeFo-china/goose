@@ -12,8 +12,11 @@ const SAFE_SELECT = [
   "description",
   "channel",
   "is_current",
+  "is_tenant_selectable",
   "confirmed_by_employee_id",
   "confirmed_at",
+  "selectability_updated_at",
+  "selectability_updated_by_employee_id",
   "created_at",
 ].join(",");
 
@@ -26,8 +29,11 @@ const DeployableTemplateSchema = z.strictObject({
   description: z.string().trim().min(1).max(200),
   channel: z.enum(["default", "1"]),
   is_current: z.boolean(),
+  is_tenant_selectable: z.boolean(),
   confirmed_by_employee_id: z.uuid().nullable(),
   confirmed_at: z.iso.datetime({ offset: true }),
+  selectability_updated_at: z.iso.datetime({ offset: true }),
+  selectability_updated_by_employee_id: z.uuid().nullable(),
   created_at: z.iso.datetime({ offset: true }),
 });
 
@@ -42,15 +48,29 @@ export type ConfirmDouyinDeployableTemplateInput = {
   readonly channel: DouyinDeployableTemplateChannel;
   readonly actorEmployeeId: string;
 };
+export type ListDouyinDeployableTemplatesInput = {
+  readonly channel: DouyinDeployableTemplateChannel;
+  readonly page: number;
+  readonly pageSize: number;
+};
+export type SetDouyinTemplateSelectabilityInput = {
+  readonly templateRecordId: string;
+  readonly isTenantSelectable: boolean;
+  readonly expectedIsTenantSelectable: boolean;
+  readonly actorEmployeeId: string;
+};
 
 type DatabaseResult = {
   readonly data: unknown;
   readonly error: unknown;
+  readonly count?: number | null;
 };
 
 interface Query {
-  select(columns: string): Query;
+  select(columns: string, options?: { count: "exact" }): Query;
   eq(column: string, value: unknown): Query;
+  order(column: string, options: { ascending: boolean }): Query;
+  range(from: number, to: number): PromiseLike<DatabaseResult>;
   maybeSingle(): Promise<DatabaseResult>;
 }
 
@@ -84,6 +104,31 @@ export class DouyinDeployableTemplatesRepository {
     });
   }
 
+  async findSelectableById(
+    templateRecordId: string,
+    channel: DouyinDeployableTemplateChannel,
+  ): Promise<DouyinDeployableTemplate | null> {
+    return execute(async () => {
+      const result = await this.client
+        .from("douyin_miniapp_deployable_templates")
+        .select(SAFE_SELECT)
+        .eq("id", templateRecordId)
+        .eq("channel", channel)
+        .eq("is_tenant_selectable", true)
+        .maybeSingle();
+      assertSuccess(result);
+      return result.data === null ? null : parseTemplate(result.data);
+    });
+  }
+
+  async list(input: ListDouyinDeployableTemplatesInput) {
+    return this.listWhere(input, false);
+  }
+
+  async listSelectable(input: ListDouyinDeployableTemplatesInput) {
+    return this.listWhere(input, true);
+  }
+
   async confirm(
     input: ConfirmDouyinDeployableTemplateInput,
   ): Promise<DouyinDeployableTemplate> {
@@ -102,6 +147,53 @@ export class DouyinDeployableTemplatesRepository {
       );
       assertSuccess(result);
       return parseTemplate(result.data);
+    });
+  }
+
+  async setSelectability(
+    input: SetDouyinTemplateSelectabilityInput,
+  ): Promise<DouyinDeployableTemplate> {
+    return execute(async () => {
+      const result = await this.client.rpc(
+        "set_douyin_deployable_template_selectability",
+        {
+          p_template_record_id: input.templateRecordId,
+          p_is_tenant_selectable: input.isTenantSelectable,
+          p_expected_is_tenant_selectable: input.expectedIsTenantSelectable,
+          p_actor_employee_id: input.actorEmployeeId,
+        },
+      );
+      assertSuccess(result);
+      return parseTemplate(result.data);
+    });
+  }
+
+  private async listWhere(
+    input: ListDouyinDeployableTemplatesInput,
+    selectableOnly: boolean,
+  ) {
+    return execute(async () => {
+      let query = this.client
+        .from("douyin_miniapp_deployable_templates")
+        .select(SAFE_SELECT, { count: "exact" })
+        .eq("channel", input.channel);
+      if (selectableOnly) query = query.eq("is_tenant_selectable", true);
+      const from = (input.page - 1) * input.pageSize;
+      const result = await query
+        .order("is_current", { ascending: false })
+        .order("confirmed_at", { ascending: false })
+        .order("id", { ascending: false })
+        .range(from, from + input.pageSize - 1);
+      assertSuccess(result);
+      if (!Array.isArray(result.data)
+        || !Number.isInteger(result.count)
+        || (result.count ?? -1) < 0) {
+        throw invalidResponse();
+      }
+      return {
+        list: result.data.map(parseTemplate),
+        total: result.count as number,
+      };
     });
   }
 }
@@ -131,6 +223,22 @@ function assertSuccess(result: DatabaseResult): void {
       "无权确认抖音可发布模板",
       message,
     );
+  }
+  if (message === "DOUYIN_TEMPLATE_SELECTABILITY_FORBIDDEN") {
+    throw Errors.business(
+      403,
+      "无权修改抖音模板可选状态",
+      message,
+    );
+  }
+  if (message === "DOUYIN_DEPLOYABLE_TEMPLATE_NOT_FOUND") {
+    throw Errors.business(404, "抖音模板不存在", message);
+  }
+  if (message === "DOUYIN_TEMPLATE_SELECTABILITY_CHANGED") {
+    throw Errors.business(409, "模板可选状态已更新，请刷新后重试", message);
+  }
+  if (message === "DOUYIN_CURRENT_TEMPLATE_MUST_REMAIN_SELECTABLE") {
+    throw Errors.business(409, "推荐模板必须保持租户可选", message);
   }
   throw repositoryError();
 }
