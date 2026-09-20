@@ -56,6 +56,7 @@ const target = {
 const release: DouyinMiniappReleaseRecord = {
   id: RELEASE_ID,
   installation_id: INSTALLATION_ID,
+  deployable_template_id: null,
   template_id: "9133504853504535288",
   template_version: "1.2.3-beta.1",
   description: "装修模板首发",

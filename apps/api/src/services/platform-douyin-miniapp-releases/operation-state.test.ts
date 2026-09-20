@@ -6,6 +6,7 @@ import { recoveryPatch } from "./operation-state";
 const release: DouyinMiniappReleaseRecord = {
   id: "11111111-1111-4111-8111-111111111111",
   installation_id: "22222222-2222-4222-8222-222222222222",
+  deployable_template_id: null,
   template_id: "78690",
   template_version: "0.1.39",
   description: "装修行业生产模板",

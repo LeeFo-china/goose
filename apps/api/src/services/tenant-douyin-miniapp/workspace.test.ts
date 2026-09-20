@@ -69,8 +69,11 @@ const deployableTemplate = {
   description: "租户发布闭环",
   channel: "default" as const,
   is_current: true,
+  is_tenant_selectable: true,
   confirmed_by_employee_id: "66666666-6666-4666-8666-666666666666",
   confirmed_at: "2026-08-13T08:00:00.000Z",
+  selectability_updated_at: "2026-08-13T08:00:00.000Z",
+  selectability_updated_by_employee_id: "66666666-6666-4666-8666-666666666666",
   created_at: "2026-08-13T08:00:00.000Z",
 };
 const tenantRelease = {

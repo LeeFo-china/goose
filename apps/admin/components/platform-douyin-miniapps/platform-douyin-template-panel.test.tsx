@@ -86,4 +86,42 @@ describe("PlatformDouyinTemplatePanel", () => {
       'method: "GET"',
     );
   });
+
+  test("renders the paginated tenant allowlist with an accessible locked recommendation", () => {
+    const html = renderToStaticMarkup(
+      <PlatformDouyinTemplatePanel
+        initialError={null}
+        initialStatus={status}
+        initialTemplateList={{
+          list: [{
+            id: "00000000-0000-4000-8000-000000000001",
+            template_id: "78149", template_version: "0.1.3",
+            description: "图片更新", channel: "default", is_current: true,
+            is_tenant_selectable: true,
+            confirmed_at: "2026-08-13T11:53:09.793818+00:00",
+            selectability_updated_at: "2026-09-20T10:00:00.000Z",
+          }],
+          pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+        }}
+      />,
+    );
+
+    expect(html).toContain("租户可选版本");
+    expect(html).toContain("推荐版本");
+    expect(html).toContain("请先确认新的推荐模板");
+    expect(html).toContain("设置模板 0.1.3 是否对租户可选");
+  });
+
+  test("fetches the first bounded allowlist page and sends compare-and-swap mutations", async () => {
+    const [pageSource, allowlistSource] = await Promise.all([
+      Bun.file("app/(console)/platform/douyin-miniapps/page.tsx").text(),
+      Bun.file("components/platform-douyin-miniapps/platform-douyin-template-allowlist.tsx").text(),
+    ]);
+    expect(pageSource).toContain(
+      "/platform/douyin-miniapps/deployable-templates?channel=default&page=1&pageSize=20",
+    );
+    expect(allowlistSource).toContain("expected_is_tenant_selectable: template.is_tenant_selectable");
+    expect(allowlistSource).toContain("await loadPage(data?.pagination.page ?? 1)");
+    expect(allowlistSource).toContain("if (refreshToken > 0) void loadPage(1)");
+  });
 });

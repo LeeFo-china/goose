@@ -43,6 +43,12 @@ describe("TenantDouyinMiniappReleasesService", () => {
       source: "confirmed_template", actions: ["create_test_version"],
     });
     expect(result.pagination).toEqual({ page: 1, pageSize: 20, total: 1, totalPages: 1 });
+    expect(result.template_pagination).toEqual({
+      page: 1, pageSize: 20, total: 1, totalPages: 1,
+    });
+    expect(context.templates.listSelectable).toHaveBeenCalledWith({
+      channel: "default", page: 1, pageSize: 20,
+    });
     expect(JSON.stringify(result.history)).not.toMatch(
       /ext_json|douyin_log_id|platform_operator_id|provider_summary/,
     );
@@ -143,6 +149,7 @@ describe("TenantDouyinMiniappReleasesService", () => {
       INSTALLATION_ID,
       EMPLOYEE_ID,
       {
+        deployable_template_id: deployableTemplate.id,
         template_id: deployableTemplate.template_id,
         template_version: deployableTemplate.template_version,
         description: deployableTemplate.description,
@@ -157,6 +164,75 @@ describe("TenantDouyinMiniappReleasesService", () => {
       EMPLOYEE_ID,
     );
     expect(result).not.toHaveProperty("ext_json");
+  });
+
+  test("creates a test version from an older tenant-selectable template", async () => {
+    const context = fixture({ latestRelease: release({
+      status: "released", template_version: "0.1.4",
+    }) });
+    const rollbackTemplate = {
+      ...deployableTemplate,
+      id: "88888888-8888-4888-8888-888888888888",
+      template_id: "77594",
+      template_version: "0.1.1",
+      is_current: false,
+    };
+    context.templates.findSelectableById.mockResolvedValue(rollbackTemplate);
+
+    await context.service.createFromTemplate(
+      tenantContext(["douyin_miniapp.manage"]),
+      {
+        expected_template_record_id: rollbackTemplate.id,
+        expected_template_id: rollbackTemplate.template_id,
+      },
+    );
+
+    expect(context.operations.upload).toHaveBeenCalledWith(
+      expect.objectContaining({ id: INSTALLATION_ID }),
+      INSTALLATION_ID,
+      EMPLOYEE_ID,
+      {
+        deployable_template_id: rollbackTemplate.id,
+        template_id: rollbackTemplate.template_id,
+        template_version: rollbackTemplate.template_version,
+        description: rollbackTemplate.description,
+        channel: "default",
+      },
+    );
+  });
+
+  test("rejects a template that is no longer tenant-selectable", async () => {
+    const context = fixture();
+    context.templates.findSelectableById.mockResolvedValue(null);
+
+    await expect(context.service.createFromTemplate(
+      tenantContext(["douyin_miniapp.manage"]),
+      selectedTemplate,
+    )).rejects.toMatchObject({
+      statusCode: 409,
+      code: "DOUYIN_DEPLOYABLE_TEMPLATE_UNAVAILABLE",
+    });
+    expect(context.operations.upload).not.toHaveBeenCalled();
+  });
+
+  test("rejects creating a duplicate cycle for the exact current online template", async () => {
+    const context = fixture();
+    context.gateway.getVersionList.mockResolvedValue({
+      current: {
+        version: deployableTemplate.template_version,
+        summary: `[#${deployableTemplate.template_id}] ${deployableTemplate.description}`,
+      },
+      logId: "versions-log",
+    });
+
+    await expect(context.service.createFromTemplate(
+      tenantContext(["douyin_miniapp.manage"]),
+      selectedTemplate,
+    )).rejects.toMatchObject({
+      statusCode: 409,
+      code: "DOUYIN_DEPLOYABLE_TEMPLATE_ALREADY_CURRENT",
+    });
+    expect(context.operations.upload).not.toHaveBeenCalled();
   });
 
   test("publishes only an owned release with the production permission", async () => {
@@ -286,6 +362,7 @@ describe("TenantDouyinMiniappReleasesService", () => {
       INSTALLATION_ID,
       EMPLOYEE_ID,
       {
+        deployable_template_id: deployableTemplate.id,
         template_id: createdRelease.template_id,
         template_version: createdRelease.template_version,
         description: createdRelease.description,
@@ -310,6 +387,7 @@ describe("TenantDouyinMiniappReleasesService", () => {
         INSTALLATION_ID,
         EMPLOYEE_ID,
         {
+          deployable_template_id: deployableTemplate.id,
           template_id: deployableTemplate.template_id,
           template_version: deployableTemplate.template_version,
           description: deployableTemplate.description,

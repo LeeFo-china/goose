@@ -71,6 +71,7 @@ const CLAIM_EXPIRES_AT = "2026-07-20T01:05:00.000Z";
 const releaseRow = {
   id: "11111111-1111-4111-8111-111111111111",
   installation_id: "22222222-2222-4222-8222-222222222222",
+  deployable_template_id: null,
   template_id: "9133504853504535288",
   template_version: "1.2.3",
   description: "装修行业模板首发",

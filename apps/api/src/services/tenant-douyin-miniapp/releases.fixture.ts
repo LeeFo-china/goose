@@ -1,5 +1,7 @@
 import { mock } from "bun:test";
 import type { DouyinReleaseReadiness } from "@gooes/domain";
+import type { DouyinVersionListResult } from
+  "@/gateways/douyin-open-platform/client";
 
 import type { AuthContext } from "@/services/authorization";
 
@@ -30,8 +32,11 @@ export const deployableTemplate = {
   description: "租户发布闭环",
   channel: "default" as const,
   is_current: true,
+  is_tenant_selectable: true,
   confirmed_by_employee_id: EMPLOYEE_ID,
   confirmed_at: "2026-09-17T10:00:00.000Z",
+  selectability_updated_at: "2026-09-17T10:00:00.000Z",
+  selectability_updated_by_employee_id: EMPLOYEE_ID,
   created_at: "2026-09-17T10:00:00.000Z",
 };
 export const selectedTemplate = {
@@ -92,6 +97,7 @@ export function release(overrides: Record<string, unknown> = {}) {
   return {
     id: RELEASE_ID,
     installation_id: INSTALLATION_ID,
+    deployable_template_id: null,
     template_id: "77595",
     template_version: "0.1.2",
     description: "租户联调版本",
@@ -167,6 +173,9 @@ export function fixture(options: {
   const templates = {
     findCurrent: mock(async (): Promise<typeof deployableTemplate | null> =>
       deployableTemplate),
+    findSelectableById: mock(async (templateId: string) =>
+      templateId === deployableTemplate.id ? deployableTemplate : null),
+    listSelectable: mock(async () => ({ list: [deployableTemplate], total: 1 })),
   };
   const accessPolicy = {
     assertTenantContext: mock((context: AuthContext) => {
@@ -197,7 +206,7 @@ export function fixture(options: {
     getAuthorizerAccessToken: mock(async () => "authorizer-access-token"),
   };
   const gateway = {
-    getVersionList: mock(async () => ({
+    getVersionList: mock(async (): Promise<DouyinVersionListResult> => ({
       latest: { version: "0.1.2", summary: "租户联调版本" },
       logId: "versions-log",
     })),

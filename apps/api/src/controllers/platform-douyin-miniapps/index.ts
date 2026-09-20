@@ -6,9 +6,12 @@ import {
   CreateTemplateDevelopmentInstallationSchema,
   PlatformDouyinMiniappIdParamsSchema,
   PlatformDouyinMiniappListQuerySchema,
+  PlatformDouyinDeployableTemplateListQuerySchema,
+  PlatformDouyinDeployableTemplateParamsSchema,
   PlatformDouyinMiniappReleaseEmptyObjectSchema,
   PlatformDouyinMiniappReleaseListQuerySchema,
   PromoteLatestPlatformDouyinTemplateSchema,
+  SetPlatformDouyinTemplateSelectabilitySchema,
   UpdatePlatformDouyinMiniappConfigSchema,
 } from "@/schema/platform-douyin-miniapps";
 import { getPlatformDouyinMiniappReleasesService } from
@@ -53,7 +56,7 @@ type ReleaseControllerService = Pick<
 type ReleaseServiceProvider = () => Promise<ReleaseControllerService>;
 type PromotionControllerService = Pick<
   PlatformDouyinTemplatePromotionService,
-  "getStatus" | "confirmLatest"
+  "getStatus" | "confirmLatest" | "listTemplates" | "setTemplateSelectability"
 >;
 type PromotionServiceProvider = () => Promise<PromotionControllerService>;
 const RenderingJobParams = z.strictObject({ id: z.uuid() });
@@ -120,6 +123,44 @@ export class PlatformDouyinMiniappsController extends PlatformBaseController {
     const promotionService = await this.promotionServiceProvider();
     return ResponseHandler.success(
       await promotionService.confirmLatest(authContext, bodyResult.data),
+    );
+  }
+
+  @Get("/platform/douyin-miniapps/deployable-templates")
+  async listDeployableTemplates(request: FastifyRequest) {
+    const authContext = await this.getDouyinMiniappManageContext(request);
+    const queryResult = PlatformDouyinDeployableTemplateListQuerySchema.safeParse(
+      request.query || {},
+    );
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+    const promotionService = await this.promotionServiceProvider();
+    return ResponseHandler.success(
+      await promotionService.listTemplates(authContext, queryResult.data),
+    );
+  }
+
+  @Post(
+    "/platform/douyin-miniapps/deployable-templates/:templateRecordId/selectability",
+  )
+  async setTemplateSelectability(request: FastifyRequest) {
+    const authContext = await this.getDouyinMiniappManageContext(request);
+    this.parseEmptyRequestPart(request.query);
+    const paramsResult = PlatformDouyinDeployableTemplateParamsSchema.safeParse(
+      request.params || {},
+    );
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+    const bodyResult = SetPlatformDouyinTemplateSelectabilitySchema.safeParse(
+      request.body || {},
+    );
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+    const promotionService = await this.promotionServiceProvider();
+    return ResponseHandler.success(
+      await promotionService.setTemplateSelectability(authContext, {
+        templateRecordId: paramsResult.data.templateRecordId,
+        isTenantSelectable: bodyResult.data.is_tenant_selectable,
+        expectedIsTenantSelectable:
+          bodyResult.data.expected_is_tenant_selectable,
+      }),
     );
   }
 

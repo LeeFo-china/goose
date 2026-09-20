@@ -240,7 +240,7 @@ export function TenantDouyinMiniappWorkspaceActions({
     setPending("create_test_version");
     try {
       const nextRelease = await requestBackendJson<Release>(
-        "/tenant/douyin-miniapp/releases/from-current-template",
+        "/tenant/douyin-miniapp/releases/from-template",
         {
           method: "POST",
           body: JSON.stringify({

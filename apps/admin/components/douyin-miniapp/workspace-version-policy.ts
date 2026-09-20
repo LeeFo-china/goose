@@ -1,18 +1,31 @@
 import type { TenantDouyinReleaseOption } from "./workspace-types";
 
 export function selectDefaultReleaseOption(options: readonly TenantDouyinReleaseOption[]) {
-  return options.find((option) => option.source === "confirmed_template") ?? options[0] ?? null;
+  return options.find((option) => option.source === "confirmed_template"
+    && option.is_recommended)
+    ?? options.find((option) => option.source === "confirmed_template")
+    ?? options[0] ?? null;
 }
 
 export function versionActionCopy(option: TenantDouyinReleaseOption) {
-  const revision = option.source === "confirmed_template";
+  const template = option.source === "confirmed_template";
   return {
-    title: `${option.template_version}${revision ? " · 新模板修订" : ""}`,
-    description: revision
-      ? "版本号相同或更新，但模板包已经更新。"
+    title: template
+      ? `${option.template_version} · ${selectionLabel(option.selection_kind)}`
+      : option.template_version,
+    description: option.selection_kind === "rollback"
+      ? "生成后需要重新体验、提审和发布，不会立即替换当前线上版本。"
       : option.description,
     primaryLabel: primaryLabel(option),
   };
+}
+
+export function selectionLabel(kind: TenantDouyinReleaseOption["selection_kind"]) {
+  if (kind === "recommended") return "推荐版本";
+  if (kind === "stable") return "稳定可选版本";
+  if (kind === "rollback") return "旧版回退";
+  if (kind === "current_online") return "已发布";
+  return "发布记录";
 }
 
 function primaryLabel(option: TenantDouyinReleaseOption) {

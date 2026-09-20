@@ -30,8 +30,7 @@ type Dependencies = {
 };
 type Claim = { readonly token: string; readonly recoveryRequired: boolean };
 type Acquired = { readonly claim: Claim; readonly release: DouyinMiniappReleaseRecord };
-type UploadInput = { readonly template_id: string; readonly template_version: string;
-  readonly description: string; readonly channel: "default" | "1" };
+type UploadInput = { readonly deployable_template_id?: string; readonly template_id: string; readonly template_version: string; readonly description: string; readonly channel: "default" | "1" };
 type AuditInput = { readonly host_names: string[]; readonly audit_note: string };
 const CLAIM_TTL_MS = 120_000;
 const UPLOAD_TERMINAL: readonly DouyinMiniappReleaseStatus[] = [
@@ -51,6 +50,7 @@ export class PlatformDouyinMiniappReleaseOperations {
     };
     const claimed = await this.dependencies.releaseRepository.getOrCreateAndClaimUpload({
       installationId,
+      ...(input.deployable_template_id ? { deployableTemplateId: input.deployable_template_id } : {}),
       templateId: input.template_id,
       templateVersion: input.template_version,
       description: input.description,

@@ -24,8 +24,10 @@ import { Separator } from "@/components/ui/separator";
 import { requestBackendJson } from "@/lib/backend-client";
 import {
   getTemplateConfirmationState,
+  type PlatformDouyinTemplateList,
   type PlatformDouyinTemplateStatus,
 } from "./platform-douyin-template-rules";
+import { PlatformDouyinTemplateAllowlist } from "./platform-douyin-template-allowlist";
 
 type ConfirmedTemplate = NonNullable<
   PlatformDouyinTemplateStatus["current_template"]
@@ -34,13 +36,18 @@ type ConfirmedTemplate = NonNullable<
 export function PlatformDouyinTemplatePanel({
   initialError,
   initialStatus,
+  initialTemplateList = null,
+  initialTemplateListError = null,
 }: {
   initialError: string | null;
   initialStatus: PlatformDouyinTemplateStatus | null;
+  initialTemplateList?: PlatformDouyinTemplateList | null;
+  initialTemplateListError?: string | null;
 }) {
   const [status, setStatus] = useState(initialStatus);
   const [pending, setPending] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [allowlistRefreshToken, setAllowlistRefreshToken] = useState(0);
   const [error, setError] = useState(initialError);
   const confirmation = status
     ? getTemplateConfirmationState(status)
@@ -64,6 +71,7 @@ export function PlatformDouyinTemplatePanel({
         current_template: confirmed,
         is_latest_confirmed: true,
       });
+      setAllowlistRefreshToken((value) => value + 1);
       toast.success("最新模板已设为租户可发布版本");
     } catch (caught) {
       const message = caught instanceof Error
@@ -188,6 +196,11 @@ export function PlatformDouyinTemplatePanel({
             </Button>
           </div>
         </CardContent>
+        <PlatformDouyinTemplateAllowlist
+          initialData={initialTemplateList}
+          initialError={initialTemplateListError}
+          refreshToken={allowlistRefreshToken}
+        />
       </Card>
     </div>
   );

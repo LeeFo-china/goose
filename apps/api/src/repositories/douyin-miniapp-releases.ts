@@ -9,7 +9,6 @@ import {
 } from "./douyin-miniapp-releases-claims";
 
 export * from "./douyin-miniapp-releases-claims";
-
 export const DOUYIN_MINIAPP_RELEASE_STATUSES = [
   "created",
   "uploaded",
@@ -22,7 +21,7 @@ export const DOUYIN_MINIAPP_RELEASE_STATUSES = [
 ] as const;
 
 const RELEASE_SELECT = [
-  "id", "installation_id", "template_id", "template_version", "description",
+  "id", "installation_id", "deployable_template_id", "template_id", "template_version", "description",
   "provider_summary", "channel", "ext_json", "status", "douyin_log_id", "test_qr_url",
   "latest_test_qr_url", "audit_qr_url", "audit_host_names", "audit_note",
   "audit_result", "submitted_at", "audited_at", "released_at",
@@ -70,6 +69,7 @@ const ExtJsonSchema = z.strictObject({
 const ReleaseSchema = z.strictObject({
   id: z.string().uuid(),
   installation_id: z.string().uuid(),
+  deployable_template_id: z.string().uuid().nullable().default(null),
   template_id: TemplateIdSchema,
   template_version: TemplateVersionSchema,
   description: z.string().trim().min(1).max(200),
@@ -121,7 +121,7 @@ export type DouyinMiniappClaimedUploadRelease = z.infer<typeof ClaimedUploadRele
 
 export type GetOrCreateAndClaimDouyinMiniappUploadInput = {
   readonly installationId: string;
-  readonly templateId: string;
+  readonly deployableTemplateId?: string; readonly templateId: string;
   readonly templateVersion: string;
   readonly description: string;
   readonly channel: "default" | "1";
@@ -245,9 +245,12 @@ export class DouyinMiniappReleasesRepository {
     const claim = parseInput(UploadClaimInputSchema, input);
     return execute(async () => {
       const result = await this.client.rpc(
-        "get_or_create_and_claim_douyin_miniapp_release_upload_v2",
+        claim.deployableTemplateId
+          ? "get_or_create_and_claim_douyin_miniapp_release_upload_v3"
+          : "get_or_create_and_claim_douyin_miniapp_release_upload_v2",
         {
           p_installation_id: claim.installationId,
+          ...(claim.deployableTemplateId ? { p_deployable_template_id: claim.deployableTemplateId } : {}),
           p_template_id: claim.templateId,
           p_template_version: claim.templateVersion,
           p_description: claim.description,
@@ -329,6 +332,7 @@ const ClaimOperationInputSchema = z.strictObject({
 });
 const UploadClaimInputSchema = z.strictObject({
   installationId: z.string().uuid(),
+  deployableTemplateId: z.string().uuid().optional(),
   templateId: TemplateIdSchema,
   templateVersion: TemplateVersionSchema,
   description: z.string().trim().min(1).max(200),

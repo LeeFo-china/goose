@@ -8,6 +8,8 @@ import { compareDouyinTemplateVersion } from "./template-version";
 
 export type TenantDouyinReleaseAction = "create_test_version" | "generate_test_qr"
   | "generate_audit_qr" | "submit_audit" | "sync_status" | "publish";
+export type TenantDouyinTemplateSelectionKind =
+  | "recommended" | "stable" | "rollback" | "current_online" | "release";
 export type TenantDouyinReleaseOption = {
   readonly id: string;
   readonly source: "confirmed_template" | "release";
@@ -19,25 +21,27 @@ export type TenantDouyinReleaseOption = {
   readonly actions: readonly TenantDouyinReleaseAction[];
   readonly test_qr_url: string | null;
   readonly updated_at: string;
+  readonly is_recommended: boolean;
+  readonly selection_kind: TenantDouyinTemplateSelectionKind;
 };
 
 type Input = {
-  readonly template: DouyinDeployableTemplate | null;
+  readonly templates: readonly DouyinDeployableTemplate[];
   readonly releases: readonly DouyinMiniappReleaseRecord[];
   readonly versions: DouyinVersionListResult | null;
 };
 
 export function buildTenantDouyinReleaseOptions(input: Input): TenantDouyinReleaseOption[] {
-  const exact = input.template
-    ? input.releases.find((release) => release.template_id === input.template?.template_id
-      && release.template_version === input.template.template_version)
-    : undefined;
   const options: TenantDouyinReleaseOption[] = [];
-  if (input.template && shouldOfferTemplate(input.template, input.releases[0], exact)) {
-    options.push(templateOption(input.template));
+  for (const template of input.templates) {
+    const exact = input.releases.find((release) => release.template_id === template.template_id
+      && release.template_version === template.template_version);
+    if (shouldOfferTemplate(exact, template, input.versions)) {
+      options.push(templateOption(template, input.versions));
+    }
   }
   for (const release of input.releases) {
-    if (isAmbiguousLegacyRevision(release, input.template, exact)) continue;
+    if (isAmbiguousLegacyRevision(release, input.templates)) continue;
     const actions = releaseActions(release, input.versions);
     if (actions.length === 0 && release.status !== "released") continue;
     if (!matchesProviderState(release, input.versions)) continue;
@@ -51,23 +55,21 @@ export function buildPagination(page: number, pageSize: number, total: number) {
     totalPages: total === 0 ? 0 : Math.ceil(total / pageSize) };
 }
 
-function shouldOfferTemplate(template: DouyinDeployableTemplate,
-  latest: DouyinMiniappReleaseRecord | undefined,
-  exact: DouyinMiniappReleaseRecord | undefined): boolean {
+function shouldOfferTemplate(exact: DouyinMiniappReleaseRecord | undefined,
+  template: DouyinDeployableTemplate,
+  versions: DouyinVersionListResult | null): boolean {
   if (exact?.status === "created" || exact?.status === "failed") return true;
-  if (exact) return false;
-  if (!latest) return true;
-  const compared = compareDouyinTemplateVersion(template.template_version, latest.template_version);
-  return compared !== null && (compared > 0
-    || (compared === 0 && template.template_id !== latest.template_id));
+  if (!exact) return true;
+  return exact.status === "released" && matchesTemplateStage(template, versions?.current);
 }
 
 function isAmbiguousLegacyRevision(release: DouyinMiniappReleaseRecord,
-  template: DouyinDeployableTemplate | null,
-  exact: DouyinMiniappReleaseRecord | undefined): boolean {
-  return template !== null && exact === undefined
-    && release.template_version === template.template_version
-    && release.template_id !== template.template_id;
+  templates: readonly DouyinDeployableTemplate[]): boolean {
+  const exact = templates.some((template) => template.template_id === release.template_id
+    && template.template_version === release.template_version);
+  return !exact && templates.some((template) =>
+    release.template_version === template.template_version
+    && release.template_id !== template.template_id);
 }
 
 function matchesProviderState(release: DouyinMiniappReleaseRecord,
@@ -100,12 +102,17 @@ function releaseActions(release: DouyinMiniappReleaseRecord,
   }
 }
 
-function templateOption(template: DouyinDeployableTemplate): TenantDouyinReleaseOption {
+function templateOption(template: DouyinDeployableTemplate,
+  versions: DouyinVersionListResult | null): TenantDouyinReleaseOption {
+  const selectionKind = templateSelectionKind(template, versions);
   return {
     id: template.id, source: "confirmed_template", release_id: null,
     template_id: template.template_id, template_version: template.template_version,
     description: template.description, stage: "ready_to_upload",
-    actions: ["create_test_version"], test_qr_url: null, updated_at: template.confirmed_at,
+    actions: selectionKind === "current_online" ? [] : ["create_test_version"],
+    test_qr_url: null, updated_at: template.confirmed_at,
+    is_recommended: template.is_current,
+    selection_kind: selectionKind,
   };
 }
 
@@ -117,5 +124,23 @@ function releaseOption(release: DouyinMiniappReleaseRecord,
     description: release.description, stage: release.status, actions,
     test_qr_url: release.latest_test_qr_url ?? release.test_qr_url,
     updated_at: release.updated_at,
+    is_recommended: false,
+    selection_kind: "release",
   };
+}
+
+function templateSelectionKind(template: DouyinDeployableTemplate,
+  versions: DouyinVersionListResult | null): TenantDouyinTemplateSelectionKind {
+  if (matchesTemplateStage(template, versions?.current)) return "current_online";
+  if (template.is_current) return "recommended";
+  const currentVersion = versions?.current?.version;
+  if (!currentVersion) return "stable";
+  const compared = compareDouyinTemplateVersion(template.template_version, currentVersion);
+  return compared !== null && compared < 0 ? "rollback" : "stable";
+}
+
+function matchesTemplateStage(template: DouyinDeployableTemplate,
+  stage: DouyinVersionListResult["current"]): boolean {
+  return stage?.version === template.template_version
+    && stage.summary?.startsWith(`[#${template.template_id}]`) === true;
 }

@@ -17,6 +17,36 @@ export type PlatformDouyinTemplateStatus = {
   is_latest_confirmed: boolean;
 };
 
+export type PlatformDouyinDeployableTemplate = {
+  id: string;
+  template_id: string;
+  template_version: string;
+  description: string;
+  channel: "default" | "1";
+  is_current: boolean;
+  is_tenant_selectable: boolean;
+  confirmed_at: string;
+  selectability_updated_at: string;
+};
+
+export type PlatformDouyinTemplateList = {
+  list: PlatformDouyinDeployableTemplate[];
+  pagination: { page: number; pageSize: number; total: number; totalPages: number };
+};
+
+export function getTemplateSelectabilityState(
+  template: PlatformDouyinDeployableTemplate,
+) {
+  if (template.is_current) {
+    return { disabled: true, label: "推荐版本，租户可选", help: "请先确认新的推荐模板" };
+  }
+  return {
+    disabled: false,
+    label: template.is_tenant_selectable ? "租户可选" : "租户不可选",
+    help: null,
+  };
+}
+
 export function getTemplateConfirmationState(
   status: PlatformDouyinTemplateStatus,
 ) {
