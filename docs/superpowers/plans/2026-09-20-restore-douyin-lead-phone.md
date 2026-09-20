@@ -81,4 +81,3 @@
 - [x] Run the repository file-size and migration contract checks relevant to the modified files.
 - [x] Inspect `git diff --check`, the final diff and worktree status.
 - [x] Mark completed plan checkboxes and commit with a focused Conventional Commit message.
-
