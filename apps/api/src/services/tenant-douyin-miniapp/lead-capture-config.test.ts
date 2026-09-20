@@ -89,7 +89,7 @@ describe("TenantDouyinMiniappLeadCaptureConfigService", () => {
 
   test("binds the update to the current active tenant AppID", async () => {
     const { service, repository, accessPolicy } = createService();
-    await service.update(authContext(), { ...input, enabled: false });
+    await service.update(authContext(), input);
     expect(accessPolicy.assertPermission).toHaveBeenCalledWith(
       authContext(),
       "douyin_miniapp.manage",
@@ -99,19 +99,8 @@ describe("TenantDouyinMiniappLeadCaptureConfigService", () => {
       installationId: INSTALLATION_ID,
       authorizerAppId: APP_ID,
       expectedUpdatedAt: UPDATED_AT,
-      enabled: false,
+      enabled: true,
     });
-  });
-
-  test("rejects attempts to enable phone capture before installation access", async () => {
-    const { service, repository, workspace } = createService();
-
-    await expect(service.update(authContext(), input)).rejects.toMatchObject({
-      statusCode: 409,
-      code: "DOUYIN_LEAD_PHONE_MODE_UNAVAILABLE",
-    });
-    expect(workspace.findCurrentInstallation).not.toHaveBeenCalled();
-    expect(repository.update).not.toHaveBeenCalled();
   });
 
   test("rejects missing, inactive or mismatched current installations", async () => {
@@ -121,7 +110,7 @@ describe("TenantDouyinMiniappLeadCaptureConfigService", () => {
       { ...installation, authorizer_appid: "tt-other" },
     ]) {
       const { service, repository } = createService({ current: current as never });
-      await expect(service.update(authContext(), { ...input, enabled: false })).rejects.toMatchObject({
+      await expect(service.update(authContext(), input)).rejects.toMatchObject({
         statusCode: current === null ? 404 : 409,
       });
       expect(repository.update).not.toHaveBeenCalled();

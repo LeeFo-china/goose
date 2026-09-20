@@ -22,13 +22,9 @@ describe("bootstrapFeatures", () => {
     });
   });
 
-  test("forces SMS mode for the runtime contract without mutating input", () => {
-    expect(bootstrapFeatures(modernFeatures, "runtime")).toEqual({
-      ...modernFeatures,
-      douyin_phone: false,
-      phone_capture_mode: "sms",
-    });
-    expect(bootstrapFeatures(modernFeatures, "runtime")).not.toBe(modernFeatures);
+  test("preserves installation phone features for the runtime contract", () => {
+    expect(bootstrapFeatures(modernFeatures, "runtime")).toEqual(modernFeatures);
+    expect(bootstrapFeatures(modernFeatures, "runtime")).toBe(modernFeatures);
     expect(modernFeatures.phone_capture_mode).toBe("douyin_phone");
   });
 });

@@ -7,12 +7,13 @@
     </view>
     <view class="field-group">
       <view class="field-label">手机号 <text class="required" style="color: {{primaryColor}}">*</text></view>
-      <view class="phone-input-shell ui-control {{fieldErrors.phone ? 'ui-control--error' : ''}}">
-        <input class="phone-inline-input" aria-label="手机号" data-field="phone" type="number" maxlength="11" value="{{value.phone}}" placeholder="请输入手机号" focus="{{focusedField === 'phone'}}" disabled="{{submitting}}" bindinput="onInput" />
+      <view class="phone-input-shell ui-control {{fieldErrors.phone ? 'ui-control--error' : ''}} {{douyinPhoneEnabled ? 'phone-input-shell--with-action' : ''}}">
+        <input class="phone-inline-input" aria-label="手机号" data-field="phone" type="number" maxlength="11" value="{{value.phone}}" placeholder="{{douyinPhoneAuthorized ? '已获取抖音绑定手机号' : '请输入手机号'}}" focus="{{focusedField === 'phone'}}" disabled="{{submitting}}" bindinput="onInput" />
+        <button tt:if="{{douyinPhoneEnabled}}" class="phone-inline-action ui-pressable" hover-class="ui-pressable--pressed" style="color: {{primaryColor}}" open-type="getPhoneNumber" bindgetphonenumber="onDouyinPhoneNumber" disabled="{{submitting}}">获取抖音绑定手机号</button>
       </view>
       <view tt:if="{{fieldErrors.phone}}" class="ui-field-error" role="alert">{{fieldErrors.phone}}</view>
     </view>
-    <view class="field-group sms-code-group">
+    <view tt:if="{{!douyinPhoneEnabled || value.phone}}" class="field-group sms-code-group">
       <view class="field-label">短信验证码 <text class="required" style="color: {{primaryColor}}">*</text></view>
       <sms-code-input value="{{value.sms_code}}" phone-ready="{{phoneReady && !submitting}}" sending="{{smsSending || submitting}}" cooldown="{{smsCooldown}}" focused="{{focusedField === 'sms_code'}}" error="{{fieldErrors.sms_code || ''}}" primary-color="{{primaryColor}}" bindchange="onSmsCodeChange" bindsend="onSendSms" />
       <view tt:if="{{fieldErrors.sms_code}}" class="ui-field-error" role="alert">{{fieldErrors.sms_code}}</view>
