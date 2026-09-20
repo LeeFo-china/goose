@@ -122,5 +122,6 @@ describe("PlatformDouyinTemplatePanel", () => {
     );
     expect(allowlistSource).toContain("expected_is_tenant_selectable: template.is_tenant_selectable");
     expect(allowlistSource).toContain("await loadPage(data?.pagination.page ?? 1)");
+    expect(allowlistSource).toContain("if (refreshToken > 0) void loadPage(1)");
   });
 });

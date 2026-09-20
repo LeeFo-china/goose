@@ -47,6 +47,7 @@ export function PlatformDouyinTemplatePanel({
   const [status, setStatus] = useState(initialStatus);
   const [pending, setPending] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [allowlistRefreshToken, setAllowlistRefreshToken] = useState(0);
   const [error, setError] = useState(initialError);
   const confirmation = status
     ? getTemplateConfirmationState(status)
@@ -70,6 +71,7 @@ export function PlatformDouyinTemplatePanel({
         current_template: confirmed,
         is_latest_confirmed: true,
       });
+      setAllowlistRefreshToken((value) => value + 1);
       toast.success("最新模板已设为租户可发布版本");
     } catch (caught) {
       const message = caught instanceof Error
@@ -197,6 +199,7 @@ export function PlatformDouyinTemplatePanel({
         <PlatformDouyinTemplateAllowlist
           initialData={initialTemplateList}
           initialError={initialTemplateListError}
+          refreshToken={allowlistRefreshToken}
         />
       </Card>
     </div>

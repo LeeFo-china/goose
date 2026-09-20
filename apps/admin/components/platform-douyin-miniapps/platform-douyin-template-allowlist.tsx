@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -18,15 +18,17 @@ import {
 export function PlatformDouyinTemplateAllowlist({
   initialData,
   initialError,
+  refreshToken,
 }: {
   initialData: PlatformDouyinTemplateList | null;
   initialError: string | null;
+  refreshToken: number;
 }) {
   const [data, setData] = useState(initialData);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [loadingPage, setLoadingPage] = useState(false);
 
-  async function loadPage(page: number) {
+  const loadPage = useCallback(async (page: number) => {
     setLoadingPage(true);
     try {
       const next = await requestBackendJson<PlatformDouyinTemplateList>(
@@ -39,7 +41,11 @@ export function PlatformDouyinTemplateAllowlist({
     } finally {
       setLoadingPage(false);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    if (refreshToken > 0) void loadPage(1);
+  }, [loadPage, refreshToken]);
 
   async function setSelectable(template: PlatformDouyinDeployableTemplate, checked: boolean) {
     if (pendingId || template.is_current) return;
