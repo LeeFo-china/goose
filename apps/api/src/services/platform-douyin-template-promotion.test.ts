@@ -68,6 +68,11 @@ function createHarness() {
   };
   const templates = {
     findCurrent: mock(async () => null as typeof currentTemplate | null),
+    list: mock(async () => ({ list: [currentTemplate], total: 1 })),
+    setSelectability: mock(async () => ({
+      ...currentTemplate,
+      is_tenant_selectable: false,
+    })),
     confirm: mock(async (_input: unknown) => currentTemplate),
   };
   const wait = mock(async (_delayMs: number) => {});
@@ -83,6 +88,45 @@ function createHarness() {
 }
 
 describe("PlatformDouyinTemplatePromotionService", () => {
+  test("lists confirmed templates with bounded pagination", async () => {
+    const harness = createHarness();
+
+    await expect(harness.service.listTemplates(authContext as never, {
+      channel: "default", page: 2, pageSize: 20,
+    })).resolves.toEqual({
+      list: [currentTemplate],
+      pagination: { page: 2, pageSize: 20, total: 1, totalPages: 1 },
+    });
+    expect(harness.templates.list).toHaveBeenCalledWith({
+      channel: "default", page: 2, pageSize: 20,
+    });
+  });
+
+  test("changes template selectability with the authenticated platform actor", async () => {
+    const harness = createHarness();
+
+    await harness.service.setTemplateSelectability(authContext as never, {
+      templateRecordId: currentTemplate.id,
+      isTenantSelectable: false,
+      expectedIsTenantSelectable: true,
+    });
+
+    expect(harness.templates.setSelectability).toHaveBeenCalledWith({
+      templateRecordId: currentTemplate.id,
+      isTenantSelectable: false,
+      expectedIsTenantSelectable: true,
+      actorEmployeeId: OPERATOR_ID,
+    });
+  });
+
+  test("rejects invalid template allowlist pagination before repository access", async () => {
+    const harness = createHarness();
+    await expect(harness.service.listTemplates(authContext as never, {
+      channel: "default", page: 1, pageSize: 101,
+    })).rejects.toMatchObject({ statusCode: 400 });
+    expect(harness.templates.list).not.toHaveBeenCalled();
+  });
+
   test("reports the latest provider draft and current confirmed template", async () => {
     const harness = createHarness();
     harness.templates.findCurrent.mockResolvedValue(currentTemplate);

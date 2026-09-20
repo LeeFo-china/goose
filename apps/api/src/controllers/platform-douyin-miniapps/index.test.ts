@@ -57,6 +57,14 @@ function createController() {
       template_id: "77596",
       template_version: "0.1.4",
     })),
+    listTemplates: mock(async () => ({
+      list: [],
+      pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+    })),
+    setTemplateSelectability: mock(async () => ({
+      id: "11111111-1111-4111-8111-111111111111",
+      is_tenant_selectable: false,
+    })),
   };
   const promotionServiceProvider = mock(async () => promotionService);
   const renderingReconciliationService = { reconcile: mock(async () => ({
@@ -102,6 +110,14 @@ describe("PlatformDouyinMiniappsController", () => {
       {
         method: "POST",
         path: "/platform/douyin-miniapps/deployable-template/confirm-latest",
+      },
+      {
+        method: "GET",
+        path: "/platform/douyin-miniapps/deployable-templates",
+      },
+      {
+        method: "POST",
+        path: "/platform/douyin-miniapps/deployable-templates/:templateRecordId/selectability",
       },
       { method: "GET", path: "/platform/douyin-miniapps/:id" },
       { method: "POST", path: "/platform/douyin-miniapps/:id/bind" },
@@ -320,6 +336,53 @@ describe("PlatformDouyinMiniappsController", () => {
       data: { id: "template", template_id: "77596" },
       message: "success",
     });
+  });
+  test("lists templates and changes selectability with strict CAS input", async () => {
+    const { controller, promotionService, authContext } = createController();
+    const templateRecordId = "11111111-1111-4111-8111-111111111111";
+
+    const listed = await controller.listDeployableTemplates({ query: {} } as never);
+    const changed = await controller.setTemplateSelectability({
+      params: { templateRecordId },
+      query: {},
+      body: {
+        is_tenant_selectable: false,
+        expected_is_tenant_selectable: true,
+      },
+    } as never);
+
+    expect(promotionService.listTemplates).toHaveBeenCalledWith(authContext, {
+      channel: "default", page: 1, pageSize: 20,
+    });
+    expect(promotionService.setTemplateSelectability).toHaveBeenCalledWith(
+      authContext,
+      {
+        templateRecordId,
+        isTenantSelectable: false,
+        expectedIsTenantSelectable: true,
+      },
+    );
+    expect(listed).toMatchObject({ data: { list: [] }, message: "success" });
+    expect(changed).toMatchObject({
+      data: { id: templateRecordId, is_tenant_selectable: false },
+      message: "success",
+    });
+  });
+
+  test("rejects invalid allowlist inputs before resolving the service", async () => {
+    const { controller, promotionServiceProvider } = createController();
+    await expect(controller.listDeployableTemplates({
+      query: { pageSize: 101 },
+    } as never)).rejects.toMatchObject({ statusCode: 400 });
+    await expect(controller.setTemplateSelectability({
+      params: { templateRecordId: "bad" },
+      query: {},
+      body: {
+        is_tenant_selectable: true,
+        expected_is_tenant_selectable: false,
+      },
+    } as never)).rejects.toMatchObject({ statusCode: 400 });
+    expect(promotionServiceProvider).not.toHaveBeenCalled();
   });
   test("rejects invalid template promotion bodies before resolving the service", async () => {
     for (const body of [

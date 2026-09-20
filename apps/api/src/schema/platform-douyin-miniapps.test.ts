@@ -8,7 +8,10 @@ import {
 import {
   BindPlatformDouyinMiniappSchema,
   DouyinRuntimeConfigSchema,
+  PlatformDouyinDeployableTemplateListQuerySchema,
+  PlatformDouyinDeployableTemplateParamsSchema,
   PlatformDouyinMiniappSafeRecordSchema,
+  SetPlatformDouyinTemplateSelectabilitySchema,
   UpdatePlatformDouyinMiniappConfigSchema,
   type DouyinRuntimeConfig,
   type DouyinRuntimeConfigInput,
@@ -30,6 +33,35 @@ const runtimeConfig = {
 } satisfies DouyinRuntimeConfigInput;
 
 describe('platform Douyin runtime config schema', () => {
+  test('strictly validates template allowlist list and CAS inputs', () => {
+    expect(PlatformDouyinDeployableTemplateListQuerySchema.parse({})).toEqual({
+      channel: 'default', page: 1, pageSize: 20,
+    });
+    expect(PlatformDouyinDeployableTemplateListQuerySchema.parse({
+      channel: '1', page: '2', pageSize: '100',
+    })).toEqual({ channel: '1', page: 2, pageSize: 100 });
+    expect(PlatformDouyinDeployableTemplateListQuerySchema.safeParse({
+      pageSize: 101,
+    }).success).toBe(false);
+    expect(PlatformDouyinDeployableTemplateParamsSchema.parse({
+      templateRecordId: '11111111-1111-4111-8111-111111111111',
+    })).toEqual({
+      templateRecordId: '11111111-1111-4111-8111-111111111111',
+    });
+    expect(SetPlatformDouyinTemplateSelectabilitySchema.parse({
+      is_tenant_selectable: false,
+      expected_is_tenant_selectable: true,
+    })).toEqual({
+      is_tenant_selectable: false,
+      expected_is_tenant_selectable: true,
+    });
+    expect(SetPlatformDouyinTemplateSelectabilitySchema.safeParse({
+      is_tenant_selectable: true,
+      expected_is_tenant_selectable: false,
+      actor_employee_id: 'forged',
+    }).success).toBe(false);
+  });
+
   test('re-exports the canonical domain schema by identity', () => {
     expect(DouyinRuntimeConfigSchema).toBe(DomainDouyinRuntimeConfigSchema);
   });

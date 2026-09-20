@@ -52,6 +52,24 @@ export const PromoteLatestPlatformDouyinTemplateSchema = z.strictObject({
   channel: z.enum(["default", "1"], "无效的发布通道"),
 });
 
+export const PlatformDouyinDeployableTemplateListQuerySchema = z.strictObject({
+  channel: z.enum(["default", "1"], "无效的发布通道").default("default"),
+  page: z.coerce.number().int("页码必须为整数").min(1, "页码必须大于 0")
+    .max(10_000, "页码不能超过 10000").default(1),
+  pageSize: z.coerce.number().int("每页数量必须为整数")
+    .min(1, "每页数量必须大于 0")
+    .max(100, "每页数量不能超过 100").default(20),
+});
+
+export const PlatformDouyinDeployableTemplateParamsSchema = z.strictObject({
+  templateRecordId: z.uuid("无效的抖音模板记录 ID"),
+});
+
+export const SetPlatformDouyinTemplateSelectabilitySchema = z.strictObject({
+  is_tenant_selectable: z.boolean(),
+  expected_is_tenant_selectable: z.boolean(),
+});
+
 export const SubmitPlatformDouyinMiniappReleaseAuditSchema = z.strictObject({
   host_names: z.array(
     z.string().min(1, "宿主名称不能为空").max(253, "宿主名称不能超过 253 个字符")

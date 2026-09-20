@@ -23,13 +23,22 @@ const FIXED_TEMPLATE_APP_ID = "tt0d647bd99301341b01";
 const PromotionInputSchema = z.strictObject({
   channel: z.enum(["default", "1"]),
 });
+const TemplateListInputSchema = PromotionInputSchema.extend({
+  page: z.coerce.number().int().min(1).max(10_000),
+  pageSize: z.coerce.number().int().min(1).max(100),
+}).strict();
+const TemplateSelectabilityInputSchema = z.strictObject({
+  templateRecordId: z.uuid(),
+  isTenantSelectable: z.boolean(),
+  expectedIsTenantSelectable: z.boolean(),
+});
 const TemplateAppIdSchema = z.literal(FIXED_TEMPLATE_APP_ID);
 
 type AccessPolicyPort = Pick<typeof accessPolicyService, "assertPermission">;
 type AccessTokenPort = Pick<DouyinMiniappAccessTokenService, "getComponentAccessToken">;
 type TemplateRepositoryPort = Pick<
   DouyinDeployableTemplatesRepository,
-  "findCurrent" | "confirm"
+  "findCurrent" | "confirm" | "list" | "setSelectability"
 >;
 
 type ReadyDraft = {
@@ -57,6 +66,38 @@ export class PlatformDouyinTemplatePromotionService {
   constructor(
     private readonly dependencies: PlatformDouyinTemplatePromotionDependencies,
   ) {}
+
+  async listTemplates(
+    authContext: AuthContext,
+    input: z.input<typeof TemplateListInputSchema>,
+  ) {
+    this.assertCanManage(authContext);
+    const parsed = parseRequest(TemplateListInputSchema, input);
+    const result = await this.dependencies.templates.list(parsed);
+    return {
+      list: result.list,
+      pagination: {
+        page: parsed.page,
+        pageSize: parsed.pageSize,
+        total: result.total,
+        totalPages: result.total === 0
+          ? 0
+          : Math.ceil(result.total / parsed.pageSize),
+      },
+    };
+  }
+
+  async setTemplateSelectability(
+    authContext: AuthContext,
+    input: z.input<typeof TemplateSelectabilityInputSchema>,
+  ) {
+    const actorEmployeeId = this.assertCanManage(authContext);
+    const parsed = parseRequest(TemplateSelectabilityInputSchema, input);
+    return this.dependencies.templates.setSelectability({
+      ...parsed,
+      actorEmployeeId,
+    });
+  }
 
   async getStatus(
     authContext: AuthContext,
