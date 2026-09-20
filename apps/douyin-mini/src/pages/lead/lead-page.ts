@@ -70,6 +70,7 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
   attributionEntryVersion: 0,
   submissionAttribution: null as { key: string; value: LaunchContext } | null,
   successNavigationInFlight: false,
+  successPresentationPending: false,
   douyinPhoneAuthorization: null as { code: string; expiresAt: number } | null,
   data: {
     loading: true,
@@ -116,6 +117,7 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
     });
     this.syncBudgetContext();
     this.resumeCooldown();
+    this.presentPendingSuccess();
     if (becameVisible && (this.data.loading || this.data.error)) {
       if (this.bootstrapSnapshot) this.presentBootstrap(this.bootstrapSnapshot);
       else void this.load();
@@ -331,6 +333,10 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
     });
   },
   async onSubmit() {
+    if (dependencies.readMeasurementSuccessContext()) {
+      this.openSuccessPage();
+      return;
+    }
     const phoneCaptureMode = this.data.douyinPhoneEnabled
         && this.douyinPhoneAuthorization !== null
       ? "douyin_phone"
@@ -433,7 +439,14 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
         linkedEstimateId: linkedBudget?.estimateId ?? null,
       });
       const canPresent = this.lifecycle.finishSubmit(authority);
-      if (!acceptedAttempt || !canPresent) return;
+      if (!acceptedAttempt) return;
+      if (!canPresent) {
+        if (recorded) {
+          this.successPresentationPending = true;
+          this.presentPendingSuccess();
+        }
+        return;
+      }
       if (!recorded) {
         this.setData({
           submitting: false,
@@ -469,6 +482,12 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
       });
       return;
     }
+    this.setData({ submitting: false });
+    this.openSuccessPage();
+  },
+  presentPendingSuccess() {
+    if (!this.successPresentationPending || !this.lifecycle.isVisible()) return;
+    this.successPresentationPending = false;
     this.setData({ submitting: false });
     this.openSuccessPage();
   },

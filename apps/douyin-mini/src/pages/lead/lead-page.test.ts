@@ -343,6 +343,47 @@ describe("lead page definition", () => {
     expect(harness.page.data.douyinPhoneAuthorized).toBe(false);
   });
 
+  test("recovers a successful official-phone submit that finishes while hidden", async () => {
+    const harness = createHarness({
+      ...BOOTSTRAP,
+      features: {
+        ...BOOTSTRAP.features,
+        douyin_phone: true,
+        phone_capture_mode: "douyin_phone",
+      },
+    }, { trackSuccessContext: true });
+    harness.page.onLoad();
+    await flushPromises();
+    harness.page.onShow();
+    setValidForm(harness.page);
+    harness.page.onDouyinPhoneNumber({
+      detail: { douyin_phone_code: "official-phone-code" },
+    });
+    const submit = harness.deferredSubmit();
+    const operation = harness.page.onSubmit();
+    await flushPromises();
+    expect(harness.submitLead).toHaveBeenCalledTimes(1);
+
+    harness.page.onHide();
+    submit.resolve(publicAppointment());
+    await operation;
+
+    expect(harness.page.idempotency.status).toBe("succeeded");
+    expect(harness.navigateToPage).not.toHaveBeenCalled();
+
+    const recoveryNavigation = harness.deferredNavigation();
+    harness.page.onShow();
+    expect(harness.navigateToPage).toHaveBeenCalledWith("pages/lead-success/index");
+    recoveryNavigation.resolve();
+    await flushPromises();
+
+    const repeatNavigation = harness.deferredNavigation();
+    await harness.page.onSubmit();
+    expect(harness.submitLead).toHaveBeenCalledTimes(1);
+    expect(harness.navigateToPage).toHaveBeenCalledTimes(2);
+    repeatNavigation.resolve();
+  });
+
   test("typing a phone after authorization switches back to SMS submission", async () => {
     const harness = createHarness({
       ...BOOTSTRAP,
@@ -410,7 +451,10 @@ type TestLeadPage = LeadPageDefinition & {
   setData(patch: Partial<LeadPageDefinition["data"]>): void;
 };
 
-function createHarness(bootstrap: BootstrapData = BOOTSTRAP) {
+function createHarness(
+  bootstrap: BootstrapData = BOOTSTRAP,
+  options: { trackSuccessContext?: boolean } = {},
+) {
   const submitFlights: Array<Deferred<SubmitLeadResult>> = [];
   const bootstrapLoads: Array<Deferred<BootstrapData | null>> = [];
   const navigationFlights: Array<Deferred<void>> = [];
@@ -419,6 +463,7 @@ function createHarness(bootstrap: BootstrapData = BOOTSTRAP) {
     ?? Promise.reject(new Error("missing submit flight")));
   const navigateToPage = mock(() => navigationFlights.shift()?.promise
     ?? Promise.reject(new Error("missing navigation flight")));
+  let hasSuccessContext = false;
   const app = {
     api: {},
     bootstrap: {
@@ -444,8 +489,18 @@ function createHarness(bootstrap: BootstrapData = BOOTSTRAP) {
     sendLeadSms: async () => ({ success: true as const, cooldown_seconds: 60 }),
     submitLead,
     readBudgetLeadContext: () => null,
-    readMeasurementSuccessContext: () => null,
-    writeMeasurementSuccessContext: () => true,
+    readMeasurementSuccessContext: () => options.trackSuccessContext && hasSuccessContext
+      ? {
+        appointmentNo: "DYLF-20260719-000001",
+        preferredVisitDate: "2099-01-01",
+        preferredVisitPeriod: "morning" as const,
+        linkedEstimateId: null,
+      }
+      : null,
+    writeMeasurementSuccessContext: () => {
+      hasSuccessContext = true;
+      return true;
+    },
     navigateToPage,
     showToast: () => undefined,
     makePhoneCall: () => undefined,
