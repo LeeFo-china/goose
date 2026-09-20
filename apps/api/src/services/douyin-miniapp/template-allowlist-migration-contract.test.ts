@@ -16,6 +16,7 @@ describe("Douyin tenant template allowlist migration", () => {
     expect(migration).toContain("selectability_updated_by_employee_id uuid NULL");
     expect(migration).toContain("WHERE is_current = true");
     expect(migration).toContain("SET is_tenant_selectable = true");
+    expect(migration).toContain("UPDATE OF is_current, is_tenant_selectable");
     expect(migration).toContain(
       "CREATE INDEX douyin_deployable_templates_selectable_channel_idx",
     );
@@ -44,6 +45,7 @@ describe("Douyin tenant template allowlist migration", () => {
 
   test("links release cycles to templates and preserves released history", () => {
     expect(migration).toContain("deployable_template_id uuid NULL");
+    expect(migration).toContain("other_template.id <> template.id");
     expect(migration).toContain("DROP CONSTRAINT douyin_miniapp_releases_delivery_key_unique");
     expect(migration).toContain("latest_exact.status = 'released'");
     expect(migration).toContain("INSERT INTO public.douyin_miniapp_releases");

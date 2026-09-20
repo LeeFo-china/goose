@@ -51,7 +51,7 @@ REVOKE ALL ON FUNCTION public.ensure_current_douyin_template_selectable()
 FROM PUBLIC, anon, authenticated;
 
 CREATE TRIGGER ensure_current_douyin_template_selectable_trigger
-BEFORE INSERT OR UPDATE OF is_current
+BEFORE INSERT OR UPDATE OF is_current, is_tenant_selectable
 ON public.douyin_miniapp_deployable_templates
 FOR EACH ROW
 EXECUTE FUNCTION public.ensure_current_douyin_template_selectable();
@@ -164,7 +164,15 @@ FROM public.douyin_miniapp_deployable_templates AS template
 WHERE release.deployable_template_id IS NULL
   AND template.template_id = release.template_id
   AND template.template_version = release.template_version
-  AND template.channel = release.channel;
+  AND template.channel = release.channel
+  AND NOT EXISTS (
+    SELECT 1
+    FROM public.douyin_miniapp_deployable_templates AS other_template
+    WHERE other_template.id <> template.id
+      AND other_template.template_id = template.template_id
+      AND other_template.template_version = template.template_version
+      AND other_template.channel = template.channel
+  );
 
 CREATE INDEX douyin_miniapp_releases_template_cycles_idx
 ON public.douyin_miniapp_releases(
