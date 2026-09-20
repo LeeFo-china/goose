@@ -335,6 +335,10 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
     });
   },
   async onSubmit() {
+    if (this.successPresentationPending && this.hasPageSuccessContext()) {
+      this.presentPendingSuccess();
+      return;
+    }
     if (this.hasCurrentSuccessContext()) {
       this.openSuccessPage();
       return;
@@ -515,7 +519,6 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
   },
   presentPendingSuccess() {
     if (!this.successPresentationPending || !this.lifecycle.isVisible()) return;
-    this.successPresentationPending = false;
     this.setData({ submitting: false });
     this.openSuccessPage(true);
   },
@@ -556,6 +559,9 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
         : this.hasCurrentSuccessContext())) return;
     this.successNavigationInFlight = true;
     void dependencies.navigateToPage("pages/lead-success/index")
+      .then(() => {
+        if (allowDetachedSuccess) this.successPresentationPending = false;
+      })
       .catch(() => {
         if (this.lifecycle.isVisible()) this.setData({
           formError: "申请已提交，点击提交按钮可重新打开结果页",

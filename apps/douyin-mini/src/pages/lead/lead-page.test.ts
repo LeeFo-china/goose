@@ -435,6 +435,33 @@ describe("lead page definition", () => {
     recoveryNavigation.resolve();
   });
 
+  test("retries detached success navigation without submitting a second appointment", async () => {
+    const harness = createHarness(BOOTSTRAP, { trackSuccessContext: true });
+    harness.page.onLoad();
+    await flushPromises();
+    harness.page.onShow();
+    setValidForm(harness.page);
+    const submit = harness.deferredSubmit();
+    const operation = harness.page.onSubmit();
+    await flushPromises();
+
+    harness.page.onHide();
+    submit.resolve(publicAppointment());
+    await operation;
+    const failedNavigation = harness.deferredNavigation();
+    harness.app.attributionEntryVersion = 2;
+    harness.page.onShow();
+    failedNavigation.reject(new Error("navigation failed"));
+    await flushPromises();
+
+    const retryNavigation = harness.deferredNavigation();
+    await harness.page.onSubmit();
+
+    expect(harness.submitLead).toHaveBeenCalledTimes(1);
+    expect(harness.navigateToPage).toHaveBeenCalledTimes(2);
+    retryNavigation.resolve();
+  });
+
   test("does not reuse an unrelated success context for a new page draft", async () => {
     const harness = createHarness(BOOTSTRAP, {
       trackSuccessContext: true,
