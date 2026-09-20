@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from
   "@/components/ui/select";
 import type { TenantDouyinReleaseOption, TenantDouyinReleaseOptionsResponse } from
   "./workspace-types";
-import { versionActionCopy } from "./workspace-version-policy";
+import { selectionLabel, versionActionCopy } from "./workspace-version-policy";
 
 type Props = {
   data: TenantDouyinReleaseOptionsResponse;
@@ -45,7 +45,8 @@ export function WorkspaceVersionPicker({ data, disabled, selected, onSelect }: P
               <SelectContent>
                 {data.list.map((option) => (
                   <SelectItem key={option.id} value={option.id}>
-                    {option.template_version} · {STAGE_LABELS[option.stage]}
+                    {option.template_version} · {option.source === "confirmed_template"
+                      ? selectionLabel(option.selection_kind) : STAGE_LABELS[option.stage]}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -67,6 +68,14 @@ export function WorkspaceVersionPicker({ data, disabled, selected, onSelect }: P
           当前没有可操作版本。
         </p>
       )}
+      {selected?.selection_kind === "rollback" ? (
+        <Alert>
+          <AlertCircle aria-hidden="true" />
+          <AlertDescription>
+            旧版会创建新的体验版并重新走审核，不会立即替换当前线上版本。
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <ReleaseHistory data={data} />
     </div>
   );

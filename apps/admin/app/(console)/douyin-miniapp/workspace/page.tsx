@@ -50,7 +50,10 @@ export default async function TenantDouyinMiniappWorkspacePage() {
         headers,
         cache: "no-store",
       }).then((response) => parseBackendJson<DouyinReleaseReadiness>(response)),
-      fetch(buildBackendUrl("/tenant/douyin-miniapp/release-options?page=1&pageSize=20"), {
+      fetch(buildBackendUrl(
+        "/tenant/douyin-miniapp/release-options?page=1&pageSize=20"
+          + "&templatePage=1&templatePageSize=20",
+      ), {
         headers,
         cache: "no-store",
       }).then((response) => parseBackendJson<TenantDouyinReleaseOptionsResponse>(response)),

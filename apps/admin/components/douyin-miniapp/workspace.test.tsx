@@ -418,8 +418,7 @@ describe("TenantDouyinMiniappWorkspace", () => {
         canManage
         loadError={null}
         releaseOptions={{
-          provider_state: "fresh",
-          provider_message: null,
+          provider_state: "fresh", provider_message: null,
           list: [{
             id: "00000000-0000-4000-8000-000000000099",
             source: "confirmed_template",
@@ -431,9 +430,10 @@ describe("TenantDouyinMiniappWorkspace", () => {
             actions: ["create_test_version"],
             test_qr_url: null,
             updated_at: "2026-09-17T10:00:00.000Z",
+            is_recommended: true, selection_kind: "recommended",
           }],
           history: [workspace.latest_release!],
-          pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+          pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 }, template_pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
         }}
         workspace={{
           ...workspace,
@@ -448,7 +448,7 @@ describe("TenantDouyinMiniappWorkspace", () => {
       />,
     );
 
-    expect(html).toContain("0.1.39 · 新模板修订");
+    expect(html).toContain("0.1.39 · 推荐版本");
     expect(html).toContain("生成 0.1.39 测试码");
     expect(html).not.toContain("当前可发布模板版本异常");
     expect(html).not.toContain("平台当前模板不是该租户的新版本");

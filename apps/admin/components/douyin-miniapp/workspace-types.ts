@@ -151,6 +151,8 @@ export type TenantDouyinReleaseOption = {
   actions: TenantDouyinReleaseOptionAction[];
   test_qr_url: string | null;
   updated_at: string;
+  is_recommended: boolean;
+  selection_kind: "recommended" | "stable" | "rollback" | "current_online" | "release";
 };
 export type TenantDouyinReleaseOptionsResponse = {
   list: TenantDouyinReleaseOption[];
@@ -158,4 +160,5 @@ export type TenantDouyinReleaseOptionsResponse = {
   provider_message: string | null;
   history: TenantDouyinRelease[];
   pagination: { page: number; pageSize: number; total: number; totalPages: number };
+  template_pagination: { page: number; pageSize: number; total: number; totalPages: number };
 };
