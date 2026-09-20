@@ -61,8 +61,12 @@ function createController() {
       page: 1, pageSize: 20, total: 0, totalPages: 0,
     } })),
     listOptions: mock(async () => ({ list: [], history: [], provider_state: "fresh",
-      provider_message: null, pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 } })),
+      provider_message: null, pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+      template_pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 } })),
     createFromCurrentTemplate: mock(async () => ({
+      id: "release-id", status: "testing",
+    })),
+    createFromTemplate: mock(async () => ({
       id: "release-id", status: "testing",
     })),
     getTestQr: mock(async () => ({ id: "release-id", status: "testing" })),
@@ -139,6 +143,10 @@ describe("TenantDouyinMiniappController", () => {
       },
       { method: "GET", path: "/tenant/douyin-miniapp/releases" },
       { method: "GET", path: "/tenant/douyin-miniapp/release-options" },
+      {
+        method: "POST",
+        path: "/tenant/douyin-miniapp/releases/from-template",
+      },
       {
         method: "POST",
         path: "/tenant/douyin-miniapp/releases/from-current-template",
@@ -279,7 +287,7 @@ describe("TenantDouyinMiniappController", () => {
     } as never);
     expect(releases.listOptions).toHaveBeenCalledWith(
       authContext,
-      { page: 1, pageSize: 20 },
+      { page: 1, pageSize: 20, templatePage: 1, templatePageSize: 20 },
     );
     await expect(controller.listReleaseOptions({
       query: { page: "1", pageSize: "101" },
@@ -291,6 +299,13 @@ describe("TenantDouyinMiniappController", () => {
     const params = { releaseId: "77777777-7777-4777-8777-777777777777" };
 
     await controller.createReleaseFromCurrentTemplate({
+      query: {},
+      body: {
+        expected_template_record_id: "88888888-8888-4888-8888-888888888888",
+        expected_template_id: "77596",
+      },
+    } as never);
+    await controller.createReleaseFromTemplate({
       query: {},
       body: {
         expected_template_record_id: "88888888-8888-4888-8888-888888888888",
@@ -309,6 +324,13 @@ describe("TenantDouyinMiniappController", () => {
     await controller.publishRelease({ params, body: {} } as never);
 
     expect(releases.createFromCurrentTemplate).toHaveBeenCalledWith(
+      authContext,
+      {
+        expected_template_record_id: "88888888-8888-4888-8888-888888888888",
+        expected_template_id: "77596",
+      },
+    );
+    expect(releases.createFromTemplate).toHaveBeenCalledWith(
       authContext,
       {
         expected_template_record_id: "88888888-8888-4888-8888-888888888888",

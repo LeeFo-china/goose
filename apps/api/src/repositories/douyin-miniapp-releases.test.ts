@@ -62,6 +62,7 @@ function createClient(results: DouyinMiniappReleaseDatabaseResult[]) {
 const releaseRow = {
   id: "11111111-1111-4111-8111-111111111111",
   installation_id: "22222222-2222-4222-8222-222222222222",
+  deployable_template_id: null,
   template_id: "9133504853504535288",
   template_version: "1.2.3-beta.1",
   description: "装修行业模板首发",
@@ -116,6 +117,39 @@ describe("DouyinMiniappReleasesRepository reads", () => {
     expect(calls.find((call) => call.method === "rpc")?.args[0]).toBe(
       "get_or_create_and_claim_douyin_miniapp_release_upload_v2",
     );
+  });
+
+  test("claims an allowlisted template through v3 and preserves its template record id", async () => {
+    const deployableTemplateId = "88888888-8888-4888-8888-888888888888";
+    const claimedRow = {
+      ...releaseRow,
+      deployable_template_id: deployableTemplateId,
+      latest_test_qr_url: "https://example.test/latest.png",
+      audit_qr_url: "https://example.test/audit.png",
+      operation_name: "upload" as const,
+      operation_claim_token: "77777777-7777-4777-8777-777777777777",
+      operation_claim_expires_at: "2026-07-20T01:02:00.000Z",
+      recovery_required: false,
+    };
+    const { client, calls } = createClient([{ data: [claimedRow], error: null }]);
+
+    await expect(new Repository(client).getOrCreateAndClaimUpload({
+      installationId: releaseRow.installation_id,
+      deployableTemplateId,
+      templateId: releaseRow.template_id,
+      templateVersion: releaseRow.template_version,
+      description: releaseRow.description,
+      channel: releaseRow.channel,
+      extJson: releaseRow.ext_json,
+      platformOperatorId: releaseRow.platform_operator_id,
+      claimToken: claimedRow.operation_claim_token,
+      claimExpiresAt: claimedRow.operation_claim_expires_at,
+    })).resolves.toEqual(claimedRow);
+
+    expect(calls.find((call) => call.method === "rpc")?.args).toEqual([
+      "get_or_create_and_claim_douyin_miniapp_release_upload_v3",
+      expect.objectContaining({ p_deployable_template_id: deployableTemplateId }),
+    ]);
   });
 
   test("lists one installation with exact projection, count, and bounded range", async () => {

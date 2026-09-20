@@ -46,6 +46,11 @@ export const TenantDouyinReleaseListQuerySchema = z.strictObject({
   page: z.coerce.number().int().min(1).max(10_000).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
+export const TenantDouyinReleaseOptionsQuerySchema =
+  TenantDouyinReleaseListQuerySchema.extend({
+    templatePage: z.coerce.number().int().min(1).max(10_000).default(1),
+    templatePageSize: z.coerce.number().int().min(1).max(100).default(20),
+  });
 export const TenantDouyinReleaseParamsSchema = z.strictObject({
   releaseId: z.uuid("无效的抖音小程序发布记录 ID"),
 });
@@ -169,6 +174,9 @@ export type TenantDouyinAuthorizationCallbackInput = z.infer<
 >;
 export type TenantDouyinCreateReleaseInput = z.infer<
   typeof TenantDouyinCreateReleaseSchema
+>;
+export type TenantDouyinReleaseOptionsQuery = z.infer<
+  typeof TenantDouyinReleaseOptionsQuerySchema
 >;
 export type TenantDouyinAuthorizationState = z.infer<
   typeof TenantDouyinAuthorizationStateSchema

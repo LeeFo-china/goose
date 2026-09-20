@@ -95,6 +95,7 @@ export function release(overrides: Record<string, unknown> = {}) {
   return {
     id: RELEASE_ID,
     installation_id: INSTALLATION_ID,
+    deployable_template_id: null,
     template_id: "77595",
     template_version: "0.1.2",
     description: "租户联调版本",
@@ -170,6 +171,9 @@ export function fixture(options: {
   const templates = {
     findCurrent: mock(async (): Promise<typeof deployableTemplate | null> =>
       deployableTemplate),
+    findSelectableById: mock(async (templateId: string) =>
+      templateId === deployableTemplate.id ? deployableTemplate : null),
+    listSelectable: mock(async () => ({ list: [deployableTemplate], total: 1 })),
   };
   const accessPolicy = {
     assertTenantContext: mock((context: AuthContext) => {

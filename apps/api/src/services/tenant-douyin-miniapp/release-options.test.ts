@@ -21,6 +21,7 @@ const template = {
 const release: DouyinMiniappReleaseRecord = {
   id: "33333333-3333-4333-8333-333333333333",
   installation_id: "44444444-4444-4444-8444-444444444444",
+  deployable_template_id: null,
   template_id: "78689", template_version: "0.1.39", description: "旧模板",
   provider_summary: "[#78689] 旧模板", channel: "default", ext_json: {
     extEnable: true, extAppid: "tt-authorizer",
@@ -37,7 +38,7 @@ const release: DouyinMiniappReleaseRecord = {
 describe("tenant Douyin release options", () => {
   test("offers a confirmed same-version revision instead of the legacy test release", () => {
     expect(buildTenantDouyinReleaseOptions({
-      template,
+      templates: [template],
       releases: [release],
       versions: {
         latest: { version: "0.1.39", summary: "[#78689] 旧模板" },
@@ -53,19 +54,40 @@ describe("tenant Douyin release options", () => {
     const current = { ...release, template_id: "78690", description: "新版模板",
       provider_summary: "[#78690] 新版模板" };
     expect(buildTenantDouyinReleaseOptions({
-      template, releases: [current], versions: {
+      templates: [template], releases: [current], versions: {
         latest: { version: "0.1.39", summary: "[#78690] 新版模板" }, logId: "ok",
       },
     })[0]).toMatchObject({ source: "release", actions: ["submit_audit"] });
     expect(buildTenantDouyinReleaseOptions({
-      template, releases: [current], versions: {
+      templates: [template], releases: [current], versions: {
         latest: { version: "0.1.39", summary: "[#78689] 旧模板" }, logId: "wrong",
       },
     })).toEqual([]);
   });
 
   test("keeps a confirmed template selectable when provider status is unavailable", () => {
-    expect(buildTenantDouyinReleaseOptions({ template, releases: [release], versions: null }))
+    expect(buildTenantDouyinReleaseOptions({ templates: [template], releases: [release], versions: null }))
       .toEqual([expect.objectContaining({ actions: ["create_test_version"] })]);
+  });
+
+  test("labels current, stable, and rollback templates without hiding selectable history", () => {
+    const stable = { ...template, id: "66666666-6666-4666-8666-666666666666",
+      template_id: "78688", template_version: "0.1.38", is_current: false };
+    const rollback = { ...template, id: "77777777-7777-4777-8777-777777777777",
+      template_id: "78687", template_version: "0.1.37", is_current: false };
+
+    const options = buildTenantDouyinReleaseOptions({
+      templates: [template, stable, rollback], releases: [], versions: {
+        current: { version: "0.1.38", summary: "[#78688] 稳定模板" },
+        logId: "versions-log",
+      },
+    });
+
+    expect(options.map((item) => [item.template_id, item.selection_kind,
+      item.is_recommended, item.actions])).toEqual([
+      ["78690", "recommended", true, ["create_test_version"]],
+      ["78688", "current_online", false, []],
+      ["78687", "rollback", false, ["create_test_version"]],
+    ]);
   });
 });
