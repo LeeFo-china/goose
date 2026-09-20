@@ -87,6 +87,30 @@ test("generic detail projects source context and enforces privacy and page bound
   expect(visibleHtml).toContain(`/customers/${id}`);
 });
 
+test("generic detail accepts customer login attribution from the canonical Douyin pages", () => {
+  const empty = { list: [], pagination: { ...pagination, total: 0, totalPages: 0 } };
+  const detail = CUSTOMER_LEAD_PROFILE.normalizeDetail({
+    ...summary,
+    source_context: {
+      attribution: {
+        source_type: "direct",
+        entry_path: "pages/customer-login/index",
+        scene: "0",
+      },
+      demand: "量房",
+      budget: null,
+      ai: null,
+    },
+    latest_appointment: null,
+    appointments: empty,
+    follow_ups: empty,
+    actions: Object.fromEntries(["assign", "follow_up", "convert", "mark_invalid"].map((action) =>
+      [action, { enabled: true, reason: null }])),
+  });
+
+  expect(detail?.attribution.entry_path).toBe("pages/customer-login/index");
+});
+
 test("ordinary followups validate without an appointment while legacy followups require one", () => {
   const values = { summary: "电话沟通", result: "继续跟进" };
   expect(validateAction("follow_up", values, false)).toEqual({});
