@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { getTemplateConfirmationState } from
+import { getTemplateConfirmationState, getTemplateSelectabilityState } from
   "./platform-douyin-template-rules";
 
 const status = {
@@ -41,6 +41,30 @@ describe("getTemplateConfirmationState", () => {
       canConfirm: false,
       label: "暂无可用草稿",
       tone: "neutral",
+    });
+  });
+});
+
+describe("getTemplateSelectabilityState", () => {
+  const template = {
+    id: "00000000-0000-4000-8000-000000000001",
+    template_id: "78149", template_version: "0.1.4", description: "稳定模板",
+    channel: "default" as const, is_current: false, is_tenant_selectable: true,
+    confirmed_at: "2026-09-20T10:00:00.000Z",
+    selectability_updated_at: "2026-09-20T10:00:00.000Z",
+  };
+
+  test("locks the recommended template in the tenant allowlist", () => {
+    expect(getTemplateSelectabilityState({ ...template, is_current: true })).toEqual({
+      disabled: true,
+      label: "推荐版本，租户可选",
+      help: "请先确认新的推荐模板",
+    });
+  });
+
+  test("describes a mutable historical template", () => {
+    expect(getTemplateSelectabilityState(template)).toEqual({
+      disabled: false, label: "租户可选", help: null,
     });
   });
 });

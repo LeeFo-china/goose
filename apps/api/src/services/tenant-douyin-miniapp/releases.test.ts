@@ -215,6 +215,26 @@ describe("TenantDouyinMiniappReleasesService", () => {
     expect(context.operations.upload).not.toHaveBeenCalled();
   });
 
+  test("rejects creating a duplicate cycle for the exact current online template", async () => {
+    const context = fixture();
+    context.gateway.getVersionList.mockResolvedValue({
+      current: {
+        version: deployableTemplate.template_version,
+        summary: `[#${deployableTemplate.template_id}] ${deployableTemplate.description}`,
+      },
+      logId: "versions-log",
+    });
+
+    await expect(context.service.createFromTemplate(
+      tenantContext(["douyin_miniapp.manage"]),
+      selectedTemplate,
+    )).rejects.toMatchObject({
+      statusCode: 409,
+      code: "DOUYIN_DEPLOYABLE_TEMPLATE_ALREADY_CURRENT",
+    });
+    expect(context.operations.upload).not.toHaveBeenCalled();
+  });
+
   test("publishes only an owned release with the production permission", async () => {
     const context = fixture({
       foundRelease: release({ status: "audit_approved" }),

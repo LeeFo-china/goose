@@ -1,6 +1,8 @@
 import { Errors } from "@/errors/error-factory";
 import type { DouyinMiniappReleaseTarget } from
   "@/repositories/douyin-miniapp-installations";
+import type { DouyinMiniappReleaseGateway } from
+  "@/gateways/douyin-open-platform/client";
 import type { DouyinMiniappReleasesRepository } from
   "@/repositories/douyin-miniapp-releases";
 import type { DouyinDeployableTemplatesRepository } from
@@ -11,6 +13,8 @@ import type { TenantDouyinCreateReleaseInput } from
   "@/schema/tenant-douyin-miniapp";
 import type { PlatformDouyinMiniappReleaseOperations } from
   "@/services/platform-douyin-miniapp-releases/operation-service";
+import type { DouyinMiniappAccessTokenService } from
+  "@/services/douyin-miniapp/access-tokens";
 import { releaseNotFound } from
   "@/services/platform-douyin-miniapp-releases/support";
 import { compareDouyinTemplateVersion } from "./template-version";
@@ -21,6 +25,8 @@ type Dependencies = {
   templates: Pick<DouyinDeployableTemplatesRepository,
     "findCurrent" | "findSelectableById">;
   operations: Pick<PlatformDouyinMiniappReleaseOperations, "upload" | "getTestQr">;
+  accessTokens: Pick<DouyinMiniappAccessTokenService, "getAuthorizerAccessToken">;
+  gateway: Pick<DouyinMiniappReleaseGateway, "getVersionList">;
 };
 type Context = {
   operatorId: string;
@@ -64,7 +70,24 @@ export class TenantDouyinTemplateReleaseCreator {
       throw Errors.business(409, "所选抖音模板已更新，请刷新版本列表后重试",
         "DOUYIN_DEPLOYABLE_TEMPLATE_CHANGED");
     }
+    await this.assertNotCurrentOnline(context, template);
     return this.createResolved(context, latestRelease, template, false);
+  }
+
+  private async assertNotCurrentOnline(context: Context, template: Template) {
+    const authorizerAccessToken = await this.dependencies.accessTokens.getAuthorizerAccessToken({
+      authorizerAppId: context.installation.authorizer_appid,
+      deploymentKey: context.installation.deployment_key,
+    });
+    const versions = await this.dependencies.gateway.getVersionList({
+      authorizerAccessToken,
+      appId: context.installation.authorizer_appid,
+    });
+    if (versions.current?.version === template.template_version
+      && versions.current.summary?.startsWith(`[#${template.template_id}]`) === true) {
+      throw Errors.business(409, "所选模板已经是当前线上版本",
+        "DOUYIN_DEPLOYABLE_TEMPLATE_ALREADY_CURRENT");
+    }
   }
 
   private async createResolved(

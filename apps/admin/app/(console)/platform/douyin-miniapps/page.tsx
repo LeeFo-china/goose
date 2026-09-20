@@ -7,6 +7,8 @@ import { PlatformDouyinTemplatePanel } from
   "@/components/platform-douyin-miniapps/platform-douyin-template-panel";
 import type { PlatformDouyinTemplateStatus } from
   "@/components/platform-douyin-miniapps/platform-douyin-template-rules";
+import type { PlatformDouyinTemplateList } from
+  "@/components/platform-douyin-miniapps/platform-douyin-template-rules";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
@@ -34,6 +36,17 @@ async function getTemplateStatus(): Promise<PlatformDouyinTemplateStatus> {
   );
   const payload = await parseBackendJson<PlatformDouyinTemplateStatus>(response);
   if (!payload.data) throw new Error("接口未返回抖音模板状态");
+  return payload.data;
+}
+
+async function getDeployableTemplates(): Promise<PlatformDouyinTemplateList> {
+  const token = await getAdminToken();
+  if (!token) throw new Error("缺少登录凭证");
+  const response = await fetch(buildBackendUrl(
+    "/platform/douyin-miniapps/deployable-templates?channel=default&page=1&pageSize=20",
+  ), { headers: { authorization: `Bearer ${token}` }, cache: "no-store" });
+  const payload = await parseBackendJson<PlatformDouyinTemplateList>(response);
+  if (!payload.data) throw new Error("接口未返回租户可选模板");
   return payload.data;
 }
 
@@ -68,15 +81,18 @@ export default async function PlatformDouyinMiniappsPage() {
   const canManage = isPlatformIdentity && hasPermission;
   let status: PlatformDouyinTemplateStatus | null = null;
   let installations: PlatformDouyinInstallation[] = [];
+  let templates: PlatformDouyinTemplateList | null = null;
   let error: string | null = null;
+  let templateListError: string | null = null;
   let releaseError: string | null = null;
 
   if (!canManage) {
     error = "当前账号无权管理抖音模板";
     releaseError = "当前账号无权查看商户发布审核";
   } else {
-    const [templateResult, installationsResult] = await Promise.allSettled([
+    const [templateResult, templateListResult, installationsResult] = await Promise.allSettled([
       getTemplateStatus(),
+      getDeployableTemplates(),
       getActiveMerchantInstallations(),
     ]);
     if (templateResult.status === "fulfilled") {
@@ -85,6 +101,12 @@ export default async function PlatformDouyinMiniappsPage() {
       error = templateResult.reason instanceof Error
         ? templateResult.reason.message
         : "加载抖音模板状态失败";
+    }
+    if (templateListResult.status === "fulfilled") {
+      templates = templateListResult.value;
+    } else {
+      templateListError = templateListResult.reason instanceof Error
+        ? templateListResult.reason.message : "加载租户可选模板失败";
     }
     if (installationsResult.status === "fulfilled") {
       installations = installationsResult.value;
@@ -100,6 +122,8 @@ export default async function PlatformDouyinMiniappsPage() {
       <PlatformDouyinTemplatePanel
         initialError={error}
         initialStatus={status}
+        initialTemplateList={templates}
+        initialTemplateListError={templateListError}
       />
       <PlatformDouyinReleaseAuditPanel
         installations={installations}

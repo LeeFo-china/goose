@@ -24,8 +24,10 @@ import { Separator } from "@/components/ui/separator";
 import { requestBackendJson } from "@/lib/backend-client";
 import {
   getTemplateConfirmationState,
+  type PlatformDouyinTemplateList,
   type PlatformDouyinTemplateStatus,
 } from "./platform-douyin-template-rules";
+import { PlatformDouyinTemplateAllowlist } from "./platform-douyin-template-allowlist";
 
 type ConfirmedTemplate = NonNullable<
   PlatformDouyinTemplateStatus["current_template"]
@@ -34,9 +36,13 @@ type ConfirmedTemplate = NonNullable<
 export function PlatformDouyinTemplatePanel({
   initialError,
   initialStatus,
+  initialTemplateList = null,
+  initialTemplateListError = null,
 }: {
   initialError: string | null;
   initialStatus: PlatformDouyinTemplateStatus | null;
+  initialTemplateList?: PlatformDouyinTemplateList | null;
+  initialTemplateListError?: string | null;
 }) {
   const [status, setStatus] = useState(initialStatus);
   const [pending, setPending] = useState(false);
@@ -188,6 +194,10 @@ export function PlatformDouyinTemplatePanel({
             </Button>
           </div>
         </CardContent>
+        <PlatformDouyinTemplateAllowlist
+          initialData={initialTemplateList}
+          initialError={initialTemplateListError}
+        />
       </Card>
     </div>
   );
