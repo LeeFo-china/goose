@@ -384,6 +384,25 @@ describe("lead page definition", () => {
     repeatNavigation.resolve();
   });
 
+  test("does not reuse an unrelated success context for a new page draft", async () => {
+    const harness = createHarness(BOOTSTRAP, {
+      trackSuccessContext: true,
+      initialSuccessContext: true,
+    });
+    harness.page.onLoad();
+    await flushPromises();
+    setValidForm(harness.page);
+    const submit = harness.deferredSubmit();
+
+    const operation = harness.page.onSubmit();
+    await flushPromises();
+
+    expect(harness.submitLead).toHaveBeenCalledTimes(1);
+    expect(harness.navigateToPage).not.toHaveBeenCalled();
+    submit.resolve(publicAppointment());
+    await operation;
+  });
+
   test("typing a phone after authorization switches back to SMS submission", async () => {
     const harness = createHarness({
       ...BOOTSTRAP,
@@ -453,7 +472,7 @@ type TestLeadPage = LeadPageDefinition & {
 
 function createHarness(
   bootstrap: BootstrapData = BOOTSTRAP,
-  options: { trackSuccessContext?: boolean } = {},
+  options: { trackSuccessContext?: boolean; initialSuccessContext?: boolean } = {},
 ) {
   const submitFlights: Array<Deferred<SubmitLeadResult>> = [];
   const bootstrapLoads: Array<Deferred<BootstrapData | null>> = [];
@@ -463,7 +482,7 @@ function createHarness(
     ?? Promise.reject(new Error("missing submit flight")));
   const navigateToPage = mock(() => navigationFlights.shift()?.promise
     ?? Promise.reject(new Error("missing navigation flight")));
-  let hasSuccessContext = false;
+  let hasSuccessContext = options.initialSuccessContext === true;
   const app = {
     api: {},
     bootstrap: {

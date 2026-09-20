@@ -71,6 +71,7 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
   submissionAttribution: null as { key: string; value: LaunchContext } | null,
   successNavigationInFlight: false,
   successPresentationPending: false,
+  successfulSubmissionKey: null as string | null,
   douyinPhoneAuthorization: null as { code: string; expiresAt: number } | null,
   data: {
     loading: true,
@@ -333,7 +334,7 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
     });
   },
   async onSubmit() {
-    if (dependencies.readMeasurementSuccessContext()) {
+    if (this.hasCurrentSuccessContext()) {
       this.openSuccessPage();
       return;
     }
@@ -438,6 +439,7 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
         preferredVisitPeriod,
         linkedEstimateId: linkedBudget?.estimateId ?? null,
       });
+      if (recorded) this.successfulSubmissionKey = decision.key;
       const canPresent = this.lifecycle.finishSubmit(authority);
       if (!acceptedAttempt) return;
       if (!canPresent) {
@@ -455,8 +457,7 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
         return;
       }
     } catch (error) {
-      if (this.idempotency.status === "succeeded"
-        && dependencies.readMeasurementSuccessContext()) {
+      if (this.hasCurrentSuccessContext()) {
         if (!this.lifecycle.finishSubmit(authority)) return;
         this.setData({ submitting: false });
         this.openSuccessPage();
@@ -484,6 +485,11 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
     }
     this.setData({ submitting: false });
     this.openSuccessPage();
+  },
+  hasCurrentSuccessContext() {
+    return this.idempotency.status === "succeeded"
+      && this.successfulSubmissionKey === this.idempotency.key
+      && dependencies.readMeasurementSuccessContext() !== null;
   },
   presentPendingSuccess() {
     if (!this.successPresentationPending || !this.lifecycle.isVisible()) return;
@@ -523,7 +529,7 @@ export function createLeadPageDefinition(dependencies: LeadPageDependencies) {
   },
   openSuccessPage() {
     if (this.successNavigationInFlight || !this.lifecycle.isVisible()
-      || !dependencies.readMeasurementSuccessContext()) return;
+      || !this.hasCurrentSuccessContext()) return;
     this.successNavigationInFlight = true;
     void dependencies.navigateToPage("pages/lead-success/index")
       .catch(() => {
