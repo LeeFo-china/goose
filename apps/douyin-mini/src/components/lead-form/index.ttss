@@ -9,6 +9,9 @@
 .field-textarea { min-height: 184rpx; padding: 20rpx 22rpx; line-height: 1.6; }
 .phone-input-shell { position: relative; box-sizing: border-box; width: 100%; height: 92rpx; overflow: hidden; padding: 0; }
 .phone-inline-input { box-sizing: border-box; width: 100%; height: 90rpx; padding: 0 22rpx; font-size: 27rpx; }
+.phone-input-shell--with-action .phone-inline-input { padding-right: 286rpx; }
+.phone-inline-action { position: absolute; top: 10rpx; right: 10rpx; box-sizing: border-box; width: 260rpx; min-height: 70rpx; margin: 0; padding: 0 12rpx; border-radius: 10rpx; background: #f4f2ef; font-size: 22rpx; font-weight: 650; line-height: 70rpx; white-space: nowrap; }
+.phone-inline-action[disabled] { opacity: .6; }
 .picker-control { box-sizing: border-box; display: flex; width: 100%; height: 92rpx; align-items: center; justify-content: space-between; padding: 0 22rpx; font-size: 27rpx; }
 .picker-value { color: #191817; }
 .picker-placeholder { color: #706c67; }

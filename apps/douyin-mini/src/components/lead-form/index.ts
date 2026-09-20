@@ -1,3 +1,5 @@
+import { resolvePhoneNumberCallback, type PhoneNumberCallbackEvent } from "../../platform/phone-number-callback";
+
 Component({
   properties: {
     value: { type: Object, value: {} },
@@ -16,6 +18,8 @@ Component({
     hasLinkedEstimate: { type: Boolean, value: false },
     estimateNo: { type: String, value: "" },
     estimateRange: { type: String, value: "" },
+    douyinPhoneEnabled: { type: Boolean, value: false },
+    douyinPhoneAuthorized: { type: Boolean, value: false },
   },
   methods: {
     onInput(event: { currentTarget: { dataset: { field?: string } }; detail: { value: string } }) {
@@ -57,6 +61,14 @@ Component({
     },
     onSubmit() {
       if (!this.data.submitting) this.triggerEvent("submit");
+    },
+    onDouyinPhoneNumber(event: PhoneNumberCallbackEvent) {
+      if (this.data.submitting) return;
+      const result = resolvePhoneNumberCallback(event);
+      this.triggerEvent("douyinphone", {
+        douyin_phone_code: result.code ?? "",
+        authorization_error: result.error ?? "",
+      });
     },
   },
 });

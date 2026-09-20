@@ -181,7 +181,28 @@ describe("lead page definition", () => {
     expect(harness.page.data.form.consented_at).toBe("");
   });
 
-  test("keeps free measurement on SMS when legacy bootstrap enables Douyin phone", async () => {
+  test("presents official Douyin phone capture only from bootstrap configuration", async () => {
+    const harness = createHarness({
+      ...BOOTSTRAP,
+      features: {
+        ...BOOTSTRAP.features,
+        douyin_phone: true,
+        phone_capture_mode: "douyin_phone",
+      },
+    });
+    harness.page.onLoad();
+    await flushPromises();
+
+    expect(harness.page.data).toMatchObject({
+      douyinPhoneEnabled: true,
+    });
+    expect(harness.page.data).not.toHaveProperty("douyinClueComponentId");
+
+    expect(harness.page.data.form.phone).toBe("");
+    expect(harness.page.data.phoneReady).toBe(false);
+  });
+
+  test("captures a Douyin phone code before the final form submission", async () => {
     const harness = createHarness({
       ...BOOTSTRAP,
       features: {
@@ -193,8 +214,156 @@ describe("lead page definition", () => {
     harness.page.onLoad();
     await flushPromises();
     setValidForm(harness.page);
-    expect(harness.page.data).not.toHaveProperty("douyinPhoneEnabled");
-    expect(harness.page.data).not.toHaveProperty("douyinPhoneAuthorized");
+    harness.page.data.form = {
+      ...harness.page.data.form,
+      phone: "",
+      sms_code: "",
+    };
+    harness.page.onDouyinPhoneNumber({
+      detail: { douyin_phone_code: "official-phone-code" },
+    });
+
+    expect(harness.submitLead).not.toHaveBeenCalled();
+    expect(harness.page.data).toMatchObject({
+      douyinPhoneAuthorized: true,
+      form: { phone: "", sms_code: "" },
+      phoneReady: false,
+      formError: "",
+    });
+
+    const submit = harness.deferredSubmit();
+    const operation = harness.page.onSubmit();
+    submit.resolve(publicAppointment());
+    await operation;
+
+    expect(harness.submitLead).toHaveBeenCalledWith({}, expect.objectContaining({
+      verification_method: "douyin_phone",
+      douyin_phone_code: "official-phone-code",
+    }));
+    const payload = harness.submitLead.mock.calls[0]![1] as Record<string, unknown>;
+    expect(payload).not.toHaveProperty("phone");
+    expect(payload).not.toHaveProperty("sms_code");
+  });
+
+  test("falls back to SMS when Douyin does not return a phone code", async () => {
+    const harness = createHarness({
+      ...BOOTSTRAP,
+      features: {
+        ...BOOTSTRAP.features,
+        douyin_phone: true,
+        phone_capture_mode: "douyin_phone",
+      },
+    });
+    harness.page.onLoad();
+    await flushPromises();
+
+    harness.page.onDouyinPhoneNumber({ detail: { douyin_phone_code: "" } });
+
+    expect(harness.submitLead).not.toHaveBeenCalled();
+    expect(harness.page.data).toMatchObject({
+      submitting: false,
+      focusedField: "phone",
+      douyinPhoneAuthorized: false,
+      formError: "抖音未返回手机号令牌；请手动输入手机号并使用短信验证码",
+    });
+  });
+
+  test("submits a manually entered phone with SMS when Douyin is also enabled", async () => {
+    const harness = createHarness({
+      ...BOOTSTRAP,
+      features: {
+        ...BOOTSTRAP.features,
+        douyin_phone: true,
+        phone_capture_mode: "douyin_phone",
+      },
+    });
+    harness.page.onLoad();
+    await flushPromises();
+    setValidForm(harness.page);
+
+    const submit = harness.deferredSubmit();
+    const operation = harness.page.onSubmit();
+    submit.resolve(publicAppointment());
+    await operation;
+
+    expect(harness.submitLead).toHaveBeenCalledWith({}, expect.objectContaining({
+      verification_method: "sms",
+      phone: "13800138000",
+      sms_code: "123456",
+    }));
+  });
+
+  test("rejects an expired Douyin phone authorization", async () => {
+    const harness = createHarness({
+      ...BOOTSTRAP,
+      features: {
+        ...BOOTSTRAP.features,
+        douyin_phone: true,
+        phone_capture_mode: "douyin_phone",
+      },
+    });
+    harness.page.onLoad();
+    await flushPromises();
+    setValidForm(harness.page);
+    harness.page.onDouyinPhoneNumber({
+      detail: { douyin_phone_code: "expired-phone-code" },
+    });
+    harness.page.douyinPhoneAuthorization!.expiresAt = Date.now() - 1;
+
+    await harness.page.onSubmit();
+
+    expect(harness.submitLead).not.toHaveBeenCalled();
+    expect(harness.page.data).toMatchObject({
+      douyinPhoneAuthorized: false,
+      formError: "手机号授权已过期，请重新获取",
+      fieldErrors: { phone: "手机号授权已过期，请重新获取" },
+    });
+  });
+
+  test("clears an unconsumed phone authorization when the page is hidden", async () => {
+    const harness = createHarness({
+      ...BOOTSTRAP,
+      features: {
+        ...BOOTSTRAP.features,
+        douyin_phone: true,
+        phone_capture_mode: "douyin_phone",
+      },
+    });
+    harness.page.onLoad();
+    await flushPromises();
+    harness.page.onShow();
+    harness.page.onDouyinPhoneNumber({
+      detail: { douyin_phone_code: "page-scoped-phone-code" },
+    });
+
+    harness.page.onHide();
+    harness.page.onShow();
+
+    expect(harness.page.douyinPhoneAuthorization).toBeNull();
+    expect(harness.page.data.douyinPhoneAuthorized).toBe(false);
+  });
+
+  test("typing a phone after authorization switches back to SMS submission", async () => {
+    const harness = createHarness({
+      ...BOOTSTRAP,
+      features: {
+        ...BOOTSTRAP.features,
+        douyin_phone: true,
+        phone_capture_mode: "douyin_phone",
+      },
+    });
+    harness.page.onLoad();
+    await flushPromises();
+    setValidForm(harness.page);
+    harness.page.onDouyinPhoneNumber({
+      detail: { douyin_phone_code: "official-phone-code" },
+    });
+    harness.page.onFieldChange({ detail: { field: "phone", value: "13800138000" } });
+    harness.page.onFieldChange({ detail: { field: "sms_code", value: "123456" } });
+    expect(harness.page.data).toMatchObject({
+      douyinPhoneAuthorized: false,
+      form: { phone: "13800138000", sms_code: "123456" },
+    });
 
     const submit = harness.deferredSubmit();
     const operation = harness.page.onSubmit();
