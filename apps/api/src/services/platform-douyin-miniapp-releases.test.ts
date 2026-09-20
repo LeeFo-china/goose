@@ -2,7 +2,6 @@ import { describe, expect, mock, test } from "bun:test";
 import type { DouyinMiniappReleaseRecord } from "@/repositories/douyin-miniapp-releases";
 import type { AuthContext } from "@/services/authorization";
 import { PlatformDouyinMiniappReleasesService } from "./platform-douyin-miniapp-releases";
-
 const INSTALLATION_ID = "22222222-2222-4222-8222-222222222222";
 const RELEASE_ID = "11111111-1111-4111-8111-111111111111";
 const OPERATOR_ID = "55555555-5555-4555-8555-555555555555";
@@ -36,6 +35,7 @@ const target = {
 const release: DouyinMiniappReleaseRecord = {
   id: RELEASE_ID,
   installation_id: INSTALLATION_ID,
+  deployable_template_id: null,
   template_id: "9133504853504535288",
   template_version: "1.2.3-beta.1",
   description: "装修模板首发",

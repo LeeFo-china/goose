@@ -175,7 +175,7 @@ export type TenantDouyinAuthorizationCallbackInput = z.infer<
 export type TenantDouyinCreateReleaseInput = z.infer<
   typeof TenantDouyinCreateReleaseSchema
 >;
-export type TenantDouyinReleaseOptionsQuery = z.infer<
+export type TenantDouyinReleaseOptionsQuery = z.input<
   typeof TenantDouyinReleaseOptionsQuerySchema
 >;
 export type TenantDouyinAuthorizationState = z.infer<

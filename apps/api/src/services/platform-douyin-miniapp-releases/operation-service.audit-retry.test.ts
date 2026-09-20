@@ -30,6 +30,7 @@ function release(
   return {
     id: RELEASE_ID,
     installation_id: INSTALLATION_ID,
+    deployable_template_id: null,
     template_id: "77595",
     template_version: "0.1.2",
     description: "装修模板联调",

@@ -1,5 +1,7 @@
 import { mock } from "bun:test";
 import type { DouyinReleaseReadiness } from "@gooes/domain";
+import type { DouyinVersionListResult } from
+  "@/gateways/douyin-open-platform/client";
 
 import type { AuthContext } from "@/services/authorization";
 
@@ -204,7 +206,7 @@ export function fixture(options: {
     getAuthorizerAccessToken: mock(async () => "authorizer-access-token"),
   };
   const gateway = {
-    getVersionList: mock(async () => ({
+    getVersionList: mock(async (): Promise<DouyinVersionListResult> => ({
       latest: { version: "0.1.2", summary: "租户联调版本" },
       logId: "versions-log",
     })),
