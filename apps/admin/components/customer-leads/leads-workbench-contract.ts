@@ -1,4 +1,5 @@
-import { DouyinBudgetAiAnalysisSchema, type CustomerLeadActionAvailability,
+import { DouyinBudgetAiAnalysisSchema, DouyinEntryPathSchema,
+  type CustomerLeadActionAvailability,
   type CustomerLeadSourceContext, type CustomerLeadSource } from "@gooes/domain";
 import { z } from "zod";
 
@@ -68,9 +69,7 @@ const budgetRangeSchema = z.strictObject({
 }).refine((range) => range.minimum_total <= range.maximum_total);
 const attributionSchema = z.strictObject({
   source_type: z.enum(["short_video", "live", "search", "profile", "share", "direct", "other"]).optional(),
-  entry_path: z.enum(["pages/home/index", "pages/company/index", "pages/privacy/index",
-    "pages/cases/index", "pages/case-detail/index", "pages/sites/index",
-    "pages/site-detail/index", "pages/lead/index", "pages/lead-success/index"]).optional(),
+  entry_path: DouyinEntryPathSchema.optional(),
   scene: z.string().regex(/^[0-9]{1,20}$/).optional(),
   campaign_code: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).optional(),
   content_id: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).optional(),
