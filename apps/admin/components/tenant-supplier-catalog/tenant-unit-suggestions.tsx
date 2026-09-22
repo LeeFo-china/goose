@@ -93,7 +93,7 @@ export function TenantUnitSuggestionDialogButton() {
     }}>
       <DialogTrigger asChild><Button type="button">提交单位建议</Button></DialogTrigger>
       <DialogContent className="sm:max-w-lg">
-        <DialogHeader><DialogTitle>提交单位建议</DialogTitle><DialogDescription>租户只能提交建议，标准单位由平台审核后统一维护。</DialogDescription></DialogHeader>
+        <DialogHeader><DialogTitle>提交单位建议</DialogTitle><DialogDescription>公司只能提交建议，标准单位由平台审核后统一维护。</DialogDescription></DialogHeader>
         <form onSubmit={handleSubmit}>
           <FieldGroup>
             <Field><FieldLabel htmlFor="suggested-unit-code">建议编码</FieldLabel><Input id="suggested-unit-code" required maxLength={64} value={code} onChange={(event) => setCode(event.target.value)} /></Field>

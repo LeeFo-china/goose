@@ -47,7 +47,7 @@ test.describe("租户私有供应商目录", () => {
 
     await expect(page.getByText("私有类目已创建")).toBeVisible();
     const privateRow = page.getByRole("row").filter({ hasText: "租户瓷砖" });
-    await expect(privateRow.getByText("租户私有", { exact: true })).toBeVisible();
+    await expect(privateRow.getByText("公司私有", { exact: true })).toBeVisible();
     await expect(privateRow.getByRole("button", { name: "编辑" })).toBeVisible();
     await privateRow.getByRole("link", {
       name: "查看租户瓷砖的下级分类",

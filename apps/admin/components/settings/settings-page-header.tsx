@@ -78,9 +78,9 @@ export function TenantSettingsHeader({ groups }: { groups: SettingsGroup[] }) {
       <SettingsHeaderIcon />
       <div className="flex min-w-0 flex-1 flex-col gap-2">
         <div>
-          <h1 className="text-xl font-semibold tracking-normal">租户系统配置</h1>
+          <h1 className="text-xl font-semibold tracking-normal">公司系统配置</h1>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-            管理本租户使用的短信服务和客服入口。平台密钥及模板不会在租户侧展示。
+            管理本公司使用的短信服务和客服入口。平台密钥及模板不会在公司侧展示。
           </p>
         </div>
         <Badge

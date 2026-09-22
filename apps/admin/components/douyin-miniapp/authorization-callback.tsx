@@ -119,8 +119,8 @@ export function TenantDouyinAuthorizationCallback() {
         <CardTitle>{error ? "授权未完成" : "正在完成授权"}</CardTitle>
         <CardDescription>
           {error
-            ? "授权信息未能绑定到当前租户，可返回工作台重新发起。"
-            : "正在校验抖音授权结果并绑定当前租户，请不要关闭页面。"}
+            ? "授权信息未能绑定到当前公司，可返回工作台重新发起。"
+            : "正在校验抖音授权结果并绑定当前公司，请不要关闭页面。"}
         </CardDescription>
       </CardHeader>
       <CardContent>

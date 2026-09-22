@@ -57,7 +57,7 @@ export function TenantSupplierTable({
             : "outline"
         }>
           {row.original.supplier.ownership_scope === "tenant"
-            ? "租户私有"
+            ? "公司私有"
             : "平台共享"}
         </Badge>
       ),
@@ -116,7 +116,7 @@ export function TenantSupplierTable({
     },
     {
       accessorKey: "tenant_owner_employee_id",
-      header: "租户负责人",
+      header: "公司负责人",
       cell: ({ row }) => (
         <span className="block max-w-40 truncate text-sm">
           {row.original.tenant_owner_employee_id ?? "未指定"}

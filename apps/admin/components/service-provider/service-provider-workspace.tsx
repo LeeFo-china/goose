@@ -240,7 +240,7 @@ export function ServiceProviderWorkspace({
           ) : null}
         </div>
         {!currentProfile ? (
-          <div className="py-6"><StatusAlert>未加载到服务商资料，请确认租户已通过入驻审核。</StatusAlert></div>
+          <div className="py-6"><StatusAlert>未加载到服务商资料，请确认公司已通过入驻审核。</StatusAlert></div>
         ) : (
           <>
             <ProfileFormSection

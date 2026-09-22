@@ -415,7 +415,7 @@ export default async function CamerasPage({
                 <EmptyHeader>
                   <EmptyTitle>暂无设备接入上下文</EmptyTitle>
                   <EmptyDescription>
-                    创建项目后，可以在这里维护租户设备资产。
+                    创建项目后，可以在这里维护公司设备资产。
                   </EmptyDescription>
                 </EmptyHeader>
               </Empty>

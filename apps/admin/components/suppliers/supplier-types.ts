@@ -136,7 +136,7 @@ export const relationshipStatusMeta: Record<
   active: { label: "合作中", variant: "success" },
   suspended: { label: "已暂停", variant: "warning" },
   terminated: { label: "已终止", variant: "secondary" },
-  blacklisted: { label: "租户黑名单", variant: "danger" },
+  blacklisted: { label: "公司黑名单", variant: "danger" },
 };
 
 export const contractHealthMeta: Record<
@@ -154,7 +154,7 @@ export const blockingReasonLabel: Record<SupplierOrderBlockingReason, string> = 
   supplier_not_approved: "平台供应商尚未通过准入审核",
   supplier_suspended: "平台供应商已暂停运营",
   supplier_blacklisted: "平台供应商已加入黑名单",
-  relationship_not_active: "租户合作关系尚未启用",
+  relationship_not_active: "公司合作关系尚未启用",
   required_qualification_missing: "缺少新订单要求的必填资质",
   required_qualification_expired: "新订单要求的必填资质已过期",
   active_contract_required: "当前策略要求存在生效合同",

@@ -187,7 +187,7 @@ export function TenantAdminDashboard({
     <div className={DASHBOARD_SHELL_CLASS}>
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
         <div>
-          <h1 className="text-2xl font-semibold tracking-normal">租户概览</h1>
+          <h1 className="text-2xl font-semibold tracking-normal">公司概览</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             查看客户增长、项目推进、费用待处理、AI token 和视频转文本分钟趋势。
           </p>

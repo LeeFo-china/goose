@@ -89,7 +89,7 @@ function PermissionEmpty() {
             </EmptyMedia>
             <EmptyTitle>无权访问抖音小程序工作台</EmptyTitle>
             <EmptyDescription>
-              当前账号缺少抖音小程序查看权限，请联系租户管理员调整角色权限。
+              当前账号缺少抖音小程序查看权限，请联系公司管理员调整角色权限。
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
@@ -119,7 +119,7 @@ function MissingWorkspace() {
             </EmptyMedia>
             <EmptyTitle>暂未获取到工作台数据</EmptyTitle>
             <EmptyDescription>
-              请刷新页面重试；若持续出现，请联系平台管理员检查租户配置。
+              请刷新页面重试；若持续出现，请联系平台管理员检查公司配置。
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
@@ -208,7 +208,7 @@ function WorkspaceOverview({
           </Button>
         </div>
         <dl className="mt-4 grid gap-4 sm:grid-cols-2">
-          <IdentityField label="租户内部名称" value={workspace.tenant.name} />
+          <IdentityField label="公司内部名称" value={workspace.tenant.name} />
           <IdentityField label="小程序公开品牌" value={workspace.public_profile?.public_name || "尚未设置"} />
         </dl>
         {workspace.public_profile?.introduction ? (
@@ -251,7 +251,7 @@ function TemplateAvailabilityNotice({
   if (!template || template.state !== "stale_version") return null;
   const content = {
     title: `当前可发布模板版本异常 ${template.version}`,
-    description: "平台当前模板版本低于租户记录，请联系平台管理员核对。",
+    description: "平台当前模板版本低于公司记录，请联系平台管理员核对。",
     attention: true,
   };
   return (
@@ -333,7 +333,7 @@ function ReleaseSummary({
         <div className="mt-4">
           <p className="text-sm font-medium">尚未上传小程序版本</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            完成授权后，可由平台代开发并上传租户专属版本。
+            完成授权后，可由平台代开发并上传公司专属版本。
           </p>
         </div>
       )}

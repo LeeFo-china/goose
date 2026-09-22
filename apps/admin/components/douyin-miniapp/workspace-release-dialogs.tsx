@@ -117,7 +117,7 @@ export function WorkspaceReleaseDialogs({
             <p className="text-sm font-semibold">提交前检查</p>
             <ChecklistItem
               complete={checklist.authorizationActive}
-              label="租户小程序授权有效"
+              label="公司小程序授权有效"
             />
             <ChecklistItem
               complete={checklist.profilePublished}
@@ -172,7 +172,7 @@ export function WorkspaceReleaseDialogs({
           <DialogHeader>
             <DialogTitle>确认正式发布</DialogTitle>
             <DialogDescription>
-              发布后该版本将成为租户抖音小程序的线上版本，请确认已完成体验验收且审核通过。
+              发布后该版本将成为公司抖音小程序的线上版本，请确认已完成体验验收且审核通过。
             </DialogDescription>
           </DialogHeader>
           <div className="rounded-md border bg-muted/20 p-4 text-sm">

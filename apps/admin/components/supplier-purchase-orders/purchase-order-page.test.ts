@@ -316,7 +316,7 @@ describe("供应商采购单页面边界", () => {
     const receipt = readSource("./purchase-order-receipt-dialog.tsx");
 
     expect(panel).toContain("<AlertDialogTitle>记录供应商确认？</AlertDialogTitle>");
-    expect(panel).toContain("租户员工代供应商录入");
+    expect(panel).toContain("公司员工代供应商录入");
     expect(panel).toContain('toast.success("供应商确认事实已记录")');
     expect(panel).toContain("expected_version: order.version");
     expect(panel).toMatch(

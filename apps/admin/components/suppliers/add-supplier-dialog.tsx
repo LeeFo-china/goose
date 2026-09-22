@@ -202,11 +202,11 @@ export function AddSupplierDialog({
           }
           : {}),
       }, newIdempotencyKey("tenant-private-supplier-create"));
-      toast.success("已新建租户私有供应商");
+      toast.success("已新建公司私有供应商");
       changeOpen(false);
       onCreated();
     } catch (caught) {
-      setError(messageOf(caught, "新建租户私有供应商失败"));
+      setError(messageOf(caught, "新建公司私有供应商失败"));
     } finally {
       setCreatingId(null);
     }
@@ -223,7 +223,7 @@ export function AddSupplierDialog({
         <DialogHeader>
           <DialogTitle>添加合作供应商</DialogTitle>
           <DialogDescription>
-            平台共享资料可被所有租户选用；租户私有资料只属于当前租户。
+            平台共享资料可被所有公司选用；公司私有资料只属于当前公司。
           </DialogDescription>
         </DialogHeader>
 
@@ -241,7 +241,7 @@ export function AddSupplierDialog({
             onClick={() => selectMode("private")}
             icon={<Store className="size-5" />} title="新建私有供应商"
             description={privateCreationEnabled
-              ? "创建仅当前租户可见和维护的资料"
+              ? "创建仅当前公司可见和维护的资料"
               : "需要私有供应商主档权限并启用私有写入"} />
         </div>
 

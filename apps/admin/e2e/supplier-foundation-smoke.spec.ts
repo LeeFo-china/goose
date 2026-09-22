@@ -238,7 +238,7 @@ test.describe("租户私有供应商确定性交互", () => {
 
   test("列表标识平台共享、租户私有及内部编码", async ({ page }) => {
     await expect(page.getByText("平台共享", { exact: true })).toBeVisible();
-    await expect(page.getByText("租户私有", { exact: true })).toBeVisible();
+    await expect(page.getByText("公司私有", { exact: true })).toBeVisible();
     await expect(page.getByText("PLATFORM-INTERNAL", { exact: true })).toBeVisible();
     await expect(page.getByText("PRIVATE-INTERNAL", { exact: true })).toBeVisible();
   });

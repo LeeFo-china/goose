@@ -30,7 +30,7 @@ export default async function FinanceWechatPayPage() {
           <div className="min-w-0">
             <h1 className="text-xl font-semibold tracking-normal">微信支付</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              租户微信支付商户配置、回调地址、证书序列号和校验状态
+              公司微信支付商户配置、回调地址、证书序列号和校验状态
             </p>
           </div>
         </div>

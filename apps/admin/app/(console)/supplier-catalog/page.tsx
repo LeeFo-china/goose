@@ -145,7 +145,7 @@ export default async function TenantSupplierCatalogPage({
       <Tabs value={view} className="contents">
         <PlatformListPageShell
           title="供应商目录"
-          description="组合使用平台标准资料与本租户永久私有的分类、品牌和规格。"
+          description="组合使用平台标准资料与本公司永久私有的分类、品牌和规格。"
           leading={<span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground"><PackageSearch aria-hidden="true" /></span>}
           action={canManage
             ? view === "categories"

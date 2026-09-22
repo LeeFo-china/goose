@@ -204,7 +204,7 @@ export function CameraDialog({
       .catch((err) => {
         if (!disposed) {
           setCreateDevices([]);
-          setError(err instanceof Error ? err.message : "租户设备资产加载失败");
+          setError(err instanceof Error ? err.message : "公司设备资产加载失败");
         }
       })
       .finally(() => {

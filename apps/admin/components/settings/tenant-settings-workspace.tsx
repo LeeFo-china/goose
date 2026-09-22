@@ -33,7 +33,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 const tenantGroupMeta = {
   sms: {
     label: "短信配置",
-    description: "选择平台统一通道或租户自有通道。",
+    description: "选择平台统一通道或公司自有通道。",
     icon: MessageSquareText,
   },
   customer_service: {
@@ -44,7 +44,7 @@ const tenantGroupMeta = {
 } as const;
 
 const fallbackGroupMeta = {
-  description: "管理本租户可维护的业务配置。",
+  description: "管理本公司可维护的业务配置。",
   icon: Settings2,
 };
 
@@ -101,8 +101,8 @@ function TenantSettingsEmpty() {
   return (
     <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
       <CardHeader className="border-b">
-        <CardTitle>租户系统配置</CardTitle>
-        <CardDescription>管理本租户可维护的业务能力。</CardDescription>
+        <CardTitle>公司系统配置</CardTitle>
+        <CardDescription>管理本公司可维护的业务能力。</CardDescription>
       </CardHeader>
       <CardContent className="flex min-h-0 flex-1 p-0">
         <Empty>
@@ -112,7 +112,7 @@ function TenantSettingsEmpty() {
             </EmptyMedia>
             <EmptyTitle>暂无可维护配置</EmptyTitle>
             <EmptyDescription>
-              当前租户暂无可维护的系统配置。如需开通能力，请联系平台管理员。
+              当前公司暂无可维护的系统配置。如需开通能力，请联系平台管理员。
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
@@ -156,7 +156,7 @@ export function TenantSettingsWorkspace({ groups }: { groups: SettingsGroup[] })
         <div className="flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[14rem_minmax(0,1fr)]">
           <div className="shrink-0 border-b bg-muted/25 lg:min-h-0 lg:border-b-0 lg:border-r">
             <TabsList
-              aria-label="租户系统配置分组"
+              aria-label="公司系统配置分组"
               className="flex h-auto w-full justify-start gap-1 overflow-x-auto rounded-none border-0 bg-transparent p-2 lg:min-h-0 lg:flex-1 lg:flex-col lg:items-stretch lg:justify-start lg:overflow-x-hidden lg:overflow-y-auto"
             >
               {groups.map((group) => {

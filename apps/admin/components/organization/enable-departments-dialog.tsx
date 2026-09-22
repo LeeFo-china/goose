@@ -109,7 +109,7 @@ export function EnableDepartmentsDialog({
             <div>
               <DialogTitle>启用部门</DialogTitle>
               <DialogDescription>
-                从平台标准部门中搜索并多选，启用后才会进入租户部门列表。
+                从平台标准部门中搜索并多选，启用后才会进入公司部门列表。
               </DialogDescription>
             </div>
           </div>
@@ -190,4 +190,3 @@ export function EnableDepartmentsDialog({
     </Dialog>
   );
 }
-

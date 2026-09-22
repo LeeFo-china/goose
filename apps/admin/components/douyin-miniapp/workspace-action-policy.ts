@@ -80,7 +80,7 @@ export function parseAuditHostNames(value: string) {
 }
 
 export function actionSummary(actions: TenantDouyinWorkspaceAction[]) {
-  if (actions.includes("authorize")) return "连接租户自有抖音小程序";
+  if (actions.includes("authorize")) return "连接公司自有抖音小程序";
   if (actions.includes("get_test_qr")) return "生成体验二维码并完成手机验收";
   if (actions.includes("get_audit_qr")) return "获取审核版二维码并保留扫码入口";
   if (actions.includes("submit_audit")) return "核对提审信息并提交平台审核";

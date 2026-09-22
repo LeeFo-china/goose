@@ -73,7 +73,7 @@ export function BatchWarehousePicker(
         )
         : null}
       <p className="text-sm text-muted-foreground">
-        仅一个启用仓库时自动选择；有多个仓库时优先租户默认仓库。没有启用仓库时不可保存。
+        仅一个启用仓库时自动选择；有多个仓库时优先公司默认仓库。没有启用仓库时不可保存。
       </p>
     </div>
   );

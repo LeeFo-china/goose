@@ -53,9 +53,9 @@ const actionMeta: Record<Action, {
     destructive: true,
   },
   blacklist: {
-    label: "加入租户黑名单",
-    title: "加入租户黑名单",
-    description: "仅影响当前租户，不改变平台供应商的全局状态。",
+    label: "加入公司黑名单",
+    title: "加入公司黑名单",
+    description: "仅影响当前公司，不改变平台供应商的全局状态。",
     reasonRequired: true,
     destructive: true,
   },
@@ -145,7 +145,7 @@ export function TenantSupplierActions({
   if (isRelationshipReadOnly(relationship.relationship_status)) {
     return (
       <p className="text-sm text-muted-foreground">
-        该合作关系已终止或加入租户黑名单，当前仅可查看历史资料。
+        该合作关系已终止或加入公司黑名单，当前仅可查看历史资料。
       </p>
     );
   }

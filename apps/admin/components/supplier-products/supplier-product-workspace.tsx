@@ -317,5 +317,5 @@ function EmptySupplier() {
 }
 
 function PageHeading() {
-  return <div><h1 className="text-xl font-semibold tracking-normal">商品与价格</h1><p className="mt-1 text-sm text-muted-foreground">维护租户私有商品、结构化规格、单位换算与默认基础供货价；平台共享商品保持只读。</p></div>;
+  return <div><h1 className="text-xl font-semibold tracking-normal">商品与价格</h1><p className="mt-1 text-sm text-muted-foreground">维护公司私有商品、结构化规格、单位换算与默认基础供货价；平台共享商品保持只读。</p></div>;
 }

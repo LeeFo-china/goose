@@ -85,7 +85,7 @@ function ChannelAssetAction({
     return <Badge variant="success">已纳入资产</Badge>;
   }
   if (channel.is_asset_owned_by_other_tenant) {
-    return <Badge variant="secondary">其他租户资产</Badge>;
+    return <Badge variant="secondary">其他公司资产</Badge>;
   }
 
   return (

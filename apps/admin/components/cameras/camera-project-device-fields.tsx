@@ -162,9 +162,9 @@ export function CameraProjectDeviceFields({
             />
             <FieldDescription>
               {deviceLoading
-                ? "正在加载当前租户未绑定设备资产。"
+                ? "正在加载当前公司未绑定设备资产。"
                 : activeProjectId
-                  ? "只展示当前租户资产池中未绑定到项目的设备通道。"
+                  ? "只展示当前公司资产池中未绑定到项目的设备通道。"
                   : "选择房产项目后才会加载可绑定设备资产。"}
             </FieldDescription>
             <FieldError errors={[fieldState.error]} />

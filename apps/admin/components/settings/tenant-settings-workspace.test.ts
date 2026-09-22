@@ -19,11 +19,11 @@ describe("tenant settings workspace", () => {
     const headerSource = readSource("./settings-page-header.tsx");
     const workspaceSource = readSource("./tenant-settings-workspace.tsx");
 
-    expect(headerSource).toContain("管理本租户使用的短信服务和客服入口");
+    expect(headerSource).toContain("管理本公司使用的短信服务和客服入口");
     expect(headerSource).toContain("配置已就绪");
     expect(workspaceSource).toContain("短信配置");
     expect(workspaceSource).toContain("客服配置");
-    expect(workspaceSource).toContain('aria-label="租户系统配置分组"');
+    expect(workspaceSource).toContain('aria-label="公司系统配置分组"');
     expect(workspaceSource).toContain("lg:grid-cols-[14rem_minmax(0,1fr)]");
     expect(workspaceSource).toContain("TenantSmsSettingsPanel");
     expect(workspaceSource).not.toContain("PlatformPaymentSettingsPanel");

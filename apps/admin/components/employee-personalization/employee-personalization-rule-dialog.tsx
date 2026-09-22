@@ -187,7 +187,7 @@ export function RuleDialog({
 
             {(scope === "department" || scope === "department_post") ? (
               <Field>
-                <FieldLabel htmlFor="personalization-department">租户部门</FieldLabel>
+                <FieldLabel htmlFor="personalization-department">公司部门</FieldLabel>
                 <select
                   id="personalization-department"
                   name="tenant_department_id"
@@ -279,4 +279,3 @@ export function RuleDialog({
     </Dialog>
   );
 }
-

@@ -146,7 +146,7 @@ describe("TenantDouyinMiniappWorkspace", () => {
       />,
     );
 
-    expect(html).toContain("租户内部名称");
+    expect(html).toContain("公司内部名称");
     expect(html).toContain("好店装修内部租户");
     expect(html).toContain("小程序公开品牌");
     expect(html).toContain("好店装修服务");
@@ -408,7 +408,7 @@ describe("TenantDouyinMiniappWorkspace", () => {
     );
 
     expect(html).toContain("当前可发布模板版本异常 0.1.2");
-    expect(html).toContain("平台当前模板版本低于租户记录，请联系平台管理员核对");
+    expect(html).toContain("平台当前模板版本低于公司记录，请联系平台管理员核对");
     expect(html).not.toContain("生成新版体验版");
   });
   test("renders a same-version template revision as the default test target", () => {

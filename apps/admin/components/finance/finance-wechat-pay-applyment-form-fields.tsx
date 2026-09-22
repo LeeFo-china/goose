@@ -335,7 +335,7 @@ function FieldLabelWithRequirement({
             : displayedSource === "manual"
               ? "已修改"
               : displayedSource === "tenant"
-                ? "租户资料"
+                ? "公司资料"
                 : "已安全保存"}
         </Badge>
       ) : null}

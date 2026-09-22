@@ -39,14 +39,14 @@ export function AdminShell({
   const isPlatformMode = isPlatformOnlySession(session);
   const headerTenantLabel = isPlatformMode
     ? "平台管理"
-    : session.tenant?.name || "未绑定租户";
+    : session.tenant?.name || "未绑定公司";
   const headerRoleLabel = isPlatformMode
     ? "平台管理模式"
     : session.employee.post_name || "未分配岗位";
   const headerDepartmentLabel = isPlatformMode
     ? "平台账号"
     : session.employee.department_name || "未分配部门";
-  const sidebarIdentityTitle = `${isPlatformMode ? "平台超管" : session.tenant?.name || "未绑定租户"} · ${session.employee.name || "未命名员工"}`;
+  const sidebarIdentityTitle = `${isPlatformMode ? "平台超管" : session.tenant?.name || "未绑定公司"} · ${session.employee.name || "未命名员工"}`;
   const sidebarIdentityMeta = isPlatformMode
     ? `平台账号 · ${session.user_id || "-"}`
     : `${session.employee.department_name || "未分配部门"} · ${session.user_id || "-"}`;

@@ -63,7 +63,7 @@ export function createTenantPrivateSupplier(
     method: "POST",
     headers: { "Idempotency-Key": idempotencyKey },
     body: JSON.stringify(input),
-    fallbackMessage: "新建租户私有供应商失败",
+    fallbackMessage: "新建公司私有供应商失败",
   });
 }
 

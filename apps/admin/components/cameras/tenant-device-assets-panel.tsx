@@ -41,7 +41,7 @@ export function TenantDeviceAssetsPanel({
         <div className="min-w-0">
           <h2 className="text-sm font-medium">设备资产池</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            统一管理当前租户设备资产，新增设备后同步通道，再绑定到项目摄像头。
+            统一管理当前公司设备资产，新增设备后同步通道，再绑定到项目摄像头。
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -110,7 +110,7 @@ export function TenantDeviceAssetsPanel({
             {!assets.length ? (
               <TableRow>
                 <TableCell colSpan={6} className="h-28 text-center text-muted-foreground">
-                  暂无租户设备资产
+                  暂无公司设备资产
                 </TableCell>
               </TableRow>
             ) : null}

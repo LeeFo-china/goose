@@ -134,7 +134,7 @@ export function TenantOverviewCharts({ trend }: { trend: TenantOverviewTrendPoin
       <Card className="flex min-h-0 flex-col overflow-hidden">
         <CardHeader className="shrink-0 space-y-1 p-4 pb-2">
           <CardTitle>AI Token 用量</CardTitle>
-          <CardDescription>按天统计租户 AI token 消耗。</CardDescription>
+          <CardDescription>按天统计公司 AI token 消耗。</CardDescription>
         </CardHeader>
         <CardContent className="min-h-0 flex-1 p-4 pt-0">
           {hasData ? (

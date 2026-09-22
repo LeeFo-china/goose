@@ -156,7 +156,7 @@ export function SupplierWorkspace({
         <div>
           <h1 className="text-xl font-semibold tracking-normal">合作供应商</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            管理租户与平台供应商之间的合作关系、合同和新订单资格。
+            管理公司与平台供应商之间的合作关系、合同和新订单资格。
           </p>
         </div>
         <Card className="flex min-h-80 flex-1 items-center justify-center shadow-none">
@@ -168,7 +168,7 @@ export function SupplierWorkspace({
                 </EmptyMedia>
                 <EmptyTitle>供应商模块尚未启用</EmptyTitle>
                 <EmptyDescription>
-                  当前页面为只读状态，不会加载供应商列表或目录。请联系平台管理员为本租户启用模块。
+                  当前页面为只读状态，不会加载供应商列表或目录。请联系平台管理员为本公司启用模块。
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>

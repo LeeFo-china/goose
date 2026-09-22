@@ -83,7 +83,7 @@ export function EligibilityPanel({
       <Alert variant={eligibility?.eligible ? "default" : "destructive"}>
         <AlertTitle>{eligibility?.eligible ? "当前可创建新订单" : "当前不可创建新订单"}</AlertTitle>
         <AlertDescription>
-          平台共享供应商会综合平台准入、运营状态、租户合作状态、必填资质和合同策略实时判断。
+          平台共享供应商会综合平台准入、运营状态、公司合作状态、必填资质和合同策略实时判断。
         </AlertDescription>
       </Alert>
       {blocking_reasons.length ? (
@@ -116,7 +116,7 @@ export function ServiceRegionsPanel({
     <Alert>
       <AlertTitle>平台维护的服务区域</AlertTitle>
       <AlertDescription>
-        服务区域属于平台供应商主数据，租户端只读。Phase 0 暂不提供租户侧区域明细接口，
+        服务区域属于平台供应商主数据，公司端只读。Phase 0 暂不提供公司侧区域明细接口，
         如需核对请联系平台运营并提供供应商编码 {relationship.supplier.code}。
       </AlertDescription>
     </Alert>

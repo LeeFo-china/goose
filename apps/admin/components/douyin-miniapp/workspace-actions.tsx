@@ -409,7 +409,7 @@ export function TenantDouyinMiniappWorkspaceActions({
             </Button>
           ) : null}
           {actions.length === 0 ? (
-            <Badge variant="outline">当前无需租户操作</Badge>
+            <Badge variant="outline">当前无需公司操作</Badge>
           ) : null}
         </div>
       </div>
@@ -428,7 +428,7 @@ export function TenantDouyinMiniappWorkspaceActions({
           canPublish,
         ) ? (
           <p className="text-xs text-muted-foreground">
-            当前账号缺少执行该操作的权限，请联系租户管理员。
+            当前账号缺少执行该操作的权限，请联系公司管理员。
           </p>
         ) : null}
 

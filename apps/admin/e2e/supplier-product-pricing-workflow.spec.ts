@@ -182,7 +182,7 @@ test("租户可检索第21个合作供应商并维护私有商品、规格、换
   await expect(page).not.toHaveURL(/productId=/);
 
   await page.getByRole("button", { name: "新增商品" }).click();
-  let dialog = page.getByRole("dialog", { name: "新增租户私有商品" });
+  let dialog = page.getByRole("dialog", { name: "新增公司私有商品" });
   await expect(dialog.getByLabel("商品编码")).toBeDisabled();
   await expect(dialog.getByLabel("商品编码")).toHaveValue("保存后系统自动生成");
   await dialog.getByLabel("商品名称").fill("E2E 瓷砖");
@@ -299,7 +299,7 @@ test("租户新增私有商品可快速新建分类和品牌并保持单位只�
   await selectTwentyFirstSupplier(page);
 
   await page.getByRole("button", { name: "新增商品" }).click();
-  let dialog = page.getByRole("dialog", { name: "新增租户私有商品" });
+  let dialog = page.getByRole("dialog", { name: "新增公司私有商品" });
   await dialog.getByLabel("商品名称").fill("E2E 快速目录商品");
 
   await dialog.getByRole("combobox", { name: "分类", exact: true }).click();

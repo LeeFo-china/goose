@@ -65,7 +65,7 @@ export const EMPLOYEE_PERSONALIZATION_SCOPE_LABELS: Record<
   post: "岗位",
   department: "部门",
   role: "角色",
-  tenant_default: "租户默认",
+  tenant_default: "公司默认",
 };
 
 export const EMPLOYEE_PERSONALIZATION_STATUS_LABELS: Record<

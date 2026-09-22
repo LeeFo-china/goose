@@ -106,7 +106,7 @@ export function TenantBrandDialogButton({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{editing ? "编辑私有品牌" : "新建私有品牌"}</DialogTitle>
-          <DialogDescription>私有品牌永久属于当前租户，编码由系统维护。</DialogDescription>
+          <DialogDescription>私有品牌永久属于当前公司，编码由系统维护。</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <FieldGroup>

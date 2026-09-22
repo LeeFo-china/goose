@@ -216,7 +216,7 @@ export function BudgetPricing({ initialData, initialError }: {
         <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground"><Calculator aria-hidden="true" /></span>
         <div className="min-w-0">
           <h1 className="text-xl font-semibold tracking-normal">预算报价配置</h1>
-          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">维护抖音小程序预算初算的租户报价版本。启用后版本不可原地修改。</p>
+          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">维护抖音小程序预算初算的公司报价版本。启用后版本不可原地修改。</p>
         </div>
       </header>
 

@@ -121,8 +121,8 @@ export function SupplierProductDialog({
   }
 
   const title = product
-    ? `编辑${isPlatform ? "平台共享" : "租户私有"}商品`
-    : `新增${isPlatform ? "平台共享" : "租户私有"}商品`;
+    ? `编辑${isPlatform ? "平台共享" : "公司私有"}商品`
+    : `新增${isPlatform ? "平台共享" : "公司私有"}商品`;
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -142,7 +142,7 @@ export function SupplierProductDialog({
           <DialogDescription>
             {isPlatform
               ? "平台商品对所有租户共享，只能在此平台入口维护。"
-              : "商品永久归当前租户私有，不会共享给其他租户。"}
+              : "商品永久归当前公司私有，不会共享给其他公司。"}
           </DialogDescription>
         </DialogHeader>
         <FieldGroup>

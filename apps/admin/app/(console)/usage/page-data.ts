@@ -79,7 +79,7 @@ export async function fetchBackend<T>(path: string, fallback: T) {
 export function emptySummary(dateFrom: string, dateTo: string): TenantUsageSummaryData {
   return {
     range: { date_from: dateFrom, date_to: dateTo },
-    tenant: { id: "", name: "当前租户", slug: "" },
+    tenant: { id: "", name: "当前公司", slug: "" },
     ai: {
       call_count: 0,
       success_count: 0,

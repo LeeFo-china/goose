@@ -133,7 +133,7 @@ export async function fetchTenantOverview(dateFrom: string, dateTo: string) {
   } catch (error) {
     return {
       data: null,
-      error: error instanceof Error ? error.message : "租户概览数据加载失败",
+      error: error instanceof Error ? error.message : "公司概览数据加载失败",
     };
   }
 }

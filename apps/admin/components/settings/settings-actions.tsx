@@ -77,7 +77,7 @@ function getSettingPlaceholder(setting: SystemSetting) {
     return "例如：周一至周日 09:00-18:00";
   }
 
-  return setting.effective_scope === "tenant" ? "留空保存可清空租户值" : "留空则继承环境变量或默认值";
+  return setting.effective_scope === "tenant" ? "留空保存可清空公司值" : "留空则继承环境变量或默认值";
 }
 
 const smsChannelModeLabels: Record<string, string> = {
@@ -239,7 +239,7 @@ function GenericSettingEditor({ setting }: { setting: SystemSetting }) {
             type="password"
             value={value}
             onChange={(event) => setValue(event.target.value)}
-            placeholder={isAiSecret ? "输入新密钥以更换，留空不修改" : setting.effective_scope === "tenant" ? "输入新密钥，留空保存可清空租户值" : "输入新密钥"}
+            placeholder={isAiSecret ? "输入新密钥以更换，留空不修改" : setting.effective_scope === "tenant" ? "输入新密钥，留空保存可清空公司值" : "输入新密钥"}
             autoComplete="new-password"
           />
         ) : setting.value_type === "boolean" ? (
@@ -261,7 +261,7 @@ function GenericSettingEditor({ setting }: { setting: SystemSetting }) {
             rows={setting.key.includes("PROMPT") ? 5 : 3}
             value={value}
             onChange={(event) => setValue(event.target.value)}
-            placeholder={setting.effective_scope === "tenant" ? "留空保存可清空租户值" : "留空则继承环境变量或默认值"}
+            placeholder={setting.effective_scope === "tenant" ? "留空保存可清空公司值" : "留空则继承环境变量或默认值"}
           />
         ) : (
           <Input
@@ -273,7 +273,7 @@ function GenericSettingEditor({ setting }: { setting: SystemSetting }) {
           />
         )}
         <FieldDescription>
-          {isAiSecret ? "留空不修改已有密钥；更换会影响所有引用此配置的供应商。" : setting.effective_scope === "tenant" ? "租户覆盖值，留空保存可清空。" : "平台配置值，留空保存将回退环境变量或默认值。"}
+          {isAiSecret ? "留空不修改已有密钥；更换会影响所有引用此配置的供应商。" : setting.effective_scope === "tenant" ? "公司覆盖值，留空保存可清空。" : "平台配置值，留空保存将回退环境变量或默认值。"}
         </FieldDescription>
         {error ? <StatusAlert>{error}</StatusAlert> : null}
         {saved ? <StatusAlert tone="success">已保存</StatusAlert> : null}

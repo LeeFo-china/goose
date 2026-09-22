@@ -179,7 +179,7 @@ export async function getTenantDevices(token: string | null) {
   } catch (error) {
     return {
       list: [] as TenantDeviceAsset[],
-      error: error instanceof Error ? error.message : "租户设备资产加载失败",
+      error: error instanceof Error ? error.message : "公司设备资产加载失败",
     };
   }
 }

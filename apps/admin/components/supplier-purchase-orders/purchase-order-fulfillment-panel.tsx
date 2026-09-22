@@ -308,7 +308,7 @@ export function PurchaseOrderFulfillmentPanel({
             采购履约
           </h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            由租户员工代供应商录入确认事实，再登记发货与收货。
+            由公司员工代供应商录入确认事实，再登记发货与收货。
           </p>
         </div>
         <Button
@@ -362,7 +362,7 @@ export function PurchaseOrderFulfillmentPanel({
           <EmptyHeader>
             <EmptyTitle>尚未记录供应商确认</EmptyTitle>
             <EmptyDescription>
-              租户员工代供应商记录确认后才能登记发货，不修改采购快照。
+              公司员工代供应商记录确认后才能登记发货，不修改采购快照。
             </EmptyDescription>
           </EmptyHeader>
           {actions.includes("confirm") ? (
@@ -397,7 +397,7 @@ export function PurchaseOrderFulfillmentPanel({
           <AlertDialogHeader>
             <AlertDialogTitle>记录供应商确认？</AlertDialogTitle>
             <AlertDialogDescription>
-              租户员工代供应商录入该事实，并以当前采购单版本创建履约快照。
+              公司员工代供应商录入该事实，并以当前采购单版本创建履约快照。
             </AlertDialogDescription>
           </AlertDialogHeader>
           {error ? <StatusAlert>{error}</StatusAlert> : null}

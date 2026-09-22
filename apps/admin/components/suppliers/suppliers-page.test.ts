@@ -44,7 +44,7 @@ describe("租户合作供应商工作台", () => {
       "新订单资格",
       "结算条款",
       "合同健康",
-      "租户负责人",
+      "公司负责人",
       "操作",
     ]) {
       expect(source).toContain(column);
@@ -117,7 +117,7 @@ describe("租户合作供应商工作台", () => {
   test("关系状态只能通过显式命令变更并处理版本冲突", () => {
     const source = readSource("./tenant-supplier-actions.tsx");
 
-    for (const action of ["启用合作", "暂停合作", "终止合作", "加入租户黑名单"]) {
+    for (const action of ["启用合作", "暂停合作", "终止合作", "加入公司黑名单"]) {
       expect(source).toContain(action);
     }
     expect(source).toContain('"Idempotency-Key"');

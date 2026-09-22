@@ -293,7 +293,7 @@ function SettingsPanel({
       </section>
       <section className="border-t pt-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-sm font-semibold">租户合作条款</h3>
+          <h3 className="text-sm font-semibold">公司合作条款</h3>
           <TenantSupplierActions
             relationship={relationship}
             canManage={canManage}
@@ -324,7 +324,7 @@ function SettingsPanel({
               />
             </Field>
             <Field>
-              <FieldLabel htmlFor="supplier-owner-id">租户负责人员工 ID</FieldLabel>
+              <FieldLabel htmlFor="supplier-owner-id">公司负责人员工 ID</FieldLabel>
               <Input
                 id="supplier-owner-id"
                 value={ownerId}

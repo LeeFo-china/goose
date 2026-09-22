@@ -74,7 +74,7 @@ export function FinanceWechatPayApplymentActions({
             <AlertDialogHeader>
               <AlertDialogTitle>提交微信支付开通申请？</AlertDialogTitle>
               <AlertDialogDescription>
-                提交后租户侧资料将进入只读状态，由平台审核并决定是否发送微信正式进件。
+                提交后公司侧资料将进入只读状态，由平台审核并决定是否发送微信正式进件。
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

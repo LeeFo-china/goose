@@ -26,22 +26,22 @@ async function loginAsPlatformAdmin(page: Page) {
   expect(loginResponse.ok()).toBe(true);
 }
 
-test("租户系统配置页使用响应式双栏工作台", async ({ page }) => {
+test("公司系统配置页使用响应式双栏工作台", async ({ page }) => {
   await loginAsTenantAdmin(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/settings", { waitUntil: "networkidle" });
 
   await expect(
-    page.getByRole("heading", { name: "租户系统配置", level: 1 }),
+    page.getByRole("heading", { name: "公司系统配置", level: 1 }),
   ).toBeVisible();
   await expect(
-    page.getByText("管理本租户使用的短信服务和客服入口。", {
+    page.getByText("管理本公司使用的短信服务和客服入口。", {
       exact: false,
     }),
   ).toBeVisible();
 
   const groupTabs = page.getByRole("tablist", {
-    name: "租户系统配置分组",
+    name: "公司系统配置分组",
   });
   await expect(groupTabs).toHaveAttribute("aria-orientation", "vertical");
   await expect(page.getByRole("tab", { name: /短信配置/ })).toBeVisible();
@@ -76,6 +76,6 @@ test("平台系统配置页保留原有运维工作台", async ({ page }) => {
   ).toBeVisible();
   await expect(page.getByRole("tab", { name: /支付配置/ })).toBeVisible();
   await expect(
-    page.getByRole("tablist", { name: "租户系统配置分组" }),
+    page.getByRole("tablist", { name: "公司系统配置分组" }),
   ).toHaveCount(0);
 });

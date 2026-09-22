@@ -237,7 +237,7 @@ export default async function TenantBillingPage() {
             <Badge variant={status.variant}>{status.label}</Badge>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            查看当前租户积分余额、近期扣费和主要功能的计费口径。
+            查看当前公司积分余额、近期扣费和主要功能的计费口径。
           </p>
         </div>
         {lastActivity !== "-" ? (
@@ -283,7 +283,7 @@ export default async function TenantBillingPage() {
           <div className="min-w-0">
             <CardTitle className="text-sm">积分流水</CardTitle>
             <CardDescription className="mt-1 text-xs">
-              租户最近的充值、扣费、冻结和解冻记录。
+              公司最近的充值、扣费、冻结和解冻记录。
             </CardDescription>
           </div>
           <Badge

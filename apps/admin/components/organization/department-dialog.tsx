@@ -98,7 +98,7 @@ export function DepartmentDialog({
             <div>
               <DialogTitle>部门配置</DialogTitle>
               <DialogDescription>
-                标准部门编码不可修改，可调整租户侧显示名称、启停和排序。
+                标准部门编码不可修改，可调整公司侧显示名称、启停和排序。
               </DialogDescription>
             </div>
           </div>

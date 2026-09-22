@@ -126,7 +126,7 @@ export function AddProjectMemberDialog({
           <DialogHeader className="border-b p-5">
             <DialogTitle>添加项目成员</DialogTitle>
             <DialogDescription>
-              直接选择租户员工加入项目，不需要配置项目角色。
+              直接选择公司员工加入项目，不需要配置项目角色。
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-4 p-5">

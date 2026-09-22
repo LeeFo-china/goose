@@ -127,7 +127,7 @@ function getLoginBindingMeta(employee: EmployeeRecord): {
   if (status === "web_only") {
     return {
       label: "仅后台账号",
-      description: "可登录租户后台",
+      description: "可登录公司后台",
       variant: "outline",
       icon: Globe2,
     };

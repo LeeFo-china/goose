@@ -38,7 +38,7 @@ const MERCHANT_MODE_OPTIONS = [
 ];
 
 const PRINCIPAL_TYPE_OPTIONS = [
-  { value: "tenant", label: "租户收款" },
+  { value: "tenant", label: "公司收款" },
   { value: "platform", label: "平台收款" },
 ];
 
@@ -141,7 +141,7 @@ export function FinanceWechatPayConfigForm({
       ) : null}
       {managedByPlatform ? (
         <StatusAlert tone="warning">
-          当前服务商配置由平台进件激活流程统一维护，租户侧只读。
+          当前服务商配置由平台进件激活流程统一维护，公司侧只读。
         </StatusAlert>
       ) : readonly ? (
         <StatusAlert tone="warning">当前账号只有查看权限，不能修改微信支付配置。</StatusAlert>

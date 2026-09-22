@@ -69,7 +69,7 @@ describe("Tenant billing page layout", () => {
 
     expect(page).toContain("TENANT_BILLING_LOCKED");
     expect(sections).toContain("系统使用费待缴纳");
-    expect(sections).toContain("当前租户积分不足");
+    expect(sections).toContain("当前公司积分不足");
     expect(sections).toContain("@/components/ui/alert");
     expect(page).toContain("billing.recharge.create");
     expect(sections).toContain("TenantRechargeOrderButton");

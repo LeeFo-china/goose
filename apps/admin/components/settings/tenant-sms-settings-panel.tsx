@@ -107,7 +107,7 @@ export function TenantSmsSettingsPanel({
           <div className="min-w-0">
             <h3 className="text-sm font-medium">短信发送通道</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              选择平台统一服务，或使用本租户自己的短信服务商。
+              选择平台统一服务，或使用本公司自己的短信服务商。
             </p>
           </div>
           <ChannelStatus mode={mode} missingCount={missingCount} />
@@ -157,7 +157,7 @@ export function TenantSmsSettingsPanel({
             </p>
           ) : null}
           {!modeSetting ? (
-            <StatusAlert tone="warning">当前租户未开放短信通道配置。</StatusAlert>
+            <StatusAlert tone="warning">当前公司未开放短信通道配置。</StatusAlert>
           ) : null}
           {error ? <StatusAlert>{error}</StatusAlert> : null}
           {saved ? (
@@ -174,7 +174,7 @@ export function TenantSmsSettingsPanel({
           <div className="min-w-0">
             <h3 className="text-sm font-medium">当前使用平台统一短信通道</h3>
             <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-              短信服务商、签名、模板和密钥由平台统一维护，本租户无需填写参数，也不会看到平台敏感信息。
+              短信服务商、签名、模板和密钥由平台统一维护，本公司无需填写参数，也不会看到平台敏感信息。
             </p>
           </div>
         </section>

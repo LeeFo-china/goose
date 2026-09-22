@@ -52,7 +52,7 @@ export function AccountOverviewCard({
         <div className="min-w-0">
           <CardTitle className="text-sm">账户余额</CardTitle>
           <CardDescription className="mt-1 text-xs">
-            当前租户可用于短信、视频转文本和 AI 服务扣费的积分。
+            当前公司可用于短信、视频转文本和 AI 服务扣费的积分。
           </CardDescription>
         </div>
         <Badge variant={status.variant} className="w-fit shrink-0">
@@ -143,7 +143,7 @@ export function BillingLockedPanel({
               <Badge variant="warning">已锁定</Badge>
             </div>
             <AlertDescription className="mt-1 text-muted-foreground">
-              当前租户积分不足，业务功能已暂停。充值到账后系统会自动补扣欠费并恢复使用。
+              当前公司积分不足，业务功能已暂停。充值到账后系统会自动补扣欠费并恢复使用。
             </AlertDescription>
           </div>
           {lock.locked_at ? (

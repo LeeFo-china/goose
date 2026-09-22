@@ -30,7 +30,7 @@ export default async function FinanceWechatPayApplymentPage() {
           <div className="min-w-0">
             <h1 className="text-xl font-semibold tracking-normal">微信支付开通</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              提交租户特约商户资料，查看平台审核、人工进件和 AppID 绑定进度。
+              提交公司特约商户资料，查看平台审核、人工进件和 AppID 绑定进度。
             </p>
           </div>
         </div>
@@ -46,7 +46,7 @@ export default async function FinanceWechatPayApplymentPage() {
           <CardHeader>
             <CardTitle>开通申请</CardTitle>
             <CardDescription>
-              申请通过并完成平台激活后，项目收款才会使用租户子商户号。
+              申请通过并完成平台激活后，项目收款才会使用公司子商户号。
             </CardDescription>
           </CardHeader>
           <CardContent>

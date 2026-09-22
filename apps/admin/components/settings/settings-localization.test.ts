@@ -30,7 +30,7 @@ describe("settings localization", () => {
     expect(source).toContain('label="配置项"');
     expect(source).toContain('label="未配置"');
     expect(source).toContain("TenantSettingsHeader");
-    expect(source).toContain("管理本租户使用的短信服务和客服入口");
+    expect(source).toContain("管理本公司使用的短信服务和客服入口");
   });
 
   test("uses Chinese labels for platform settings interactions", () => {

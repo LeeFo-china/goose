@@ -137,7 +137,7 @@ export function CatalogSpecDefinitionsDialogButton({
         <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>{category.name}规格模板</DialogTitle>
-            <DialogDescription>规格定义按分类分页维护，平台模板在租户侧始终只读。</DialogDescription>
+            <DialogDescription>规格定义按分类分页维护，平台模板在公司侧始终只读。</DialogDescription>
           </DialogHeader>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Select value={status || "all"} onValueChange={(value) => { setStatus(value === "all" ? "" : value as CatalogStatus); setPage(1); }}>
