@@ -76,7 +76,6 @@ export default async function CamerasPage({
   const {
     list: cameraProjectGroups,
     pagination: cameraProjectPagination,
-    summary: cameraProjectSummary,
     error: cameraProjectError,
   } = await getCameraProjectGroups({
     token,
@@ -93,12 +92,10 @@ export default async function CamerasPage({
     error: tenantDeviceError,
   } = await getTenantDevices(token);
   const unboundTenantDeviceCount = tenantDevices.filter((device) => !device.bound_camera_id).length;
-  const hasTenantDevices = tenantDevices.length > 0;
   const hasUnboundTenantDevices = unboundTenantDeviceCount > 0;
   const hasCameraProjectGroups = cameraProjectGroups.length > 0;
   const showCameraSearch = hasCameraProjectGroups || Boolean(cameraKeyword);
   const showCameraPagination = cameraProjectPagination.total > 0;
-  const showSetupFlow = !hasCameraProjectGroups && !cameraProjectError && !cameraKeyword;
   const currentPageOfflineCount = cameraProjectGroups.reduce(
     (count, group) => count + group.cameras.filter((camera) => camera.status === "offline").length,
     0,
@@ -117,10 +114,6 @@ export default async function CamerasPage({
     || currentPageHiddenCount > 0
     || hasUnboundTenantDevices
   );
-  const headerAction = showSetupFlow || !projects.length
-    ? null
-    : <Gb28181OnboardingButton />;
-
   return (
     <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
       <h1 className="sr-only">工地监控</h1>
@@ -148,23 +141,6 @@ export default async function CamerasPage({
 
       {selectedProjectId || cameraProjectGroups.length || cameraProjectError ? (
         <CamerasWorkspaceTabs
-          actions={headerAction}
-          summary={(
-            <>
-              <Badge variant="outline">已绑定项目 {cameraProjectSummary.project_count}</Badge>
-              {cameraProjectSummary.online_count > 0 ? (
-                <Badge variant="success">在线 {cameraProjectSummary.online_count}</Badge>
-              ) : null}
-              {cameraProjectSummary.hidden_count > 0 ? (
-                <Badge variant="secondary">客户隐藏 {cameraProjectSummary.hidden_count}</Badge>
-              ) : null}
-              {hasTenantDevices ? (
-                <Badge variant="outline">未绑定设备 {unboundTenantDeviceCount}</Badge>
-              ) : (
-                <Badge variant="secondary">尚未接入设备</Badge>
-              )}
-            </>
-          )}
           cameras={(
             <>
               <div className="shrink-0 border-b bg-card px-4 py-3">
@@ -239,7 +215,7 @@ export default async function CamerasPage({
                 <div className="min-h-0 flex-1 divide-y overflow-auto">
                   {cameraProjectGroups.map((group) => (
                     <section key={group.project.id} className="bg-card">
-                      <div className="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
                         <div className="min-w-0">
                           <div className="truncate text-sm font-semibold">
                             {group.project.address || group.project.name || "未命名项目"}
@@ -250,15 +226,21 @@ export default async function CamerasPage({
                             {group.project.property?.layout ? <span>{group.project.property.layout}</span> : null}
                             {group.project.property?.area ? <span>{group.project.property.area}㎡</span> : null}
                           </div>
+                          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                            <span className="font-medium text-foreground">
+                              {group.summary.camera_count} 台摄像头
+                            </span>
+                            <span>在线 {group.summary.online_count}</span>
+                            {group.summary.hidden_count > 0 ? (
+                              <span>客户隐藏 {group.summary.hidden_count}</span>
+                            ) : null}
+                          </div>
                         </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant="success">在线 {group.summary.online_count}</Badge>
-                          <Badge variant="secondary">客户隐藏 {group.summary.hidden_count}</Badge>
-                          <Badge variant="outline">腾讯云 {group.summary.tencent_count}</Badge>
-                          <Badge variant="outline">共 {group.summary.camera_count}</Badge>
+                        <div className="flex shrink-0">
                           <Gb28181OnboardingButton
                             projectId={group.project.id}
                             projectLabel={group.project.address || group.project.name || "当前项目"}
+                            label="接入到此项目"
                           />
                         </div>
                       </div>

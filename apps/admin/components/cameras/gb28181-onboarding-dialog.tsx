@@ -77,11 +77,13 @@ export function Gb28181OnboardingButton({
   projectId,
   projectLabel,
   initialAsset,
+  label,
   size = "sm",
 }: {
   projectId?: string;
   projectLabel?: string;
   initialAsset?: TenantDeviceAsset;
+  label?: string;
   size?: "sm" | "default";
 }) {
   const router = useRouter();
@@ -251,10 +253,10 @@ export function Gb28181OnboardingButton({
         onClick={openDialog}
       >
         <Plus data-icon="inline-start" />
-        {initialAsset ? "继续接入" : "接入摄像头"}
+        {label || (initialAsset ? "继续接入" : "接入摄像头")}
       </Button>
       <Dialog open={open} onOpenChange={changeOpen}>
-        <DialogContent className="max-h-[90vh] max-w-[640px] overflow-y-auto">
+        <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] max-w-[760px] overflow-x-hidden overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle>
               {step === "success" ? "摄像头已接入" : "接入 GB28181 摄像头"}

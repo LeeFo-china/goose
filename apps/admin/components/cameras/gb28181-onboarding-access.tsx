@@ -10,7 +10,7 @@ function AccessValue({
   value: string | number | null | undefined;
 }) {
   return (
-    <div className="flex min-w-0 items-center justify-between gap-3 border-b py-3 last:border-b-0">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b py-3 last:border-b-0">
       <div className="min-w-0">
         <div className="text-xs font-medium text-muted-foreground">{label}</div>
         <div className="mt-1 break-all text-sm font-medium">{value || "-"}</div>
@@ -28,7 +28,7 @@ export function Gb28181AccessDetails({
   sipServer: TencentSipServerConfig | null;
 }) {
   return (
-    <div className="rounded-md border bg-background px-4">
+    <div className="min-w-0 overflow-hidden rounded-md border bg-background px-4">
       <AccessValue label="SIP服务器地址" value={sipServer?.sip_host} />
       <AccessValue label="SIP服务器端口" value={sipServer?.sip_port} />
       <AccessValue label="SIP服务器ID" value={sipServer?.sip_server_id} />
