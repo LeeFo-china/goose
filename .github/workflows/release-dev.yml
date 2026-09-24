@@ -1,24 +1,10 @@
 name: Release Dev
 run-name: Dev release ${{ inputs.service }} from ${{ github.ref_name }}
 
-on:
-  workflow_dispatch:
-    inputs:
-      service:
-        description: "Admin release service(s); use all or a comma-separated list"
-        required: true
-        type: string
-      operation:
-        description: "Release intent; rollback builds and deploys the selected immutable ref"
-        required: true
-        default: release
-        type: choice
-        options: [release, rollback]
-      reason:
-        description: "Optional operator reason"
-        required: false
-        default: ""
-        type: string
+# The development server was retired in September 2026. The implementation
+# remains for audit and recovery, but cannot be dispatched without restoring
+# the server and reviewing its runner/environment configuration.
+on: {}
 
 permissions:
   contents: read

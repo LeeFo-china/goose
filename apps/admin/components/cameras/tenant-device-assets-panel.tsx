@@ -1,8 +1,13 @@
 "use client";
 
+import { useEffect, useState, useTransition } from "react";
+import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { StatusAlert } from "@/components/admin/status-alert";
+import { CreateCameraButton } from "@/components/cameras/camera-mutations";
+import { Gb28181OnboardingButton } from "@/components/cameras/gb28181-onboarding-dialog";
 import { CreateTencentDeviceButton } from "@/components/cameras/tencent-device-actions";
-import type { TenantDeviceAsset } from "@/components/cameras/camera-types";
+import type { Pagination, TenantDeviceAsset } from "@/components/cameras/camera-types";
 import {
   SyncTenantDevicesButton,
   TenantDeviceRowActions,
@@ -14,6 +19,7 @@ import {
   vendorLabel,
 } from "@/components/cameras/tenant-device-asset-utils";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -22,30 +28,66 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { requestBackendJson } from "@/lib/backend-client";
+
+type TenantDevicePage = {
+  list: TenantDeviceAsset[];
+  pagination: Pagination;
+};
 
 export function TenantDeviceAssetsPanel({
   assets,
   error,
+  pagination,
   projectId,
 }: {
   assets: TenantDeviceAsset[];
   error?: string | null;
+  pagination?: Pagination;
   projectId?: string | null;
 }) {
-  const unboundCount = assets.filter((asset) => !asset.bound_camera_id).length;
-  const onlineCount = assets.filter((asset) => asset.status === "online").length;
+  const [visibleAssets, setVisibleAssets] = useState(assets);
+  const [currentPage, setCurrentPage] = useState(pagination?.page || 1);
+  const [pending, startTransition] = useTransition();
+  const total = pagination?.total || visibleAssets.length;
+  const totalPages = pagination?.totalPages || 0;
+  const unboundCount = visibleAssets.filter((asset) => !asset.bound_camera_id).length;
+  const onlineCount = visibleAssets.filter((asset) => asset.status === "online").length;
+
+  useEffect(() => {
+    setVisibleAssets(assets);
+    setCurrentPage(pagination?.page || 1);
+  }, [assets, pagination?.page]);
+
+  function loadMore() {
+    if (pending || currentPage >= totalPages) return;
+    startTransition(async () => {
+      try {
+        const result = await requestBackendJson<TenantDevicePage>(
+          `/tenant-devices?page=${currentPage + 1}&pageSize=${pagination?.pageSize || 100}`,
+        );
+        setVisibleAssets((current) => {
+          const known = new Set(current.map((asset) => asset.id));
+          return [...current, ...(result.list || []).filter((asset) => !known.has(asset.id))];
+        });
+        setCurrentPage(result.pagination?.page || currentPage + 1);
+      } catch (caught) {
+        toast.error(caught instanceof Error ? caught.message : "设备加载失败");
+      }
+    });
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="shrink-0 flex flex-col justify-between gap-3 border-b bg-card px-4 py-3 md:flex-row md:items-center">
         <div className="min-w-0">
-          <h2 className="text-sm font-medium">设备资产池</h2>
+          <h2 className="text-sm font-medium">设备管理</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            统一管理当前公司设备资产，新增设备后同步通道，再绑定到项目摄像头。
+            查看设备状态，或处理 NVR、多通道和手动绑定等高级场景。
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline">共 {assets.length} 个</Badge>
+          <Badge variant="outline">已加载 {visibleAssets.length} / {total}</Badge>
           <Badge variant="secondary">未绑定 {unboundCount}</Badge>
           <Badge variant="success">在线 {onlineCount}</Badge>
           {projectId ? (
@@ -54,6 +96,7 @@ export function TenantDeviceAssetsPanel({
               sipServer={null}
             />
           ) : null}
+          <CreateCameraButton projectId="" devices={[]} />
           <SyncTenantDevicesButton />
         </div>
       </div>
@@ -75,7 +118,7 @@ export function TenantDeviceAssetsPanel({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {assets.map((asset) => (
+            {visibleAssets.map((asset) => (
               <TableRow key={asset.id}>
                 <TableCell>
                   <div className="min-w-0">
@@ -103,11 +146,23 @@ export function TenantDeviceAssetsPanel({
                   )}
                 </TableCell>
                 <TableCell className="text-right">
-                  <TenantDeviceRowActions asset={asset} />
+                  <div className="flex justify-end gap-2">
+                    {asset.vendor === "tencent_iotvideo_industry"
+                      && asset.vendor_channel_id === null
+                      && asset.device_type === "IPC"
+                      && !asset.bound_camera_id
+                      && asset.source_project_id ? (
+                        <Gb28181OnboardingButton
+                          projectId={asset.source_project_id || projectId || undefined}
+                          initialAsset={asset}
+                        />
+                      ) : null}
+                    <TenantDeviceRowActions asset={asset} />
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
-            {!assets.length ? (
+            {!visibleAssets.length ? (
               <TableRow>
                 <TableCell colSpan={6} className="h-28 text-center text-muted-foreground">
                   暂无公司设备资产
@@ -117,6 +172,14 @@ export function TenantDeviceAssetsPanel({
           </TableBody>
         </Table>
       </div>
+      {currentPage < totalPages ? (
+        <div className="shrink-0 border-t bg-card px-4 py-3 text-center">
+          <Button type="button" variant="outline" disabled={pending} onClick={loadMore}>
+            {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
+            加载更多设备
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -163,6 +163,7 @@ export async function getTenantDevices(token: string | null) {
   if (!token) {
     return {
       list: [] as TenantDeviceAsset[],
+      pagination: { page: 1, pageSize: 100, total: 0, totalPages: 0 },
       error: "缺少登录凭证",
     };
   }
@@ -174,11 +175,13 @@ export async function getTenantDevices(token: string | null) {
     );
     return {
       list: data?.list || [],
+      pagination: data?.pagination || { page: 1, pageSize: 100, total: 0, totalPages: 0 },
       error: null,
     };
   } catch (error) {
     return {
       list: [] as TenantDeviceAsset[],
+      pagination: { page: 1, pageSize: 100, total: 0, totalPages: 0 },
       error: error instanceof Error ? error.message : "公司设备资产加载失败",
     };
   }

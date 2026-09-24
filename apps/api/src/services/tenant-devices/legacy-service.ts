@@ -17,6 +17,7 @@ import {
   syncPlatformTenantDevice,
 } from "./legacy/platform-tencent";
 import { syncTenantDevices } from "./legacy/sync";
+import { getTenantTencentDeviceAccessInfo } from "./legacy/tenant-tencent";
 
 class TenantDeviceService {
   listTenantDevices = listTenantDevices;
@@ -28,6 +29,7 @@ class TenantDeviceService {
   updateTenantDevice = updateTenantDevice;
   deleteTenantDevice = deleteTenantDevice;
   syncTenantDevices = syncTenantDevices;
+  getTenantTencentDeviceAccessInfo = getTenantTencentDeviceAccessInfo;
   getPlatformTencentDeviceAccessInfo = getPlatformTencentDeviceAccessInfo;
   getPlatformTencentDevicePassword = getPlatformTencentDevicePassword;
   resetPlatformTencentDevicePassword = resetPlatformTencentDevicePassword;

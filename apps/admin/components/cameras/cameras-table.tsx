@@ -72,9 +72,6 @@ const columns: ColumnDef<CameraRecord>[] = [
         <div className="truncate font-medium">
           {row.original.name || "未命名摄像头"}
         </div>
-        <div className="truncate text-xs text-muted-foreground">
-          {row.original.position || "未设置位置"}
-        </div>
       </div>
     ),
   },

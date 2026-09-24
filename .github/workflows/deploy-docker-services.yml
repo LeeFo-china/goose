@@ -771,6 +771,16 @@ jobs:
         if: ${{ success() }}
         run: |
           set -euo pipefail
+          test -n "${TENCENT_CCR_REGISTRY}"
+          test -n "${TENCENT_CCR_NAMESPACE}"
+          case "${TENCENT_CCR_REGISTRY}:${TENCENT_CCR_NAMESPACE}" in
+            useccr.ccs.tencentyun.com:america_goose|ccr.ccs.tencentyun.com:gooes-goodcms)
+              ;;
+            *)
+              echo "::error::Unsupported Tencent CCR registry/namespace pair."
+              exit 1
+              ;;
+          esac
           if python3 "${SOURCE_DIR}/scripts/cleanup-production-digest-images.py" \
             --repository-prefix "${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}/" \
             --retention-hours 24; then

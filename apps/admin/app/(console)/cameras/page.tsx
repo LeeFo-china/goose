@@ -1,12 +1,10 @@
 import { Search, X } from "lucide-react";
 import Link from "next/link";
 import { StatusAlert } from "@/components/admin/status-alert";
-import { CreateCameraButton } from "@/components/cameras/camera-mutations";
 import { CamerasTable } from "@/components/cameras/cameras-table";
 import { CamerasWorkspaceTabs } from "@/components/cameras/cameras-workspace-tabs";
+import { Gb28181OnboardingButton } from "@/components/cameras/gb28181-onboarding-dialog";
 import { TenantDeviceAssetsPanel } from "@/components/cameras/tenant-device-assets-panel";
-import { SyncTenantDevicesButton } from "@/components/cameras/tenant-device-asset-actions";
-import { CreateTencentDeviceButton } from "@/components/cameras/tencent-device-actions";
 import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -26,50 +24,10 @@ import {
   getTenantDevices,
 } from "./page-data";
 
-function SetupStep({
-  index,
-  title,
-  description,
-  state,
-}: {
-  index: number;
-  title: string;
-  description: string;
-  state: "done" | "active" | "pending";
-}) {
-  const isDone = state === "done";
-  const isActive = state === "active";
-
-  return (
-    <div className="flex gap-3">
-      <div
-        className={[
-          "flex size-7 shrink-0 items-center justify-center rounded-md border text-xs font-semibold",
-          isDone ? "border-success bg-success text-success-foreground" : "",
-          isActive ? "border-primary bg-primary text-primary-foreground" : "",
-          state === "pending" ? "bg-card text-muted-foreground" : "",
-        ].filter(Boolean).join(" ")}
-      >
-        {index}
-      </div>
-      <div className="min-w-0">
-        <div className="text-sm font-medium">{title}</div>
-        <p className="mt-1 text-xs text-muted-foreground">{description}</p>
-      </div>
-    </div>
-  );
-}
-
 function CameraEmptyState({
   cameraKeyword,
-  hasTenantDevices,
-  hasUnboundTenantDevices,
-  selectedProjectId,
 }: {
   cameraKeyword: string;
-  hasTenantDevices: boolean;
-  hasUnboundTenantDevices: boolean;
-  selectedProjectId: string;
 }) {
   if (cameraKeyword) {
     return (
@@ -87,50 +45,16 @@ function CameraEmptyState({
     );
   }
 
-  const activeStep = !hasTenantDevices ? 1 : hasUnboundTenantDevices ? 3 : 2;
-
   return (
     <div className="px-4 py-10">
-      <div className="mx-auto flex max-w-2xl flex-col gap-5">
+      <div className="mx-auto flex max-w-xl flex-col items-center gap-4 text-center">
         <div className="text-center">
-          <h2 className="text-base font-semibold">按设备接入流程完成项目监控</h2>
+          <h2 className="text-base font-semibold">接入第一台摄像头</h2>
           <p className="mx-auto mt-2 max-w-xl text-sm text-muted-foreground">
-            先把现场设备纳入资产池，再同步通道，最后绑定到房产项目。
+            填写名称，按提示配置设备，检测成功后自动绑定所选项目。
           </p>
         </div>
-
-        <div className="grid gap-4 rounded-md border bg-muted/20 p-4 md:grid-cols-3">
-          <SetupStep
-            index={1}
-            title="新增设备"
-            description="创建设备资产，获取现场 SIP 接入信息。"
-            state={!hasTenantDevices ? "active" : "done"}
-          />
-          <SetupStep
-            index={2}
-            title="同步通道"
-            description="设备上线后同步通道，确认可绑定资产。"
-            state={activeStep === 2 ? "active" : activeStep > 2 ? "done" : "pending"}
-          />
-          <SetupStep
-            index={3}
-            title="绑定项目"
-            description="把可用通道绑定到客户的房产项目。"
-            state={activeStep === 3 ? "active" : "pending"}
-          />
-        </div>
-
-        <div className="flex flex-col items-center justify-center gap-2 sm:flex-row">
-          {!hasTenantDevices && selectedProjectId ? (
-            <CreateTencentDeviceButton projectId={selectedProjectId} sipServer={null} />
-          ) : null}
-          {hasTenantDevices && !hasUnboundTenantDevices ? (
-            <SyncTenantDevicesButton />
-          ) : null}
-          {hasUnboundTenantDevices ? (
-            <CreateCameraButton projectId="" devices={[]} />
-          ) : null}
-        </div>
+        <Gb28181OnboardingButton />
       </div>
     </div>
   );
@@ -165,6 +89,7 @@ export default async function CamerasPage({
     : projects[0]?.id || "";
   const {
     list: tenantDevices,
+    pagination: tenantDevicePagination,
     error: tenantDeviceError,
   } = await getTenantDevices(token);
   const unboundTenantDeviceCount = tenantDevices.filter((device) => !device.bound_camera_id).length;
@@ -192,13 +117,9 @@ export default async function CamerasPage({
     || currentPageHiddenCount > 0
     || hasUnboundTenantDevices
   );
-  const headerAction = showSetupFlow ? null : (
-    !hasTenantDevices && selectedProjectId ? (
-      <CreateTencentDeviceButton projectId={selectedProjectId} sipServer={null} />
-    ) : projects.length ? (
-      <CreateCameraButton projectId="" devices={[]} />
-    ) : null
-  );
+  const headerAction = showSetupFlow || !projects.length
+    ? null
+    : <Gb28181OnboardingButton />;
 
   return (
     <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
@@ -330,11 +251,15 @@ export default async function CamerasPage({
                             {group.project.property?.area ? <span>{group.project.property.area}㎡</span> : null}
                           </div>
                         </div>
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <Badge variant="success">在线 {group.summary.online_count}</Badge>
                           <Badge variant="secondary">客户隐藏 {group.summary.hidden_count}</Badge>
                           <Badge variant="outline">腾讯云 {group.summary.tencent_count}</Badge>
                           <Badge variant="outline">共 {group.summary.camera_count}</Badge>
+                          <Gb28181OnboardingButton
+                            projectId={group.project.id}
+                            projectLabel={group.project.address || group.project.name || "当前项目"}
+                          />
                         </div>
                       </div>
                       <CamerasTable
@@ -348,9 +273,6 @@ export default async function CamerasPage({
                   {!cameraProjectGroups.length && !cameraProjectError ? (
                     <CameraEmptyState
                       cameraKeyword={cameraKeyword}
-                      hasTenantDevices={hasTenantDevices}
-                      hasUnboundTenantDevices={hasUnboundTenantDevices}
-                      selectedProjectId={selectedProjectId}
                     />
                   ) : null}
                 </div>
@@ -408,6 +330,7 @@ export default async function CamerasPage({
               <TenantDeviceAssetsPanel
                 assets={tenantDevices}
                 error={tenantDeviceError}
+                pagination={tenantDevicePagination}
                 projectId={selectedProjectId}
               />
             ) : (

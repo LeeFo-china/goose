@@ -1,4 +1,4 @@
-import type { CameraProjectOption, TenantDeviceAsset } from "@/components/cameras/camera-types";
+import type { CameraProjectOption, Pagination, TenantDeviceAsset } from "@/components/cameras/camera-types";
 
 export type CameraMode = "create" | "edit";
 
@@ -39,4 +39,5 @@ export type CameraBindProjectOptionsData = {
 
 export type TenantDeviceListData = {
   list?: TenantDeviceAsset[];
+  pagination?: Pagination;
 };

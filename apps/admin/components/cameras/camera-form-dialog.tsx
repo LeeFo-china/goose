@@ -22,6 +22,7 @@ export function CameraDialog({
   projectId,
   camera,
   devices,
+  advanced = false,
   open,
   onOpenChange,
 }: {
@@ -29,6 +30,7 @@ export function CameraDialog({
   projectId: string;
   camera?: CameraRecord;
   devices: CameraDeviceChannel[];
+  advanced?: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -45,6 +47,9 @@ export function CameraDialog({
   const [createDevices, setCreateDevices] = useState<CameraDeviceChannel[]>(
     projectId ? devices : [],
   );
+  const [deviceKeyword, setDeviceKeyword] = useState("");
+  const [devicePage, setDevicePage] = useState(1);
+  const [deviceTotalPages, setDeviceTotalPages] = useState(0);
   const [deviceLoading, setDeviceLoading] = useState(false);
   const initializedOpenRef = useRef(false);
   const form = useForm<CameraFormValues>({
@@ -93,6 +98,9 @@ export function CameraDialog({
     setProjectOptions([]);
     setProjectSelectError("");
     setCreateDevices(projectId ? devices : []);
+    setDeviceKeyword("");
+    setDevicePage(1);
+    setDeviceTotalPages(0);
     const initialVendor = mode === "create" && projectId ? initialCreateVendor : defaults.vendor;
     form.reset({
       ...defaults,
@@ -159,6 +167,8 @@ export function CameraDialog({
     if (!open || mode !== "create" || !selectedProjectId) {
       if (mode === "create" && !selectedProjectId) {
         setCreateDevices([]);
+        setDevicePage(1);
+        setDeviceTotalPages(0);
         form.setValue("device_key", "", {
           shouldDirty: false,
           shouldValidate: true,
@@ -168,53 +178,90 @@ export function CameraDialog({
     }
 
     let disposed = false;
-    setDeviceLoading(true);
-    setError("");
-    requestCamera({
-      path: "/tenant-devices?only_unbound=true&page=1&pageSize=100",
-    })
-      .then((data: TenantDeviceListData) => {
-        if (disposed) return;
-        const nextDevices = tenantAssetsToDevices(data?.list || []);
-        const nextKeys: Record<CameraFormValues["vendor"], string> = {
-          ezviz: "",
-          tencent_iotvideo_industry: "",
-        };
-        for (const device of nextDevices) {
-          if (!device.can_bind || nextKeys[device.vendor]) continue;
-          nextKeys[device.vendor] = buildDeviceKey(device);
-        }
-        const currentVendor = form.getValues("vendor");
-        const nextVendor = nextKeys[currentVendor]
-          ? currentVendor
-          : nextKeys.tencent_iotvideo_industry
-            ? "tencent_iotvideo_industry"
-            : "ezviz";
-
-        setCreateDevices(nextDevices);
-        form.setValue("vendor", nextVendor, {
-          shouldDirty: true,
-          shouldValidate: true,
-        });
-        form.setValue("device_key", nextKeys[nextVendor], {
-          shouldDirty: true,
-          shouldValidate: true,
-        });
-      })
-      .catch((err) => {
-        if (!disposed) {
-          setCreateDevices([]);
-          setError(err instanceof Error ? err.message : "公司设备资产加载失败");
-        }
-      })
-      .finally(() => {
-        if (!disposed) setDeviceLoading(false);
+    const timer = window.setTimeout(() => {
+      const params = new URLSearchParams({
+        only_unbound: "true",
+        page: "1",
+        pageSize: "20",
       });
+      if (deviceKeyword.trim()) params.set("keyword", deviceKeyword.trim());
+
+      setDeviceLoading(true);
+      setError("");
+      requestCamera({ path: `/tenant-devices?${params.toString()}` })
+        .then((data: TenantDeviceListData) => {
+          if (disposed) return;
+          const nextDevices = tenantAssetsToDevices(data?.list || []);
+          const nextKeys: Record<CameraFormValues["vendor"], string> = {
+            ezviz: "",
+            tencent_iotvideo_industry: "",
+          };
+          for (const device of nextDevices) {
+            if (!device.can_bind || nextKeys[device.vendor]) continue;
+            nextKeys[device.vendor] = buildDeviceKey(device);
+          }
+          const currentVendor = form.getValues("vendor");
+          const nextVendor = nextKeys[currentVendor]
+            ? currentVendor
+            : nextKeys.tencent_iotvideo_industry
+              ? "tencent_iotvideo_industry"
+              : "ezviz";
+
+          setCreateDevices(nextDevices);
+          setDevicePage(data.pagination?.page || 1);
+          setDeviceTotalPages(data.pagination?.totalPages || 0);
+          form.setValue("vendor", nextVendor, {
+            shouldDirty: true,
+            shouldValidate: true,
+          });
+          form.setValue("device_key", nextKeys[nextVendor], {
+            shouldDirty: true,
+            shouldValidate: true,
+          });
+        })
+        .catch((err) => {
+          if (!disposed) {
+            setCreateDevices([]);
+            setError(err instanceof Error ? err.message : "公司设备资产加载失败");
+          }
+        })
+        .finally(() => {
+          if (!disposed) setDeviceLoading(false);
+        });
+    }, deviceKeyword.trim() ? 300 : 0);
 
     return () => {
       disposed = true;
+      window.clearTimeout(timer);
     };
-  }, [form, mode, open, selectedProjectId]);
+  }, [deviceKeyword, form, mode, open, selectedProjectId]);
+
+  function loadMoreDevices() {
+    if (deviceLoading || devicePage >= deviceTotalPages) return;
+    const params = new URLSearchParams({
+      only_unbound: "true",
+      page: String(devicePage + 1),
+      pageSize: "20",
+    });
+    if (deviceKeyword.trim()) params.set("keyword", deviceKeyword.trim());
+
+    setDeviceLoading(true);
+    setError("");
+    requestCamera({ path: `/tenant-devices?${params.toString()}` })
+      .then((data: TenantDeviceListData) => {
+        const nextDevices = tenantAssetsToDevices(data?.list || []);
+        setCreateDevices((current) => {
+          const known = new Set(current.map(buildDeviceKey));
+          return [...current, ...nextDevices.filter((device) => !known.has(buildDeviceKey(device)))];
+        });
+        setDevicePage(data.pagination?.page || devicePage + 1);
+        setDeviceTotalPages(data.pagination?.totalPages || deviceTotalPages);
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "公司设备资产加载失败");
+      })
+      .finally(() => setDeviceLoading(false));
+  }
 
   function close() {
     if (pending) return;
@@ -290,16 +337,21 @@ export function CameraDialog({
                 selectedProject={selectedProject}
                 projectLoading={projectLoading}
                 projectSelectError={projectSelectError}
+                deviceKeyword={deviceKeyword}
                 deviceLoading={deviceLoading}
+                hasMoreDevices={devicePage < deviceTotalPages}
                 availableDevices={availableDevices}
                 firstDeviceKeyByVendor={firstDeviceKeyByVendor}
                 setProjectKeyword={setProjectKeyword}
                 setSelectedProjectId={setSelectedProjectId}
                 setSelectedProject={setSelectedProject}
+                setDeviceKeyword={setDeviceKeyword}
+                loadMoreDevices={loadMoreDevices}
               />
             ) : null}
             <CameraSettingsFields
               form={form}
+              showAdvanced={mode === "edit" || advanced}
               pending={pending}
               selectedCapabilities={selectedCapabilities}
               toggleCapability={toggleCapability}

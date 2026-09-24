@@ -26,10 +26,11 @@ export function CreateCameraButton({
     <>
       <Button type="button" onClick={() => setOpen(true)}>
         <Plus data-icon="inline-start" />
-        绑定摄像头
+        高级绑定
       </Button>
       <CameraDialog
         mode="create"
+        advanced
         projectId={projectId}
         devices={devices}
         open={open}

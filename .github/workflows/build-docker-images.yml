@@ -1,22 +1,19 @@
 name: Build Docker Images
-run-name: ${{ github.event_name == 'push' && inputs.target_environment == '' && inputs.service == '' && 'Build development affected services' || format('Build {0} {1}', inputs.target_environment, inputs.service || 'all') }}
+run-name: ${{ format('Build {0} {1}', inputs.target_environment || 'production', inputs.service || 'all') }}
 
 # Builds immutable application images on environment-specific runners and
 # publishes them to Tencent CCR. Deployment is intentionally handled by
 # environment-specific workflows after this workflow succeeds.
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       target_environment:
         description: "Image configuration target"
         required: true
-        default: development
+        default: production
         type: choice
         options:
-          - development
           - production
       service:
         description: "Service(s) to build. Use all or comma-separated values like api,admin"
@@ -46,8 +43,8 @@ permissions:
   actions: read
 
 concurrency:
-  group: ${{ (github.event_name == 'push' || inputs.target_environment == 'development') && 'build-docker-images-development' || format('build-docker-images-{0}-{1}', inputs.target_environment, inputs.service) }}
-  cancel-in-progress: ${{ github.event_name != 'push' && inputs.target_environment != 'development' }}
+  group: ${{ inputs.target_environment == 'development' && 'build-docker-images-development' || format('build-docker-images-{0}-{1}', inputs.target_environment, inputs.service) }}
+  cancel-in-progress: ${{ inputs.target_environment != 'development' }}
 
 env:
   TENCENT_CCR_REGISTRY: ${{ vars.TENCENT_CCR_REGISTRY }}
