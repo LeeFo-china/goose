@@ -35,7 +35,7 @@ export function CamerasWorkspaceTabs({
                 className={adminTabsTriggerClassName}
                 value="devices"
               >
-                设备接入
+                设备管理
               </TabsTrigger>
             </TabsList>
             {summary || actions ? (

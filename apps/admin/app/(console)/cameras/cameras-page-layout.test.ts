@@ -43,11 +43,23 @@ describe("cameras page layout contract", () => {
 
     expect(tabs).toContain("actions?: ReactNode");
     expect(tabs).toContain("{actions ? (");
-    expect(tabs).toContain("h-auto min-w-max justify-start gap-5");
+    expect(tabs).toContain("className={adminTabsListClassName}");
     expect(tabs).not.toContain("ml-5");
 
     expect(loading).not.toContain("size-10 shrink-0");
     expect(loading).not.toContain("h-6 w-32");
-    expect(loading).toContain("h-auto min-w-max justify-start gap-5");
+    expect(loading).toContain("adminTabsListClassName");
+  });
+
+  test("uses the one-name GB28181 flow as the normal camera entry", () => {
+    const { page, tabs } = readCamerasSources();
+
+    expect(page).toContain("Gb28181OnboardingButton");
+    expect(page).toContain('projectLabel={group.project.address || group.project.name || "当前项目"}');
+    expect(page).toContain('projects={projects}');
+    expect(page).not.toContain("CreateTencentDeviceButton");
+    expect(page).toContain("填写名称，按提示配置设备，检测成功后自动绑定当前项目。");
+    expect(tabs).toContain("设备管理");
+    expect(tabs).not.toContain("设备接入");
   });
 });

@@ -1,6 +1,7 @@
 "use client";
 
 import { StatusAlert } from "@/components/admin/status-alert";
+import { Gb28181OnboardingButton } from "@/components/cameras/gb28181-onboarding-dialog";
 import { CreateTencentDeviceButton } from "@/components/cameras/tencent-device-actions";
 import type { TenantDeviceAsset } from "@/components/cameras/camera-types";
 import {
@@ -39,9 +40,9 @@ export function TenantDeviceAssetsPanel({
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="shrink-0 flex flex-col justify-between gap-3 border-b bg-card px-4 py-3 md:flex-row md:items-center">
         <div className="min-w-0">
-          <h2 className="text-sm font-medium">设备资产池</h2>
+          <h2 className="text-sm font-medium">设备管理</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            统一管理当前公司设备资产，新增设备后同步通道，再绑定到项目摄像头。
+            查看设备状态，或处理 NVR、多通道和手动绑定等高级场景。
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -103,7 +104,18 @@ export function TenantDeviceAssetsPanel({
                   )}
                 </TableCell>
                 <TableCell className="text-right">
-                  <TenantDeviceRowActions asset={asset} />
+                  <div className="flex justify-end gap-2">
+                    {asset.vendor === "tencent_iotvideo_industry"
+                      && asset.vendor_channel_id === null
+                      && !asset.bound_camera_id
+                      && asset.source_project_id ? (
+                        <Gb28181OnboardingButton
+                          projectId={asset.source_project_id || projectId || undefined}
+                          initialAsset={asset}
+                        />
+                      ) : null}
+                    <TenantDeviceRowActions asset={asset} />
+                  </div>
                 </TableCell>
               </TableRow>
             ))}

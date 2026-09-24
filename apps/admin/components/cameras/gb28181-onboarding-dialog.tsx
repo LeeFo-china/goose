@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Loader2, Plus, RadioTower } from "lucide-react";
+import { FormSelect } from "@/components/admin/form-select";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Gb28181AccessDetails } from "@/components/cameras/gb28181-onboarding-access";
 import {
@@ -12,6 +13,7 @@ import {
   type Gb28181ChannelAsset,
 } from "@/components/cameras/gb28181-onboarding-rules";
 import type {
+  CameraProjectOption,
   Pagination,
   TenantDeviceAsset,
   TencentSipServerConfig,
@@ -30,7 +32,7 @@ import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { requestBackendJson } from "@/lib/backend-client";
 
-type OnboardingStep = "name" | "configure" | "choose-channel" | "success";
+type OnboardingStep = "project" | "name" | "configure" | "choose-channel" | "success";
 
 type TencentDeviceCreateResult = {
   device: TencentDeviceSecretResult;
@@ -68,20 +70,32 @@ async function loadDeviceAssets(deviceId: string) {
 export function Gb28181OnboardingButton({
   projectId,
   projectLabel,
+  projects = [],
+  initialAsset,
   size = "sm",
 }: {
-  projectId: string;
-  projectLabel: string;
+  projectId?: string;
+  projectLabel?: string;
+  projects?: CameraProjectOption[];
+  initialAsset?: TenantDeviceAsset;
   size?: "sm" | "default";
 }) {
   const router = useRouter();
+  const fixedProjectId = projectId || initialAsset?.source_project_id || "";
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
-  const [step, setStep] = useState<OnboardingStep>("name");
-  const [name, setName] = useState("");
+  const [step, setStep] = useState<OnboardingStep>(fixedProjectId ? "name" : "project");
+  const [selectedProjectId, setSelectedProjectId] = useState(fixedProjectId);
+  const [name, setName] = useState(initialAsset?.vendor_device_name || "");
   const [error, setError] = useState("");
   const [created, setCreated] = useState<TencentDeviceCreateResult | null>(null);
   const [channels, setChannels] = useState<Gb28181ChannelAsset[]>([]);
+  const activeProjectId = fixedProjectId || selectedProjectId;
+  const selectedProject = projects.find((project) => project.id === activeProjectId);
+  const activeProjectLabel = projectLabel
+    || selectedProject?.address
+    || selectedProject?.name
+    || "当前项目";
 
   function resetForNext() {
     setStep("name");
@@ -94,7 +108,33 @@ export function Gb28181OnboardingButton({
   function changeOpen(nextOpen: boolean) {
     if (pending) return;
     setOpen(nextOpen);
-    if (!nextOpen) resetForNext();
+    if (!nextOpen) {
+      setSelectedProjectId(fixedProjectId);
+      setStep(fixedProjectId ? "name" : "project");
+      setName(initialAsset?.vendor_device_name || "");
+      setError("");
+      setCreated(null);
+      setChannels([]);
+    }
+  }
+
+  function openDialog() {
+    setOpen(true);
+    if (!initialAsset) return;
+
+    setError("");
+    startTransition(async () => {
+      try {
+        const result = await requestBackendJson<TencentDeviceCreateResult>(
+          `/tenant-devices/${initialAsset.id}/tencent-access`,
+        );
+        setName(result.device.device_name || initialAsset.vendor_device_name || "摄像头");
+        setCreated(result);
+        setStep("configure");
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : "读取接入信息失败");
+      }
+    });
   }
 
   function createDevice() {
@@ -105,7 +145,7 @@ export function Gb28181OnboardingButton({
     startTransition(async () => {
       try {
         const result = await requestBackendJson<TencentDeviceCreateResult>(
-          `/projects/${projectId}/cameras/tencent-devices`,
+          `/projects/${activeProjectId}/cameras/tencent-devices`,
           {
             method: "POST",
             body: JSON.stringify({
@@ -126,7 +166,7 @@ export function Gb28181OnboardingButton({
 
   async function bindChannel(channel: Gb28181ChannelAsset) {
     if (!created?.device.device_id) return;
-    await requestBackendJson(`/projects/${projectId}/cameras`, {
+    await requestBackendJson(`/projects/${activeProjectId}/cameras`, {
       method: "POST",
       body: JSON.stringify(buildGb28181CameraPayload({
         name,
@@ -149,7 +189,7 @@ export function Gb28181OnboardingButton({
       try {
         await requestBackendJson("/tenant-devices/sync", { method: "POST" });
         const assets = await loadDeviceAssets(deviceId);
-        const decision = decideGb28181Assets(assets, deviceId, projectId);
+        const decision = decideGb28181Assets(assets, deviceId, activeProjectId);
 
         if (decision.kind === "already-bound") {
           setStep("success");
@@ -191,9 +231,15 @@ export function Gb28181OnboardingButton({
 
   return (
     <>
-      <Button type="button" size={size} onClick={() => setOpen(true)}>
+      <Button
+        type="button"
+        size={size}
+        variant={initialAsset ? "outline" : "default"}
+        disabled={pending}
+        onClick={openDialog}
+      >
         <Plus data-icon="inline-start" />
-        接入摄像头
+        {initialAsset ? "继续接入" : "接入摄像头"}
       </Button>
       <Dialog open={open} onOpenChange={changeOpen}>
         <DialogContent className="max-h-[90vh] max-w-[640px] overflow-y-auto">
@@ -203,14 +249,41 @@ export function Gb28181OnboardingButton({
             </DialogTitle>
             <DialogDescription>
               {step === "name"
-                ? `接入到「${projectLabel}」，每台摄像头只需填写一个名称。`
+                ? `接入到「${activeProjectLabel}」，每台摄像头只需填写一个名称。`
+                : step === "project"
+                  ? "先选择摄像头所属项目，连续添加时无需重复选择。"
                 : step === "configure"
                   ? "把以下参数填写到摄像头的 GB28181 配置页面并保存。"
                   : step === "choose-channel"
                     ? "该设备返回了多个通道，请选择要接入当前项目的通道。"
-                    : `「${name}」已绑定到「${projectLabel}」。`}
+                    : `「${name}」已绑定到「${activeProjectLabel}」。`}
             </DialogDescription>
           </DialogHeader>
+
+          {step === "project" ? (
+            <Field>
+              <FieldLabel htmlFor="gb28181-project">所属项目</FieldLabel>
+              <FormSelect
+                id="gb28181-project"
+                value={selectedProjectId}
+                disabled={pending}
+                placeholder="请选择项目"
+                options={projects
+                  .filter((project) => (
+                    project.status !== "invalid" && project.status !== "acceptance"
+                  ))
+                  .map((project) => ({
+                    value: project.id,
+                    label: project.label
+                      || project.address
+                      || project.name
+                      || "未命名项目",
+                  }))}
+                onChange={setSelectedProjectId}
+              />
+              <FieldDescription>竣工验收或已失效项目不能继续接入摄像头。</FieldDescription>
+            </Field>
+          ) : null}
 
           {step === "name" ? (
             <Field>
@@ -285,6 +358,20 @@ export function Gb28181OnboardingButton({
                 <Button type="button" disabled={pending || !name.trim()} onClick={createDevice}>
                   {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
                   生成接入信息
+                </Button>
+              </>
+            ) : null}
+            {step === "project" ? (
+              <>
+                <Button type="button" variant="outline" disabled={pending} onClick={() => changeOpen(false)}>
+                  取消
+                </Button>
+                <Button
+                  type="button"
+                  disabled={!selectedProjectId}
+                  onClick={() => setStep("name")}
+                >
+                  下一步
                 </Button>
               </>
             ) : null}

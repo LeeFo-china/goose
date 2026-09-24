@@ -147,6 +147,20 @@ class TenantDeviceController extends TenantBaseController {
     return ResponseHandler.success(result);
   }
 
+  @Get("/tenant-devices/:id/tencent-access")
+  async getTenantTencentDeviceAccessInfo(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const paramsResult = TenantDeviceParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const result = await tenantDeviceService.getTenantTencentDeviceAccessInfo({
+      authContext,
+      id: paramsResult.data.id,
+    });
+
+    return ResponseHandler.success(result);
+  }
+
   @Post("/tenant-devices")
   async createTenantDevice(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getRequiredTenantContext(request);
