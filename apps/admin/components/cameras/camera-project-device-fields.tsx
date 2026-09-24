@@ -21,12 +21,16 @@ export function CameraProjectDeviceFields({
   selectedProject,
   projectLoading,
   projectSelectError,
+  deviceKeyword,
   deviceLoading,
+  hasMoreDevices,
   availableDevices,
   firstDeviceKeyByVendor,
   setProjectKeyword,
   setSelectedProjectId,
   setSelectedProject,
+  setDeviceKeyword,
+  loadMoreDevices,
 }: {
   form: UseFormReturn<CameraFormValues>;
   pending: boolean;
@@ -37,12 +41,16 @@ export function CameraProjectDeviceFields({
   selectedProject: CameraProjectOption | null;
   projectLoading: boolean;
   projectSelectError: string;
+  deviceKeyword: string;
   deviceLoading: boolean;
+  hasMoreDevices: boolean;
   availableDevices: CameraDeviceChannel[];
   firstDeviceKeyByVendor: Record<CameraFormValues["vendor"], string>;
   setProjectKeyword: (value: string) => void;
   setSelectedProjectId: (value: string) => void;
   setSelectedProject: (value: CameraProjectOption | null) => void;
+  setDeviceKeyword: (value: string) => void;
+  loadMoreDevices: () => void;
 }) {
   return (
     <>
@@ -109,6 +117,23 @@ export function CameraProjectDeviceFields({
         </FieldDescription>
         {projectSelectError ? <StatusAlert>{projectSelectError}</StatusAlert> : null}
       </Field>
+      <Field className="md:col-span-2">
+        <FieldLabel htmlFor="camera-device-search">查找设备 / 通道</FieldLabel>
+        <Input
+          id="camera-device-search"
+          value={deviceKeyword}
+          disabled={pending || !activeProjectId}
+          placeholder="输入设备名称、设备 ID 或通道名称"
+          onChange={(event) => {
+            setDeviceKeyword(event.target.value);
+            form.setValue("device_key", "", {
+              shouldDirty: true,
+              shouldValidate: true,
+            });
+          }}
+        />
+        <FieldDescription>按关键词分页查询，设备超过 100 个也可继续查找。</FieldDescription>
+      </Field>
       <Controller
         name="vendor"
         control={form.control}
@@ -168,6 +193,18 @@ export function CameraProjectDeviceFields({
                   : "选择房产项目后才会加载可绑定设备资产。"}
             </FieldDescription>
             <FieldError errors={[fieldState.error]} />
+            {hasMoreDevices ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={pending || deviceLoading}
+                onClick={loadMoreDevices}
+              >
+                {deviceLoading ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
+                加载更多通道
+              </Button>
+            ) : null}
           </Field>
         )}
       />

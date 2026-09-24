@@ -149,6 +149,8 @@ class TenantDeviceController extends TenantBaseController {
 
   @Get("/tenant-devices/:id/tencent-access")
   async getTenantTencentDeviceAccessInfo(request: FastifyRequest, reply: FastifyReply) {
+    reply.header("Cache-Control", "private, no-store");
+    reply.header("Referrer-Policy", "no-referrer");
     const authContext = await this.getRequiredTenantContext(request);
     const paramsResult = TenantDeviceParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);

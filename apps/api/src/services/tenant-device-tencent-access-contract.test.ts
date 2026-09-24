@@ -15,7 +15,10 @@ describe("tenant Tencent device access contract", () => {
     expect(service).toContain('assertTenantDeviceAccess(input.authContext, "project.update")');
     expect(service).toContain("tenantDeviceRepository.findById(input.id, tenantId)");
     expect(service).toContain('device.vendor !== "tencent_iotvideo_industry"');
+    expect(service).toContain("accessPolicyService.canAccessProject");
+    expect(service).toContain('projectId,\n    "project.update"');
     expect(service).toContain("getDevicePassword(device.vendor_device_serial)");
     expect(controller).toContain('@Get("/tenant-devices/:id/tencent-access")');
+    expect(controller).toContain('reply.header("Cache-Control", "private, no-store")');
   });
 });

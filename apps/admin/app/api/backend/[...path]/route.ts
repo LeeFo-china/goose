@@ -158,6 +158,7 @@ async function proxyBackend(request: Request, context: RouteContext) {
   // Private images and secret configuration must remain non-cacheable, including
   // early errors, without changing unrelated proxy routes.
   if (path[0] === "tenant" && path[1] === "rendering-library"
+    || path[0] === "tenant-devices" && path[2] === "tencent-access"
     || path[0] === "platform" && path[1] === "ai-config" && path[2] === "secret-settings"
     || path[0] === "platform" && path[1] === "customer-rendering-settings") {
     response.headers.set("Cache-Control", "private, no-store");

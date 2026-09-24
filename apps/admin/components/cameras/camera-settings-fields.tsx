@@ -17,13 +17,13 @@ import { boolOptions, capabilityOptions, playProtocolOptions, type CameraFormVal
 
 export function CameraSettingsFields({
   form,
-  mode,
+  showAdvanced,
   pending,
   selectedCapabilities,
   toggleCapability,
 }: {
   form: UseFormReturn<CameraFormValues>;
-  mode: "create" | "edit";
+  showAdvanced: boolean;
   pending: boolean;
   selectedCapabilities: CameraFormValues["capabilities"];
   toggleCapability: (capability: CameraFormValues["capabilities"][number]) => void;
@@ -48,7 +48,7 @@ export function CameraSettingsFields({
           </Field>
         )}
       />
-      {mode === "edit" ? (
+      {showAdvanced ? (
         <Collapsible className="md:col-span-2">
           <CollapsibleTrigger asChild>
             <Button type="button" variant="outline" className="w-full justify-between">

@@ -26,10 +26,8 @@ import {
 
 function CameraEmptyState({
   cameraKeyword,
-  projects,
 }: {
   cameraKeyword: string;
-  projects: Parameters<typeof Gb28181OnboardingButton>[0]["projects"];
 }) {
   if (cameraKeyword) {
     return (
@@ -53,10 +51,10 @@ function CameraEmptyState({
         <div className="text-center">
           <h2 className="text-base font-semibold">接入第一台摄像头</h2>
           <p className="mx-auto mt-2 max-w-xl text-sm text-muted-foreground">
-            填写名称，按提示配置设备，检测成功后自动绑定当前项目。
+            填写名称，按提示配置设备，检测成功后自动绑定所选项目。
           </p>
         </div>
-        <Gb28181OnboardingButton projects={projects} />
+        <Gb28181OnboardingButton />
       </div>
     </div>
   );
@@ -91,6 +89,7 @@ export default async function CamerasPage({
     : projects[0]?.id || "";
   const {
     list: tenantDevices,
+    pagination: tenantDevicePagination,
     error: tenantDeviceError,
   } = await getTenantDevices(token);
   const unboundTenantDeviceCount = tenantDevices.filter((device) => !device.bound_camera_id).length;
@@ -120,7 +119,7 @@ export default async function CamerasPage({
   );
   const headerAction = showSetupFlow || !projects.length
     ? null
-    : <Gb28181OnboardingButton projects={projects} />;
+    : <Gb28181OnboardingButton />;
 
   return (
     <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
@@ -274,7 +273,6 @@ export default async function CamerasPage({
                   {!cameraProjectGroups.length && !cameraProjectError ? (
                     <CameraEmptyState
                       cameraKeyword={cameraKeyword}
-                      projects={projects}
                     />
                   ) : null}
                 </div>
@@ -332,6 +330,7 @@ export default async function CamerasPage({
               <TenantDeviceAssetsPanel
                 assets={tenantDevices}
                 error={tenantDeviceError}
+                pagination={tenantDevicePagination}
                 projectId={selectedProjectId}
               />
             ) : (

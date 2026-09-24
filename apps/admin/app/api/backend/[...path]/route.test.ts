@@ -56,6 +56,15 @@ describe("admin backend proxy redirects", () => {
     }), { params: Promise.resolve({ path: ["platform", "ai-config", "secret-settings", "ARK_API_KEY"] }) });
     expect(response.headers.get("cache-control")).toBe("private, no-store");
   });
+  test.each([200, 403, 500])("keeps camera SIP access responses private for status %s", async (status) => {
+    backendFetch.mockResolvedValueOnce(Response.json({ success: status === 200 }, { status }));
+    const { GET } = await import("./route");
+    const response = await GET(new Request("https://admin.example.com/api/backend/tenant-devices/device-id/tencent-access"), {
+      params: Promise.resolve({ path: ["tenant-devices", "device-id", "tencent-access"] }),
+    });
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+  });
   beforeEach(() => {
     backendFetch.mockClear();
     getAdminToken.mockResolvedValue("admin-token");
