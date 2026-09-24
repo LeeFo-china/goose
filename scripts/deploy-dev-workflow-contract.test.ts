@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
 const workflow = readFileSync(
-  new URL("../.github/workflows/deploy-dev.yml", import.meta.url),
+  new URL("../.github/workflows/deploy-dev.yml.disabled", import.meta.url),
   "utf8",
 );
 const socialVideoWorkerDockerfile = readFileSync(

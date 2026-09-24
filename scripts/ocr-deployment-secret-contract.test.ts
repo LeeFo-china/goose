@@ -14,7 +14,7 @@ function workflowStep(workflow: string, name: string): string {
 
 const devCompose = read("deploy/docker-compose.dev.yml");
 const productionCompose = read("deploy/docker-compose.api.yml");
-const devDeploy = read(".github/workflows/deploy-dev.yml");
+const devDeploy = read(".github/workflows/deploy-dev.yml.disabled");
 const productionDeploy = read(".github/workflows/deploy-docker-services.yml");
 
 const requiredComposeValue =
