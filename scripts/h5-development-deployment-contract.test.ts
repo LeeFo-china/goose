@@ -148,7 +148,7 @@ describe("H5 development image", () => {
 describe("H5 development hostname cutover", () => {
   test("routes H5 pages to H5 and compatibility APIs to API", () => {
     const nginx = readRepositoryFile("deploy/nginx/gooes-dev.conf");
-    const workflow = readRepositoryFile(".github/workflows/deploy-dev.yml");
+    const workflow = readRepositoryFile(".github/workflows/deploy-dev.yml.disabled");
     const apiServer = nginx.slice(
       nginx.indexOf("server_name api-dev.goodcms.cn;"),
       nginx.indexOf("server_name admin-dev.goodcms.cn;"),

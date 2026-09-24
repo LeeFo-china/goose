@@ -15,19 +15,19 @@ const buildWorkflow = readFileSync(
   "utf8",
 );
 const autoDeployDevWorkflow = readFileSync(
-  new URL("../.github/workflows/auto-deploy-dev.yml", import.meta.url),
+  new URL("../.github/workflows/auto-deploy-dev.yml.disabled", import.meta.url),
   "utf8",
 );
 const verifyDevMigrationHistoryWorkflow = readFileSync(
-  new URL("../.github/workflows/verify-dev-migration-history.yml", import.meta.url),
+  new URL("../.github/workflows/verify-dev-migration-history.yml.disabled", import.meta.url),
   "utf8",
 );
 const deployDevWorkflow = readFileSync(
-  new URL("../.github/workflows/deploy-dev.yml", import.meta.url),
+  new URL("../.github/workflows/deploy-dev.yml.disabled", import.meta.url),
   "utf8",
 );
 const releaseDevWorkflowUrl = new URL(
-  "../.github/workflows/release-dev.yml",
+  "../.github/workflows/release-dev.yml.disabled",
   import.meta.url,
 );
 const releaseDevWorkflow = existsSync(releaseDevWorkflowUrl)
@@ -53,7 +53,7 @@ const freezeRenderingAdmissionWorkflow = readFileSync(
   "utf8",
 );
 const migrateDevWorkflow = readFileSync(
-  new URL("../.github/workflows/migrate-dev-database.yml", import.meta.url),
+  new URL("../.github/workflows/migrate-dev-database.yml.disabled", import.meta.url),
   "utf8",
 );
 const workflowTaskAccessibleRpcMigration = readFileSync(
@@ -2422,6 +2422,31 @@ describe("reusable build workflow", () => {
     /\bsystemctl(?:\s|$)/i,
     /\bnginx(?:\s|$)/i,
   ] as const;
+
+  test("archives every workflow that requires the retired development server", () => {
+    const retiredWorkflows = [
+      "auto-deploy-dev.yml",
+      "deploy-dev.yml",
+      "migrate-dev-database.yml",
+      "release-dev.yml",
+      "verify-dev-douyin-material-note-explain.yml",
+      "verify-dev-migration-history.yml",
+      "verify-dev-rendering-publication.yml",
+      "verify-dev-supplier-purchase-workflow-explain.yml",
+      "verify-dev-web-deployment-gate.yml",
+    ];
+
+    for (const workflow of retiredWorkflows) {
+      expect(
+        existsSync(new URL(`../.github/workflows/${workflow}`, import.meta.url)),
+      ).toBe(false);
+      expect(
+        existsSync(
+          new URL(`../.github/workflows/${workflow}.disabled`, import.meta.url),
+        ),
+      ).toBe(true);
+    }
+  });
 
   test("exposes stable inputs, outputs, and environment-specific build plans", () => {
     expect(buildWorkflow).not.toContain("\n  push:");
