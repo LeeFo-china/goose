@@ -300,6 +300,7 @@ export function CameraDialog({
             ) : null}
             <CameraSettingsFields
               form={form}
+              mode={mode}
               pending={pending}
               selectedCapabilities={selectedCapabilities}
               toggleCapability={toggleCapability}
