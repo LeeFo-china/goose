@@ -30,19 +30,20 @@ describe("cameras page layout contract", () => {
     );
   });
 
-  test("starts the camera workspace with tabs and actions instead of a visual section title", () => {
+  test("starts the camera workspace with tabs instead of duplicate global actions", () => {
     const { loading, page, tabs } = readCamerasSources();
 
     expect(page).toContain('<h1 className="sr-only">工地监控</h1>');
-    expect(page).toContain("actions={headerAction}");
+    expect(page).not.toContain("actions={headerAction}");
+    expect(page).not.toContain("summary={(");
     expect(page).not.toContain("truncate text-xl font-semibold tracking-normal");
     expect(page).not.toContain("维护项目摄像头、客户可见权限和设备资产接入。");
     expect(page).not.toContain(
       "flex size-10 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground",
     );
 
-    expect(tabs).toContain("actions?: ReactNode");
-    expect(tabs).toContain("{actions ? (");
+    expect(tabs).not.toContain("actions?: ReactNode");
+    expect(tabs).not.toContain("summary?: ReactNode");
     expect(tabs).toContain("className={adminTabsListClassName}");
     expect(tabs).not.toContain("ml-5");
 
@@ -61,5 +62,16 @@ describe("cameras page layout contract", () => {
     expect(page).toContain("填写名称，按提示配置设备，检测成功后自动绑定所选项目。");
     expect(tabs).toContain("设备管理");
     expect(tabs).not.toContain("设备接入");
+  });
+
+  test("keeps one contextual entry per project and uses plain readable counts", () => {
+    const { page } = readCamerasSources();
+
+    expect(page).toContain('label="接入到此项目"');
+    expect(page).toContain("{group.summary.camera_count} 台摄像头");
+    expect(page).toContain("在线 {group.summary.online_count}");
+    expect(page).toContain("group.summary.hidden_count > 0");
+    expect(page).not.toContain("腾讯云 {group.summary.tencent_count}");
+    expect(page).not.toContain('<Badge variant="outline">共 {group.summary.camera_count}</Badge>');
   });
 });
