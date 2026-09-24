@@ -2,8 +2,11 @@ import { describe, expect, test } from "bun:test";
 import type { TenantDeviceAsset } from "@/components/cameras/camera-types";
 import {
   buildGb28181CameraPayload,
+  decideGb28181Assets,
   decideGb28181Channel,
   findGb28181Channels,
+  getNextTenantDevicePage,
+  type Gb28181ChannelAsset,
 } from "@/components/cameras/gb28181-onboarding-rules";
 
 function asset(overrides: Partial<TenantDeviceAsset>): TenantDeviceAsset {
@@ -28,6 +31,12 @@ function asset(overrides: Partial<TenantDeviceAsset>): TenantDeviceAsset {
     updated_at: "2026-09-24T00:00:00.000Z",
     ...overrides,
   };
+}
+
+function channelAsset(
+  overrides: Partial<Gb28181ChannelAsset>,
+): Gb28181ChannelAsset {
+  return asset(overrides) as Gb28181ChannelAsset;
 }
 
 describe("GB28181 onboarding rules", () => {
@@ -71,8 +80,8 @@ describe("GB28181 onboarding rules", () => {
   });
 
   test("automatically selects one channel and asks when several are available", () => {
-    const first = asset({ id: "first", vendor_channel_id: "channel-1" });
-    const second = asset({ id: "second", vendor_channel_id: "channel-2" });
+    const first = channelAsset({ id: "first", vendor_channel_id: "channel-1" });
+    const second = channelAsset({ id: "second", vendor_channel_id: "channel-2" });
 
     expect(decideGb28181Channel([])).toEqual({ kind: "not-found" });
     expect(decideGb28181Channel([first])).toEqual({ kind: "selected", channel: first });
@@ -80,5 +89,35 @@ describe("GB28181 onboarding rules", () => {
       kind: "choose",
       channels: [first, second],
     });
+  });
+
+  test("continues paginated asset lookup until the final page", () => {
+    expect(getNextTenantDevicePage({ page: 1, pageSize: 100, total: 205, totalPages: 3 }))
+      .toBe(2);
+    expect(getNextTenantDevicePage({ page: 3, pageSize: 100, total: 205, totalPages: 3 }))
+      .toBeNull();
+    expect(getNextTenantDevicePage(undefined)).toBeNull();
+  });
+
+  test("treats a device already bound to the current project as completed", () => {
+    const bound = asset({
+      id: "bound",
+      bound_project_id: "project-1",
+      bound_camera_id: "camera-1",
+    });
+
+    expect(decideGb28181Assets([bound], "device-1", "project-1"))
+      .toEqual({ kind: "already-bound", asset: bound });
+  });
+
+  test("blocks a device already bound to another project", () => {
+    const bound = asset({
+      id: "bound-elsewhere",
+      bound_project_id: "project-2",
+      bound_camera_id: "camera-2",
+    });
+
+    expect(decideGb28181Assets([bound], "device-1", "project-1"))
+      .toEqual({ kind: "bound-elsewhere", asset: bound });
   });
 });
