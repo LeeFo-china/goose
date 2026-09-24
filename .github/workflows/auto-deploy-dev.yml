@@ -1,11 +1,10 @@
 name: Auto Deploy Dev
 run-name: Auto dev deploy ${{ github.event.workflow_run.head_sha }}
 
-on:
-  workflow_run:
-    workflows: [Build Docker Images]
-    types: [completed]
-    branches: [main]
+# The development server was retired in September 2026. Keep the workflow
+# body as audited recovery material, but expose no trigger while no matching
+# self-hosted runner exists.
+on: {}
 
 permissions:
   contents: read

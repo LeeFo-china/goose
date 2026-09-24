@@ -176,6 +176,12 @@ const registryUsageBlocks = [
     "Login to Tencent CCR",
     'docker login "$TENCENT_CCR_REGISTRY"',
   ],
+  [
+    "production digest cleanup",
+    deployProductionWorkflow,
+    "Clean up old unused production CCR digest images",
+    '--repository-prefix "${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}/"',
+  ],
 ] as const;
 const registryKey = "TENCENT_CCR_REGISTRY";
 const namespaceKey = "TENCENT_CCR_NAMESPACE";
@@ -1026,10 +1032,10 @@ describe("Tencent CCR registry configuration", () => {
   );
 
   test("tracks every registry credential and image-path usage", () => {
-    expect(registryUsageBlocks).toHaveLength(10);
+    expect(registryUsageBlocks).toHaveLength(11);
     expect(registryWorkflows.reduce((count, [, workflow]) => {
       return count + extractSensitiveRegistrySteps(workflow).length;
-    }, 0)).toBe(10);
+    }, 0)).toBe(11);
   });
 
   test("validates every extracted sensitive registry step", () => {
@@ -1040,8 +1046,8 @@ describe("Tencent CCR registry configuration", () => {
       }));
     });
 
-    expect(sensitiveSteps).toHaveLength(10);
-    expect(registryUsageBlocks).toHaveLength(10);
+    expect(sensitiveSteps).toHaveLength(11);
+    expect(registryUsageBlocks).toHaveLength(11);
     for (const { step, workflow } of sensitiveSteps) {
       const knownUsage = getKnownRegistryUsage(workflow, step);
       expect(knownUsage).toBeDefined();
@@ -2418,7 +2424,7 @@ describe("reusable build workflow", () => {
   ] as const;
 
   test("exposes stable inputs, outputs, and environment-specific build plans", () => {
-    expect(buildWorkflow).toContain("push:\n    branches: [main]");
+    expect(buildWorkflow).not.toContain("\n  push:");
     expect(buildWorkflow).toContain("workflow_dispatch:");
     expect(buildWorkflow).toContain("workflow_call:");
     expect(buildWorkflow).toContain(
@@ -2537,21 +2543,19 @@ describe("reusable build workflow", () => {
     }
   });
 
-  test("distinguishes a direct push from a reusable call whose caller event is push", () => {
+  test("does not route main pushes to the retired development server", () => {
+    expect(buildWorkflow).not.toContain("\n  push:");
     expect(buildWorkflow).toContain(
-      "run-name: ${{ github.event_name == 'push' && inputs.target_environment == '' && inputs.service == '' && 'Build development affected services' || format('Build {0} {1}', inputs.target_environment, inputs.service || 'all') }}",
+      "run-name: ${{ format('Build {0} {1}', inputs.target_environment || 'production', inputs.service || 'all') }}",
     );
     expect(buildWorkflow).toContain(
-      "group: ${{ (github.event_name == 'push' || inputs.target_environment == 'development') && 'build-docker-images-development' || format('build-docker-images-{0}-{1}', inputs.target_environment, inputs.service) }}",
+      "group: ${{ inputs.target_environment == 'development' && 'build-docker-images-development' || format('build-docker-images-{0}-{1}', inputs.target_environment, inputs.service) }}",
     );
     expect(buildWorkflow).toContain(
-      "cancel-in-progress: ${{ github.event_name != 'push' && inputs.target_environment != 'development' }}",
+      "cancel-in-progress: ${{ inputs.target_environment != 'development' }}",
     );
-    expect(buildWorkflow).toContain(
-      "DIRECT_PUSH: ${{ github.event_name == 'push' && inputs.target_environment == '' && inputs.service == '' }}",
-    );
-    expect(buildWorkflow).toContain('if [ "${DIRECT_PUSH}" = "true" ]; then');
-    expect(buildWorkflow).not.toContain('if [ "${GITHUB_EVENT_NAME}" = "push" ]; then');
+    expect(buildWorkflow).toContain("default: production");
+    expect(buildWorkflow).not.toContain("default: development");
   });
 
   test("serializes development builds and reclaims only disposable Docker data", () => {
@@ -3088,7 +3092,8 @@ describe("reusable build workflow", () => {
     }
   });
 
-  test("keeps automatic development deployment bound to successful push evidence", () => {
+  test("keeps retired automatic development deployment disabled", () => {
+    expect(autoDeployDevWorkflow).toContain("on: {}");
     expect(autoDeployDevWorkflow).toContain(
       "gh run download \"${UPSTREAM_RUN_ID}\" --repo \"${GITHUB_REPOSITORY}\" -n dev-build-plan",
     );
@@ -3151,20 +3156,13 @@ describe("development orchestrator", () => {
     );
   });
 
-  test("provides a development-only manual release entrypoint", () => {
+  test("keeps the retired development release implementation undispatchable", () => {
     expect(releaseDevWorkflow).toContain("name: Release Dev");
-    expect(releaseDevWorkflow).toContain("workflow_dispatch:");
+    expect(releaseDevWorkflow).toContain("on: {}");
     expect(releaseDevWorkflow).not.toContain("workflow_call:");
+    expect(releaseDevWorkflow).not.toContain("workflow_dispatch:");
     expect(releaseDevWorkflow).not.toContain("\n  push:");
     expect(releaseDevWorkflow).not.toContain("workflow_run:");
-    const serviceInput = releaseDevWorkflow.slice(
-      releaseDevWorkflow.indexOf("      service:"),
-      releaseDevWorkflow.indexOf("      operation:"),
-    );
-    expect(serviceInput).toContain("required: true");
-    expect(serviceInput).toContain("type: string");
-    expect(releaseDevWorkflow).toContain("options: [release, rollback]");
-    expect(releaseDevWorkflow).toContain("reason:");
     expect(releaseDevWorkflow).toContain("contents: read");
     expect(releaseDevWorkflow).toContain("actions: read");
     expect(releaseDevWorkflow).toContain("group: admin-release-development");
@@ -3411,8 +3409,9 @@ describe("development orchestrator", () => {
     expect(deployWeb).toContain(
       "gate_receipt_b64: ${{ needs.web-gate.outputs.receipt_b64 }}",
     );
-    expect(autoDeployDevWorkflow).toContain("types: [completed]");
-    expect(autoDeployDevWorkflow).toContain("branches: [main]");
+    expect(autoDeployDevWorkflow).toContain("on: {}");
+    expect(autoDeployDevWorkflow).not.toContain("types: [completed]");
+    expect(autoDeployDevWorkflow).not.toContain("branches: [main]");
     expect(autoDeployDevWorkflow).toContain(
       "github.event.workflow_run.conclusion == 'success'",
     );
