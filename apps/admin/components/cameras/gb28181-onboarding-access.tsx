@@ -37,6 +37,7 @@ export function Gb28181AccessDetails({
         label="设备ID / 用户名"
         value={device.sip_username || device.device_code || device.device_id}
       />
+      <AccessValue label="视频通道编码" value={device.video_channel_code} />
       <AccessValue label="认证密码" value={device.sip_password} />
       <AccessValue
         label="传输协议"

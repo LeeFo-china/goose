@@ -1,3 +1,4 @@
+import { buildGb28181VideoChannelCode } from "@/services/gb28181-channel-code";
 import { assertTenantDeviceAccess } from "./access";
 import {
   Errors,
@@ -42,6 +43,7 @@ export async function getTenantTencentDeviceAccessInfo(input: {
       device_name: device.vendor_device_name,
       device_type_label: device.device_type,
       sip_username: device.vendor_device_code || device.vendor_device_serial,
+      video_channel_code: buildGb28181VideoChannelCode(device.vendor_device_code),
       sip_password: passwordResult.password,
       sip_transport_protocol: "TCP" as const,
       source_project_id: device.source_project_id,
