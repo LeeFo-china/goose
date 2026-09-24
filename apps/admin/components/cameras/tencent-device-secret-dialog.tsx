@@ -21,6 +21,7 @@ export type TencentDeviceSecretResult = {
   name_adjusted?: boolean | null;
   device_type_label?: string | null;
   sip_username?: string | null;
+  video_channel_code?: string | null;
   sip_password?: string | null;
   sip_transport_protocol?: string | null;
   request_id?: string | null;
@@ -76,6 +77,7 @@ export function DeviceSecretDialog({
           ) : null}
           <SecretItem label="设备类型" value={device.device_type_label} />
           <SecretItem label="SIP用户名" value={device.sip_username || device.device_code} />
+          <SecretItem label="视频通道编码" value={device.video_channel_code} />
           <SecretItem label="SIP认证密码" value={device.sip_password} />
           <SecretItem label="SIP传输协议" value={device.sip_transport_protocol || "TCP"} />
           <SecretItem label="设备ID" value={device.device_id} />

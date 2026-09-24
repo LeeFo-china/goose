@@ -1,3 +1,4 @@
+import { buildGb28181VideoChannelCode } from "@/services/gb28181-channel-code";
 import {
   Errors,
   ErrorCodes,
@@ -122,6 +123,7 @@ export async function createTencentDevice(this: any, input: TenantServiceAccessI
       device_type_label: getTencentDeviceTypeLabel(input.payload.device_type),
       virtual_group_id: created.virtual_group_id,
       sip_username: created.device_code,
+      video_channel_code: buildGb28181VideoChannelCode(created.device_code),
       sip_password: password,
       sip_transport_protocol: "TCP",
       request_id: created.request_id,

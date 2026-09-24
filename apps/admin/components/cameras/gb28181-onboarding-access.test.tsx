@@ -8,6 +8,7 @@ test("shows only the GB28181 values an installer must enter", () => {
       device={{
         device_id: "device-id",
         sip_username: "sip-user",
+        video_channel_code: "99958005371310000007",
         sip_password: "sip-password",
         sip_transport_protocol: "TCP",
       }}
@@ -28,6 +29,7 @@ test("shows only the GB28181 values an installer must enter", () => {
     "SIP服务器ID",
     "SIP服务器域",
     "设备ID / 用户名",
+    "视频通道编码",
     "认证密码",
     "传输协议",
   ]) {
