@@ -3,16 +3,18 @@ import {
   updateStatusByCameraId,
   upsertFromProjectCamera,
 } from "./legacy/camera-sync";
-import { hydratePlatformRows } from "./legacy/hydrate";
+import { hydratePlatformRows, hydrateTenantRows } from "./legacy/hydrate";
 import {
   create,
   softDelete,
   update,
+  updateHardwareSerialByDevice,
   upsertSynced,
 } from "./legacy/mutations";
 import {
   findById,
   findByVendorDeviceChannel,
+  findByHardwareSerial,
   list,
   listActiveByVendor,
   listActiveByVendorDeviceSerial,
@@ -25,6 +27,7 @@ export type {
   TenantDeviceCameraLite,
   TenantDeviceProjectLite,
   TenantDeviceRow,
+  TenantDeviceHydratedRow,
   TenantDeviceTenantLite,
 } from "./legacy/shared";
 
@@ -35,16 +38,19 @@ class TenantDeviceRepository {
   listPlatform = listPlatform;
   findById = findById;
   findByVendorDeviceChannel = findByVendorDeviceChannel;
+  findByHardwareSerial = findByHardwareSerial;
   listAllByTenant = listAllByTenant;
   listActiveByVendor = listActiveByVendor;
   listActiveByVendorDeviceSerial = listActiveByVendorDeviceSerial;
   hydratePlatformRows = hydratePlatformRows;
+  hydrateTenantRows = hydrateTenantRows;
   create = create;
   upsertSynced = upsertSynced;
   upsertFromProjectCamera = upsertFromProjectCamera;
   markUnboundByCameraId = markUnboundByCameraId;
   updateStatusByCameraId = updateStatusByCameraId;
   update = update;
+  updateHardwareSerialByDevice = updateHardwareSerialByDevice;
   softDelete = softDelete;
 }
 

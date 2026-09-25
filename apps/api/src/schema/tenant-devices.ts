@@ -59,6 +59,27 @@ export const TenantDeviceParamsSchema = z.object({
   id: z.uuid("无效的设备资产 ID"),
 });
 
+const HardwareSerialSchema = z.string()
+  .trim()
+  .min(1, "设备 SN 不能为空")
+  .max(160, "设备 SN 过长")
+  .transform((value) => value.toUpperCase());
+
+const TenantTencentDevicePasswordSchema = z.string()
+  .trim()
+  .min(1, "SIP认证密码不能为空")
+  .max(16, "SIP认证密码不能超过 16 个字符")
+  .regex(/^[A-Za-z0-9_]+$/, "SIP认证密码只支持英文、数字和下划线");
+
+export const CreateTenantTencentDeviceSchema = z.object({
+  hardware_serial: HardwareSerialSchema,
+  password: TenantTencentDevicePasswordSchema.nullable().optional().default(null),
+  device_type: z.coerce.number().int("设备类型非法").refine(
+    (value) => value === 2 || value === 3,
+    "设备类型仅支持 IPC 或 NVR",
+  ).default(2),
+});
+
 export const PlatformTencentDeviceParamsSchema = z.object({
   device_id: z.string().trim().min(1, "设备 ID 不能为空").max(160, "设备 ID 过长"),
 });
@@ -68,6 +89,7 @@ export const CreateTenantDeviceSchema = z.object({
     message: "无效的设备厂商",
   }),
   vendor_device_serial: z.string().trim().min(1, "设备 ID 不能为空").max(160, "设备 ID 过长"),
+  hardware_serial: HardwareSerialSchema.nullable().optional(),
   vendor_device_code: z.string().trim().max(100, "设备编码过长").nullable().optional(),
   vendor_device_name: z.string().trim().max(100, "设备名称过长").nullable().optional(),
   vendor_channel_id: z.string().trim().max(160, "通道 ID 过长").nullable().optional(),
@@ -82,6 +104,7 @@ export const CreateTenantDeviceSchema = z.object({
 });
 
 export const UpdateTenantDeviceSchema = z.object({
+  hardware_serial: HardwareSerialSchema.nullable().optional(),
   vendor_device_name: z.string().trim().max(100, "设备名称过长").nullable().optional(),
   vendor_channel_name: z.string().trim().max(100, "通道名称过长").nullable().optional(),
   device_type: z.string().trim().max(50, "设备类型过长").nullable().optional(),
@@ -97,5 +120,6 @@ export type TenantDeviceListQueryInput = z.infer<typeof TenantDeviceListQuerySch
 export type PlatformTenantDeviceListQueryInput = z.infer<typeof PlatformTenantDeviceListQuerySchema>;
 export type PlatformTencentDeviceListQueryInput = z.infer<typeof PlatformTencentDeviceListQuerySchema>;
 export type CreateTenantDeviceInput = z.infer<typeof CreateTenantDeviceSchema>;
+export type CreateTenantTencentDeviceInput = z.infer<typeof CreateTenantTencentDeviceSchema>;
 export type UpdateTenantDeviceInput = z.infer<typeof UpdateTenantDeviceSchema>;
 export type TenantDeviceStatus = (typeof TenantDeviceStatusValues)[number];

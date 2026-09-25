@@ -14,6 +14,7 @@ function asset(overrides: Partial<TenantDeviceAsset>): TenantDeviceAsset {
     id: "asset-1",
     tenant_id: "tenant-1",
     vendor: "tencent_iotvideo_industry",
+    hardware_serial: "DS-ABC123",
     vendor_device_serial: "device-1",
     vendor_device_code: "34020000001320000001",
     vendor_device_name: "客厅",

@@ -6,6 +6,7 @@ import {
   type TenantDeviceProjectLite,
   type TenantDeviceRepositoryContext,
   type TenantDeviceRow,
+  type TenantDeviceHydratedRow,
   type TenantDeviceTenantLite,
 } from "./shared";
 
@@ -25,6 +26,32 @@ export async function hydratePlatformRows(
   return rows.map((item): PlatformTenantDeviceRow => ({
     ...item,
     tenant: tenantMap.get(item.tenant_id) ?? null,
+    source_project: item.source_project_id
+      ? projectMap.get(item.source_project_id) ?? null
+      : null,
+    bound_project: item.bound_project_id
+      ? projectMap.get(item.bound_project_id) ?? null
+      : null,
+    bound_camera: item.bound_camera_id
+      ? cameraMap.get(item.bound_camera_id) ?? null
+      : null,
+  }));
+}
+
+export async function hydrateTenantRows(
+  this: TenantDeviceRepositoryContext,
+  rows: TenantDeviceRow[],
+) {
+  const [projectMap, cameraMap] = await Promise.all([
+    findProjects.call(this, rows.flatMap((item) => [
+      item.source_project_id,
+      item.bound_project_id,
+    ])),
+    findCameras.call(this, rows.map((item) => item.bound_camera_id)),
+  ]);
+
+  return rows.map((item): TenantDeviceHydratedRow => ({
+    ...item,
     source_project: item.source_project_id
       ? projectMap.get(item.source_project_id) ?? null
       : null,
@@ -68,7 +95,7 @@ async function findProjects(
 
   const { data, error } = await this.adminClient
     .from("projects")
-    .select("id,name")
+    .select("id,name,address")
     .in("id", idsToFetch);
 
   if (error) {

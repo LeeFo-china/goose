@@ -73,6 +73,7 @@ export const UpdateProjectCameraTencentDevicePasswordSchema = z.object({
 }).default({});
 
 const ProjectCameraWritableBaseSchema = z.object({
+  tenant_device_id: z.uuid("无效的设备资产 ID").optional(),
   name: z.string().trim().min(1, "摄像头名称不能为空").max(80, "摄像头名称过长"),
   position: z.string().trim().max(80, "摄像头位置过长").nullable().optional(),
   vendor: z.enum(PROJECT_CAMERA_VENDOR_VALUES, {

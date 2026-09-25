@@ -3,8 +3,9 @@ import Link from "next/link";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { CamerasTable } from "@/components/cameras/cameras-table";
 import { CamerasWorkspaceTabs } from "@/components/cameras/cameras-workspace-tabs";
-import { Gb28181OnboardingButton } from "@/components/cameras/gb28181-onboarding-dialog";
+import { CreateCameraButton } from "@/components/cameras/camera-mutations";
 import { TenantDeviceAssetsPanel } from "@/components/cameras/tenant-device-assets-panel";
+import { collapseTenantDeviceAssets } from "@/components/cameras/tenant-device-asset-utils";
 import { getTenantBusinessAccessDenied } from "@/components/layout/platform-mode-access-denied";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -20,7 +21,6 @@ import {
   buildCameraPageHref,
   type CamerasPageSearchParams,
   getCameraProjectGroups,
-  getProjects,
   getTenantDevices,
 } from "./page-data";
 
@@ -47,14 +47,13 @@ function CameraEmptyState({
 
   return (
     <div className="px-4 py-10">
-      <div className="mx-auto flex max-w-xl flex-col items-center gap-4 text-center">
+      <div className="mx-auto flex max-w-xl flex-col items-center gap-3 text-center">
         <div className="text-center">
-          <h2 className="text-base font-semibold">接入第一台摄像头</h2>
+          <h2 className="text-base font-semibold">暂无项目摄像头</h2>
           <p className="mx-auto mt-2 max-w-xl text-sm text-muted-foreground">
-            填写名称，按提示配置设备，检测成功后自动绑定所选项目。
+            点击“添加摄像头”，选择未绑定设备并设置项目内别名。
           </p>
         </div>
-        <Gb28181OnboardingButton />
       </div>
     </div>
   );
@@ -70,7 +69,6 @@ export default async function CamerasPage({
 
   const params = await searchParams;
   const token = await getAdminToken();
-  const { list: projects, error: projectError } = await getProjects(token);
   const cameraPage = Math.max(Number(params.camera_page || 1) || 1, 1);
   const cameraKeyword = params.camera_keyword?.trim() || "";
   const {
@@ -82,16 +80,14 @@ export default async function CamerasPage({
     page: cameraPage,
     keyword: cameraKeyword,
   });
-  const requestedProjectId = params.project_id?.trim() || "";
-  const selectedProjectId = projects.some((project) => project.id === requestedProjectId)
-    ? requestedProjectId
-    : projects[0]?.id || "";
   const {
     list: tenantDevices,
     pagination: tenantDevicePagination,
     error: tenantDeviceError,
   } = await getTenantDevices(token);
-  const unboundTenantDeviceCount = tenantDevices.filter((device) => !device.bound_camera_id).length;
+  const unboundTenantDeviceCount = collapseTenantDeviceAssets(tenantDevices).filter(
+    (device) => !device.bound_camera_id && !device.bound_project_id,
+  ).length;
   const hasUnboundTenantDevices = unboundTenantDeviceCount > 0;
   const hasCameraProjectGroups = cameraProjectGroups.length > 0;
   const showCameraSearch = hasCameraProjectGroups || Boolean(cameraKeyword);
@@ -118,29 +114,12 @@ export default async function CamerasPage({
     <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
       <h1 className="sr-only">工地监控</h1>
 
-      {projectError ? (
-        <div className="shrink-0">
-          <StatusAlert>{projectError}</StatusAlert>
-        </div>
-      ) : null}
       {cameraProjectError ? (
         <div className="shrink-0">
           <StatusAlert>{cameraProjectError}</StatusAlert>
         </div>
       ) : null}
-      {!selectedProjectId && !projectError ? (
-        <Empty>
-          <EmptyHeader>
-            <EmptyTitle>暂无可管理项目</EmptyTitle>
-            <EmptyDescription>
-              创建项目后，可以在这里绑定摄像头并维护设备资产。
-            </EmptyDescription>
-          </EmptyHeader>
-        </Empty>
-      ) : null}
-
-      {selectedProjectId || cameraProjectGroups.length || cameraProjectError ? (
-        <CamerasWorkspaceTabs
+      <CamerasWorkspaceTabs
           cameras={(
             <>
               <div className="shrink-0 border-b bg-card px-4 py-3">
@@ -180,7 +159,9 @@ export default async function CamerasPage({
                       </div>
                     ) : null}
                   </div>
-                  {showCameraSearch ? (
+                  <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+                    <CreateCameraButton projectId="" devices={[]} />
+                    {showCameraSearch ? (
                     <form
                       className={[
                         "grid w-full gap-2 lg:w-auto",
@@ -208,7 +189,8 @@ export default async function CamerasPage({
                         </Button>
                       ) : null}
                     </form>
-                  ) : null}
+                    ) : null}
+                  </div>
                 </div>
               </div>
               <div className="flex min-h-0 flex-1 flex-col">
@@ -237,10 +219,9 @@ export default async function CamerasPage({
                           </div>
                         </div>
                         <div className="flex shrink-0">
-                          <Gb28181OnboardingButton
+                          <CreateCameraButton
                             projectId={group.project.id}
-                            projectLabel={group.project.address || group.project.name || "当前项目"}
-                            label="接入到此项目"
+                            devices={[]}
                           />
                         </div>
                       </div>
@@ -308,26 +289,13 @@ export default async function CamerasPage({
             </>
           )}
           devices={(
-            selectedProjectId ? (
-              <TenantDeviceAssetsPanel
-                assets={tenantDevices}
-                error={tenantDeviceError}
-                pagination={tenantDevicePagination}
-                projectId={selectedProjectId}
-              />
-            ) : (
-              <Empty className="border-0 py-12">
-                <EmptyHeader>
-                  <EmptyTitle>暂无设备接入上下文</EmptyTitle>
-                  <EmptyDescription>
-                    创建项目后，可以在这里维护公司设备资产。
-                  </EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            )
+            <TenantDeviceAssetsPanel
+              assets={tenantDevices}
+              error={tenantDeviceError}
+              pagination={tenantDevicePagination}
+            />
           )}
         />
-      ) : null}
     </div>
   );
 }

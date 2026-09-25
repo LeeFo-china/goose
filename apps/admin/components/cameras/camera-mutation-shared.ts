@@ -102,7 +102,9 @@ export function getProjectOptionDescription(project: CameraProjectOption) {
 }
 
 export function canBindCameraToProject(project: CameraProjectOption | null | undefined) {
-  return project?.status !== "invalid" && project?.status !== "acceptance";
+  return Boolean(
+    project && project.status !== "invalid" && project.status !== "acceptance",
+  );
 }
 
 function readAssetChannelNo(asset: TenantDeviceAsset) {
@@ -114,16 +116,17 @@ function readAssetChannelNo(asset: TenantDeviceAsset) {
 }
 
 function assetToDeviceChannel(asset: TenantDeviceAsset): CameraDeviceChannel | null {
-  if (asset.bound_camera_id) return null;
+  if (asset.bound_camera_id || asset.bound_project_id) return null;
 
   if (asset.vendor === "tencent_iotvideo_industry") {
     if (!asset.vendor_channel_id) return null;
 
     return {
       vendor: "tencent_iotvideo_industry",
+      tenant_device_id: asset.id,
       device_id: asset.vendor_device_serial,
       device_code: asset.vendor_device_code,
-      device_name: asset.vendor_device_name,
+      device_name: asset.hardware_serial || asset.vendor_device_name,
       device_type: null,
       device_type_label: asset.device_type,
       channel_id: asset.vendor_channel_id,
@@ -148,7 +151,8 @@ function assetToDeviceChannel(asset: TenantDeviceAsset): CameraDeviceChannel | n
   if (asset.vendor === "ezviz") {
     return {
       vendor: "ezviz",
-      device_name: asset.vendor_device_name,
+      tenant_device_id: asset.id,
+      device_name: asset.hardware_serial || asset.vendor_device_name,
       device_serial: asset.vendor_device_serial,
       channel_no: readAssetChannelNo(asset),
       channel_name: asset.vendor_channel_name,

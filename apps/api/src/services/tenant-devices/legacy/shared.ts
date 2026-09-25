@@ -9,6 +9,7 @@ export {
 } from "@/repositories/tenant-devices";
 export type {
   CreateTenantDeviceInput,
+  CreateTenantTencentDeviceInput,
   PlatformTencentDeviceListQueryInput,
   PlatformTenantDeviceListQueryInput,
   TenantDeviceListQueryInput,

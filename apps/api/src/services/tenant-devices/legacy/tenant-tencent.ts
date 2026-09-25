@@ -2,7 +2,6 @@ import { buildGb28181VideoChannelCode } from "@/services/gb28181-channel-code";
 import { assertTenantDeviceAccess } from "./access";
 import {
   Errors,
-  accessPolicyService,
   tenantDeviceRepository,
   tencentIotVideoService,
   type AuthContext,
@@ -19,15 +18,6 @@ export async function getTenantTencentDeviceAccessInfo(input: {
   }
   if (device.vendor !== "tencent_iotvideo_industry") {
     throw Errors.badRequest("仅腾讯云设备支持该操作");
-  }
-
-  const projectId = device.bound_project_id || device.source_project_id;
-  if (!projectId || !await accessPolicyService.canAccessProject(
-    input.authContext,
-    projectId,
-    "project.update",
-  )) {
-    throw Errors.forbidden();
   }
 
   const [sipServer, passwordResult] = await Promise.all([

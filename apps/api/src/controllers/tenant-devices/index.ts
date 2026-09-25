@@ -3,6 +3,7 @@ import { TenantBaseController } from "@/controllers/TenantBaseController";
 import { Errors } from "@/errors/error-factory";
 import {
   CreateTenantDeviceSchema,
+  CreateTenantTencentDeviceSchema,
   PlatformTencentDeviceParamsSchema,
   PlatformTencentDeviceListQuerySchema,
   PlatformTenantDeviceListQuerySchema,
@@ -177,11 +178,42 @@ class TenantDeviceController extends TenantBaseController {
     return ResponseHandler.success(result);
   }
 
+  @Post("/tenant-devices/tencent")
+  async createTenantTencentDevice(request: FastifyRequest, reply: FastifyReply) {
+    reply.header("Cache-Control", "private, no-store");
+    reply.header("Referrer-Policy", "no-referrer");
+    const authContext = await this.getRequiredTenantContext(request);
+    const bodyResult = CreateTenantTencentDeviceSchema.safeParse(request.body);
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const result = await tenantDeviceService.createTenantTencentDevice({
+      authContext,
+      payload: bodyResult.data,
+    });
+
+    return ResponseHandler.success(result);
+  }
+
   @Post("/tenant-devices/sync")
   async syncTenantDevices(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getRequiredTenantContext(request);
     const result = await tenantDeviceService.syncTenantDevices({
       authContext,
+    });
+
+    return ResponseHandler.success(result);
+  }
+
+  @Post("/tenant-devices/:id/play-params")
+  async getTenantDevicePlayParams(request: FastifyRequest, reply: FastifyReply) {
+    reply.header("Cache-Control", "private, no-store");
+    const authContext = await this.getRequiredTenantContext(request);
+    const paramsResult = TenantDeviceParamsSchema.safeParse(request.params);
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const result = await tenantDeviceService.getTenantDevicePlayParams({
+      authContext,
+      id: paramsResult.data.id,
     });
 
     return ResponseHandler.success(result);

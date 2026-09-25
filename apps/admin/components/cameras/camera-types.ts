@@ -130,6 +130,7 @@ export type TenantDeviceAsset = {
   id: string;
   tenant_id: string;
   vendor: "ezviz" | "tencent_iotvideo_industry" | string;
+  hardware_serial: string | null;
   vendor_device_serial: string;
   vendor_device_code: string | null;
   vendor_device_name: string | null;
@@ -140,6 +141,20 @@ export type TenantDeviceAsset = {
   source_project_id: string | null;
   bound_project_id: string | null;
   bound_camera_id: string | null;
+  source_project?: {
+    id: string;
+    name: string | null;
+    address: string | null;
+  } | null;
+  bound_project?: {
+    id: string;
+    name: string | null;
+    address: string | null;
+  } | null;
+  bound_camera?: {
+    id: string;
+    name: string | null;
+  } | null;
   status: "online" | "offline" | "unknown" | string;
   raw_status: string | null;
   metadata?: Record<string, unknown> | null;

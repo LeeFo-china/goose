@@ -16,9 +16,11 @@ import { requestCamera } from "@/components/cameras/camera-mutation-shared";
 export function CreateCameraButton({
   projectId,
   devices,
+  label = "添加摄像头",
 }: {
   projectId: string;
   devices: CameraDeviceChannel[];
+  label?: string;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -26,7 +28,7 @@ export function CreateCameraButton({
     <>
       <Button type="button" onClick={() => setOpen(true)}>
         <Plus data-icon="inline-start" />
-        高级绑定
+        {label}
       </Button>
       <CameraDialog
         mode="create"

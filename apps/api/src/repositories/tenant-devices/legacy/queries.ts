@@ -1,5 +1,5 @@
 import { applyListFilters } from "./filters";
-import { hydratePlatformRows } from "./hydrate";
+import { hydratePlatformRows, hydrateTenantRows } from "./hydrate";
 import {
   Errors,
   type PlatformTenantDeviceListQueryInput,
@@ -36,8 +36,9 @@ export async function list(
     throw Errors.dbError("查询租户设备资产失败", error);
   }
 
+  const rows = (data || []) as TenantDeviceRow[];
   return {
-    list: (data || []) as TenantDeviceRow[],
+    list: await hydrateTenantRows.call(this, rows),
     pagination: {
       page,
       pageSize,
@@ -45,6 +46,31 @@ export async function list(
       totalPages: count ? Math.ceil(count / pageSize) : 0,
     },
   };
+}
+
+export async function findByHardwareSerial(
+  this: TenantDeviceRepositoryContext,
+  input: {
+    tenantId: string;
+    vendor: ProjectCameraVendor;
+    hardwareSerial: string;
+  },
+) {
+  const { data, error } = await this.adminClient
+    .from("tenant_devices")
+    .select("*")
+    .eq("tenant_id", input.tenantId)
+    .eq("vendor", input.vendor)
+    .ilike("hardware_serial", input.hardwareSerial)
+    .is("deleted_at", null)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw Errors.dbError("查询设备 SN 失败", error);
+  }
+
+  return (data || null) as TenantDeviceRow | null;
 }
 
 export async function listPlatform(

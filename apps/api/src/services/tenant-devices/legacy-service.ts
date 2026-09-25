@@ -18,6 +18,8 @@ import {
 } from "./legacy/platform-tencent";
 import { syncTenantDevices } from "./legacy/sync";
 import { getTenantTencentDeviceAccessInfo } from "./legacy/tenant-tencent";
+import { createTenantTencentDevice } from "./legacy/tenant-tencent-create";
+import { getTenantDevicePlayParams } from "./legacy/playback";
 
 class TenantDeviceService {
   listTenantDevices = listTenantDevices;
@@ -26,6 +28,8 @@ class TenantDeviceService {
   deletePlatformTencentDevice = deletePlatformTencentDevice;
   getTenantDevice = getTenantDevice;
   createTenantDevice = createTenantDevice;
+  createTenantTencentDevice = createTenantTencentDevice;
+  getTenantDevicePlayParams = getTenantDevicePlayParams;
   updateTenantDevice = updateTenantDevice;
   deleteTenantDevice = deleteTenantDevice;
   syncTenantDevices = syncTenantDevices;
