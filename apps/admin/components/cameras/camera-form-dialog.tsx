@@ -15,7 +15,7 @@ import type { CameraBindProjectOptionsData, CameraMode, TenantDeviceListData } f
 import { saveCameraForm } from "@/components/cameras/camera-form-submit";
 import { CameraProjectDeviceFields } from "@/components/cameras/camera-project-device-fields";
 import { CameraSettingsFields } from "@/components/cameras/camera-settings-fields";
-import { buildDefaults, buildDeviceKey, CameraFormSchema, canBindCameraToProject, getVendorLabel, requestCamera, tenantAssetsToDevices, type CameraFormValues } from "@/components/cameras/camera-mutation-shared";
+import { buildDefaults, buildDeviceKey, CameraFormSchema, canBindCameraToProject, requestCamera, tenantAssetsToDevices, type CameraFormValues } from "@/components/cameras/camera-mutation-shared";
 
 export function CameraDialog({
   mode,
@@ -56,31 +56,11 @@ export function CameraDialog({
     resolver: zodResolver(CameraFormSchema as never) as Resolver<CameraFormValues>,
     defaultValues: defaults,
   });
-  const selectedVendor = form.watch("vendor");
   const activeProjectId = mode === "create" ? selectedProjectId : projectId;
   const activeDevices = mode === "create" ? createDevices : devices;
-  const firstDeviceKeyByVendor = useMemo<Record<CameraFormValues["vendor"], string>>(() => {
-    const keys: Record<CameraFormValues["vendor"], string> = {
-      ezviz: "",
-      tencent_iotvideo_industry: "",
-    };
-
-    for (const device of activeDevices) {
-      if (!device.can_bind || keys[device.vendor]) continue;
-      keys[device.vendor] = buildDeviceKey(device);
-    }
-
-    return keys;
-  }, [activeDevices]);
-  const initialCreateVendor = useMemo<CameraFormValues["vendor"]>(() => {
-    if (firstDeviceKeyByVendor[defaults.vendor]) return defaults.vendor;
-    if (firstDeviceKeyByVendor.tencent_iotvideo_industry) return "tencent_iotvideo_industry";
-    if (firstDeviceKeyByVendor.ezviz) return "ezviz";
-    return defaults.vendor;
-  }, [defaults.vendor, firstDeviceKeyByVendor]);
   const availableDevices = useMemo(
-    () => activeDevices.filter((device) => device.vendor === selectedVendor && device.can_bind),
-    [activeDevices, selectedVendor],
+    () => activeDevices.filter((device) => device.can_bind),
+    [activeDevices],
   );
   const selectedCapabilities = form.watch("capabilities");
 
@@ -101,14 +81,12 @@ export function CameraDialog({
     setDeviceKeyword("");
     setDevicePage(1);
     setDeviceTotalPages(0);
-    const initialVendor = mode === "create" && projectId ? initialCreateVendor : defaults.vendor;
     form.reset({
       ...defaults,
-      vendor: initialVendor,
-      device_key: mode === "create" && projectId ? firstDeviceKeyByVendor[initialVendor] : "",
+      device_key: "",
     });
     setError("");
-  }, [defaults, devices, firstDeviceKeyByVendor, form, initialCreateVendor, mode, open, projectId]);
+  }, [defaults, devices, form, mode, open, projectId]);
 
   useEffect(() => {
     if (!open || mode !== "create") return;
@@ -192,30 +170,11 @@ export function CameraDialog({
         .then((data: TenantDeviceListData) => {
           if (disposed) return;
           const nextDevices = tenantAssetsToDevices(data?.list || []);
-          const nextKeys: Record<CameraFormValues["vendor"], string> = {
-            ezviz: "",
-            tencent_iotvideo_industry: "",
-          };
-          for (const device of nextDevices) {
-            if (!device.can_bind || nextKeys[device.vendor]) continue;
-            nextKeys[device.vendor] = buildDeviceKey(device);
-          }
-          const currentVendor = form.getValues("vendor");
-          const nextVendor = nextKeys[currentVendor]
-            ? currentVendor
-            : nextKeys.tencent_iotvideo_industry
-              ? "tencent_iotvideo_industry"
-              : "ezviz";
-
           setCreateDevices(nextDevices);
           setDevicePage(data.pagination?.page || 1);
           setDeviceTotalPages(data.pagination?.totalPages || 0);
-          form.setValue("vendor", nextVendor, {
-            shouldDirty: true,
-            shouldValidate: true,
-          });
-          form.setValue("device_key", nextKeys[nextVendor], {
-            shouldDirty: true,
+          form.setValue("device_key", "", {
+            shouldDirty: false,
             shouldValidate: true,
           });
         })
@@ -291,7 +250,7 @@ export function CameraDialog({
       return;
     }
     if (mode === "create" && !values.device_key) {
-      setError(`请选择一个未绑定的${getVendorLabel(values.vendor)}设备通道`);
+      setError("请选择一个未绑定的设备资产");
       return;
     }
 
@@ -320,7 +279,7 @@ export function CameraDialog({
           <DialogTitle>{mode === "create" ? "绑定摄像头" : "编辑摄像头"}</DialogTitle>
           <DialogDescription>
             {mode === "create"
-              ? "从未绑定的设备通道中选择，并维护展示名称、权限和播放配置。"
+              ? "选择未绑定的设备资产，设置项目内别名后完成绑定。"
               : "设备序列号和通道号绑定后不可修改，避免误切换到其他项目。"}
           </DialogDescription>
         </DialogHeader>
@@ -341,7 +300,6 @@ export function CameraDialog({
                 deviceLoading={deviceLoading}
                 hasMoreDevices={devicePage < deviceTotalPages}
                 availableDevices={availableDevices}
-                firstDeviceKeyByVendor={firstDeviceKeyByVendor}
                 setProjectKeyword={setProjectKeyword}
                 setSelectedProjectId={setSelectedProjectId}
                 setSelectedProject={setSelectedProject}
@@ -369,6 +327,7 @@ export function CameraDialog({
                 (mode === "create" && (
                   deviceLoading ||
                   !activeProjectId ||
+                  !canBindCameraToProject(selectedProject) ||
                   availableDevices.length === 0
                 ))
               }

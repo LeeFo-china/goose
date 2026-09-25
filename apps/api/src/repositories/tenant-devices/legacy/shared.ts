@@ -18,6 +18,7 @@ export type TenantDeviceRow = {
   id: string;
   tenant_id: string;
   vendor: ProjectCameraVendor;
+  hardware_serial: string | null;
   vendor_device_serial: string;
   vendor_device_code: string | null;
   vendor_device_name: string | null;
@@ -49,6 +50,7 @@ export type TenantDeviceTenantLite = {
 export type TenantDeviceProjectLite = {
   id: string;
   name: string | null;
+  address: string | null;
 };
 
 export type TenantDeviceCameraLite = {
@@ -58,6 +60,12 @@ export type TenantDeviceCameraLite = {
 
 export type PlatformTenantDeviceRow = TenantDeviceRow & {
   tenant: TenantDeviceTenantLite | null;
+  source_project: TenantDeviceProjectLite | null;
+  bound_project: TenantDeviceProjectLite | null;
+  bound_camera: TenantDeviceCameraLite | null;
+};
+
+export type TenantDeviceHydratedRow = TenantDeviceRow & {
   source_project: TenantDeviceProjectLite | null;
   bound_project: TenantDeviceProjectLite | null;
   bound_camera: TenantDeviceCameraLite | null;

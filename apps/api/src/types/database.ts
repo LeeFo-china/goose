@@ -16974,6 +16974,7 @@ export type Database = {
           created_by: string | null
           deleted_at: string | null
           device_type: string | null
+          hardware_serial: string | null
           id: string
           last_synced_at: string | null
           metadata: Json
@@ -16998,6 +16999,7 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           device_type?: string | null
+          hardware_serial?: string | null
           id?: string
           last_synced_at?: string | null
           metadata?: Json
@@ -17022,6 +17024,7 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           device_type?: string | null
+          hardware_serial?: string | null
           id?: string
           last_synced_at?: string | null
           metadata?: Json

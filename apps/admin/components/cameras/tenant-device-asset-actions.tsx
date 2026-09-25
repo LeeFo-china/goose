@@ -28,7 +28,6 @@ import {
 } from "@/components/ui/dialog";
 import {
   Field,
-  FieldDescription,
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
@@ -53,8 +52,7 @@ function EditDeviceDialog({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
   const defaults = useMemo(() => ({
-    vendor_device_name: asset.vendor_device_name || "",
-    vendor_channel_name: asset.vendor_channel_name || "",
+    hardware_serial: asset.hardware_serial || "",
     device_type: asset.device_type || "",
   }), [asset]);
 
@@ -67,8 +65,7 @@ function EditDeviceDialog({
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
-    const vendorDeviceName = String(formData.get("vendor_device_name") || "").trim();
-    const vendorChannelName = String(formData.get("vendor_channel_name") || "").trim();
+    const hardwareSerial = String(formData.get("hardware_serial") || "").trim();
     const deviceType = String(formData.get("device_type") || "").trim();
 
     setError("");
@@ -78,8 +75,7 @@ function EditDeviceDialog({
           method: "PATCH",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            vendor_device_name: vendorDeviceName || null,
-            vendor_channel_name: vendorChannelName || null,
+            hardware_serial: hardwareSerial || null,
             device_type: deviceType || null,
           }),
         });
@@ -103,27 +99,15 @@ function EditDeviceDialog({
         <form className="flex flex-col gap-4" onSubmit={submit}>
           <FieldGroup>
             <Field>
-              <FieldLabel htmlFor={`device-${asset.id}-name`}>设备名称</FieldLabel>
+              <FieldLabel htmlFor={`device-${asset.id}-name`}>设备 SN</FieldLabel>
               <Input
                 id={`device-${asset.id}-name`}
-                name="vendor_device_name"
-                defaultValue={defaults.vendor_device_name}
-                placeholder="例如 工地入口 IPC"
-                maxLength={100}
+                name="hardware_serial"
+                defaultValue={defaults.hardware_serial}
+                placeholder="例如 DS-2CD3T47-ABC123"
+                maxLength={160}
                 disabled={pending}
               />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor={`device-${asset.id}-channel-name`}>通道名称</FieldLabel>
-              <Input
-                id={`device-${asset.id}-channel-name`}
-                name="vendor_channel_name"
-                defaultValue={defaults.vendor_channel_name}
-                placeholder="例如 入口通道"
-                maxLength={100}
-                disabled={pending}
-              />
-              <FieldDescription>腾讯云通道资产建议填写，设备级资产可留空。</FieldDescription>
             </Field>
             <Field>
               <FieldLabel htmlFor={`device-${asset.id}-type`}>设备类型</FieldLabel>

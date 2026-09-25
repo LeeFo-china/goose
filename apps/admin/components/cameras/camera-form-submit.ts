@@ -23,20 +23,20 @@ function buildCommonCameraPayload(values: CameraFormValues) {
   };
 }
 
-function buildCreateCameraPayload(
+export function buildCreateCameraPayload(
   values: CameraFormValues,
   availableDevices: CameraDeviceChannel[],
 ) {
   const commonPayload = buildCommonCameraPayload(values);
   const device = parseDeviceKey(values.device_key);
+  const selectedDevice = availableDevices.find(
+    (item) => buildDeviceKey(item) === values.device_key,
+  );
 
   if (device.vendor === "tencent_iotvideo_industry") {
-    const selectedDevice = availableDevices.find(
-      (item) => buildDeviceKey(item) === values.device_key,
-    );
-
     return {
       ...commonPayload,
+      tenant_device_id: selectedDevice?.tenant_device_id || undefined,
       vendor: "tencent_iotvideo_industry",
       vendor_device_serial: device.deviceId,
       vendor_channel_id: device.channelId,
@@ -52,6 +52,7 @@ function buildCreateCameraPayload(
 
   return {
     ...commonPayload,
+    tenant_device_id: selectedDevice?.tenant_device_id || undefined,
     vendor: "ezviz",
     vendor_device_serial: device.deviceSerial,
     channel_no: device.channelNo,

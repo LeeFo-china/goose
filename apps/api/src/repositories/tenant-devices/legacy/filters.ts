@@ -17,11 +17,14 @@ export function applyListFilters<T extends TenantDeviceFilterableQuery<T>>(
     request = request.eq("status", input.status);
   }
   if (input.only_unbound) {
-    request = request.is("bound_camera_id", null);
+    request = request
+      .is("bound_camera_id", null)
+      .is("bound_project_id", null);
   }
   if (keyword) {
     const safeKeyword = keyword.replace(/[%,()]/g, " ").replace(/\s+/g, " ");
     request = request.or([
+      `hardware_serial.ilike.%${safeKeyword}%`,
       `vendor_device_serial.ilike.%${safeKeyword}%`,
       `vendor_device_code.ilike.%${safeKeyword}%`,
       `vendor_device_name.ilike.%${safeKeyword}%`,

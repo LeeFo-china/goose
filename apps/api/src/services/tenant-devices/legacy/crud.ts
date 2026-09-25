@@ -70,8 +70,33 @@ export async function updateTenantDevice(input: {
     throw Errors.badRequest("设备资产不存在");
   }
 
+  const { hardware_serial: hardwareSerial, ...rowPayload } = input.payload;
+  let updatedDevice = device;
+  if (hardwareSerial !== undefined) {
+    const existing = hardwareSerial
+      ? await tenantDeviceRepository.findByHardwareSerial({
+        tenantId,
+        vendor: device.vendor,
+        hardwareSerial,
+      })
+      : null;
+    if (existing && existing.vendor_device_serial !== device.vendor_device_serial) {
+      throw Errors.business(409, "该设备 SN 已登记", ErrorCodes.CAMERA_ALREADY_BOUND);
+    }
+
+    const updatedRows = await tenantDeviceRepository.updateHardwareSerialByDevice({
+      tenantId,
+      vendor: device.vendor,
+      vendorDeviceSerial: device.vendor_device_serial,
+      hardwareSerial,
+      updatedBy: input.authContext.employeeId,
+    });
+    updatedDevice = updatedRows.find((row) => row.id === input.id) || updatedDevice;
+  }
+
+  if (Object.keys(rowPayload).length === 0) return updatedDevice;
   return tenantDeviceRepository.update(input.id, {
-    ...input.payload,
+    ...rowPayload,
     updated_by: input.authContext.employeeId,
   }, tenantId);
 }

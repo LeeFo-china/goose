@@ -9,7 +9,7 @@ import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui
 import { Input } from "@/components/ui/input";
 import type { CameraDeviceChannel, CameraProjectOption } from "@/components/cameras/camera-types";
 import { cn } from "@/lib/utils";
-import { buildDeviceKey, canBindCameraToProject, formatDeviceLabel, getProjectOptionDescription, getProjectOptionLabel, type CameraFormValues, vendorOptions } from "@/components/cameras/camera-mutation-shared";
+import { buildDeviceKey, canBindCameraToProject, formatDeviceLabel, getProjectOptionDescription, getProjectOptionLabel, parseDeviceKey, type CameraFormValues } from "@/components/cameras/camera-mutation-shared";
 
 export function CameraProjectDeviceFields({
   form,
@@ -25,7 +25,6 @@ export function CameraProjectDeviceFields({
   deviceLoading,
   hasMoreDevices,
   availableDevices,
-  firstDeviceKeyByVendor,
   setProjectKeyword,
   setSelectedProjectId,
   setSelectedProject,
@@ -45,7 +44,6 @@ export function CameraProjectDeviceFields({
   deviceLoading: boolean;
   hasMoreDevices: boolean;
   availableDevices: CameraDeviceChannel[];
-  firstDeviceKeyByVendor: Record<CameraFormValues["vendor"], string>;
   setProjectKeyword: (value: string) => void;
   setSelectedProjectId: (value: string) => void;
   setSelectedProject: (value: CameraProjectOption | null) => void;
@@ -88,6 +86,10 @@ export function CameraProjectDeviceFields({
                     setSelectedProjectId(project.id);
                     setSelectedProject(project);
                     setProjectKeyword(getProjectOptionLabel(project));
+                    form.setValue("device_key", "", {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    });
                   }}
                 >
                   <span className="font-medium">{getProjectOptionLabel(project)}</span>
@@ -113,17 +115,17 @@ export function CameraProjectDeviceFields({
         <FieldDescription>
           {selectedProject
             ? `当前绑定到：${getProjectOptionLabel(selectedProject)}`
-            : "请先选择要绑定的房产项目，再选择设备厂商和通道。"}
+            : "请先选择要绑定的房产项目，再选择设备资产。"}
         </FieldDescription>
         {projectSelectError ? <StatusAlert>{projectSelectError}</StatusAlert> : null}
       </Field>
       <Field className="md:col-span-2">
-        <FieldLabel htmlFor="camera-device-search">查找设备 / 通道</FieldLabel>
+        <FieldLabel htmlFor="camera-device-search">查找设备资产</FieldLabel>
         <Input
           id="camera-device-search"
           value={deviceKeyword}
           disabled={pending || !activeProjectId}
-          placeholder="输入设备名称、设备 ID 或通道名称"
+          placeholder="输入设备 SN、设备 ID 或通道名称"
           onChange={(event) => {
             setDeviceKeyword(event.target.value);
             form.setValue("device_key", "", {
@@ -135,36 +137,11 @@ export function CameraProjectDeviceFields({
         <FieldDescription>按关键词分页查询，设备超过 100 个也可继续查找。</FieldDescription>
       </Field>
       <Controller
-        name="vendor"
-        control={form.control}
-        render={({ field, fieldState }) => (
-          <Field data-invalid={fieldState.invalid}>
-            <FieldLabel htmlFor="camera-vendor">设备厂商</FieldLabel>
-            <FormSelect
-              id="camera-vendor"
-              value={field.value}
-              disabled={pending || !activeProjectId}
-              invalid={fieldState.invalid}
-              options={vendorOptions.map(([value, label]) => ({ value, label }))}
-              onChange={(value) => {
-                const nextVendor = value as CameraFormValues["vendor"];
-                field.onChange(nextVendor);
-                form.setValue("device_key", firstDeviceKeyByVendor[nextVendor], {
-                  shouldDirty: true,
-                  shouldValidate: true,
-                });
-              }}
-            />
-            <FieldError errors={[fieldState.error]} />
-          </Field>
-        )}
-      />
-      <Controller
         name="device_key"
         control={form.control}
         render={({ field, fieldState }) => (
-          <Field data-invalid={fieldState.invalid}>
-            <FieldLabel htmlFor="camera-device">设备通道</FieldLabel>
+          <Field className="md:col-span-2" data-invalid={fieldState.invalid}>
+            <FieldLabel htmlFor="camera-device">设备资产</FieldLabel>
             <FormSelect
               id="camera-device"
               value={field.value}
@@ -176,20 +153,26 @@ export function CameraProjectDeviceFields({
                   : deviceLoading
                     ? "设备通道加载中"
                     : availableDevices.length
-                      ? "请选择设备通道"
-                      : "暂无未绑定设备"
+                      ? "请选择设备资产"
+                    : "暂无可绑定设备"
               }
               options={availableDevices.map((device) => ({
                 value: buildDeviceKey(device),
                 label: formatDeviceLabel(device),
               }))}
-              onChange={field.onChange}
+              onChange={(value) => {
+                field.onChange(value);
+                form.setValue("vendor", parseDeviceKey(value).vendor, {
+                  shouldDirty: true,
+                  shouldValidate: true,
+                });
+              }}
             />
             <FieldDescription>
               {deviceLoading
                 ? "正在加载当前公司未绑定设备资产。"
                 : activeProjectId
-                  ? "只展示当前公司资产池中未绑定到项目的设备通道。"
+                  ? "只展示当前公司已完成接入且尚未绑定项目的设备。"
                   : "选择房产项目后才会加载可绑定设备资产。"}
             </FieldDescription>
             <FieldError errors={[fieldState.error]} />
@@ -202,7 +185,7 @@ export function CameraProjectDeviceFields({
                 onClick={loadMoreDevices}
               >
                 {deviceLoading ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
-                加载更多通道
+                加载更多设备
               </Button>
             ) : null}
           </Field>

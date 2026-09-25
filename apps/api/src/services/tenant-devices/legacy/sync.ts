@@ -26,6 +26,7 @@ export async function syncAssets(input: {
   updatedBy?: string | null;
 }) {
   const sourceProjectByDevice = new Map<string, string | null>();
+  const hardwareSerialByDevice = new Map<string, string | null>();
   const tencentDeviceIds = new Set<string>();
   const ezvizDeviceSerials = new Set<string>();
 
@@ -34,6 +35,12 @@ export async function syncAssets(input: {
       `${asset.vendor}:${asset.vendor_device_serial}`,
       asset.source_project_id,
     );
+    if (asset.hardware_serial) {
+      hardwareSerialByDevice.set(
+        `${asset.vendor}:${asset.vendor_device_serial}`,
+        asset.hardware_serial,
+      );
+    }
     if (asset.vendor === "tencent_iotvideo_industry") {
       tencentDeviceIds.add(asset.vendor_device_serial);
     }
@@ -53,6 +60,9 @@ export async function syncAssets(input: {
       const result = await tenantDeviceRepository.upsertSynced({
         tenant_id: input.tenantId,
         vendor: "tencent_iotvideo_industry",
+        hardware_serial: hardwareSerialByDevice.get(
+          `tencent_iotvideo_industry:${channel.device_id}`,
+        ) || null,
         vendor_device_serial: channel.device_id,
         vendor_device_code: channel.device_code,
         vendor_device_name: channel.device_name,
@@ -86,6 +96,7 @@ export async function syncAssets(input: {
       const result = await tenantDeviceRepository.upsertSynced({
         tenant_id: input.tenantId,
         vendor: "ezviz",
+        hardware_serial: hardwareSerialByDevice.get(`ezviz:${channel.device_serial}`) || null,
         vendor_device_serial: channel.device_serial,
         vendor_device_name: channel.device_name,
         vendor_channel_id: null,

@@ -35,7 +35,7 @@ export function CameraSettingsFields({
         control={form.control}
         render={({ field, fieldState }) => (
           <Field data-invalid={fieldState.invalid}>
-            <FieldLabel htmlFor="camera-name">摄像头名称</FieldLabel>
+            <FieldLabel htmlFor="camera-name">项目内别名</FieldLabel>
             <Input
               {...field}
               id="camera-name"
@@ -43,7 +43,7 @@ export function CameraSettingsFields({
               aria-invalid={fieldState.invalid}
               placeholder="例如：客厅施工位"
             />
-            <FieldDescription>名称同时用于标识安装位置，例如“客厅”或“入户门”。</FieldDescription>
+            <FieldDescription>例如“客厅”或“入户门”，不会修改设备 SN。</FieldDescription>
             <FieldError errors={[fieldState.error]} />
           </Field>
         )}

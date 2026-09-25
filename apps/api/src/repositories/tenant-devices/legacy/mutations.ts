@@ -12,7 +12,8 @@ import {
 
 export async function create(
   this: TenantDeviceRepositoryContext,
-  input: CreateTenantDeviceInput & {
+  input: Omit<CreateTenantDeviceInput, "source_project_id"> & {
+    source_project_id?: string | null;
     tenant_id: string;
     created_by?: string | null;
   },
@@ -22,6 +23,7 @@ export async function create(
     .insert({
       tenant_id: input.tenant_id,
       vendor: input.vendor,
+      hardware_serial: input.hardware_serial || null,
       vendor_device_serial: input.vendor_device_serial,
       vendor_device_code: input.vendor_device_code || null,
       vendor_device_name: input.vendor_device_name || null,
@@ -29,7 +31,7 @@ export async function create(
       vendor_channel_code: input.vendor_channel_code || null,
       vendor_channel_name: input.vendor_channel_name || null,
       device_type: input.device_type || null,
-      source_project_id: input.source_project_id,
+      source_project_id: input.source_project_id || null,
       status: input.status,
       metadata: input.metadata || {},
       created_by: input.created_by || null,
@@ -50,6 +52,7 @@ export async function upsertSynced(
   input: {
     tenant_id: string;
     vendor: ProjectCameraVendor;
+    hardware_serial?: string | null;
     vendor_device_serial: string;
     vendor_device_code?: string | null;
     vendor_device_name?: string | null;
@@ -66,6 +69,7 @@ export async function upsertSynced(
 ) {
   const existing = await findByVendorDeviceChannel.call(this, {
     vendor: input.vendor,
+    hardware_serial: input.hardware_serial || null,
     vendor_device_serial: input.vendor_device_serial,
     vendor_channel_id: input.vendor_channel_id,
   });
@@ -165,6 +169,36 @@ export async function update(
   }
 
   return data as TenantDeviceRow;
+}
+
+export async function updateHardwareSerialByDevice(
+  this: TenantDeviceRepositoryContext,
+  input: {
+    tenantId: string;
+    vendor: ProjectCameraVendor;
+    vendorDeviceSerial: string;
+    hardwareSerial: string | null;
+    updatedBy?: string | null;
+  },
+) {
+  const { data, error } = await this.adminClient
+    .from("tenant_devices")
+    .update({
+      hardware_serial: input.hardwareSerial,
+      updated_by: input.updatedBy || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("tenant_id", input.tenantId)
+    .eq("vendor", input.vendor)
+    .eq("vendor_device_serial", input.vendorDeviceSerial)
+    .is("deleted_at", null)
+    .select("*");
+
+  if (error) {
+    throw Errors.dbError("更新设备 SN 失败", error);
+  }
+
+  return (data || []) as TenantDeviceRow[];
 }
 
 export async function softDelete(
