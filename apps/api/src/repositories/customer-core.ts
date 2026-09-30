@@ -340,6 +340,27 @@ class CustomerCoreRepository {
     return projectMap;
   }
 
+  async findLatestProject(input: {
+    customerId: string;
+    tenantId: string;
+  }): Promise<CustomerLatestProjectSummary | null> {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("projects")
+      .select("id, customer_id, name, status, created_at")
+      .eq("tenant_id", input.tenantId)
+      .eq("customer_id", input.customerId)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询客户项目摘要失败", error);
+    }
+
+    return (data as CustomerLatestProjectSummary | null) ?? null;
+  }
+
   async create(payload: Record<string, unknown>) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("customers")

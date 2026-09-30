@@ -4,6 +4,10 @@ import { TenantBaseController } from "@/controllers/TenantBaseController";
 import { ErrorCodes } from "@/errors/error-codes";
 import { Errors } from "@/errors/error-factory";
 import {
+  customerCoreRepository,
+  type CustomerLatestProjectSummary,
+} from "@/repositories/customer-core";
+import {
   CreateCustomerSchema,
   type CreateCustomerSchemaType,
   type UpdateCustomerSchemaType,
@@ -57,6 +61,21 @@ export function buildPagination(page: number, pageSize: number, total: number) {
     total,
     totalPages: total > 0 ? Math.ceil(total / pageSize) : 0,
   };
+}
+
+export function assertCustomerLatestProject(
+  customerId: string,
+  project: CustomerLatestProjectSummary | null,
+): CustomerLatestProjectSummary | null {
+  if (!project) {
+    return null;
+  }
+
+  if (project.customer_id !== customerId) {
+    throw Errors.dbError("客户项目归属异常");
+  }
+
+  return project;
 }
 
 export abstract class CustomerBaseController extends TenantBaseController<
@@ -339,6 +358,7 @@ export abstract class CustomerBaseController extends TenantBaseController<
       followUpMap,
       sourceSummaryMap,
       workflowStateResult,
+      latestProject,
     ] = await Promise.all([
       options.primaryProperty !== undefined
         ? Promise.resolve(options.primaryProperty)
@@ -357,6 +377,10 @@ export abstract class CustomerBaseController extends TenantBaseController<
         })
         : Promise.resolve(new Map<string, CustomerSourceSummary>()),
       workflowStatePromise,
+      customerCoreRepository.findLatestProject({
+        customerId: customer.id,
+        tenantId,
+      }),
     ]);
 
     return {
@@ -372,6 +396,7 @@ export abstract class CustomerBaseController extends TenantBaseController<
       building_info: primaryProperty?.building_info ?? null,
       layout: primaryProperty?.layout ?? null,
       area: primaryProperty?.area ?? null,
+      latest_project: assertCustomerLatestProject(customer.id, latestProject),
       ...(workflowStateResult
         ? { workflow_state: workflowStateResult.workflow_state }
         : {}),

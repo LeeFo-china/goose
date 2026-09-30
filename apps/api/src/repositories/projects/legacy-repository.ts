@@ -83,6 +83,10 @@ class ProjectRepository {
       );
     }
 
+    if (filters.customerId) {
+      filteredQuery = filteredQuery.eq("customer_id", filters.customerId);
+    }
+
     if (filters.projectIds !== undefined && filters.projectIds !== null) {
       if (filters.projectIds.length === 0) {
         filteredQuery = filteredQuery.eq("id", "00000000-0000-0000-0000-000000000000");

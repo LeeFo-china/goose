@@ -264,6 +264,7 @@ export type ProjectCoreListFilters = {
   visibleProjectIds: string[] | null;
   status?: ProjectListQuery["status"];
   keyword?: string;
+  customerId?: string;
   projectIds?: string[] | null;
 };
 

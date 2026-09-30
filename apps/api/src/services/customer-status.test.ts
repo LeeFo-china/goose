@@ -7,12 +7,18 @@ const updateCustomerById = mock(async () => ({
   owner_id: "owner-1",
   status: "following",
 }));
-const getPrimarySummary = mock(async () => ({
+const getPrimarySummary = mock(async (): Promise<{
+  id: string;
+  community: string;
+  building_info: string;
+} | null> => ({
   id: "property-1",
   community: "秀园丽水明珠",
   building_info: "1-101",
 }));
-const findActiveByCustomerProperty = mock(async () => null);
+const findActiveByCustomerProperty = mock(
+  async (): Promise<Record<string, unknown> | null> => null,
+);
 const createProject = mock(async () => ({
   id: "project-1",
   tenant_id: "tenant-1",
@@ -306,5 +312,109 @@ describe("customerStatusService", () => {
         customer_id: "customer-1",
       },
     });
+  });
+
+  test("offers start_following but not start_design for a potential customer", async () => {
+    const { customerStatusService } = await import("./customer-status");
+
+    const result = customerStatusService.listCustomerStatusActionsForCustomer({
+      status: "potential",
+    });
+
+    expect(result.actions.map((action) => action.action)).toContain(
+      "start_following",
+    );
+    expect(result.actions.map((action) => action.action)).not.toContain(
+      "start_design",
+    );
+  });
+
+  test("rejects start_design before reading or creating a project when no property exists", async () => {
+    getPrimarySummary.mockImplementationOnce(async () => null);
+    const { customerStatusService } = await import("./customer-status");
+
+    await expect(customerStatusService.transitionCustomerStatus({
+      authContext: buildAuthContext(),
+      customerId: "customer-1",
+      existing: {
+        id: "customer-1",
+        tenant_id: "tenant-1",
+        owner_id: "owner-1",
+        status: "arrived",
+      },
+      payload: {
+        action: "start_design",
+        metadata: {},
+      },
+    })).rejects.toThrow("客户进入设计前必须先维护房产信息");
+
+    expect(findActiveByCustomerProperty).not.toHaveBeenCalled();
+    expect(createProject).not.toHaveBeenCalled();
+    expect(updateCustomerById).not.toHaveBeenCalled();
+  });
+
+  test("reuses an active project for the same customer and property", async () => {
+    findActiveByCustomerProperty.mockImplementationOnce(async () => ({
+      id: "project-existing",
+      tenant_id: "tenant-1",
+      customer_id: "customer-1",
+      property_id: "property-1",
+      status: "designing",
+    }));
+    listRuntimeInstances.mockImplementationOnce(async () => ({
+      list: [{
+        id: "customer-instance-1",
+        current_node_key: "arrived",
+      }],
+      pagination: {
+        page: 1,
+        pageSize: 1,
+        total: 1,
+        totalPages: 1,
+      },
+    }));
+    completeRuntimeNode.mockImplementationOnce(async () => ({
+      ok: true,
+      instance: {
+        id: "customer-instance-1",
+        current_node_key: "designing",
+      },
+      completedNode: {},
+      nextNode: {
+        node_key: "designing",
+      },
+      task: null,
+    }));
+    const { customerStatusService } = await import("./customer-status");
+
+    await customerStatusService.transitionCustomerStatus({
+      authContext: buildAuthContext(),
+      customerId: "customer-1",
+      existing: {
+        id: "customer-1",
+        tenant_id: "tenant-1",
+        owner_id: "owner-1",
+        status: "arrived",
+      },
+      payload: {
+        action: "start_design",
+        metadata: {},
+      },
+    });
+
+    expect(findActiveByCustomerProperty).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      customerId: "customer-1",
+      propertyId: "property-1",
+    });
+    expect(createProject).not.toHaveBeenCalled();
+    expect(syncProjectCreated).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: "tenant-1",
+      projectId: "project-existing",
+      source: "customer_start_design",
+      extraContext: {
+        customer_id: "customer-1",
+      },
+    }));
   });
 });

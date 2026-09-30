@@ -171,7 +171,6 @@ export function projectListCacheKey(this: any, authContext: AuthContext, query: 
     const permissions = authContext.permissions
         .map((item) => `${item.code}:${item.scope}`)
         .sort();
-
     return JSON.stringify({
         tenantId: authContext.tenantId,
         authUserId: authContext.authUserId,
@@ -180,6 +179,7 @@ export function projectListCacheKey(this: any, authContext: AuthContext, query: 
         pageSize: query.pageSize,
         status: query.status ?? null,
         keyword: query.keyword?.trim() ?? null,
+        customer_id: query.customer_id ?? null,
         ownership: query.ownership ?? null,
         work_scope: query.work_scope ?? null,
         workflow_group_key: query.workflow_group_key ?? null,
@@ -245,6 +245,7 @@ export async function loadProjects(this: any, input: {
         pageSize,
         status,
         keyword,
+        customer_id: customerId,
         work_scope: workScope,
         mode,
         workflow_group_key: workflowGroupKey,
@@ -290,6 +291,7 @@ export async function loadProjects(this: any, input: {
         visibleProjectIds,
         status,
         keyword: keyword?.trim(),
+        customerId,
         projectIds: intersectProjectIdFilters(todayProjectIds, workflowProjectIds),
     };
     if (mode === "home") {
