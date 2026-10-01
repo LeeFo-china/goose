@@ -52,6 +52,12 @@ function fixture(input: {
       status: "active" })),
     findConversionPreflight: mock(async () => ({ leadId: LEAD_ID,
       phone: "13800138000", assignedEmployeeId, customerId: input.customerId ?? null })),
+    findCustomerAccess: mock(async () => ({
+      id: CUSTOMER_ID,
+      tenant_id: TENANT_ID,
+      status: "potential",
+      owner_id: assignedEmployeeId,
+    })),
     assign: mock(async (args: { assignedEmployeeId: string }) => ({ ok: true as const, data: {
       action: "assign" as const, result: "assigned" as const, lead_id: LEAD_ID,
       assigned_employee_id: args.assignedEmployeeId, lead_version: 2,
@@ -84,7 +90,11 @@ function fixture(input: {
   };
   const phonePrivacy = { createPrivacyContext: mock(async () => ({})),
     serializeCustomerPhoneFields: mock(() => ({})) };
-  return { service: new Service({ repository, accessPolicy, phonePrivacy } as never),
+  const workflowInitialization = {
+    initialize: mock(async () => ({ status: "ready" as const, attempts: 1 })),
+  };
+  return { service: new Service({ repository, accessPolicy, phonePrivacy,
+    workflowInitialization } as never),
     repository, accessPolicy };
 }
 

@@ -61,8 +61,12 @@ function fixture(source: "douyin_miniapp" | "h5" = "douyin_miniapp",
     markInvalid: mock(async () => ({ ok: true as const, data: { action: "mark_invalid" as const, result: "invalid" as const,
       lead_id: leadId, lead_version: 2, appointments_updated: 0, repeated_invalidation: false, idempotent: false } })),
   };
+  const workflowInitialization = {
+    initialize: mock(async () => ({ status: "ready" as const, attempts: 1 })),
+  };
   return { lead, customer, repository, service: new Service({ repository, accessPolicy: policy,
-    phonePrivacy: { serializeMaskedPhoneOnly: () => ({ phone: null, phone_masked: "138****8000" }) } }) };
+    phonePrivacy: { serializeMaskedPhoneOnly: () => ({ phone: null, phone_masked: "138****8000" }) },
+    workflowInitialization } as never), workflowInitialization };
 }
 
 test("generic read is employee-only and does not accept legacy permissions", async () => {
@@ -152,7 +156,13 @@ test("conversion hides customer ID independently of permission to convert", asyn
   const context = fixture();
   expect(await context.service.convert(auth(["customer_lead.read", "customer_lead.convert"]), leadId, command))
     .toMatchObject({ customer_id: null, can_view_customer: false });
-  expect(context.repository.findCustomerAccess).not.toHaveBeenCalled();
+  expect(context.repository.findCustomerAccess).toHaveBeenCalledWith(tenant, customerId);
+  expect(context.workflowInitialization.initialize).toHaveBeenCalledWith({
+    authContext: expect.objectContaining({ tenantId: tenant, employeeId: employee }),
+    tenantId: tenant,
+    customerId,
+    ownerId: employee,
+  });
   expect(await context.service.convert(auth(["customer_lead.read", "customer_lead.convert", "customer.read"]), leadId, command))
     .toMatchObject({ customer_id: customerId, can_view_customer: true });
 });
@@ -166,6 +176,7 @@ test("conversion accepts recorded creation on an idempotent replay after preflig
   } }));
   await expect(context.service.convert(auth(["customer_lead.read", "customer_lead.convert"]), leadId, command))
     .resolves.toMatchObject({ idempotent: true, created_customer: true, customer_id: null });
+  expect(context.workflowInitialization.initialize).toHaveBeenCalledTimes(1);
 });
 
 test("detail whitelists source and derives actions from real permissions and preflight", async () => {

@@ -48,12 +48,15 @@ describe("production customer workflow audit contract", () => {
     expect(workflow).toContain("retention-days: 7");
   });
 
-  test("verifies repaired detail state through the deployed read path", () => {
+  test("verifies repaired detail state while allowing legitimate progression", () => {
     expect(workflow).toContain("Verify repaired customer detail state read-only");
     expect(workflow).toContain("workflowSubjectsService.getState");
     expect(workflow).toContain('business_action === "start_following"');
+    expect(workflow).toContain("customer.status !== state.current_node_key");
+    expect(workflow).toContain("potential += 1");
     expect(workflow).toContain("customer-workflow-detail-verification.json");
     expect(workflow).toContain(".ready == .checked");
-    expect(workflow).toContain(".startFollowing == .checked");
+    expect(workflow).toContain(".startFollowing == .potential");
+    expect(workflow).not.toContain(".startFollowing == .checked");
   });
 });

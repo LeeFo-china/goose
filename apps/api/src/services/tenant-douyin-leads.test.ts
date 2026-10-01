@@ -1,16 +1,12 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
-
 import type { AuthContext } from "@/services/authorization";
-
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
-
 let Service: typeof import("./tenant-douyin-leads").TenantDouyinLeadsService;
 let permissionFor: typeof import("./tenant-douyin-leads").permissionFor;
 let customerPhonePrivacyService: typeof import("@/services/customer-phone-privacy")
   .customerPhonePrivacyService;
-
 beforeAll(async () => {
   ({ TenantDouyinLeadsService: Service, permissionFor } = await import(
     "./tenant-douyin-leads"
@@ -19,12 +15,11 @@ beforeAll(async () => {
     "@/services/customer-phone-privacy"
   ));
 });
-
-const TENANT_ID = "11111111-1111-4111-8111-111111111111";
-const LEAD_ID = "22222222-2222-4222-8222-222222222222";
-const APPOINTMENT_ID = "33333333-3333-4333-8333-333333333333";
-const CUSTOMER_ID = "44444444-4444-4444-8444-444444444444";
-const EMPLOYEE_ID = "55555555-5555-4555-8555-555555555555";
+const TENANT_ID = "11111111-1111-4111-8111-111111111111",
+  LEAD_ID = "22222222-2222-4222-8222-222222222222",
+  APPOINTMENT_ID = "33333333-3333-4333-8333-333333333333";
+const CUSTOMER_ID = "44444444-4444-4444-8444-444444444444",
+  EMPLOYEE_ID = "55555555-5555-4555-8555-555555555555";
 const IDEMPOTENCY_KEY = "66666666-6666-4666-8666-666666666666";
 const CREATED_AT = "2026-08-21T08:00:00.000Z";
 
@@ -62,6 +57,9 @@ function authContext(
 }
 
 function fixture(overrides: Record<string, unknown> = {}) {
+  const workflowInitialization = {
+    initialize: mock(async () => ({ status: "ready" as const, attempts: 1 })),
+  };
   const repository = {
     listLeads: mock(async () => ({ rows: [{ lead,
       appointments: [{ ...appointment, budget_range: null }],
@@ -76,6 +74,7 @@ function fixture(overrides: Record<string, unknown> = {}) {
     findConversionPreflight: mock(async () => ({ leadId: LEAD_ID,
       phone: lead.phone, assignedEmployeeId: EMPLOYEE_ID,
       customerId: CUSTOMER_ID })),
+    findCustomerAccess: mock(async () => customer),
     assign: mock(async () => ({ ok: true as const, data: { action: "assign" as const,
       result: "assigned" as const, lead_id: LEAD_ID,
       assigned_employee_id: EMPLOYEE_ID, lead_version: 2,
@@ -119,8 +118,9 @@ function fixture(overrides: Record<string, unknown> = {}) {
     })),
   };
   return {
-    service: new Service({ repository, accessPolicy, phonePrivacy, ...overrides } as never),
-    repository, accessPolicy, phonePrivacy,
+    service: new Service({ repository, accessPolicy, phonePrivacy,
+      workflowInitialization, ...overrides } as never),
+    repository, accessPolicy, phonePrivacy, workflowInitialization,
   };
 }
 

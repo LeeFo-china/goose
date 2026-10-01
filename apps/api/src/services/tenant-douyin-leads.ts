@@ -39,6 +39,11 @@ import type {
 } from "@/services/authorization";
 import { customerPhonePrivacyService } from "@/services/customer-phone-privacy";
 import {
+  initializeConvertedPotentialCustomerWorkflow,
+  type ConvertedCustomerRepositoryPort,
+  type CustomerWorkflowInitializationPort,
+} from "@/services/tenant-douyin-lead-customer-workflow";
+import {
   serializeFollowUpBundle, serializeLeadBundle,
   type TenantDouyinLeadPhonePrivacyPort,
 } from "@/services/tenant-douyin-leads-serializer";
@@ -76,7 +81,7 @@ export function permissionFor(action: LeadAction): string {
   return ACTION_PERMISSIONS[action];
 }
 
-type RepositoryPort = {
+type RepositoryPort = ConvertedCustomerRepositoryPort & {
   listAssigneeFilterOptions(input: TenantDouyinLeadAssigneeFilterOptionsQuery & {
     tenantId: string; visibleEmployeeIds: readonly string[] | null;
   }): Promise<{ rows: readonly { id: string; name: string | null }[]; total: number }>;
@@ -155,6 +160,7 @@ export class TenantDouyinLeadsService {
     readonly repository: RepositoryPort;
     readonly accessPolicy: AccessPolicyPort;
     readonly phonePrivacy: PhonePrivacyPort;
+    readonly workflowInitialization?: CustomerWorkflowInitializationPort;
   }, private readonly permissionResource: "douyin_lead" | "customer_lead" = "douyin_lead") {}
 
   private permission(action: LeadAction): string {
@@ -373,6 +379,13 @@ export class TenantDouyinLeadsService {
         && (data.customer_id !== preflight.customerId || (data.created_customer && !data.idempotent)))) {
       throwInvalidResponse();
     }
+    await initializeConvertedPotentialCustomerWorkflow({
+      authContext,
+      tenantId: context.tenantId,
+      customerId: data.customer_id,
+      repository: this.dependencies.repository,
+      workflowInitialization: this.dependencies.workflowInitialization,
+    });
     return data;
   }
 
