@@ -1,0 +1,272 @@
+name: Verify Production Customer Start Following
+run-name: Verify one approved production customer start_following
+
+on:
+  workflow_dispatch:
+    inputs:
+      deployed_sha:
+        description: "Exact 40-character SHA deployed in gooes-api"
+        required: true
+        type: string
+      confirm_text:
+        description: "Required: 确认推进生产客户开始跟进"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-docker-services-main
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Complete and verify one approved customer workflow action
+    runs-on: [self-hosted, Linux, X64, gooes-prod-deploy]
+    environment: production
+    timeout-minutes: 10
+    env:
+      EXPECTED_DEPLOYED_SHA: ${{ inputs.deployed_sha }}
+      CONFIRM_TEXT: ${{ inputs.confirm_text }}
+      TARGET_CUSTOMER_ID: ${{ secrets.CUSTOMER_WORKFLOW_SMOKE_TARGET_ID }}
+      FIXED_TENANT_ID: 3eebca47-961f-4899-b976-a3d3208d326b
+    steps:
+      - name: Guard production runner, deployment, and explicit authorization
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME}" = "gooes-prod-vm-0-3"
+          test "${CONFIRM_TEXT}" = "确认推进生产客户开始跟进"
+          [[ "${EXPECTED_DEPLOYED_SHA}" =~ ^[a-f0-9]{40}$ ]]
+          [[ "${TARGET_CUSTOMER_ID}" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$ ]]
+
+          docker inspect gooes-api >/dev/null
+          test "$(docker inspect -f '{{.State.Status}}' gooes-api)" = running
+          test "$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' gooes-api)" = healthy
+          actual_sha="$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' gooes-api)"
+          test "${actual_sha}" = "${EXPECTED_DEPLOYED_SHA}"
+          echo "deployed_revision_verified=true" >> "${GITHUB_STEP_SUMMARY}"
+          echo "explicit_customer_authorization_verified=true" >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Complete start_following through deployed HTTP API and reread detail
+        run: |
+          set -euo pipefail
+          result_file="${RUNNER_TEMP}/production-customer-start-following.json"
+          rm -f "${result_file}"
+
+          docker exec -i \
+            -e TARGET_TENANT_ID="${FIXED_TENANT_ID}" \
+            -e TARGET_CUSTOMER_ID="${TARGET_CUSTOMER_ID}" \
+            gooes-api bun - > "${result_file}" <<'BUN'
+          const tenantId = process.env.TARGET_TENANT_ID;
+          const customerId = process.env.TARGET_CUSTOMER_ID;
+          const uuidPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
+          const fail = (message) => {
+            console.error(message);
+            process.exit(1);
+          };
+          if (!tenantId || !customerId || !uuidPattern.test(customerId)) {
+            fail("verification target is invalid");
+          }
+
+          const { SupabaseDB } = await import("./src/utils/supabase/index.ts");
+          const client = SupabaseDB.getAdminClient();
+          const customerResult = await client
+            .from("customers")
+            .select("id,tenant_id,status,owner_id")
+            .eq("tenant_id", tenantId)
+            .eq("id", customerId)
+            .maybeSingle();
+          if (customerResult.error || !customerResult.data) {
+            fail("approved customer was not found in the fixed tenant");
+          }
+          const customer = customerResult.data;
+          if (customer.status !== "potential" || !customer.owner_id) {
+            fail("approved customer is not an owned potential customer");
+          }
+
+          const employeeResult = await client
+            .from("employees")
+            .select("id,tenant_id,user_id,status")
+            .eq("tenant_id", tenantId)
+            .eq("id", customer.owner_id)
+            .maybeSingle();
+          if (
+            employeeResult.error ||
+            !employeeResult.data?.user_id ||
+            employeeResult.data.status !== "active"
+          ) {
+            fail("approved customer owner cannot execute the production action");
+          }
+
+          process.env.JWT_EXPIRES_IN = "5m";
+          const { signToken } = await import("./src/utils/jwt.ts");
+          const token = signToken({
+            sub: employeeResult.data.user_id,
+            token_type: "auth",
+          });
+          const port = process.env.PORT || "3000";
+          if (!/^\d{2,5}$/.test(port)) fail("production API port is invalid");
+          const baseUrl = `http://127.0.0.1:${port}`;
+          const request = async (path, init = {}) => {
+            const response = await fetch(`${baseUrl}${path}`, {
+              ...init,
+              headers: {
+                Authorization: `Bearer ${token}`,
+                ...(init.headers || {}),
+              },
+              signal: AbortSignal.timeout(15000),
+            });
+            let body = null;
+            try {
+              body = await response.json();
+            } catch {
+              fail(`production API returned non-JSON status ${response.status}`);
+            }
+            if (!response.ok) {
+              fail(`production API request failed with status ${response.status}`);
+            }
+            return { status: response.status, data: body?.data };
+          };
+
+          const beforeResponse = await request(`/customers/${customerId}/detail`);
+          const before = beforeResponse.data;
+          const state = before?.workflow_state;
+          if (before?.id !== customerId || before.status !== "potential") {
+            fail("customer detail precondition failed");
+          }
+          if (
+            state?.instance_status !== "running" ||
+            state.current_node_key !== "potential" ||
+            state.pending_task_count < 1
+          ) {
+            fail("customer workflow precondition failed");
+          }
+          const actions = Array.isArray(state.actions)
+            ? state.actions.filter((action) =>
+              action?.disabled !== true &&
+              action.business_domain === "customer_status" &&
+              action.business_action === "start_following"
+            )
+            : [];
+          if (actions.length !== 1) {
+            fail("expected exactly one start_following action");
+          }
+          const action = actions[0];
+          if (
+            !uuidPattern.test(action.task_id || "") ||
+            typeof action.key !== "string" ||
+            !action.key.trim() ||
+            action.requires_reason === true
+          ) {
+            fail("start_following action contract is invalid");
+          }
+
+          const taskBeforeResult = await client
+            .from("workflow_tasks")
+            .select("id,status")
+            .eq("tenant_id", tenantId)
+            .eq("id", action.task_id)
+            .maybeSingle();
+          if (taskBeforeResult.error || taskBeforeResult.data?.status !== "pending") {
+            fail("start_following task is not pending");
+          }
+
+          const mutationResponse = await request(
+            `/workflow-tasks/${action.task_id}/complete`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Idempotency-Key": `customer-start-following-${action.task_id}`,
+              },
+              body: JSON.stringify({
+                action: action.key,
+                reason: null,
+                output: {},
+              }),
+            },
+          );
+          if (mutationResponse.status !== 200) {
+            fail("start_following mutation did not return 200");
+          }
+
+          const afterResponse = await request(`/customers/${customerId}/detail`);
+          const after = afterResponse.data;
+          const afterState = after?.workflow_state;
+          if (after?.id !== customerId || after.status !== "following") {
+            fail("customer status did not advance to following");
+          }
+          if (
+            afterState?.instance_status !== "running" ||
+            afterState?.current_node_key !== "following"
+          ) {
+            fail("customer workflow node did not advance to following");
+          }
+          if (
+            Array.isArray(afterState.actions) &&
+            afterState.actions.some((action) =>
+              action.business_action === "start_following"
+            )
+          ) {
+            fail("start_following remained available after completion");
+          }
+
+          const taskAfterResult = await client
+            .from("workflow_tasks")
+            .select("id,status")
+            .eq("tenant_id", tenantId)
+            .eq("id", action.task_id)
+            .maybeSingle();
+          if (taskAfterResult.error || !taskAfterResult.data) {
+            fail("completed task verification failed");
+          }
+          const oldTask = taskAfterResult.data;
+          if (oldTask.status !== "completed") {
+            fail("original potential task was not completed");
+          }
+
+          console.log(JSON.stringify({
+            before: {
+              customerStatus: before.status,
+              instanceStatus: state.instance_status,
+              nodeKey: state.current_node_key,
+              pendingTaskCount: state.pending_task_count,
+            },
+            mutation: { httpStatus: mutationResponse.status },
+            after: {
+              customerStatus: after.status,
+              instanceStatus: afterState.instance_status,
+              nodeKey: afterState.current_node_key,
+              pendingTaskCount: afterState.pending_task_count,
+              originalTaskStatus: oldTask.status,
+            },
+          }));
+          BUN
+
+          jq -e '
+            .before.customerStatus == "potential" and
+            .before.instanceStatus == "running" and
+            .before.nodeKey == "potential" and
+            .before.pendingTaskCount >= 1 and
+            .mutation.httpStatus == 200 and
+            .after.customerStatus == "following" and
+            .after.instanceStatus == "running" and
+            .after.nodeKey == "following" and
+            .after.originalTaskStatus == "completed"
+          ' "${result_file}" >/dev/null
+          echo "before_customer_status=potential" >> "${GITHUB_STEP_SUMMARY}"
+          echo "before_workflow_node=potential" >> "${GITHUB_STEP_SUMMARY}"
+          echo "mutation_http_status=200" >> "${GITHUB_STEP_SUMMARY}"
+          echo "after_customer_status=following" >> "${GITHUB_STEP_SUMMARY}"
+          echo "after_workflow_node=following" >> "${GITHUB_STEP_SUMMARY}"
+          echo "original_task_status=completed" >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload private verification evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: production-customer-start-following-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/production-customer-start-following.json
+          if-no-files-found: error
+          retention-days: 7
