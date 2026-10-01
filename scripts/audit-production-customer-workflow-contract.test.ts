@@ -47,4 +47,13 @@ describe("production customer workflow audit contract", () => {
     expect(workflow).toContain("actions/upload-artifact@v6");
     expect(workflow).toContain("retention-days: 7");
   });
+
+  test("verifies repaired detail state through the deployed read path", () => {
+    expect(workflow).toContain("Verify repaired customer detail state read-only");
+    expect(workflow).toContain("workflowSubjectsService.getState");
+    expect(workflow).toContain('business_action === "start_following"');
+    expect(workflow).toContain("customer-workflow-detail-verification.json");
+    expect(workflow).toContain(".ready == .checked");
+    expect(workflow).toContain(".startFollowing == .checked");
+  });
 });

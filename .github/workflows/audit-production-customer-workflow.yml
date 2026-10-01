@@ -159,6 +159,112 @@ jobs:
           echo "potential_create_candidates=${create_count}" >> "${GITHUB_STEP_SUMMARY}"
           echo "failed_rows=${failed_count}" >> "${GITHUB_STEP_SUMMARY}"
 
+      - name: Verify repaired customer detail state read-only
+        run: |
+          set -euo pipefail
+          detail_output="${RUNNER_TEMP}/customer-workflow-detail-verification.json"
+          docker exec -i \
+            -e TARGET_TENANT_ID="${EXPECTED_TENANT_ID}" \
+            -e REPAIR_SOURCE=20261001120000_backfill_qingtian_potential_customer_workflow \
+            gooes-api bun - > "${detail_output}" <<'BUN'
+          const tenantId = process.env.TARGET_TENANT_ID;
+          const repairSource = process.env.REPAIR_SOURCE;
+          const fail = (message) => {
+            console.error(message);
+            process.exit(1);
+          };
+          if (!tenantId || !repairSource) fail("verification environment missing");
+
+          const { SupabaseDB } = await import("./src/utils/supabase/index.ts");
+          const { workflowSubjectsService } = await import(
+            "./src/services/workflow-subjects.ts"
+          );
+          const client = SupabaseDB.getAdminClient();
+          const instanceResult = await client
+            .from("workflow_instances")
+            .select("subject_id")
+            .eq("tenant_id", tenantId)
+            .eq("subject_type", "customer")
+            .contains("context", { source: repairSource });
+          if (instanceResult.error) fail("repaired instance query failed");
+
+          const subjectIds = (instanceResult.data ?? []).map((row) => row.subject_id);
+          if (subjectIds.length !== 8) fail("unexpected repaired customer count");
+          const customerResult = await client
+            .from("customers")
+            .select("id,owner_id")
+            .eq("tenant_id", tenantId)
+            .in("id", subjectIds);
+          if (customerResult.error) fail("repaired customer query failed");
+          if ((customerResult.data ?? []).length !== subjectIds.length) {
+            fail("repaired customer cardinality mismatch");
+          }
+
+          let ready = 0;
+          let startFollowing = 0;
+          for (const customer of customerResult.data ?? []) {
+            const authContext = {
+              authUserId: "production-read-only-verification",
+              employeeId: customer.owner_id ?? null,
+              tenantId,
+              tenantName: null,
+              tenantSlug: null,
+              tenantStatus: "active",
+              isPlatformAdmin: false,
+              employeeName: null,
+              employeeStatus: "active",
+              departmentId: null,
+              tenantDepartmentId: null,
+              departmentCode: null,
+              departmentName: null,
+              postId: null,
+              postName: null,
+              avatar: null,
+              roleCodes: [],
+              roles: [],
+              permissions: [],
+            };
+            let detail;
+            try {
+              detail = await workflowSubjectsService.getState(authContext, {
+                subjectType: "customer",
+                subjectId: customer.id,
+              });
+            } catch {
+              fail("customer workflow detail read failed");
+            }
+            const state = detail?.workflow_state;
+            if (
+              state?.instance_status === "running" &&
+              state.current_node_key === "potential" &&
+              state.pending_task_count >= 1
+            ) {
+              ready += 1;
+            }
+            if (
+              Array.isArray(state?.actions) &&
+              state.actions.some((action) =>
+                action.business_action === "start_following"
+              )
+            ) {
+              startFollowing += 1;
+            }
+          }
+
+          console.log(JSON.stringify({
+            checked: subjectIds.length,
+            ready,
+            startFollowing,
+          }));
+          BUN
+
+          jq -e \
+            '.checked == 8 and .ready == .checked and .startFollowing == .checked' \
+            "${detail_output}" >/dev/null
+          echo "detail_checked=$(jq -r '.checked' "${detail_output}")" >> "${GITHUB_STEP_SUMMARY}"
+          echo "detail_ready=$(jq -r '.ready' "${detail_output}")" >> "${GITHUB_STEP_SUMMARY}"
+          echo "detail_start_following=$(jq -r '.startFollowing' "${detail_output}")" >> "${GITHUB_STEP_SUMMARY}"
+
       - name: Upload private audit evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@v6
@@ -167,6 +273,7 @@ jobs:
           path: |
             ${{ runner.temp }}/customer-workflow-audit.json
             ${{ runner.temp }}/customer-workflow-audit.md
+            ${{ runner.temp }}/customer-workflow-detail-verification.json
           if-no-files-found: error
           retention-days: 7
 
