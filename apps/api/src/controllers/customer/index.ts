@@ -9,8 +9,7 @@ import { customerOwnerAssignmentService } from "@/services/customer-owner-assign
 import { customerPhonePrivacyService } from "@/services/customer-phone-privacy";
 import { customerPropertyService } from "@/services/customer-properties";
 import { customerSourceService } from "@/services/customer-sources";
-import { customerWorkflowRuntimeService } from "@/services/customer-workflow-runtime";
-import { workflowSubjectStateService } from "@/services/workflow-subject-state";
+import { customerWorkflowInitializationService } from "@/services/customer-workflow-initialization";
 import { ResponseHandler } from "@/utils/response";
 import customerExtrasController from "./extras-controller";
 import customerPropertiesController from "./properties-controller";
@@ -172,37 +171,41 @@ class CustomerController extends CustomerBaseController {
     }
 
     const customer = await customerCoreService.createCustomer(payload);
-    const workflowRuntimeMetadata =
-      await customerWorkflowRuntimeService.syncCustomerCreated({
+    const workflowInitialization =
+      await customerWorkflowInitializationService.initialize({
         authContext,
         tenantId: authContext.tenantId,
         customerId: customer.id,
+        ownerId: payload.owner_id,
       });
-    if (workflowRuntimeMetadata.instance_id && workflowRuntimeMetadata.definition_id) {
-      await workflowSubjectStateService.syncFromRuntimeInstance({
+    if (workflowInitialization.status === "degraded") {
+      request.log.error({
+        requestId: request.id,
         tenantId: authContext.tenantId,
-        subjectType: "customer",
-        subjectId: customer.id,
-        definitionId: workflowRuntimeMetadata.definition_id,
-        instanceId: workflowRuntimeMetadata.instance_id,
-      });
+        customerId: customer.id,
+        code: workflowInitialization.code,
+        reason: workflowInitialization.reason,
+        attempts: workflowInitialization.attempts,
+      }, "[customer-create] workflow initialization degraded");
     }
     const primaryProperty = await customerPropertyService.upsertCustomerPrimaryProperty({
       customerId: customer.id,
       propertyPayload,
       tenantId: authContext.tenantId,
     });
-    return ResponseHandler.success(
-      await this.buildCustomerDetailResponse(customer, {
-        primaryProperty,
-        phonePrivacyContext: await customerPhonePrivacyService.createPrivacyContext(
-          authContext,
-        ),
+    const detail = await this.buildCustomerDetailResponse(customer, {
+      primaryProperty,
+      phonePrivacyContext: await customerPhonePrivacyService.createPrivacyContext(
         authContext,
-        tenantId: authContext.tenantId,
-        request,
-      }),
-    );
+      ),
+      authContext,
+      tenantId: authContext.tenantId,
+      request,
+    });
+    return ResponseHandler.success({
+      ...detail,
+      workflow_initialization: workflowInitialization,
+    });
   };
 
   override update = async (request: FastifyRequest, reply: FastifyReply) => {
