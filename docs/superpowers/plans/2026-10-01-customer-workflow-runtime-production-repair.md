@@ -409,22 +409,22 @@ acceptance summary without personal data.
 
 ## Task 8: Validate `start_following`
 
-- [ ] **Step 1: Run automated transition regression**
+- [x] **Step 1: Run automated transition regression**
 
 Require `start_following` to change both customer status and workflow current node
 from `potential` to `following`.
 
-- [ ] **Step 2: Obtain an explicitly approved live customer**
+- [x] **Step 2: Obtain an explicitly approved live customer**
 
 Do not choose a real business customer automatically. The user or mini-program owner
 must provide a customer that may be advanced.
 
-- [ ] **Step 3: Perform live action after approval**
+- [x] **Step 3: Perform live action after approval**
 
 Complete the returned action through the normal API and reread detail. Require both
 statuses to be `following` and the old potential task not pending.
 
-- [ ] **Step 4: Update handoff**
+- [x] **Step 4: Update handoff**
 
 Tell orange that a client release cannot repair stored runtime data and it must keep
 consuming backend actions without synthesizing them. Confirm orange remained untouched.

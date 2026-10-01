@@ -68,8 +68,20 @@ Migration 在单个事务中执行，并在提交前断言：实例数、pending
   - 输出只包含聚合计数，不包含客户 ID 或个人信息。
 
 自动化回归同时验证 `start_following` 会把客户状态和工作流当前节点从 `potential`
-推进到 `following`。未自动选择真实生产客户执行该动作；真实推进必须由业务方明确指定
-一个允许变更状态的客户后，再通过正常 API 操作并复读详情。
+推进到 `following`。在业务方明确指定允许变更状态的客户之前，没有自动选择或推进
+任何真实客户；获批后的真实闭环结果记录如下。
+
+## 生产真实 `start_following` 闭环
+
+- 用户另行明确指定了一个允许改变业务状态的生产客户。
+- 受保护验收 Run：`36853594414`
+- 执行入口：生产已部署 API 的 `POST /workflow-tasks/:id/complete`
+- 执行前：客户 `status=potential`，实例 `running`，当前节点 `potential`，pending task 数为 1。
+- Mutation：HTTP 200。
+- 执行后：客户 `status=following`，实例仍为 `running`，当前节点 `following`，原
+  `potential` task 为 `completed`，详情不再返回 `start_following`。
+- 目标客户 ID 仅通过临时 production environment secret 注入；Run 完成后 secret 已删除，
+  仓库、工作流输入、步骤摘要和私有证据均未记录客户 ID 或个人信息。
 
 ## 小程序对接结论
 
