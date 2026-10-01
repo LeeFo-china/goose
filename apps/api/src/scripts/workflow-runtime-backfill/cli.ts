@@ -15,6 +15,15 @@ function parseSubjectType(value: string): BackfillSubjectType {
   throw new Error(`无效的 subject type: ${value}`);
 }
 
+function parseCreatedBefore(value: string) {
+  const date = new Date(value);
+  if (!value || Number.isNaN(date.getTime())) {
+    throw new Error(`无效的 created-before: ${value}`);
+  }
+
+  return date.toISOString();
+}
+
 function projectRoot() {
   return resolve(dirname(import.meta.path), "../../../../..");
 }
@@ -65,6 +74,12 @@ export function parseBackfillArgs(argv: string[]): CliOptions {
     if (arg === "--subject-type") {
       options.subjectType = parseSubjectType(argv[index + 1] || "");
       index += 1;
+      continue;
+    }
+
+    if (arg === "--created-before") {
+      options.createdBefore = parseCreatedBefore(argv[index + 1] || "");
+      index += 1;
     }
   }
 
@@ -73,6 +88,9 @@ export function parseBackfillArgs(argv: string[]): CliOptions {
   }
   if (options.apply === dryRun) {
     throw new Error("请且只请传 --dry-run 或 --apply");
+  }
+  if (options.createdBefore && options.subjectType !== "customer") {
+    throw new Error("created-before 仅支持 customer subject type");
   }
 
   return options;

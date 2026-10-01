@@ -9,7 +9,11 @@ import {
   listLegacySubjects,
   loadWorkflowBindings,
 } from "./data";
-import { summarizeResults, writeBackfillReport } from "./report";
+import {
+  summarizeResults,
+  summarizeResultsByLegacyStatus,
+  writeBackfillReport,
+} from "./report";
 import {
   SUBJECT_WORKFLOW_KEY,
   type BackfillResult,
@@ -22,8 +26,13 @@ async function backfillSubjectType(input: {
   subjectType: BackfillSubjectType;
   binding: WorkflowBinding | null;
   apply: boolean;
+  createdBefore?: string;
 }) {
-  const rows = await listLegacySubjects(input.subjectType, input.tenantId);
+  const rows = await listLegacySubjects(
+    input.subjectType,
+    input.tenantId,
+    input.subjectType === "customer" ? input.createdBefore : undefined,
+  );
   const workflowKey = SUBJECT_WORKFLOW_KEY[input.subjectType];
 
   if (!input.binding) {
@@ -135,6 +144,7 @@ async function backfillSubjectType(input: {
 export async function backfillWorkflowRuntimeFromStateMachine(
   options: CliOptions,
 ) {
+  const generatedAt = new Date().toISOString();
   const bindings = await loadWorkflowBindings(options.tenantId);
   const allResults: BackfillResult[] = [];
 
@@ -144,6 +154,7 @@ export async function backfillWorkflowRuntimeFromStateMachine(
       subjectType,
       binding: bindings.get(subjectType) ?? null,
       apply: options.apply,
+      createdBefore: options.createdBefore,
     });
     allResults.push(...results);
   }
@@ -151,15 +162,36 @@ export async function backfillWorkflowRuntimeFromStateMachine(
   const outputPath = await writeBackfillReport({
     tenantId: options.tenantId,
     apply: options.apply,
+    generatedAt,
+    createdBefore: options.createdBefore ?? null,
     reportPath: options.reportPath,
     results: allResults,
   });
 
-  return {
+  return buildBackfillRunResult({
     apply: options.apply,
-    scanned: allResults.length,
-    summary: summarizeResults(allResults),
+    generatedAt,
+    createdBefore: options.createdBefore ?? null,
+    results: allResults,
     outputPath,
+  });
+}
+
+export function buildBackfillRunResult(input: {
+  apply: boolean;
+  generatedAt: string;
+  createdBefore: string | null;
+  results: BackfillResult[];
+  outputPath: string;
+}) {
+  return {
+    apply: input.apply,
+    generatedAt: input.generatedAt,
+    createdBefore: input.createdBefore,
+    scanned: input.results.length,
+    summary: summarizeResults(input.results),
+    statusSummary: summarizeResultsByLegacyStatus(input.results),
+    outputPath: input.outputPath,
   };
 }
 

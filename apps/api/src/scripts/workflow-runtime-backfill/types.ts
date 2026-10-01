@@ -7,6 +7,7 @@ export type CliOptions = {
   apply: boolean;
   reportPath: string;
   subjectType?: BackfillSubjectType;
+  createdBefore?: string;
 };
 
 export type WorkflowDefinitionRow = {

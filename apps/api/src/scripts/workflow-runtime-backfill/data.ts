@@ -59,16 +59,22 @@ async function listPagedRows<T>(
   tableName: string,
   select: string,
   tenantId: string,
+  createdBefore?: string,
 ): Promise<T[]> {
   const rows: T[] = [];
 
   for (let offset = 0; ; offset += PAGE_SIZE) {
-    const { data, error } = await SupabaseDB.getAdminClient()
+    let query = SupabaseDB.getAdminClient()
       .from(tableName)
       .select(select)
       .eq("tenant_id", tenantId)
-      .order("created_at", { ascending: true })
-      .range(offset, offset + PAGE_SIZE - 1);
+      .order("created_at", { ascending: true });
+
+    if (createdBefore) {
+      query = query.lte("created_at", createdBefore);
+    }
+
+    const { data, error } = await query.range(offset, offset + PAGE_SIZE - 1);
 
     if (error) throw error;
 
@@ -83,13 +89,16 @@ async function listPagedRows<T>(
 export async function listLegacySubjects(
   subjectType: BackfillSubjectType,
   tenantId: string,
+  createdBefore?: string,
 ): Promise<LegacySubjectRow[]> {
-  if (subjectType === "customer") return listCustomerSubjects(tenantId);
+  if (subjectType === "customer") {
+    return listCustomerSubjects(tenantId, createdBefore);
+  }
   if (subjectType === "project") return listProjectSubjects(tenantId);
   return listExpenseSubjects(tenantId);
 }
 
-async function listCustomerSubjects(tenantId: string) {
+async function listCustomerSubjects(tenantId: string, createdBefore?: string) {
   const rows = await listPagedRows<{
     id: string;
     tenant_id: string;
@@ -97,7 +106,12 @@ async function listCustomerSubjects(tenantId: string) {
     owner_id: string | null;
     created_at: string | null;
     updated_at: string | null;
-  }>("customers", "id,tenant_id,status,owner_id,created_at,updated_at", tenantId);
+  }>(
+    "customers",
+    "id,tenant_id,status,owner_id,created_at,updated_at",
+    tenantId,
+    createdBefore,
+  );
 
   return rows.map<LegacySubjectRow>((row) => ({
     id: row.id,
