@@ -214,7 +214,7 @@ describe("customerStatusService", () => {
   test("assigns next pending customer workflow task to the customer owner after status transition", async () => {
     const { customerStatusService } = await import("./customer-status");
 
-    await customerStatusService.transitionCustomerStatus({
+    const customer = await customerStatusService.transitionCustomerStatus({
       authContext: buildAuthContext(),
       customerId: "customer-1",
       existing: {
@@ -229,6 +229,12 @@ describe("customerStatusService", () => {
       },
     });
 
+    expect(updateCustomerById).toHaveBeenCalledWith({
+      customerId: "customer-1",
+      tenantId: "tenant-1",
+      payload: { status: "following" },
+    });
+    expect(customer.status).toBe("following");
     expect(assignPendingTask).toHaveBeenCalledWith({
       tenantId: "tenant-1",
       instanceId: "instance-1",
