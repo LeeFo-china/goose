@@ -7,6 +7,10 @@
 `potential` pending task、负责人分配或无负责人语义一致的任务，以及同步后的
 `workflow_subject_states` 投影。
 
+随后发现“线索转客户”链路绕过上述初始化编排，新增了 1 个缺失运行态的潜在客户。
+该入口现已在共享转换服务中修复，新增缺口已通过第二个审计绑定 migration 回填；
+截至 `2026-10-01T13:05:20.000Z`，目标租户缺失客户运行态的候选为 0。
+
 本次没有修改 `orange` 仓库，也没有通过脚本 `--apply` 直接写生产数据库。
 生产数据写入只通过受保护、可审计的 Supabase migration 完成。
 
@@ -83,8 +87,61 @@ Migration 在单个事务中执行，并在提交前断言：实例数、pending
 - 目标客户 ID 仅通过临时 production environment secret 注入；Run 完成后 secret 已删除，
   仓库、工作流输入、步骤摘要和私有证据均未记录客户 ID 或个人信息。
 
+## 线索转客户链路补充修复
+
+### 根因与代码发布
+
+- 根因：直接新建客户会调用 `customerWorkflowInitializationService`，但普通线索与抖音
+  线索共享的 `TenantDouyinLeadsService.convert` 在 RPC 创建或关联客户后直接返回，
+  没有初始化 `customer_main`。小程序保存跟进后拿不到 `start_following`，因此客户仍
+  停留在 `potential`。
+- 修复提交：`403bc5182fa8a8f3d4cfbcb0f6e2e23fe349eff3`
+- 生产标签：`v2026.10.01.4`
+- 候选构建 Run：`36863934359`
+- 生产部署 Run：`36864638041`
+- 行为：转换成功后读取精确的租户内客户；仅 `potential` 客户进入幂等初始化；已推进
+  客户不重置节点；缺失、跨租户或无状态响应失败关闭；初始化重试后仍降级则返回稳定
+  `503` 和 `CUSTOMER_WORKFLOW_INITIALIZATION_FAILED` 或
+  `CUSTOMER_WORKFLOW_CONFIGURATION_MISSING`，不再静默成功。
+- 普通线索和抖音线索共用同一修复；对外成功响应结构未增加字段，兼容现有严格客户端
+  schema。
+
+### 冻结审计与 migration
+
+- 部署后 dry-run Run：`36865046600`
+- 审计截止时间：`2026-10-01T12:55:44.000Z`
+- 扫描客户数：27
+- running instance：13
+- 精确候选：1，且为 `potential`，计划创建 `potential` pending task
+- 历史 8 个回填客户：状态/节点一致 8/8；其中仍为 `potential` 的 6 个客户均返回
+  `start_following`。审计不再把已经正常推进到后续节点的客户误判为失败。
+- Migration：`20261001130000_backfill_lead_converted_customer_workflow.sql`
+- Migration 提交：`8a5eea0768f5702e78fde22ccbdd2b1585514aba`
+- Plan Run：`36865521815`，远端版本数 642，唯一待执行版本
+  `20261001130000`。
+- Apply Run：`36865831419`，仅应用 `20261001130000`；远端版本数由 642 变为
+  643，最新版本为 `20261001130000`。
+- 应用后 migration list 等价校验 Run：`36866276410`，远端版本数 643，
+  `pending_count=0`，Local/Remote 已对齐。
+
+Migration 固化 tenant、审计截止时间和候选数量 1；校验唯一启用并发布的
+`customer_main`、`start -> potential -> following` 图结构、RPC 返回、任务负责人、
+主体投影及最终计数。候选漂移或任一断言失败会使整个事务回滚。
+
+### 回填后验收
+
+- 回填后 dry-run Run：`36866161675`
+- 扫描客户数：27
+- running instance：14
+- `customer.dry_run_create`：0
+- 各状态缺失定义、缺失映射、创建失败：0
+- 历史 8 个客户详情校验：`ready=8`；其中 `potential=6`、
+  `startFollowing=6`。
+
 ## 小程序对接结论
 
 小程序不需要通过重新发布来修复历史数据，也不应自行合成 `start_following`。客户详情页
 继续以后端 `workflow_state.actions` 为唯一动作来源：当后端返回 `start_following` 时展示
 “开始跟进”；动作完成后重新拉取详情，并确认客户状态与工作流节点均为 `following`。
+线索转客户成功后可以直接进入上述详情流程；若转换接口返回工作流初始化相关 `503`，
+使用同一 `idempotency_key` 重试转换，不要在小程序本地直接修改客户状态。
