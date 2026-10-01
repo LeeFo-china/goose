@@ -11,11 +11,23 @@ const syncCustomerCreated = mock(
     current_node_key: "potential",
   }),
 );
+const syncStatusTransition = mock(
+  async (input: { toStatus: string }): Promise<CustomerWorkflowRuntimeMetadata> => ({
+    status: "advanced",
+    workflow_key: "customer_main",
+    definition_id: "definition-1",
+    instance_id: "instance-1",
+    current_node_key: input.toStatus,
+  }),
+);
 const syncWorkflowTasksAfterOwnerAssignment = mock(async () => undefined);
 const syncFromRuntimeInstance = mock(async () => null);
 
 mock.module("@/services/customer-workflow-runtime", () => ({
-  customerWorkflowRuntimeService: { syncCustomerCreated },
+  customerWorkflowRuntimeService: {
+    syncCustomerCreated,
+    syncStatusTransition,
+  },
 }));
 
 mock.module("@/services/customer-owner-assignments", () => ({
@@ -57,6 +69,7 @@ const input = {
 
 beforeEach(() => {
   syncCustomerCreated.mockClear();
+  syncStatusTransition.mockClear();
   syncWorkflowTasksAfterOwnerAssignment.mockClear();
   syncFromRuntimeInstance.mockClear();
   syncCustomerCreated.mockImplementation(async () => ({
