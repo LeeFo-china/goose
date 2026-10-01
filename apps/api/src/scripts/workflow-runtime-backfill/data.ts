@@ -254,7 +254,6 @@ export async function loadWorkflowBindings(tenantId: string) {
 
 export async function listExistingInstances(input: {
   tenantId: string;
-  definitionId: string;
   subjectType: BackfillSubjectType;
   subjectIds: string[];
 }) {
@@ -269,7 +268,6 @@ export async function listExistingInstances(input: {
       .from("workflow_instances")
       .select("id,subject_id,status")
       .eq("tenant_id", input.tenantId)
-      .eq("definition_id", input.definitionId)
       .eq("subject_type", input.subjectType)
       .in("subject_id", batch);
 

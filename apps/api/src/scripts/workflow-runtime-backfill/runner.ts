@@ -52,7 +52,6 @@ async function backfillSubjectType(input: {
 
   const existingBySubjectId = await listExistingInstances({
     tenantId: input.tenantId,
-    definitionId: input.binding.definition.id,
     subjectType: input.subjectType,
     subjectIds: rows.map((row) => row.id),
   });
