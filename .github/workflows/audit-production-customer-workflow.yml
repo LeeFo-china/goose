@@ -1,0 +1,177 @@
+name: Audit Production Customer Workflow
+run-name: Audit production customer workflow runtime
+
+on:
+  workflow_dispatch:
+    inputs:
+      tenant_id:
+        description: "Exact production tenant UUID"
+        required: true
+        type: string
+      deployed_sha:
+        description: "Exact 40-character SHA deployed in gooes-api"
+        required: true
+        type: string
+      confirm_text:
+        description: "Required: 确认审核客户工作流回填"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-docker-services-main
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    name: Audit customer workflow runtime without writes
+    runs-on: [self-hosted, Linux, X64, gooes-prod-deploy]
+    environment: production
+    timeout-minutes: 10
+    env:
+      EXPECTED_TENANT_ID: ${{ inputs.tenant_id }}
+      EXPECTED_DEPLOYED_SHA: ${{ inputs.deployed_sha }}
+      CONFIRM_TEXT: ${{ inputs.confirm_text }}
+      FIXED_TENANT_ID: 3eebca47-961f-4899-b976-a3d3208d326b
+    steps:
+      - name: Guard production runner, deployment, tenant, and workflow graph
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME}" = "gooes-prod-vm-0-3"
+          test "${EXPECTED_TENANT_ID}" = "${FIXED_TENANT_ID}"
+          test "${CONFIRM_TEXT}" = "确认审核客户工作流回填"
+          [[ "${EXPECTED_DEPLOYED_SHA}" =~ ^[a-f0-9]{40}$ ]]
+
+          docker inspect gooes-api >/dev/null
+          test "$(docker inspect -f '{{.State.Status}}' gooes-api)" = running
+          test "$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' gooes-api)" = healthy
+          actual_sha="$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' gooes-api)"
+          test "${actual_sha}" = "${EXPECTED_DEPLOYED_SHA}"
+          docker exec gooes-api test -f /app/apps/api/src/scripts/backfill-workflow-runtime-from-state-machine.ts
+          docker exec gooes-api grep -Fq 'potential: "start_following"' /app/apps/api/src/services/workflow-task-action-metadata.ts
+
+          psql_read() {
+            docker exec -e "SQL=$1" supabase-db sh -ceu \
+              'export PGPASSWORD="${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}"; exec psql -U supabase_admin -d postgres -At -v ON_ERROR_STOP=1 -c "${SQL}"'
+          }
+
+          tenant_count="$(psql_read "SELECT count(*) FROM public.tenants WHERE id = '${FIXED_TENANT_ID}'::uuid AND status = 'active';")"
+          test "${tenant_count}" = 1
+
+          graph_gate="$(psql_read "
+            WITH active AS (
+              SELECT definition.id, version.snapshot
+              FROM public.workflow_definitions AS definition
+              JOIN public.workflow_versions AS version
+                ON version.id = definition.active_version_id
+               AND version.definition_id = definition.id
+               AND version.tenant_id = definition.tenant_id
+              WHERE definition.tenant_id = '${FIXED_TENANT_ID}'::uuid
+                AND definition.workflow_key = 'customer_main'
+                AND definition.status = 'active'
+                AND version.status = 'published'
+            ), nodes AS (
+              SELECT
+                active.id,
+                active.snapshot,
+                max(node->>'id') FILTER (WHERE node->>'node_key' = 'start') AS start_id,
+                max(node->>'id') FILTER (WHERE node->>'node_key' = 'potential') AS potential_id,
+                max(node->>'id') FILTER (WHERE node->>'node_key' = 'following') AS following_id
+              FROM active
+              CROSS JOIN LATERAL jsonb_array_elements(COALESCE(active.snapshot->'nodes', '[]'::jsonb)) AS node
+              GROUP BY active.id, active.snapshot
+            )
+            SELECT
+              (SELECT count(*) FROM active)::text || '|' ||
+              (SELECT count(*) FROM nodes WHERE start_id IS NOT NULL AND potential_id IS NOT NULL AND following_id IS NOT NULL)::text || '|' ||
+              (SELECT count(*) FROM nodes WHERE EXISTS (
+                SELECT 1 FROM jsonb_array_elements(COALESCE(nodes.snapshot->'edges', '[]'::jsonb)) AS edge
+                WHERE edge->>'source_node_id' = nodes.start_id AND edge->>'target_node_id' = nodes.potential_id
+              ))::text || '|' ||
+              (SELECT count(*) FROM nodes WHERE EXISTS (
+                SELECT 1 FROM jsonb_array_elements(COALESCE(nodes.snapshot->'edges', '[]'::jsonb)) AS edge
+                WHERE edge->>'source_node_id' = nodes.potential_id AND edge->>'target_node_id' = nodes.following_id
+              ))::text;")"
+          # graph_gate columns: active_definition | required_nodes | start_to_potential | potential_to_following
+          test "${graph_gate}" = "1|1|1|1"
+          echo "deployed_revision=${actual_sha}" >> "${GITHUB_STEP_SUMMARY}"
+          echo "workflow_graph_gate=${graph_gate}" >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Run deployed customer workflow audit
+        run: |
+          set -euo pipefail
+          audit_cutoff="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+          container_report="/tmp/customer-workflow-audit-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.md"
+          host_json="${RUNNER_TEMP}/customer-workflow-audit.json"
+          host_markdown="${RUNNER_TEMP}/customer-workflow-audit.md"
+          gate_file="${RUNNER_TEMP}/customer-workflow-audit.gate"
+          rm -f "${host_json}" "${host_markdown}" "${gate_file}"
+
+          docker exec gooes-api bun \
+            /app/apps/api/src/scripts/backfill-workflow-runtime-from-state-machine.ts \
+            --tenant-id "${EXPECTED_TENANT_ID}" \
+            --subject-type customer \
+            --dry-run \
+            --created-before "${audit_cutoff}" \
+            --report "${container_report}" > "${host_json}"
+          docker cp "gooes-api:${container_report}" "${host_markdown}"
+          docker exec gooes-api rm -f "${container_report}"
+
+          jq -e --arg cutoff "${audit_cutoff}" \
+            '.apply == false and .createdBefore == $cutoff and (.generatedAt | type == "string")' \
+            "${host_json}" >/dev/null
+          failed_count="$(jq '[.summary | to_entries[] | select(.key | startswith("customer.failed")) | .value] | add // 0' "${host_json}")"
+          missing_definition_count="$(jq '.summary["customer.skip.active_workflow_definition_missing"] // 0' "${host_json}")"
+          mapped_node_missing_count="$(jq '.summary["customer.skip.mapped_node_missing"] // 0' "${host_json}")"
+          create_count="$(jq '.summary["customer.dry_run_create"] // 0' "${host_json}")"
+          potential_create_count="$(jq '.statusSummary["customer.potential.dry_run_create"] // 0' "${host_json}")"
+          test "${failed_count}" = 0
+          test "${missing_definition_count}" = 0
+          test "${mapped_node_missing_count}" = 0
+          test "${create_count}" = "${potential_create_count}"
+
+          planned_gate="$(awk -F'|' '
+            /^## Planned Rows$/ { in_rows=1; next }
+            /^## / && in_rows { in_rows=0 }
+            in_rows && /^\|/ {
+              subject=$2; status=$4; node=$5; task=$6
+              gsub(/^[[:space:]]+|[[:space:]]+$/, "", subject)
+              gsub(/^[[:space:]]+|[[:space:]]+$/, "", status)
+              gsub(/^[[:space:]]+|[[:space:]]+$/, "", node)
+              gsub(/^[[:space:]]+|[[:space:]]+$/, "", task)
+              if (subject == "" || subject == "subject_type" || subject == "---") next
+              total += 1
+              if (subject != "customer" || status != "potential" || node != "potential" || task != "true") invalid += 1
+            }
+            END { print (total + 0) "|" (invalid + 0) }
+          ' "${host_markdown}")"
+          planned_count="${planned_gate%%|*}"
+          invalid_planned_count="${planned_gate##*|}"
+          test "${planned_count}" = "${create_count}"
+          test "${invalid_planned_count}" = 0
+
+          echo pass > "${gate_file}"
+          echo "apply=false" >> "${GITHUB_STEP_SUMMARY}"
+          echo "created_before=${audit_cutoff}" >> "${GITHUB_STEP_SUMMARY}"
+          echo "scanned=$(jq -r '.scanned' "${host_json}")" >> "${GITHUB_STEP_SUMMARY}"
+          echo "potential_create_candidates=${create_count}" >> "${GITHUB_STEP_SUMMARY}"
+          echo "failed_rows=${failed_count}" >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload private audit evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: production-customer-workflow-audit-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/customer-workflow-audit.json
+            ${{ runner.temp }}/customer-workflow-audit.md
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Enforce audit gate
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          test "$(cat "${RUNNER_TEMP}/customer-workflow-audit.gate")" = pass
