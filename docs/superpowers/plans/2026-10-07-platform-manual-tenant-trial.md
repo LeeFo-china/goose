@@ -73,7 +73,7 @@
 - [x] 在独立本地数据库应用六个功能 migration，以 `supabase migration list` 核对验证目录 Local/Remote 对齐。完整历史重放受到既有数据修复 migration 的前置数据限制，具体见设计文档验证记录。破坏性回滚仅通过前向补偿 migration 恢复访问策略和函数版本，保留试用及审计历史。
 - [x] 运行聚焦 API/Admin 测试、`bun run api:check`、`pnpm --dir apps/admin check`、`git diff --check`。验证试用开始、试用截止、7 天宽限期截止、延期、撤销、已付费优先、旧租户兼容、合作伙伴建户及无试用新租户。
 - [x] 本地实际 SQL 创建/延期/回滚 smoke 与浏览器模拟 API smoke 通过；API 和表单在开关关闭时均禁止新开试用。
-- [ ] 部署到目标环境：核对远端历史、协调 migration/API/Admin 维护窗口，检查 `PLATFORM_SERVICE_TRIAL_ACCESS_ENABLED`；本轮不更改远端数据库或开关。
+- [x] 2026-10-08 获用户授权后完成生产发布：六个功能 migration、API/Admin 候选和独立开关/ACL 迁移均成功，650 条 Local/Remote 对齐，试用访问开启、自主申请保持关闭。见[发布证据](../../operations/evidence/2026-10-08-manual-tenant-trial-production-release.md)。
 - [x] 审核 migration 执行计划、权限与服务角色边界，确认没有对 orange 工作区写入；最后提交聚焦的代码与迁移变更。
 
 ### 执行补充

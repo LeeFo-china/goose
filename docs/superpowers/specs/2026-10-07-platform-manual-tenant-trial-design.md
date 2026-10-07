@@ -2,7 +2,7 @@
 
 **日期：** 2026-10-07
 
-**状态：** 待评审
+**状态：** 已实现并于 2026-10-08 发布生产
 
 **范围：** Gooes API、Admin、Domain 与 Supabase migration；不修改 orange 仓库
 
@@ -65,3 +65,7 @@
 回滚使用前向补偿 migration 恢复函数/访问策略，保留试用、审计和初始化记录；不要删除试用历史或直接删除新列。
 
 验证结果：`bun run api:check`（类型、构建、文件长度）、`pnpm --dir apps/admin check`、定向 API 回归及 `git diff --check` 通过。浏览器模拟 API 验证默认 30 天、修改为 15 天、暂不开通、宽限期延长和状态刷新，无页面异常；真实数据库回归同时覆盖补开试用固定 7 天及撤销。小规模本地批量事实查询 `EXPLAIN ANALYZE` 为约 4.2 ms，不能代表生产数据规模。已复核服务角色权限及分页边界；本轮为当前代理代码自查，未执行独立子代理审查。
+
+## 9. 生产发布（2026-10-08）
+
+用户授权后已完成六个功能 migration 与 API/Admin 同窗发布，并增加 `20261007232025_enable_manual_tenant_trial_access.sql` 开启试用访问。生产角色默认 ACL 与本地不同，发布核验发现建户函数仍有 anon/authenticated 直接授权；新增 migration 在开启开关前显式收回权限并校验 service_role 边界，SQL smoke 已补充相同环境差异的回归。最终 650 条迁移 Local/Remote 对齐，现有租户访问状态不变，自主申请保持关闭。详细工作流、备份、验收与回滚边界见[生产发布证据](../../operations/evidence/2026-10-08-manual-tenant-trial-production-release.md)。
