@@ -9,10 +9,27 @@ SET LOCAL statement_timeout = '30s';
 -- Rollback: use a forward migration to set this key back to false and append
 -- a change log. Keep trial/audit history; existing trial-only tenants will be
 -- blocked while the access switch is off, so prefer a forward application fix.
+-- Production migrations run as supabase_admin, whose default function ACL
+-- directly grants anon/authenticated EXECUTE. Revoking PUBLIC alone does not
+-- remove those grants. Close them before enabling the entry point.
+REVOKE ALL ON FUNCTION public.create_platform_tenant_with_trial(
+  text, text, text, text, text, text, text, text, text, text,
+  numeric, numeric, text, numeric, timestamptz, text, text,
+  text, text, uuid, text, text, uuid, integer, text, uuid, boolean
+) FROM PUBLIC, anon, authenticated;
+
 DO $$
 DECLARE
   v_setting public.system_settings%ROWTYPE;
+  v_create_function regprocedure := 'public.create_platform_tenant_with_trial(text,text,text,text,text,text,text,text,text,text,numeric,numeric,text,numeric,timestamptz,text,text,text,text,uuid,text,text,uuid,integer,text,uuid,boolean)'::regprocedure;
 BEGIN
+  IF has_function_privilege('anon', v_create_function, 'EXECUTE')
+    OR has_function_privilege('authenticated', v_create_function, 'EXECUTE')
+    OR NOT has_function_privilege('service_role', v_create_function, 'EXECUTE')
+  THEN
+    RAISE EXCEPTION 'MANUAL_TENANT_TRIAL_FUNCTION_ACL_INVALID';
+  END IF;
+
   IF to_regprocedure('public.platform_service_trial_access_facts_batch(uuid[])') IS NULL
     OR NOT EXISTS (
       SELECT 1 FROM information_schema.columns
