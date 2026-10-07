@@ -13,6 +13,7 @@ function envelope(patch: Record<string, unknown> = {}) {
     server_time: NOW,
     tenant_id: TENANT_ID,
     tenant_status: "active",
+    service_access_policy: "legacy_compatible",
     contract: null,
     paid_onboarding_order: null,
     legacy_subscription_status: "locked",
@@ -70,6 +71,7 @@ describe("TenantServiceAccessRepository", () => {
     expect(facts).toEqual({
         evaluatedAt: NOW,
         tenantStatus: "active",
+        serviceAccessPolicy: "legacy_compatible",
         contract: data.contract,
         paidOnboardingOrder: data.paid_onboarding_order,
         legacySubscriptionStatus: "locked",

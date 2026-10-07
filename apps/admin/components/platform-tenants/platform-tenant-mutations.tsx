@@ -18,7 +18,9 @@ import { requestPlatformTenantJson } from "@/components/platform-tenants/platfor
 import type { PlatformTenantRecord } from "@/components/platform-tenants/platform-tenant-types";
 import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 
-export function CreatePlatformTenantButton() {
+export function CreatePlatformTenantButton({ trialCreation }: {
+  trialCreation?: { enabled: boolean; disabled_reason: string | null };
+}) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -26,7 +28,7 @@ export function CreatePlatformTenantButton() {
         <Plus data-icon="inline-start" />
         新建租户
       </Button>
-      <TenantDialog mode="create" open={open} onOpenChange={setOpen} />
+      <TenantDialog mode="create" open={open} onOpenChange={setOpen} trialCreation={trialCreation} />
     </>
   );
 }

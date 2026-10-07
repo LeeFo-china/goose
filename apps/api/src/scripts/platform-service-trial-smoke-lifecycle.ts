@@ -457,6 +457,8 @@ export async function readAccessFacts(
   return {
     evaluatedAt: String(fact.server_time),
     tenantStatus: fact.tenant_status == null ? null : String(fact.tenant_status),
+    serviceAccessPolicy:
+      fact.service_access_policy as TenantServiceAccessFacts["serviceAccessPolicy"],
     contract: fact.contract as TenantServiceAccessFacts["contract"],
     paidOnboardingOrder:
       fact.paid_onboarding_order as TenantServiceAccessFacts["paidOnboardingOrder"],

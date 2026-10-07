@@ -19,6 +19,7 @@ const policy = { policy_id: '99999999-9999-4999-8999-999999999999', version: 1,
   reapply_cooldown_days: 30, allow_repeat: false, reminder_days: [7, 3, 1],
   override_used: false };
 const scheduled = { id: TRIAL_ID, tenant_id: TENANT_ID, source: 'platform_grant',
+  identity_basis: 'provisional_tenant',
   trial_type: 'standard', status: 'scheduled', application_reason: null,
   expected_user_count: null, expected_project_count: null, contact_name: null,
   contact_phone: null, grant_reason: '评估', review_decision: null,

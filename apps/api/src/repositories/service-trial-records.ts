@@ -39,6 +39,7 @@ const PolicySnapshotSchema = z.object({
 
 const TrialRowObjectSchema = z.object({
   id: z.uuid(), tenant_id: z.uuid(),
+  identity_basis: z.enum(["verified_enterprise", "provisional_tenant"]).optional(),
   source: z.enum(PLATFORM_SERVICE_TRIAL_SOURCE_VALUES),
   trial_type: z.enum(PLATFORM_SERVICE_TRIAL_TYPE_VALUES),
   status: z.enum(PLATFORM_SERVICE_TRIAL_STATUS_VALUES),
@@ -74,6 +75,9 @@ type TrialRow = z.infer<typeof TrialRowObjectSchema>;
 
 function validateTrialFacts(row: TrialRow, context: z.RefinementCtx): void {
   const issue = (message: string) => context.addIssue({ code: 'custom', message });
+  if (row.identity_basis === 'provisional_tenant' && row.source !== 'platform_grant') {
+    issue('临时租户试用必须由平台发放');
+  }
   const state = (facts: readonly unknown[]) => {
     const present = facts.filter((fact) => fact !== null).length;
     return present === 0 ? 'empty' : present === facts.length ? 'complete' : 'partial';

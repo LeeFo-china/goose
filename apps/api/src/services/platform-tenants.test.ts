@@ -8,6 +8,8 @@ import type {
 import type { PlatformAuditLogCreateInput } from "@/repositories/platform-audit-logs";
 import { CreatePlatformTenantSchema } from "@/schema/platform-tenants";
 import type { AuthContext } from "@/services/authorization";
+import type { TenantServiceAccessFacts } from "@/repositories/tenant-service-access";
+import type { PlatformTenantAtomicCreateResult } from "@/repositories/platform-tenants/legacy/commands";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
@@ -93,10 +95,19 @@ const authContext = {
 
 const findBySlug = mock(async () => null as PlatformTenantRecord | null);
 const findEmployeesByPhone = mock(async () => [] as Array<{ id: string }>);
-const createWithDefaultTemplate = mock(async () => ({ tenant, initialization }));
+const createWithDefaultTemplate = mock(async (): Promise<PlatformTenantAtomicCreateResult> => ({ tenant, initialization }));
+const list = mock(async () => ({ list: [tenant], pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 } }));
+const accessFacts: TenantServiceAccessFacts = {
+  evaluatedAt: "2026-10-07T08:00:00Z", tenantStatus: "active",
+  serviceAccessPolicy: "entitlement_required", contract: null,
+  paidOnboardingOrder: null, legacySubscriptionStatus: null,
+  currentTrial: null, latestTrial: null,
+};
+const getByTenantIds = mock(async () => new Map([[tenant.id, accessFacts]]));
 const initializeDefaultData = mock(async () => initialization);
 const getUsageStats = mock(async () => new Map([[tenant.id, usage]]));
 const recordBestEffort = mock(async (_input: PlatformAuditLogCreateInput) => null);
+const isTrialAccessEnabled = mock(async () => true);
 const assertPermission = mock((context: AuthContext, code: string) => {
   if (!context.permissions.some((permission) => permission.code === code)) {
     throw Errors.business(403, "缺少平台操作权限", "PLATFORM_PERMISSION_REQUIRED");
@@ -105,6 +116,7 @@ const assertPermission = mock((context: AuthContext, code: string) => {
 
 mock.module("@/repositories/platform-tenants", () => ({
   platformTenantRepository: {
+    list,
     findBySlug,
     findEmployeesByPhone,
     createWithDefaultTemplate,
@@ -113,12 +125,20 @@ mock.module("@/repositories/platform-tenants", () => ({
   },
 }));
 
+mock.module("@/repositories/tenant-service-access-batch", () => ({
+  tenantServiceAccessBatchRepository: { getByTenantIds },
+}));
+
 mock.module("@/services/platform-audit-logs", () => ({
   platformAuditLogService: { recordBestEffort },
 }));
 
 mock.module("@/services/platform-authorization", () => ({
   platformAuthorizationService: { assertPermission },
+}));
+
+mock.module("@/services/platform-service-trial-rollout", () => ({
+  platformServiceTrialRollout: { isAccessEnabled: isTrialAccessEnabled },
 }));
 
 async function getService() {
@@ -135,6 +155,8 @@ describe("PlatformTenantService.create", () => {
     getUsageStats.mockClear();
     recordBestEffort.mockClear();
     assertPermission.mockClear();
+    isTrialAccessEnabled.mockClear();
+    isTrialAccessEnabled.mockImplementation(async () => true);
     findBySlug.mockImplementation(async () => null);
     findEmployeesByPhone.mockImplementation(async () => []);
     createWithDefaultTemplate.mockImplementation(async () => ({ tenant, initialization }));
@@ -158,6 +180,8 @@ describe("PlatformTenantService.create", () => {
     expect(createWithDefaultTemplate).toHaveBeenCalledTimes(1);
     expect(createWithDefaultTemplate).toHaveBeenCalledWith(input, {
       operatorEmployeeId: authContext.employeeId,
+      manual: true,
+      allowOverride: false,
     });
     expect(initializeDefaultData).not.toHaveBeenCalled();
     expect(getUsageStats).toHaveBeenCalledWith([tenant.id]);
@@ -166,7 +190,7 @@ describe("PlatformTenantService.create", () => {
       action: "tenant_create",
       metadata: { initialization },
     });
-    expect(result).toEqual({ ...tenant, usage, initialization });
+    expect(result).toEqual({ ...tenant, usage, initialization, trial: null });
   });
 
   test("rejects missing permission before repository calls", async () => {
@@ -180,6 +204,55 @@ describe("PlatformTenantService.create", () => {
 
     expect(findBySlug).not.toHaveBeenCalled();
     expect(findEmployeesByPhone).not.toHaveBeenCalled();
+    expect(createWithDefaultTemplate).not.toHaveBeenCalled();
+  });
+
+  test("requires trial management permission before creating a tenant with trial", async () => {
+    const service = await getService();
+    const trialInput = CreatePlatformTenantSchema.parse({
+      name: tenant.name,
+      slug: tenant.slug,
+      trial: {
+        enabled: true,
+        trial_days: 30,
+        reason: "平台建户试用",
+        idempotency_key: "66666666-6666-4666-8666-666666666666",
+      },
+    });
+    await expect(service.create(trialInput, authContext)).rejects.toMatchObject({
+      statusCode: 403,
+      code: "PLATFORM_PERMISSION_REQUIRED",
+    });
+    expect(createWithDefaultTemplate).not.toHaveBeenCalled();
+  });
+
+  test("returns authoritative trial dates and override permission", async () => {
+    const trial = { id: "66666666-6666-4666-8666-666666666666", status: "active" as const,
+      trial_ends_at: "2026-11-06T08:00:00Z", grace_ends_at: "2026-11-13T08:00:00Z" };
+    createWithDefaultTemplate.mockResolvedValueOnce({ tenant, initialization, trial });
+    const withTrial = CreatePlatformTenantSchema.parse({ ...input, trial: {
+      enabled: true, trial_days: 30, reason: "客户评估", idempotency_key: crypto.randomUUID(),
+    } });
+    const service = await getService();
+    const result = await service.create(withTrial, { ...authContext, permissions: [
+      ...authContext.permissions,
+      { code: "platform.service_trial.manage", scope: "all" },
+      { code: "platform.service_trial.override", scope: "all" },
+    ] });
+    expect(result.trial).toEqual(trial);
+    expect(createWithDefaultTemplate).toHaveBeenCalledWith(withTrial, {
+      operatorEmployeeId: authContext.employeeId, manual: true, allowOverride: true,
+    });
+  });
+
+  test("rejects trial creation when rollout is disabled before any tenant write", async () => {
+    isTrialAccessEnabled.mockResolvedValueOnce(false);
+    const service = await getService();
+    await expect(service.create(CreatePlatformTenantSchema.parse({ ...input, trial: {
+      enabled: true, trial_days: 30, reason: "客户评估", idempotency_key: crypto.randomUUID(),
+    } }), { ...authContext, permissions: [...authContext.permissions,
+      { code: "platform.service_trial.manage", scope: "all" }] }))
+      .rejects.toMatchObject({ code: "SERVICE_TRIAL_ACCESS_DISABLED" });
     expect(createWithDefaultTemplate).not.toHaveBeenCalled();
   });
 
@@ -225,5 +298,46 @@ describe("PlatformTenantService.create", () => {
     expect(initializeDefaultData).not.toHaveBeenCalled();
     expect(getUsageStats).not.toHaveBeenCalled();
     expect(recordBestEffort).not.toHaveBeenCalled();
+  });
+});
+
+describe("PlatformTenantService.list", () => {
+  test.each(["active", "grace_period"] as const)("allows extending %s only with manage and override", async (status) => {
+    const currentTrial = {
+      id: "66666666-6666-4666-8666-666666666666", tenant_id: tenant.id,
+      source: "platform_grant" as const, status,
+      starts_at: "2026-09-07T08:00:00Z", trial_ends_at: "2026-10-07T08:00:00Z",
+      grace_ends_at: "2026-10-14T08:00:00Z",
+      scope_snapshot: { version: 1 as const, capabilities: ["core.projects" as const] },
+    };
+    const facts = { ...accessFacts, currentTrial, latestTrial: { ...currentTrial, version: 2 } };
+    getByTenantIds.mockResolvedValueOnce(new Map([[tenant.id, facts]]));
+    const service = await getService();
+    const permissions = ["platform.tenant.read", "platform.service_trial.manage", "platform.service_trial.override"]
+      .map((code) => ({ code, scope: "all" as const }));
+    const result = await service.list({ page: 1, pageSize: 20 }, { ...authContext, permissions });
+    expect(result.list[0]?.service_access).toMatchObject({
+      mode: status === "active" ? "trial" : "grace", can_extend: true, version: 2,
+      trial_id: currentTrial.id, grace_ends_at: currentTrial.grace_ends_at,
+    });
+    getByTenantIds.mockResolvedValueOnce(new Map([[tenant.id, facts]]));
+    const restricted = await service.list({ page: 1, pageSize: 20 }, {
+      ...authContext, permissions: permissions.filter((item) => !item.code.endsWith("override")),
+    });
+    expect(restricted.list[0]?.service_access.can_extend).toBe(false);
+  });
+
+  test.each([
+    ["entitlement_required", "service_blocked"],
+    ["legacy_compatible", "legacy"],
+  ] as const)("projects %s without inventing a subscription", async (policy, mode) => {
+    getByTenantIds.mockResolvedValueOnce(new Map([[tenant.id, { ...accessFacts, serviceAccessPolicy: policy }]]));
+    const service = await getService();
+    const result = await service.list({ page: 1, pageSize: 20 }, { ...authContext,
+      permissions: [{ code: "platform.tenant.read", scope: "all" }] });
+    expect(getByTenantIds).toHaveBeenCalledWith([tenant.id]);
+    expect(result.list[0]?.service_access.mode).toBe(mode);
+    expect(result.trial_creation.enabled).toBe(false);
+    expect(result.list[0]?.service_access.can_extend).toBe(false);
   });
 });

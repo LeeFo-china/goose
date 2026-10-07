@@ -292,7 +292,7 @@ export async function readSmokeAccessMode(
   tenantId: string,
 ): Promise<string> {
   const rows = await db<Array<SmokeJson>>`
-    select tenant.status,
+    select tenant.status, tenant.service_access_policy,
       (select jsonb_build_object(
           'id', contract.id,
           'service_start_at', contract.service_start_at,
@@ -321,6 +321,8 @@ export async function readSmokeAccessMode(
   const facts: TenantServiceAccessFacts = {
     evaluatedAt: new Date().toISOString(),
     tenantStatus: typeof fact?.status === "string" ? fact.status : null,
+    serviceAccessPolicy: fact?.service_access_policy === "legacy_compatible"
+      ? "legacy_compatible" : "entitlement_required",
     contract: readAccessObject(fact?.contract, [
       "id", "service_start_at", "service_end_at",
     ]),

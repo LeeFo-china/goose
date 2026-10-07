@@ -1,3 +1,4 @@
+import { throwServiceTrialCommandError } from "@/repositories/service-trial-command-errors";
 import { Errors } from "@/errors/error-factory";
 import { matchesPostgresError } from "@/errors/postgres-error-details";
 import {
@@ -14,6 +15,13 @@ const PlatformTenantSchema = z.object({
   name: z.string(),
   slug: z.string(),
   status: PlatformTenantStatusSchema,
+  creation_source: z.enum([
+    "legacy_unknown", "unclassified", "platform_manual", "partner",
+    "tenant_onboarding",
+  ]).optional(),
+  service_access_policy: z.enum([
+    "legacy_compatible", "entitlement_required",
+  ]).optional(),
   address: z.string().nullable(),
   address_title: z.string().nullable(),
   address_poi_id: z.string().nullable(),
@@ -46,6 +54,12 @@ const PlatformTenantInitializationSchema = z.object({
 const PlatformTenantAtomicCreateResultSchema = z.object({
   tenant: PlatformTenantSchema,
   initialization: PlatformTenantInitializationSchema,
+  trial: z.object({
+    id: z.uuid(),
+    status: z.enum(["active", "scheduled"]),
+    trial_ends_at: z.iso.datetime({ offset: true }),
+    grace_ends_at: z.iso.datetime({ offset: true }),
+  }).strict().nullable().optional(),
 }).strict();
 
 export type PlatformTenantAtomicCreateResult = z.infer<
@@ -76,17 +90,23 @@ function throwCommandError(error: unknown): never {
     }
   }
 
-  throw Errors.dbError(COMMAND_ERROR_MESSAGE);
+  throwServiceTrialCommandError(error);
 }
 
 export async function createWithDefaultTemplate(
   rpc: PlatformTenantRpc,
   input: CreatePlatformTenantInput,
   operatorEmployeeId: string | null,
+  options: { manual?: boolean; allowOverride?: boolean } = {},
 ): Promise<PlatformTenantAtomicCreateResult> {
+  if (!options.manual && input.trial?.enabled) {
+    throw Errors.badRequest("合作伙伴建户不能直接开通平台试用");
+  }
   let result: Awaited<ReturnType<PlatformTenantRpc>>;
   try {
-    result = await rpc("create_tenant_with_default_template", {
+    result = await rpc(options.manual
+      ? "create_platform_tenant_with_trial"
+      : "create_tenant_with_default_template", {
       p_name: input.name,
       p_slug: input.slug,
       p_status: input.status,
@@ -110,6 +130,13 @@ export async function createWithDefaultTemplate(
       p_admin_department_code: "EXEC_OFFICE",
       p_admin_post_code: "SYSTEM_ADMIN",
       p_operator_employee_id: operatorEmployeeId,
+      ...(options.manual ? {
+        p_allow_override: options.allowOverride ?? false,
+        p_trial_days: input.trial?.enabled ? input.trial.trial_days : null,
+        p_trial_reason: input.trial?.enabled ? input.trial.reason : null,
+        p_trial_idempotency_key: input.trial?.enabled
+          ? input.trial.idempotency_key : null,
+      } : {}),
     });
   } catch {
     throw Errors.dbError(COMMAND_ERROR_MESSAGE);

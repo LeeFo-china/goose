@@ -210,7 +210,8 @@ function resolveAccessFacts(
     : null;
   if (trial) return trial;
 
-  if (facts.legacySubscriptionStatus !== "locked") {
+  if (facts.serviceAccessPolicy === "legacy_compatible"
+    && facts.legacySubscriptionStatus !== "locked") {
     return {
       mode: "legacy",
       startsAt: null,

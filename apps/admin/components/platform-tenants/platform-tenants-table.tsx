@@ -6,6 +6,7 @@ import { Eye } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/admin/data-table";
+import { PlatformTenantTrialExtension } from "./platform-tenant-trial-extension";
 import { PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME } from "@/components/platform/platform-list-page-size";
 import {
   EditPlatformTenantButton,
@@ -50,7 +51,7 @@ const columns: ColumnDef<PlatformTenantRecord>[] = [
   },
   {
     accessorKey: "status",
-    header: "状态",
+    header: "租户状态",
     cell: ({ row }) => {
       const meta = getPlatformTenantStatusMeta(row.original.status);
       return <Badge variant={meta.variant}>{meta.label}</Badge>;
@@ -58,6 +59,30 @@ const columns: ColumnDef<PlatformTenantRecord>[] = [
     meta: {
       cellClassName: "whitespace-nowrap",
     },
+  },
+  {
+    id: "service_access",
+    header: "服务状态 / 试用期限",
+    cell: ({ row }) => {
+      const access = row.original.service_access;
+      const labels = {
+        paid: "正式服务", paid_onboarding: "已付款待开通", trial: "试用中",
+        grace: "只读宽限期", legacy: "历史兼容", hard_blocked: "租户已停用",
+        service_blocked: access?.trial_status === "expired" ? "试用已到期" : "未开通服务",
+      };
+      return <div className="flex flex-col gap-1">
+        <Badge className="self-start" variant={access?.mode === "trial" || access?.mode === "paid" ? "success" : "outline"}>
+          {access ? labels[access.mode] : "—"}
+        </Badge>
+        {access?.trial_ends_at ? <span className="text-xs text-muted-foreground">
+          试用截止 {formatDate(access.trial_ends_at)}
+        </span> : null}
+        {access?.grace_ends_at ? <span className="text-xs text-muted-foreground">
+          宽限截止 {formatDate(access.grace_ends_at)}
+        </span> : null}
+      </div>;
+    },
+    meta: { cellClassName: "whitespace-nowrap" },
   },
   {
     accessorKey: "contact_name",
@@ -108,12 +133,13 @@ const columns: ColumnDef<PlatformTenantRecord>[] = [
           </Link>
         </Button>
         <EditPlatformTenantButton tenant={row.original} />
+        <PlatformTenantTrialExtension tenant={row.original} />
         <PlatformTenantStatusButton tenant={row.original} />
       </div>
     ),
     meta: {
-      headerClassName: "text-right",
-      cellClassName: "whitespace-nowrap text-right",
+      headerClassName: "sticky right-0 z-10 bg-muted text-right",
+      cellClassName: "sticky right-0 z-10 whitespace-nowrap bg-background text-right",
     },
   },
 ];
@@ -124,7 +150,7 @@ export function PlatformTenantsTable({ tenants }: { tenants: PlatformTenantRecor
       columns={columns}
       data={tenants}
       emptyText="还没有创建租户"
-      minWidth="min-w-[1080px]"
+      minWidth="min-w-[1400px]"
       tableClassName="border-t-0"
       rowClassName={() => PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME}
     />

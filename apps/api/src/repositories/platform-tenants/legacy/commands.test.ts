@@ -56,6 +56,67 @@ function rpcHarness(result: { data: unknown; error: unknown }) {
 }
 
 describe("platform tenant atomic create command", () => {
+  test("preserves the requested trial when validating a manual tenant", () => {
+    const input = CreatePlatformTenantSchema.parse({
+      name: tenant.name,
+      slug: tenant.slug,
+      trial: {
+        enabled: true,
+        trial_days: 30,
+        reason: "平台建户试用",
+        idempotency_key: "66666666-6666-4666-8666-666666666666",
+      },
+    });
+    expect(input).toHaveProperty("trial.enabled", true);
+  });
+
+  test("accepts tenant origin and access policy returned by the migration", async () => {
+    const input = CreatePlatformTenantSchema.parse({ name: tenant.name, slug: tenant.slug });
+    const { rpc } = rpcHarness({
+      data: {
+        tenant: {
+          ...tenant,
+          creation_source: "platform_manual",
+          service_access_policy: "entitlement_required",
+        },
+        initialization,
+      },
+      error: null,
+    });
+    const result = await createWithDefaultTemplate(rpc, input, OPERATOR_ID);
+    expect(result.tenant).toMatchObject({
+      creation_source: "platform_manual",
+      service_access_policy: "entitlement_required",
+    });
+  });
+
+  test("sends manual trial in the atomic platform create RPC", async () => {
+    const input = CreatePlatformTenantSchema.parse({
+      name: tenant.name,
+      slug: tenant.slug,
+      trial: {
+        enabled: true,
+        trial_days: 30,
+        reason: "平台建户试用",
+        idempotency_key: "66666666-6666-4666-8666-666666666666",
+      },
+    });
+    const { rpc } = rpcHarness({ data: success, error: null });
+    await createWithDefaultTemplate(rpc, input, OPERATOR_ID, {
+      manual: true,
+      allowOverride: true,
+    });
+    expect(rpc).toHaveBeenCalledWith(
+      "create_platform_tenant_with_trial",
+      expect.objectContaining({
+        p_trial_days: 30,
+        p_trial_reason: "平台建户试用",
+        p_trial_idempotency_key: "66666666-6666-4666-8666-666666666666",
+        p_allow_override: true,
+      }),
+    );
+  });
+
   test("calls the exact RPC with every tenant, admin, and operator field", async () => {
     const input = CreatePlatformTenantSchema.parse({
       name: tenant.name,

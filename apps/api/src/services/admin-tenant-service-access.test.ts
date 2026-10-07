@@ -144,6 +144,7 @@ describe("AdminTenantServiceAccessService", () => {
     const facts: TenantServiceAccessFacts = {
       evaluatedAt: NOW,
       tenantStatus: "active",
+      serviceAccessPolicy: "entitlement_required",
       contract: null,
       paidOnboardingOrder: null,
       legacySubscriptionStatus: "locked",

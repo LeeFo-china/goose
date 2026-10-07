@@ -14,6 +14,7 @@ const NOW = "2026-08-12T08:00:00.000Z";
 const baseFacts: TenantServiceAccessFacts = {
   evaluatedAt: NOW,
   tenantStatus: "active",
+  serviceAccessPolicy: "entitlement_required",
   contract: null,
   paidOnboardingOrder: null,
   legacySubscriptionStatus: "locked",

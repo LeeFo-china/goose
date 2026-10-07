@@ -7,9 +7,8 @@ import {
 } from '@gooes/domain';
 import { z } from 'zod';
 
-import { ErrorCodes } from '@/errors/error-codes';
 import { Errors } from '@/errors/error-factory';
-import { matchesPostgresError } from '@/errors/postgres-error-details';
+import { throwServiceTrialCommandError } from './service-trial-command-errors';
 import { SupabaseDB } from '@/utils/supabase/index';
 import {
   AssignResultSchema,
@@ -134,7 +133,7 @@ export type ServiceTrialClient = {
   rpc(name: string, params: Record<string, unknown>): PromiseLike<QueryResult>;
 };
 
-const TRIAL_COLUMNS = 'id,tenant_id,source,trial_type,status,application_reason,expected_user_count,expected_project_count,contact_name,contact_phone,grant_reason,review_decision,review_reason,revoke_reason,withdraw_reason,requested_at,reviewed_at,granted_at,starts_at,activated_at,trial_ends_at,grace_ends_at,withdrawn_at,revoked_at,converted_at,converted_order_id,granted_by_employee_id,reviewed_by_employee_id,requested_by_employee_id,revoked_by_employee_id,withdrawn_by_employee_id,assignee_employee_id,scope_snapshot,policy_snapshot,extension_count,version,created_at,updated_at';
+const TRIAL_COLUMNS = 'id,tenant_id,identity_basis,source,trial_type,status,application_reason,expected_user_count,expected_project_count,contact_name,contact_phone,grant_reason,review_decision,review_reason,revoke_reason,withdraw_reason,requested_at,reviewed_at,granted_at,starts_at,activated_at,trial_ends_at,grace_ends_at,withdrawn_at,revoked_at,converted_at,converted_order_id,granted_by_employee_id,reviewed_by_employee_id,requested_by_employee_id,revoked_by_employee_id,withdrawn_by_employee_id,assignee_employee_id,scope_snapshot,policy_snapshot,extension_count,version,created_at,updated_at';
 const TENANT_RELATION = 'tenant:tenants!tenant_service_trials_tenant_id_fkey(id,name,slug,contact_name,contact_phone)';
 const ASSIGNEE_RELATION = 'assignee:employees!tenant_service_trials_assignee_employee_id_fkey(id,name,phone,status)';
 const EVENT_RELATION = 'events:tenant_service_trial_events!tenant_service_trial_events_trial_identity_fkey(id,tenant_id,trial_id,event_key,event_type,from_status,to_status,reason,actor_employee_id,metadata,occurred_at,created_at)';
@@ -212,33 +211,7 @@ function parseListEnvelope<T extends TrialRecord | TrialListRecord>(data: unknow
   return pageData(envelope.items.map((item) => item.trial) as T[], envelope.total, page);
 }
 
-const COMMAND_ERRORS = {
-  SERVICE_TRIAL_NOT_FOUND: [404, '技术服务试用不存在'],
-  SERVICE_TRIAL_REPEAT_REQUIRES_OVERRIDE: [403, '重复试用需要平台特批'],
-  SERVICE_TRIAL_APPLICATION_PENDING: [409, '已有待审核试用申请'],
-  SERVICE_TRIAL_ACTIVE_EXISTS: [409, '当前已有可用试用'],
-  SERVICE_TRIAL_FORMAL_SERVICE_ACTIVE: [409, '正式服务有效时不能申请试用'],
-  SERVICE_TRIAL_REAPPLY_COOLDOWN: [409, '试用再次申请仍在冷却期'],
-  SERVICE_TRIAL_ENTERPRISE_IDENTITY_REQUIRED: [409, '需要先完成企业身份认证'],
-  SERVICE_TRIAL_ACTION_NOT_ALLOWED: [409, '当前试用状态不允许此操作'],
-  SERVICE_TRIAL_VERSION_CONFLICT: [409, '试用信息已更新，请刷新后重试'],
-  SERVICE_TRIAL_IDEMPOTENCY_CONFLICT: [409, '重复请求参数不一致'],
-  SERVICE_TRIAL_EXTENSION_INVALID: [400, '试用延期参数无效'],
-} as const;
 
-function throwCommandError(error: unknown): never {
-  if (matchesPostgresError(error, 'P0001', 'SERVICE_TRIAL_OVERRIDE_REQUIRED')) {
-    throw Errors.business(403, '缺少平台操作权限',
-      ErrorCodes.PLATFORM_PERMISSION_REQUIRED,
-      { permission: 'platform.service_trial.override' });
-  }
-  for (const [code, [status, message]] of Object.entries(COMMAND_ERRORS)) {
-    if (matchesPostgresError(error, 'P0001', code)) {
-      throw Errors.business(status, message, code);
-    }
-  }
-  throw Errors.dbError('执行技术服务试用操作失败');
-}
 
 function commandCall(input: TrialCommandInput): [string, Record<string, unknown>] {
   switch (input.action) {
@@ -391,7 +364,7 @@ export class ServiceTrialRepository {
     } catch {
       throw Errors.dbError('执行技术服务试用操作失败');
     }
-    if (result.error) throwCommandError(result.error);
+    if (result.error) throwServiceTrialCommandError(result.error);
     const parsed = parse(input.action === 'assign' ? AssignResultSchema : CommandResultSchema,
       result.data, '执行技术服务试用操作失败');
     if ('tenantId' in input && parsed.tenant_id !== input.tenantId
@@ -436,7 +409,7 @@ export class ServiceTrialRepository {
     } catch {
       throw Errors.dbError('更新技术服务试用策略失败');
     }
-    if (result.error) throwCommandError(result.error);
+    if (result.error) throwServiceTrialCommandError(result.error);
     return parse(
       PolicyCommandResultSchema,
       result.data,

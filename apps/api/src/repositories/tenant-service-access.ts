@@ -38,6 +38,7 @@ export type TenantServiceLatestTrialFact = {
   id: string;
   tenant_id: string;
   status: PlatformServiceTrialStatus;
+  version?: number;
   starts_at: string | null;
   trial_ends_at: string | null;
   grace_ends_at: string | null;
@@ -46,6 +47,7 @@ export type TenantServiceLatestTrialFact = {
 export type TenantServiceAccessFacts = {
   evaluatedAt: string;
   tenantStatus: string | null;
+  serviceAccessPolicy: "legacy_compatible" | "entitlement_required";
   contract: TenantServiceContractAccessFact | null;
   paidOnboardingOrder: TenantServicePaidOnboardingFact | null;
   legacySubscriptionStatus: TenantBillingSubscriptionStatus | null;
@@ -74,6 +76,7 @@ const latestTrialSchema = z.object({
   id: z.uuid(),
   tenant_id: z.uuid(),
   status: z.enum(PLATFORM_SERVICE_TRIAL_STATUS_VALUES),
+  version: z.number().int().positive().optional(),
   starts_at: dateTime.nullable(),
   trial_ends_at: dateTime.nullable(),
   grace_ends_at: dateTime.nullable(),
@@ -98,10 +101,11 @@ const latestTrialSchema = z.object({
     context.addIssue({ code: "custom", message: "latest trial range invalid" });
   }
 });
-const accessFactsSchema = z.object({
+export const accessFactsSchema = z.object({
   server_time: dateTime,
   tenant_id: z.uuid(),
   tenant_status: z.string().trim().min(1).nullable(),
+  service_access_policy: z.enum(["legacy_compatible", "entitlement_required"]),
   contract: z.object({
     id: z.uuid(),
     service_start_at: dateTime,
@@ -200,6 +204,7 @@ export class TenantServiceAccessRepository
     return {
       evaluatedAt: parsed.data.server_time,
       tenantStatus: parsed.data.tenant_status,
+      serviceAccessPolicy: parsed.data.service_access_policy,
       contract: parsed.data.contract,
       paidOnboardingOrder: parsed.data.paid_onboarding_order,
       legacySubscriptionStatus: parsed.data.legacy_subscription_status,

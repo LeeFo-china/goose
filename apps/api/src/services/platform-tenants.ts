@@ -8,16 +8,63 @@ import type {
 import { authorizationService, type AuthContext } from "@/services/authorization";
 import { platformAuditLogService } from "@/services/platform-audit-logs";
 import { platformAuthorizationService } from "@/services/platform-authorization";
+import { platformServiceTrialRollout } from "@/services/platform-service-trial-rollout";
+import { tenantServiceAccessBatchRepository } from "@/repositories/tenant-service-access-batch";
+import { tenantServiceAccessService } from "@/services/tenant-service-access";
 import type { PermissionCode } from "@gooes/domain";
 
 class PlatformTenantService {
   async list(query: PlatformTenantListQuery, authContext: AuthContext) {
     this.assertPermission(authContext, "platform.tenant.read");
-    return platformTenantRepository.list(query);
+    const page = await platformTenantRepository.list(query);
+    const [factsById, trialAccessEnabled] = await Promise.all([
+      tenantServiceAccessBatchRepository.getByTenantIds(page.list.map((item) => item.id)),
+      platformServiceTrialRollout.isAccessEnabled(),
+    ]);
+    const hasPermission = (code: string) => authContext.isPlatformSuperAdmin
+      || authContext.permissions.some((item) => item.code === code);
+    const canManage = hasPermission("platform.service_trial.manage");
+    return {
+      ...page,
+      trial_creation: {
+        enabled: trialAccessEnabled && canManage,
+        disabled_reason: !trialAccessEnabled ? "平台试用访问尚未启用"
+          : !canManage ? "当前账号无试用管理权限" : null,
+      },
+      list: page.list.map((item) => {
+        const facts = factsById.get(item.id);
+        if (!facts) throw Errors.dbError("缺少租户服务状态");
+        const decision = tenantServiceAccessService.resolveFactsForRoute(
+          facts, trialAccessEnabled, { routeAccess: "session" },
+        );
+        const trial = facts.latestTrial;
+        return {
+          ...item,
+          service_access: {
+            mode: decision.mode,
+            trial_id: trial?.id ?? null,
+            trial_status: trial?.status ?? null,
+            trial_ends_at: trial?.trial_ends_at ?? null,
+            grace_ends_at: trial?.grace_ends_at ?? null,
+            version: trial?.version ?? null,
+            can_extend: trialAccessEnabled && canManage
+              && hasPermission("platform.service_trial.override")
+              && (decision.mode === "trial" || decision.mode === "grace")
+              && (trial?.status === "active" || trial?.status === "grace_period"),
+          },
+        };
+      }),
+    };
   }
 
   async create(input: CreatePlatformTenantInput, authContext: AuthContext) {
     this.assertPermission(authContext, "platform.tenant.manage");
+    if (input.trial?.enabled) {
+      this.assertPermission(authContext, "platform.service_trial.manage");
+      if (!await platformServiceTrialRollout.isAccessEnabled()) {
+        throw Errors.business(409, "平台试用访问尚未启用", "SERVICE_TRIAL_ACCESS_DISABLED");
+      }
+    }
 
     const existing = await platformTenantRepository.findBySlug(input.slug);
     if (existing) {
@@ -30,9 +77,12 @@ class PlatformTenantService {
       await this.assertAdminPhoneAvailable(input.admin.phone);
     }
 
-    const { tenant: record, initialization } =
+    const { tenant: record, initialization, trial } =
       await platformTenantRepository.createWithDefaultTemplate(input, {
         operatorEmployeeId: authContext.employeeId,
+        manual: true,
+        allowOverride: authContext.isPlatformSuperAdmin
+          || authContext.permissions.some((item) => item.code === "platform.service_trial.override"),
       });
     const usage = await platformTenantRepository.getUsageStats([record.id]);
     await platformAuditLogService.recordBestEffort({
@@ -50,6 +100,7 @@ class PlatformTenantService {
         contact_name: record.contact_name,
         contact_phone: record.contact_phone,
         initialization,
+        trial,
       },
     });
 
@@ -75,6 +126,7 @@ class PlatformTenantService {
       ...record,
       usage: usage.get(record.id) ?? null,
       initialization,
+      trial: trial ?? null,
     };
   }
 

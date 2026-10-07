@@ -50,6 +50,15 @@ export type PlatformTenantRoleLite = {
 };
 
 export type PlatformTenantRecord = {
+  service_access?: {
+    mode: "paid" | "paid_onboarding" | "trial" | "grace" | "legacy" | "service_blocked" | "hard_blocked";
+    trial_id: string | null;
+    trial_status: string | null;
+    trial_ends_at: string | null;
+    grace_ends_at: string | null;
+    version: number | null;
+    can_extend: boolean;
+  };
   id: string;
   name: string;
   slug: string;
@@ -135,6 +144,7 @@ export type Pagination = {
 };
 
 export type PlatformTenantListData = {
+  trial_creation?: { enabled: boolean; disabled_reason: string | null };
   list: PlatformTenantRecord[];
   pagination: Pagination;
 };

@@ -99,6 +99,15 @@ export const CreatePlatformTenantSchema = z.object({
     department_code: z.enum(DEPARTMENT_CODE_VALUES).optional().default("EXEC_OFFICE"),
     post_code: z.enum(EMPLOYEE_POST_CODE_VALUES).optional().default("SYSTEM_ADMIN"),
   }).optional(),
+  trial: z.discriminatedUnion("enabled", [
+    z.object({ enabled: z.literal(false) }).strict(),
+    z.object({
+      enabled: z.literal(true),
+      trial_days: z.number().int("试用天数必须为整数").min(1, "至少试用 1 天").max(365, "试用最多 365 天"),
+      reason: z.string().trim().min(1, "请填写开通原因").max(500, "开通原因最多 500 字"),
+      idempotency_key: z.uuidv4("无效的试用请求标识"),
+    }).strict(),
+  ]).optional(),
 });
 
 export const UpdatePlatformTenantSchema = z.object({

@@ -39,7 +39,7 @@ export async function list(this: any, query: PlatformTenantListQuery) {
   const to = from + query.pageSize - 1;
 
   let request = this.from("tenants")
-    .select("*", { count: "exact" })
+    .select("id,name,slug,status,unified_social_credit_code,address,address_title,address_poi_id,address_province,address_city,address_district,address_adcode,address_latitude,address_longitude,address_source,address_confidence,address_confirmed_at,contact_name,contact_phone,created_at,updated_at", { count: "exact" })
     .order("created_at", { ascending: false })
     .range(from, to);
 

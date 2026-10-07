@@ -49,6 +49,8 @@ export function createPlatformTenantRpcAdapter(
 
 export type PlatformTenantCreateWithDefaultTemplateOptions = {
   readonly operatorEmployeeId: string | null;
+  readonly manual?: boolean;
+  readonly allowOverride?: boolean;
 };
 
 class PlatformTenantRepository {
@@ -73,6 +75,7 @@ class PlatformTenantRepository {
       this.rpc,
       input,
       options.operatorEmployeeId,
+      { manual: options.manual, allowOverride: options.allowOverride },
     );
   }
   findEmployeesByPhone = findEmployeesByPhone;

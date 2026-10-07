@@ -62,6 +62,7 @@ async function getPlatformTenants(input: {
       list: [],
       pagination: { page: input.page, pageSize: input.pageSize, total: 0, totalPages: 0 },
       error: "缺少登录凭证",
+      trial_creation: undefined,
     };
   }
 
@@ -85,6 +86,7 @@ async function getPlatformTenants(input: {
       list: [],
       pagination: { page: input.page, pageSize: input.pageSize, total: 0, totalPages: 0 },
       error: error instanceof Error ? error.message : "平台租户列表加载失败",
+      trial_creation: undefined,
     };
   }
 }
@@ -115,12 +117,13 @@ export default async function PlatformTenantsPage({
   const pageSize = normalizePlatformListPageSize(params.pageSize);
   const status = readStatus(params.status);
   const keyword = (params.keyword || "").trim().slice(0, 80);
-  const { list, pagination, error } = hasPlatformAccess
+  const { list, pagination, error, trial_creation } = hasPlatformAccess
     ? await getPlatformTenants({ page, pageSize, status, keyword })
     : {
       list: [],
       pagination: { page, pageSize, total: 0, totalPages: 0 },
       error: "当前账号不是平台超管，无法访问租户管理",
+      trial_creation: undefined,
     };
   const summary = summarizeCurrentPage(list);
 
@@ -135,7 +138,7 @@ export default async function PlatformTenantsPage({
               <Building2 className="size-4" aria-hidden="true" />
             </span>
           }
-          action={hasPlatformAccess ? <CreatePlatformTenantButton /> : null}
+          action={hasPlatformAccess ? <CreatePlatformTenantButton trialCreation={trial_creation} /> : null}
           error={error}
           summary={
             <div className="grid gap-3 md:grid-cols-5">

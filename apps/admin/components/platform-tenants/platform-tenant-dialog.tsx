@@ -24,6 +24,7 @@ import { PlatformTenantAddressPicker } from "@/components/platform-tenants/platf
 import type { PlatformTenantRecord } from "@/components/platform-tenants/platform-tenant-types";
 import { requestPlatformTenantJson } from "@/components/platform-tenants/platform-tenant-requests";
 import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
+import { PlatformTenantTrialFields } from "./platform-tenant-trial-fields";
 
 export type TenantDialogMode = "create" | "edit";
 
@@ -116,15 +117,19 @@ export function TenantDialog({
   tenant,
   open,
   onOpenChange,
+  trialCreation,
 }: {
   mode: TenantDialogMode;
   tenant?: PlatformTenantRecord;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  trialCreation?: { enabled: boolean; disabled_reason: string | null };
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
+  const [trialEnabled, setTrialEnabled] = useState(false);
+  const [trialIntentKey, setTrialIntentKey] = useState("");
   const defaults = useMemo(() => ({
     name: tenant?.name || "",
     slug: tenant?.slug || "",
@@ -138,9 +143,11 @@ export function TenantDialog({
     if (!open) return;
 
     setError("");
+    setTrialEnabled(Boolean(trialCreation?.enabled));
+    setTrialIntentKey(crypto.randomUUID());
     setSlugManuallyEdited(false);
     setSlugValue(mode === "create" ? generateTenantSlug() : defaults.slug);
-  }, [defaults.slug, mode, open]);
+  }, [defaults.slug, mode, open, trialCreation?.enabled]);
 
   function close() {
     if (pending) return;
@@ -166,6 +173,12 @@ export function TenantDialog({
           ? {
             name,
             slug,
+            trial: trialEnabled ? {
+              enabled: true,
+              trial_days: Number(formData.get("trial_days")),
+              reason: String(formData.get("trial_reason") || "").trim(),
+              idempotency_key: trialIntentKey,
+            } : { enabled: false },
             ...addressPayload,
             contact_name: contactName || undefined,
             contact_phone: contactPhone || undefined,
@@ -199,7 +212,7 @@ export function TenantDialog({
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => (nextOpen ? onOpenChange(true) : close())}>
-      <DialogContent className="max-w-[620px]">
+      <DialogContent className="max-h-[88vh] max-w-[620px] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center gap-3">
             <div className="flex size-9 items-center justify-center rounded-md bg-accent text-accent-foreground">
@@ -216,6 +229,11 @@ export function TenantDialog({
 
         <form className="flex flex-col gap-4" onSubmit={submit}>
           <FieldGroup>
+            {mode === "create" ? <PlatformTenantTrialFields
+              enabled={trialEnabled} onEnabledChange={setTrialEnabled} disabled={pending}
+              disabledReason={trialCreation?.enabled ? null
+                : trialCreation?.disabled_reason || "当前无法开通试用"}
+            /> : null}
             <div className="flex flex-col gap-3">
               <div className="text-sm font-medium">公司信息</div>
               <FieldGroup>

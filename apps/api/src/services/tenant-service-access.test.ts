@@ -21,6 +21,7 @@ const ROUTE_ACCESSES = [
 const baseFacts: TenantServiceAccessFacts = {
   evaluatedAt: NOW.toISOString(),
   tenantStatus: "active",
+  serviceAccessPolicy: "legacy_compatible",
   contract: null,
   paidOnboardingOrder: null,
   legacySubscriptionStatus: "locked",
@@ -29,6 +30,27 @@ const baseFacts: TenantServiceAccessFacts = {
 };
 
 describe("TenantServiceAccessService", () => {
+  test("does not grant unlimited legacy access to a new tenant without service", async () => {
+    const { TenantServiceAccessService } = await import("./tenant-service-access");
+    const service = new TenantServiceAccessService({
+      repository: {
+        getAccessFacts: async () => ({
+          ...baseFacts,
+          legacySubscriptionStatus: null,
+          serviceAccessPolicy: "entitlement_required",
+        }),
+      },
+      trialAccessEnabled: async () => true,
+    });
+
+    const decision = await service.resolveForRoute({
+      tenantId: TENANT_ID,
+      routeAccess: "write",
+    });
+
+    expect(decision).toMatchObject({ mode: "service_blocked", allowed: false });
+  });
+
   test("applies hard block before paid and onboarding access", async () => {
     const { TenantServiceAccessService } = await import("./tenant-service-access");
     const getAccessFacts = mock(async () => ({
