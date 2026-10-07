@@ -21,6 +21,21 @@ DECLARE
   v_admin_count bigint;
   v_error text;
 BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_proc AS function
+    JOIN pg_namespace AS namespace ON namespace.oid = function.pronamespace
+    WHERE namespace.nspname = 'public'
+      AND function.proname IN (
+        'create_platform_tenant_with_trial',
+        'platform_service_trial_access_facts_batch'
+      )
+      AND (
+        has_function_privilege('anon', function.oid, 'EXECUTE')
+        OR has_function_privilege('authenticated', function.oid, 'EXECUTE')
+        OR NOT has_function_privilege('service_role', function.oid, 'EXECUTE')
+      )
+  ) THEN RAISE EXCEPTION 'manual trial RPC must be service-role only'; END IF;
+
   INSERT INTO public.employees(id, name, status, tenant_id)
   VALUES (v_actor, '试用验证超管', 'active', NULL);
   SELECT id INTO STRICT v_role FROM public.roles
