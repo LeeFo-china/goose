@@ -34,3 +34,15 @@
 ## 发布并发边界
 
 独立审查指出旧建户事务若在补齐扫描时尚未提交，可能越过补齐扫描。因此发布时记录应用前时间，迁移后先确认早于此时间开始的其他 client backend 事务已结束，再核对目标范围缺失资料为 0。若出现跨越发布窗口的遗漏，追加版本化补齐 migration 后再次验收；未达到条件前不宣告完成。不为低频建户增加全表触发器或暂停全部租户业务。
+
+## 生产结果
+
+- 来源提交 `4872a740d83d8b654a03330c3ad180b4b380220d`，Tag `v2026.10.08.11`。
+- [迁移预检 37751715108](https://github.com/LeeFo-china/goose/actions/runs/37751715108)：656 已应用，仅待应用 `20261008084500`。
+- [迁移应用 37751954271](https://github.com/LeeFo-china/goose/actions/runs/37751954271)：成功应用 1 条，共 657 条；检查时间 `2026-10-08T08:46:45Z`。
+- 已实际运行 `supabase migration list`，再通过 `scripts/verify-migration-history.mjs` 确认本地/远端 657 条逐条对齐。
+- 应用前记录数据库时间；完成后早于该时间开始的其他 client backend 事务为 0，eligible 缺失 profile 数为 0。
+- 生产 profile 数新增 1 条。应用前已有的 7 条资料逐条行内容摘要一致，没有被覆盖。
+- 天喜资料 ID `87da3c81-cf86-4936-a046-364a274ecf24`，draft / version 1 / public_phone=NULL / published_at=NULL。
+- 在当前生产 API 容器中，以实际员工权限上下文调用 `tenantServiceProvidersService.getTenantProfile` 和分页区域查询，正确返回目标租户资料，现有区域数量为 1。只读验证，未修改资料或提交发布。
+- 未发布应用镜像；原有页面完整刷新后可读取补齐资料。未代用户完成公开电话、地址等业务资料填写，也未提交审核。
