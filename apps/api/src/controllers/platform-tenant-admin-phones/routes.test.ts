@@ -29,11 +29,11 @@ async function app(superAdmin=true) {
   controller.registerExtraRoutes(server);
   return server;
 }
-test('registered POST rejects non-superadmin before SMS',async()=>{
+test.each(['send-code','confirm'])('registered POST %s rejects non-superadmin before change',async(endpoint)=>{
   const server=await app(false);
-  const send=spyOn(service,'sendCode');spies.push(send);
-  const response=await server.inject({method:'POST',url:`/platform/tenants/${tenant}/admins/${employee}/phone-change/send-code`,
-    payload:{new_phone:'13999200101',expected_version:1,idempotency_key:key}});
+  const send=spyOn(service,'confirm');spies.push(send);
+  const response=await server.inject({method:'POST',url:`/platform/tenants/${tenant}/admins/${employee}/phone-change/${endpoint}`,
+    payload:{new_phone:'13999200101',expected_version:1,idempotency_key:key,reason:'本人换号',same_person_confirmed:true}});
   expect(response.statusCode).toBe(403);expect(send).not.toHaveBeenCalled();await server.close();
 });
 test('registered GET validates bounded pagination',async()=>{
@@ -41,28 +41,36 @@ test('registered GET validates bounded pagination',async()=>{
   const response=await server.inject(`/platform/tenants/${tenant}/admins?pageSize=101`);
   expect(response.json()).toMatchObject({statusCode:400});expect(list).not.toHaveBeenCalled();await server.close();
 });
-test('send route passes parsed target and only server actor context',async()=>{
-  const server=await app();const send=spyOn(service,'sendCode').mockResolvedValue({challenge_id:key,expires_at:new Date().toISOString(),cooldown_seconds:60});spies.push(send);
-  const response=await server.inject({method:'POST',url:`/platform/tenants/${tenant}/admins/${employee}/phone-change/send-code`,
-    payload:{new_phone:'13999200101',expected_version:1,idempotency_key:key}});
-  expect(response.statusCode).toBe(200);expect(send.mock.calls[0]?.[0]).toEqual({tenantId:tenant,employeeId:employee});
-  expect(response.json().data.challenge_id).toBe(key);await server.close();
+test('confirm route changes phone without SMS fields',async()=>{
+  const server=await app();const confirm=spyOn(service,'confirm').mockResolvedValue({employee_id:employee,phone_masked:'139****0101',version:2,changed_at:new Date().toISOString(),idempotent:false});spies.push(confirm);
+  try {
+    const response=await server.inject({method:'POST',url:`/platform/tenants/${tenant}/admins/${employee}/phone-change/confirm`,
+      payload:{new_phone:'13999200101',expected_version:1,idempotency_key:key,reason:'本人换号',same_person_confirmed:true}});
+    expect(response.statusCode).toBe(200);expect(confirm.mock.calls[0]?.[0]).toEqual({tenantId:tenant,employeeId:employee});
+    expect(confirm.mock.calls[0]?.[1]).not.toHaveProperty('code');
+  } finally {await server.close();}
+});
+test('legacy SMS endpoint returns refresh guidance without changing anything',async()=>{
+  const server=await app();const confirm=spyOn(service,'confirm');spies.push(confirm);
+  try {
+    const response=await server.inject({method:'POST',url:`/platform/tenants/${tenant}/admins/${employee}/phone-change/send-code`,payload:{}});
+    expect(response.statusCode).toBe(410);expect(confirm).not.toHaveBeenCalled();
+  } finally {await server.close();}
 });
 test('confirmation requires same-person acknowledgement',async()=>{
   const server=await app();const confirm=spyOn(service,'confirm');spies.push(confirm);
   const response=await server.inject({method:'POST',url:`/platform/tenants/${tenant}/admins/${employee}/phone-change/confirm`,
-    payload:{new_phone:'13999200101',expected_version:1,idempotency_key:key,challenge_id:key,code:'123456',reason:'测试'}});
+    payload:{new_phone:'13999200101',expected_version:1,idempotency_key:key,reason:'测试'}});
   expect(response.statusCode).toBe(400);expect(confirm).not.toHaveBeenCalled();await server.close();
 });
 test.each([
   {actor_employee_id:employee}, {expected_version:1.5}, {reason:'   '},
-  {same_person_confirmed:false}, {new_phone:'invalid'},
+  {same_person_confirmed:false}, {new_phone:'invalid'}, {code:'123456'}, {challenge_id:key},
 ])('confirmation rejects invalid or client-supplied actor fields %j',async(invalid)=>{
   const server=await app();const confirm=spyOn(service,'confirm');spies.push(confirm);
   try {
     const response=await server.inject({method:'POST',url:`/platform/tenants/${tenant}/admins/${employee}/phone-change/confirm`,
-      payload:{new_phone:'13999200101',expected_version:1,idempotency_key:key,challenge_id:key,
-        code:'123456',reason:'本人换号',same_person_confirmed:true,...invalid}});
+      payload:{new_phone:'13999200101',expected_version:1,idempotency_key:key,reason:'本人换号',same_person_confirmed:true,...invalid}});
     expect(response.statusCode).toBe(400);expect(confirm).not.toHaveBeenCalled();
   } finally {await server.close();}
 });

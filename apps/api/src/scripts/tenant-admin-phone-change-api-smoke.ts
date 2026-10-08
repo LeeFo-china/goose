@@ -32,7 +32,6 @@ async function main() {
   const phoneBase='139'+String(randomInt(1000000,9000000));
   const phones={actor:phoneBase+'1',old:phoneBase+'2',next:phoneBase+'3'};
   const app=Fastify({logger:false});
-  let sentCode='';
   try {
     await sql`insert into auth.users(id) values(${ids.actorUser}),(${ids.employeeUser}),(${ids.customerUser})`;
     await sql`insert into public.tenants(id,name,slug,status) values(${ids.tenant},'手机号API隔离测试',${'phone-api-'+ids.tenant},'active')`;
@@ -58,7 +57,7 @@ async function main() {
     const {PlatformTenantAdminPhonesController}=await import('@/controllers/platform-tenant-admin-phones');
     const {PlatformTenantAdminPhoneService}=await import('@/services/platform-tenant-admin-phones');
     const {signAdminToken,signToken}=await import('@/utils/jwt');
-    const service=new PlatformTenantAdminPhoneService({send:async(_phone,code)=>{sentCode=code;},assertChannel:async()=>{}});
+    const service=new PlatformTenantAdminPhoneService();
     authPlugin(app);errorHandler(app);
     adminController.registerExtraRoutes(app);employeeController.registerExtraRoutes(app);
     customerController.registerExtraRoutes(app);
@@ -74,11 +73,10 @@ async function main() {
     assert.equal(list.json().data.list[0].id,ids.employee);
     assert.equal(list.json().data.list[0].can_change,true);
     const prefix=`/platform/tenants/${ids.tenant}/admins/${ids.employee}/phone-change`;
-    const sendInput={new_phone:phones.next,expected_version:1,idempotency_key:randomUUID()};
-    const sent=await app.inject({method:'POST',url:prefix+'/send-code',headers,payload:sendInput});
-    assert.equal(sent.statusCode,200,`send: ${sent.body}`);assert.match(sentCode,/^\d{6}$/);
-    const confirmInput={...sendInput,idempotency_key:randomUUID(),challenge_id:sent.json().data.challenge_id,
-      code:sentCode,reason:'管理员本人更换手机号',same_person_confirmed:true};
+    const retired=await app.inject({method:'POST',url:prefix+'/send-code',headers,payload:{}});
+    assert.equal(retired.statusCode,410);
+    const confirmInput={new_phone:phones.next,expected_version:1,idempotency_key:randomUUID(),
+      reason:'管理员本人更换手机号',same_person_confirmed:true};
     const changed=await app.inject({method:'POST',url:prefix+'/confirm',headers,payload:confirmInput});
     assert.equal(changed.statusCode,200,`confirm: ${changed.body}`);
     assert.equal(changed.json().data.version,2);
@@ -97,6 +95,8 @@ async function main() {
       customer_id:ids.customer,tenant_id:ids.tenant,roles:['customer']});
     const customerContext=await app.inject({url:'/auth/me/customer-context',headers:{authorization:`Bearer ${customerToken}`}});
     assert.equal(customerContext.statusCode,200,`same-phone legacy customer: ${customerContext.body}`);
+    const [sms]=await sql`select count(*)::int as count from public.sms_verification_codes where phone=${phones.next}`;
+    assert.equal(sms.count,0,'direct change must not create or consume SMS records');
     const oldLogin=await app.inject({method:'POST',url:'/admin/auth/login',payload:{phone:phones.old,code:'123456'}});
     assert.equal(oldLogin.statusCode,404);
     await sql`insert into public.sms_verification_codes(phone,scene,code,expired_at)
@@ -110,7 +110,7 @@ async function main() {
     assert.equal(employee.user_id,ids.employeeUser);assert.equal(employee.phone,phones.next);
     const [customer]=await sql`select phone from public.customers where id=${ids.customer}`;
     assert.equal(customer.phone,phones.old);
-    console.log(JSON.stringify({actual_api_and_database:true,sms_delivery:'injected local capture',list:true,change:true,
+    console.log(JSON.stringify({actual_api_and_database:true,sms_required:false,retired_sms_endpoint:true,list:true,change:true,
       idempotent:true,old_phone_rejected:true,old_token_rejected:true,raw_auth_rejected:true,
       wechat_employee_preserved:true,legacy_customer_preserved:true,new_login_and_business_request:true,identity_preserved:true}));
   } finally {

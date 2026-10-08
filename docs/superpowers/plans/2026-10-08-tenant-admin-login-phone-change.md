@@ -1,5 +1,7 @@
 # 租户管理员登录手机号变更 Implementation Plan
 
+> 2026-10-08 修订：本文件记录最初的短信验证实现。用户已明确要求超管直接换号无需验证码，当前行为以 [直接换号修订计划](2026-10-08-tenant-admin-phone-direct-change.md) 为准。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking. 按依赖推进；独立认证、数据库测试及页面由不同工作单元负责，公共认证文件不并行修改。
 
 **Goal:** 超管验证新手机号后，为同一租户管理员变更登录号码，保留身份与历史记录，并使旧后台会话失效。

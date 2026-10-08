@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useReducer, useRef, useState } from "react";
+import { useReducer, useRef, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -10,8 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { requestPlatformTenantJson } from "./platform-tenant-requests";
 import {
-  canConfirmPhoneChange, canSendPhoneCode, createPhoneChangeState, phoneChangeReducer,
-  type PhoneChallenge, type PhoneChangeResult, type TenantAdmin,
+  canConfirmPhoneChange, createPhoneChangeState, phoneChangeReducer,
+  type PhoneChangeResult, type TenantAdmin,
 } from "./platform-tenant-admin-phone-state";
 
 export function PlatformTenantAdminPhoneDialog({ tenantId, tenantName, admin, onClose, onRefresh, onChanged }: {
@@ -24,51 +24,21 @@ export function PlatformTenantAdminPhoneDialog({ tenantId, tenantName, admin, on
 }) {
   const [currentAdmin, setCurrentAdmin] = useState(admin);
   const [state, dispatch] = useReducer(phoneChangeReducer, admin.version, createPhoneChangeState);
-  const [now, setNow] = useState(Date.now);
   const requestInFlight = useRef(false);
   const path = `/platform/tenants/${tenantId}/admins/${admin.id}/phone-change`;
   const pending = state.pending !== null;
-  const cooldown = Math.max(0, Math.ceil((state.cooldownUntil - now) / 1000));
-  const expired = Boolean(state.challenge && Date.parse(state.challenge.expires_at) <= now);
   const canChange = currentAdmin.can_change;
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
 
   function failed(error: unknown) {
     const status = typeof error === "object" && error !== null && "status" in error && typeof error.status === "number"
       ? error.status : undefined;
-    const code = typeof error === "object" && error !== null && "code" in error && typeof error.code === "string"
-      ? error.code : undefined;
-    dispatch({ type: "failed", status, code, message: error instanceof Error ? error.message : "请求失败，请重试" });
-  }
-
-  async function sendCode() {
-    if (requestInFlight.current || !canChange || !canSendPhoneCode(state, Date.now())) return;
-    requestInFlight.current = true;
-    const event = { type: "send" as const, key: crypto.randomUUID(), now: Date.now() };
-    const next = phoneChangeReducer(state, event);
-    dispatch(event);
-    try {
-      const challenge = await requestPlatformTenantJson<PhoneChallenge>(`${path}/send-code`, {
-        method: "POST", body: JSON.stringify(next.sendRequest), fallbackMessage: "验证码发送失败",
-      });
-      const receivedAt = Date.now();
-      setNow(receivedAt);
-      dispatch({ type: "sent", challenge, now: receivedAt });
-    } catch (error) {
-      failed(error);
-    } finally {
-      requestInFlight.current = false;
-    }
+    dispatch({ type: "failed", status, message: error instanceof Error ? error.message : "请求失败，请重试" });
   }
 
   async function confirm() {
-    if (requestInFlight.current || !canChange || !canConfirmPhoneChange(state, Date.now())) return;
+    if (requestInFlight.current || !canChange || !canConfirmPhoneChange(state)) return;
     requestInFlight.current = true;
-    const event = { type: "confirm" as const, key: crypto.randomUUID(), now: Date.now() };
+    const event = { type: "confirm" as const, key: crypto.randomUUID() };
     const next = phoneChangeReducer(state, event);
     dispatch(event);
     try {
@@ -110,7 +80,7 @@ export function PlatformTenantAdminPhoneDialog({ tenantId, tenantName, admin, on
         <DialogHeader>
           <DialogTitle>变更登录手机号</DialogTitle>
           <DialogDescription>
-            仅用于同一管理员本人换号。验证新号码即可，无需旧号码验证码。
+            仅用于同一管理员本人换号。由平台超管直接变更，无需短信验证码。
           </DialogDescription>
         </DialogHeader>
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
@@ -125,9 +95,9 @@ export function PlatformTenantAdminPhoneDialog({ tenantId, tenantName, admin, on
         {!canChange ? <Alert variant="destructive"><AlertDescription>{currentAdmin.disabled_reason || "当前管理员不可变更手机号"}</AlertDescription></Alert> : null}
         {state.error ? <Alert variant="destructive"><AlertDescription>{state.error}</AlertDescription></Alert> : null}
         {state.needsRefresh ? <Alert>
-          <AlertTitle>请刷新后重新验证</AlertTitle>
+          <AlertTitle>请刷新后重新确认</AlertTitle>
           <AlertDescription className="flex flex-col gap-2">
-            <p>管理员资料或验证状态已变化。刷新最新资料后，重新发送验证码并确认本人身份。</p>
+            <p>管理员资料已变化。请刷新最新资料，核对新号码并重新确认本人身份。</p>
             <Button type="button" variant="outline" disabled={pending} onClick={() => void refresh()}>刷新管理员资料</Button>
           </AlertDescription>
         </Alert> : null}
@@ -139,25 +109,11 @@ export function PlatformTenantAdminPhoneDialog({ tenantId, tenantName, admin, on
           <FieldGroup>
             <Field data-disabled={pending || !canChange}>
               <FieldLabel htmlFor="admin-new-phone">新手机号</FieldLabel>
-              <div className="flex flex-wrap gap-2">
-                <Input id="admin-new-phone" type="tel" autoComplete="off" inputMode="tel" maxLength={11}
-                  className="min-w-0 flex-1" value={state.newPhone} disabled={pending || !canChange}
-                  aria-describedby="admin-new-phone-help"
-                  onChange={(event) => dispatch({ type: "edit", field: "newPhone", value: event.target.value })} />
-                <Button type="button" variant="outline" disabled={!canChange || !canSendPhoneCode(state, now)} onClick={() => void sendCode()}>
-                  {state.pending === "send" ? "正在发送…" : cooldown > 0 ? `${cooldown} 秒后重发` : "发送验证码"}
-                </Button>
-              </div>
-              <FieldDescription id="admin-new-phone-help">短信将发送至新号码，请先核对号码。修改号码后需重新验证。</FieldDescription>
-            </Field>
-            <Field data-disabled={pending || !canChange || !state.challenge}>
-              <FieldLabel htmlFor="admin-phone-code">新号码验证码</FieldLabel>
-              <Input id="admin-phone-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6}
-                value={state.code} disabled={pending || !canChange || !state.challenge}
-                onChange={(event) => dispatch({ type: "edit", field: "code", value: event.target.value })} />
-              <FieldDescription aria-live="polite">
-                {expired ? "验证码已过期，请重新发送。" : state.challenge ? `验证码已发送，有效至 ${new Date(state.challenge.expires_at).toLocaleTimeString("zh-CN")}。` : "先发送验证码，再填写新号码收到的 6 位验证码。"}
-              </FieldDescription>
+              <Input id="admin-new-phone" type="tel" autoComplete="off" inputMode="tel" maxLength={11}
+                value={state.newPhone} disabled={pending || !canChange}
+                aria-describedby="admin-new-phone-help"
+                onChange={(event) => dispatch({ type: "edit", field: "newPhone", value: event.target.value })} />
+              <FieldDescription id="admin-new-phone-help">请核对管理员本人的新号码，确认后将作为后台登录手机号。</FieldDescription>
             </Field>
             <Field data-disabled={pending || !canChange}>
               <FieldLabel htmlFor="admin-phone-reason">变更原因</FieldLabel>
@@ -174,7 +130,7 @@ export function PlatformTenantAdminPhoneDialog({ tenantId, tenantName, admin, on
           </FieldGroup>
           <DialogFooter>
             <Button type="button" variant="outline" disabled={pending} onClick={onClose}>取消</Button>
-            <Button type="submit" disabled={!canChange || !canConfirmPhoneChange(state, now)}>
+            <Button type="submit" disabled={!canChange || !canConfirmPhoneChange(state)}>
               {state.pending === "confirm" ? "正在变更…" : state.outcomeUnknown ? "重试原请求" : "确认变更"}
             </Button>
           </DialogFooter>

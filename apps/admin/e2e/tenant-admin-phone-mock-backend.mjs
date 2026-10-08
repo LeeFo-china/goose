@@ -2,11 +2,10 @@
 import { createServer } from "node:http";
 
 const tenantId = "11111111-1111-4111-8111-111111111111";
-let options, admins, journal, challenges, results;
+let options, admins, journal, results;
 function reset(input = {}) {
   options = input;
   journal = [];
-  challenges = new Map();
   results = new Map();
   admins = Array.from({ length: input.empty ? 0 : 21 }, (_, index) => ({
     id: `22222222-2222-4222-8222-${String(index + 1).padStart(12, "0")}`,
@@ -69,18 +68,13 @@ const server = createServer(async (req, res) => {
       const admin = admins.find((item) => item.id === match[1]);
       if (token !== "manage" || !admin?.can_change) return fail(res, 403, "无权变更");
       if (options.delay) await new Promise((resolve) => setTimeout(resolve, 700));
-      if (match[2] === "send-code") {
-        const challenge = { challenge_id: `synthetic-challenge-${challenges.size + 1}`,
-          expires_at: new Date(Date.now() + 300_000).toISOString(), cooldown_seconds: options.cooldown ?? 60 };
-        challenges.set(challenge.challenge_id, input);
-        return ok(res, challenge);
-      }
+      if (match[2] === "send-code") return fail(res, 410, "请刷新页面后直接变更手机号");
       if (results.has(input.idempotency_key)) return ok(res, { ...results.get(input.idempotency_key), idempotent: true });
       if (options.conflict) { options.conflict = false; admin.version += 1; return fail(res, 409, "管理员版本已变化"); }
       if (input.expected_version !== admin.version) return fail(res, 409, "版本冲突");
-      const challenge = challenges.get(input.challenge_id);
-      if (!challenge || challenge.new_phone !== input.new_phone) return fail(res, 409, "请重新发送验证码");
-      if (input.code !== "123456") return fail(res, 400, "验证码错误");
+      const fields = ["new_phone", "expected_version", "reason", "same_person_confirmed", "idempotency_key"];
+      if (Object.keys(input).length !== fields.length || Object.keys(input).some((key) => !fields.includes(key))) return fail(res, 400, "请求字段不正确");
+      if (!/^1[3-9]\d{9}$/.test(input.new_phone) || !input.idempotency_key) return fail(res, 400, "手机号或请求标识无效");
       if (!input.reason?.trim() || input.reason.length > 500 || input.same_person_confirmed !== true) return fail(res, 400, "请核实身份和原因");
       admin.phone_masked = `${input.new_phone.slice(0, 3)}****${input.new_phone.slice(-4)}`;
       admin.version += 1;
