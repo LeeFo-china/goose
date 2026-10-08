@@ -3,6 +3,11 @@ import { describe, expect, test } from "bun:test";
 import { SMS_SCENE_VALUES, type SmsScene } from "./auth";
 
 describe("tenant onboarding SMS scene", () => {
+  test("exports a dedicated tenant administrator phone change scene", () => {
+    const scene: SmsScene = "tenant_admin_phone_change";
+    expect(SMS_SCENE_VALUES).toContain(scene);
+    expect(SMS_SCENE_VALUES).toContain("admin_login");
+  });
   test("exports the applicant-only scene without removing legacy scenes", () => {
     const scene: SmsScene = "tenant_onboarding_application";
 

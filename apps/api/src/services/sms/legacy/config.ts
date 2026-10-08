@@ -70,7 +70,7 @@ export function getTemplateConfigKey(input: {
     return `${prefix}_BIND_CUSTOMER`;
   }
 
-  if (input.purpose === "admin_login") {
+  if (input.purpose === "admin_login" || input.purpose === "tenant_admin_phone_change") {
     return `${prefix}_ADMIN_LOGIN`;
   }
 
@@ -159,7 +159,7 @@ export async function getAliyunTemplateCode(
   const value = await readSmsConfig(channel, key);
   if (value) return value;
 
-  if (purpose === "admin_login") {
+  if (purpose === "admin_login" || purpose === "tenant_admin_phone_change") {
     return requireSmsConfig(
       channel,
       getTemplateConfigKey({ provider: "aliyun", purpose: "bind_employee" }),
@@ -177,7 +177,7 @@ export async function getTencentTemplateId(
   const value = await readSmsConfig(channel, key);
   if (value) return value;
 
-  if (purpose === "admin_login") {
+  if (purpose === "admin_login" || purpose === "tenant_admin_phone_change") {
     return requireSmsConfig(
       channel,
       getTemplateConfigKey({ provider: "tencent", purpose: "bind_employee" }),

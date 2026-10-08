@@ -7,6 +7,7 @@ export const PlatformAuditLogActionSchema = z.enum([
   "tenant_suspend",
   "tenant_activate",
   "tenant_admin_create",
+  "tenant_admin_phone_change",
   "platform_lead_assign",
   "platform_device_access_view",
   "platform_device_sync",
