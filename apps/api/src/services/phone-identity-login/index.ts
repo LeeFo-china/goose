@@ -172,20 +172,19 @@ const phoneIdentityBindings = new PhoneIdentityBindings({
       );
     }
 
+    await wechatEmployeeIdentityService.bindEmployeeAuthUser({
+      employeeId: input.employee.id,
+      authUserId: targetAuthUserId,
+      expected: input.employee,
+      errorMessage: "绑定平台管理员身份失败",
+    });
+
     await userIdentityService.syncOauthIdentity({
       userId: targetAuthUserId,
       platform: "wechat_mini",
       openid: input.openid,
       unionid: input.unionid ?? null,
     });
-
-    if (!input.employee.user_id) {
-      await wechatEmployeeIdentityService.bindEmployeeAuthUser({
-        employeeId: input.employee.id,
-        authUserId: targetAuthUserId,
-        errorMessage: "绑定平台管理员身份失败",
-      });
-    }
 
     authorizationService.invalidateAuthContext({
       authUserId: input.authUserId,

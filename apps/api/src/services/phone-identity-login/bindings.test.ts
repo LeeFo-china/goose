@@ -362,6 +362,7 @@ function employee(overrides: Record<string, unknown> = {}) {
     name: "王五",
     phone: PHONE,
     status: "active",
+    version: 1,
     tenant: { id: "tenant-1", status: "active" },
     ...overrides,
   };
@@ -375,6 +376,7 @@ function platformAdmin(overrides: Record<string, unknown> = {}) {
     name: "平台管理员",
     phone: PHONE,
     status: "active",
+    version: 1,
     tenant: null,
     roleCodes: ["platform_admin"],
     adminAuthVersion: 1,

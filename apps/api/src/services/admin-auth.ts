@@ -7,6 +7,7 @@ import {
 } from "@/repositories/admin-auth";
 import { authorizationService, type AuthContext } from "@/services/authorization";
 import { platformAuthorizationService } from "@/services/platform-authorization";
+import { employeeAdminSessionsService } from "@/services/employee-admin-sessions";
 import { sendSmsCode } from "@/services/sms";
 import { userIdentityService } from "@/services/user-identities";
 import { isPhoneLoginWithoutCodeEnabled } from "@/utils/auth/test-login";
@@ -224,6 +225,7 @@ class AdminAuthService {
       input.phone,
       options,
     );
+    const loginSnapshot = await employeeAdminSessionsService.getLoginSnapshot(employee, input.phone);
     const skipCodeVerification = isPhoneLoginWithoutCodeEnabled();
     const code = input.code?.trim() || "";
     let verificationCode: { id: string } | null = null;
@@ -268,10 +270,7 @@ class AdminAuthService {
             phone: input.phone,
             name: employee.name,
           });
-          await adminAuthRepository.bindEmployeeAuthUser({
-            employeeId: employee.id,
-            authUserId: createdAuthUserId,
-          });
+          await employeeAdminSessionsService.bindFirstLogin(loginSnapshot, createdAuthUserId);
           return createdAuthUserId;
         },
       );
@@ -306,14 +305,12 @@ class AdminAuthService {
     authorizationService.assertTenantAvailable(authContext);
 
     const isPlatformSession = Boolean(authContext.isPlatformStaff);
-    const adminAuthVersion = authContext.adminAuthVersion
-      ?? employee.admin_auth_version
-      ?? 1;
+    await employeeAdminSessionsService.assertLoginUnchanged(loginSnapshot, authUserId);
     const token = signAdminToken({
       sub: authUserId,
       login_channel: "admin_web",
       roles: ["employee"],
-      admin_auth_version: adminAuthVersion,
+      admin_auth_version: loginSnapshot.admin_auth_version,
     }, { platform: isPlatformSession });
     await adminAuthRepository.updateLastLogin(
       employee.id,

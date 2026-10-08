@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { ErrorCodes } from "@/errors/error-codes";
 import { Errors } from "@/errors/error-factory";
 import { verifyTokenDetailed } from "@/utils/jwt";
+import { employeeAdminSessionsService } from "@/services/employee-admin-sessions";
 import {
   prewarmEmployeeAuthContextForRequest,
   shouldPrewarmEmployeeAuthContext,
@@ -190,6 +191,24 @@ async function authenticateRequest(
     );
     request.user = payload;
     return true;
+  }
+
+  if (payload.login_channel === "admin_web") {
+    await logAuthStage(request, "assert_employee_admin_session", () =>
+      employeeAdminSessionsService.assertSession(payload.sub, payload.admin_auth_version)
+    );
+  } else if (
+    (payload.login_channel !== undefined && payload.login_channel !== "wechat")
+    || typeof payload.sub !== "string" || !payload.sub.trim()
+    || typeof payload.openid !== "string" || !payload.openid.trim()
+  ) {
+    // GoTrue may share our signing key. Its raw auth token is not an app
+    // session. Legacy customer/selection tokens omit channel but carry openid;
+    // keep them on the existing WeChat binding checks below.
+    const error = Errors.unauthorized("请通过后台或微信登录", ErrorCodes.TOKEN_INVALID);
+    logAuthReject(request, "unsupported_token_type", { loginChannel: payload.login_channel });
+    reply.status(error.statusCode).send(sendUnauthorized(error, request.id));
+    return false;
   }
 
   if (payload.openid && isPureVisitorPayload(payload) && isVisitorSessionRoute(method, url)) {

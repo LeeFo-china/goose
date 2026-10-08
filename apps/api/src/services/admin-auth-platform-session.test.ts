@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { ErrorCodes } from "@/errors/error-codes";
 import { Errors } from "@/errors/error-factory";
 import type { AdminAuthEmployeeRecord } from "@/repositories/admin-auth";
@@ -63,6 +63,16 @@ const invalidateAuthContext = mock(() => undefined);
 const syncBusinessMembershipBestEffort = mock(async () => undefined);
 const assertPlatformSession = mock(async () => platformAuthContext);
 const signAdminToken = mock(() => "admin-token");
+const sessionSnapshot = {
+  id: platformEmployee.id,
+  tenant_id: platformEmployee.tenant_id,
+  user_id: platformEmployee.user_id,
+  status: platformEmployee.status,
+  phone: platformEmployee.phone,
+  version: 1,
+  admin_auth_version: platformEmployee.admin_auth_version,
+};
+const sessionSpies: Array<{ mockRestore(): void }> = [];
 
 mock.module("@/repositories/admin-auth", () => ({
   adminAuthRepository: {
@@ -127,7 +137,14 @@ mock.module("@/services/files/file-url-resolver", () => ({
 }));
 
 describe("admin auth platform session", () => {
-  beforeEach(() => {
+  afterEach(() => { for (const spy of sessionSpies.splice(0)) spy.mockRestore(); });
+
+  beforeEach(async () => {
+    const { employeeAdminSessionsRepository } = await import("@/repositories/employee-admin-sessions");
+    sessionSpies.push(
+      spyOn(employeeAdminSessionsRepository, "findByEmployeeId").mockResolvedValue([sessionSnapshot]),
+      spyOn(employeeAdminSessionsRepository, "findByAuthUserId").mockResolvedValue([sessionSnapshot]),
+    );
     findEmployeeByPhone.mockClear();
     findValidVerificationCode.mockClear();
     createAdminAuthUser.mockClear();

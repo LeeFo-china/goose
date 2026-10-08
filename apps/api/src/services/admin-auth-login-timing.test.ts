@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { AuthContext } from "@/services/authorization";
 import type { AdminAuthEmployeeRecord } from "@/repositories/admin-auth";
 import {
@@ -17,6 +17,7 @@ const activeEmployee = {
   user_id: "auth-user-1",
   tenant_id: "tenant-1",
   status: "active",
+  admin_auth_version: 1,
   tenant_department_id: "department-1",
   post_id: "post-1",
   name: "出纳员",
@@ -69,6 +70,16 @@ const getAuthContextByAuthUserId = mock(async () => activeAuthContext);
 const assertTenantAvailable = mock(() => undefined);
 const invalidateAuthContext = mock(() => undefined);
 const syncBusinessMembershipBestEffort = mock(async () => undefined);
+const sessionSnapshot = {
+  id: activeEmployee.id,
+  tenant_id: activeEmployee.tenant_id,
+  user_id: activeEmployee.user_id,
+  status: activeEmployee.status,
+  phone: activeEmployee.phone,
+  version: 1,
+  admin_auth_version: activeEmployee.admin_auth_version,
+};
+const sessionSpies: Array<{ mockRestore(): void }> = [];
 
 mock.module("@/repositories/admin-auth", () => ({
   adminAuthRepository: {
@@ -130,7 +141,14 @@ function waitForTimerResolution() {
 }
 
 describe("admin auth login timing", () => {
-  beforeEach(() => {
+  afterEach(() => { for (const spy of sessionSpies.splice(0)) spy.mockRestore(); });
+
+  beforeEach(async () => {
+    const { employeeAdminSessionsRepository } = await import("@/repositories/employee-admin-sessions");
+    sessionSpies.push(
+      spyOn(employeeAdminSessionsRepository, "findByEmployeeId").mockResolvedValue([sessionSnapshot]),
+      spyOn(employeeAdminSessionsRepository, "findByAuthUserId").mockResolvedValue([sessionSnapshot]),
+    );
     findEmployeeByPhone.mockClear();
     findEmployeeByPhone.mockImplementation(async () => {
       await waitForTimerResolution();

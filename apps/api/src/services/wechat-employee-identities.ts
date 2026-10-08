@@ -19,6 +19,7 @@ class WechatEmployeeIdentityService {
   bindEmployeeAuthUser(input: {
     employeeId: string;
     authUserId: string;
+    expected: Pick<WechatEmployeeIdentityRow, "phone" | "version" | "user_id" | "tenant_id" | "status">;
     errorMessage?: string;
   }) {
     return wechatEmployeeIdentityRepository.bindEmployeeAuthUser(input);

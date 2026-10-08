@@ -48,11 +48,12 @@ export class AuthorizationService {
       return inFlight;
     }
 
+    const generation = this.cache.getGeneration();
     const promise = permissionRepository.getEmployeePermissionContextByAuthUserId(
       authUserId,
     ).then((raw) => {
       const context = buildAuthContext(raw, authUserId);
-      this.cache.setCacheValue(authUserId, context);
+      this.cache.setCacheValue(authUserId, context, generation);
       return context;
     });
     this.cache.setAuthUserInFlight(authUserId, promise);
@@ -70,6 +71,7 @@ export class AuthorizationService {
       return inFlight;
     }
 
+    const generation = this.cache.getGeneration();
     const promise = permissionRepository.getEmployeePermissionContextByEmployeeId(
       employeeId,
     ).then((raw) => {
@@ -81,7 +83,7 @@ export class AuthorizationService {
         authUserId,
       );
 
-      this.cache.setCacheContext(context);
+      this.cache.setCacheContext(context, generation);
       return context;
     });
     this.cache.setEmployeeInFlight(employeeId, promise);

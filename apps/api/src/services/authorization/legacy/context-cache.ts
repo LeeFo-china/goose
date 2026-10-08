@@ -13,6 +13,11 @@ export class AuthContextCache {
   }>();
   private authUserInFlight = new Map<string, Promise<AuthContext>>();
   private employeeInFlight = new Map<string, Promise<AuthContext>>();
+  private generation = 0;
+
+  getGeneration() {
+    return this.generation;
+  }
 
   getCacheValue(
     cache: Map<string, { expiresAt: number; value: AuthContext }>,
@@ -39,7 +44,8 @@ export class AuthContextCache {
     return this.getCacheValue(this.employeeCache, employeeId);
   }
 
-  setCacheValue(key: string, value: AuthContext) {
+  setCacheValue(key: string, value: AuthContext, generation = this.generation) {
+    if (generation !== this.generation) return;
     const expiresAt = Date.now() + CACHE_TTL_MS;
     this.authUserCache.set(key, { expiresAt, value });
 
@@ -48,9 +54,10 @@ export class AuthContextCache {
     }
   }
 
-  setCacheContext(value: AuthContext) {
+  setCacheContext(value: AuthContext, generation = this.generation) {
+    if (generation !== this.generation) return;
     if (value.authUserId) {
-      this.setCacheValue(value.authUserId, value);
+      this.setCacheValue(value.authUserId, value, generation);
       return;
     }
 
@@ -100,12 +107,23 @@ export class AuthContextCache {
     authUserId?: string | null;
     employeeId?: string | null;
   }) {
+    if (!input.authUserId && !input.employeeId) return;
+    // An auth-user load may not know its employee until it resolves. A single
+    // generation prevents stale fills without retaining per-identity tombstones;
+    // unrelated existing cache entries remain usable.
+    this.generation += 1;
     if (input.authUserId) {
       this.authUserCache.delete(input.authUserId);
       this.authUserInFlight.delete(input.authUserId);
     }
 
     if (input.employeeId) {
+      for (const [key, item] of this.authUserCache) {
+        if (item.value.employeeId === input.employeeId) {
+          this.authUserCache.delete(key);
+          this.authUserInFlight.delete(key);
+        }
+      }
       this.employeeCache.delete(input.employeeId);
       this.employeeInFlight.delete(input.employeeId);
     }

@@ -168,6 +168,13 @@ export async function bindSelectedEmployeeRole(this: any,
   });
 
   if (hasActiveMembership) {
+    const bindAuthUserStartedAt = Date.now();
+    await wechatEmployeeIdentityService.bindEmployeeAuthUser({
+      employeeId: employee.id,
+      authUserId,
+      expected: employee,
+      errorMessage: "同步员工身份绑定失败",
+    });
     if (employee.user_id && employee.user_id !== authUserId) {
       authorizationService.invalidateAuthContext({
         authUserId: employee.user_id,
@@ -176,12 +183,6 @@ export async function bindSelectedEmployeeRole(this: any,
     }
 
     if (employee.user_id !== authUserId) {
-      const bindAuthUserStartedAt = Date.now();
-      await wechatEmployeeIdentityService.bindEmployeeAuthUser({
-        employeeId: employee.id,
-        authUserId,
-        errorMessage: "同步员工身份绑定失败",
-      });
       logEmployeeBindStage("employee_auth_user_synced", bindAuthUserStartedAt, {
         employeeId: employee.id,
         tenantId: tenant.id,
@@ -241,6 +242,11 @@ export async function bindSelectedEmployeeRole(this: any,
       throw Errors.badRequest("当前账号未绑定微信身份");
     }
 
+    await wechatEmployeeIdentityService.bindEmployeeAuthUser({
+      employeeId: employee.id,
+      authUserId: employee.user_id,
+      expected: employee,
+    });
     const syncOauthStartedAt = Date.now();
     await userIdentityService.syncOauthIdentityBestEffort({
       userId: employee.user_id,
@@ -303,23 +309,24 @@ export async function bindSelectedEmployeeRole(this: any,
     branch: "new_employee_auth_user",
   });
 
+  const bindAuthUserStartedAt = Date.now();
+  await wechatEmployeeIdentityService.bindEmployeeAuthUser({
+    employeeId: employee.id,
+    authUserId,
+    expected: employee,
+    errorMessage: "绑定员工身份失败",
+  });
+  logEmployeeBindStage("employee_auth_user_bound", bindAuthUserStartedAt, {
+    employeeId: employee.id,
+    tenantId: tenant.id,
+  });
+
   const clearBindingsStartedAt = Date.now();
   await wechatEmployeeIdentityService.clearOtherEmployeeBindings({
     authUserId,
     exceptEmployeeId: employee.id,
   });
   logEmployeeBindStage("other_employee_bindings_cleared", clearBindingsStartedAt, {
-    employeeId: employee.id,
-    tenantId: tenant.id,
-  });
-
-  const bindAuthUserStartedAt = Date.now();
-  await wechatEmployeeIdentityService.bindEmployeeAuthUser({
-    employeeId: employee.id,
-    authUserId,
-    errorMessage: "绑定员工身份失败",
-  });
-  logEmployeeBindStage("employee_auth_user_bound", bindAuthUserStartedAt, {
     employeeId: employee.id,
     tenantId: tenant.id,
   });

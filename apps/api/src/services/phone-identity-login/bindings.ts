@@ -30,6 +30,7 @@ type EmployeeBindingRecord = {
   user_id: string | null;
   phone: string | null;
   status: string | null;
+  version: number;
   tenant: RelationOne<BasicTenantRef>;
 };
 
