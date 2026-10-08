@@ -14,4 +14,12 @@
 - API 类型检查、构建与文件大小检查通过。
 - 发布前只读调用真实 service 并进行 core.files 授权，确认该租户列表查询和分页正常。最终验收将走完整生产 HTTP 链路。
 
-独立审查通过，无阻断问题。生产发布验收完成后补录。
+独立审查通过，无阻断问题。生产验收见下文。
+
+## 生产发布验收
+
+- `v2026.10.08.7`，源码 `807c2c96975e9a91f5bfdb349941b22b92fe873d`；[构建 37734542455](https://github.com/LeeFo-china/goose/actions/runs/37734542455) 及 [部署 37735031323](https://github.com/LeeFo-china/goose/actions/runs/37735031323) 均成功，仅更新 API。
+- 运行 revision 与源码一致、healthy，公开入口检查通过；镜像 `sha256:3243418b9750fb3449ccf3544a28ec3f9dffd828692f59e2d39824a6a396fcce`。
+- 相同租户管理员的真实 HTTP 请求：素材列表发布前 403/TENANT_SERVICE_CAPABILITY_NOT_INCLUDED，发布后 200 且返回 data。
+- 批量预览用空 file_ids 做无数据副作用的入口校验：发布前 403，发布后按预期 400/VALIDATION_ERROR，已通过试用访问层。真实文件预览、上传及宽限期边界由上述隔离回归覆盖，未操作生产素材。
+- 无生产数据写入、无迁移、无 orange 改动；未宣称进行生产页面视觉验收。代码已合入主分支，隔离 worktree 已清理。
