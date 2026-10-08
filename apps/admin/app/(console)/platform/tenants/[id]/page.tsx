@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { ArrowLeft, Building2, ClipboardList, ShieldCheck, UserRoundCog } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
+import { PlatformTenantAdminsCard } from "@/components/platform-tenants/platform-tenant-admins-card";
 import { ServiceProviderPublicProfileCard } from "@/components/platform-tenants/service-provider-public-profile-card";
 import { TenantSupplierSettingsCard } from "@/components/platform-tenants/tenant-supplier-settings-card";
 import { TenantServiceAreaPanel } from "@/components/platform-tenants/tenant-service-area-panel";
@@ -389,7 +390,7 @@ export default async function PlatformTenantDetailPage({
                     <UserRoundCog />
                   </div>
                   <div>
-                    <CardTitle>租户管理员</CardTitle>
+                    <CardTitle>初始化管理员</CardTitle>
                     <CardDescription>初始化时创建或识别的管理员员工</CardDescription>
                   </div>
                 </div>
@@ -402,6 +403,8 @@ export default async function PlatformTenantDetailPage({
               </CardContent>
             </Card>
           </div>
+
+          <PlatformTenantAdminsCard tenantId={tenant.id} tenantName={tenant.name || "未命名租户"} />
 
           <ServiceProviderPublicProfileCard
             profile={serviceProviderProfile}

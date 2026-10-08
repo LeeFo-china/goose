@@ -4,6 +4,7 @@ export type PlatformAuditLogAction =
   | "tenant_suspend"
   | "tenant_activate"
   | "tenant_admin_create"
+  | "tenant_admin_phone_change"
   | "platform_lead_assign"
   | "platform_device_access_view"
   | "platform_device_sync"
@@ -64,6 +65,7 @@ export const platformAuditLogActionOptions = [
   { value: "tenant_suspend", label: "停用租户" },
   { value: "tenant_activate", label: "启用租户" },
   { value: "tenant_admin_create", label: "创建管理员" },
+  { value: "tenant_admin_phone_change", label: "变更管理员登录手机号" },
   { value: "platform_lead_assign", label: "分配平台线索" },
   { value: "platform_device_access_view", label: "查看设备接入信息" },
   { value: "platform_device_sync", label: "同步设备资产" },
