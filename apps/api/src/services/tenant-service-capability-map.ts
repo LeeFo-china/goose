@@ -35,6 +35,7 @@ const CAPABILITY_RULES: readonly TenantServiceCapabilityRule[] = [
   capability("employee-self-service", "core.employees", /^\/employee\/(?:bootstrap|personalization)(?:\/|$)/, 20),
   capability("workflows", "core.workflows", /^\/(?:workflows|workflow-subjects|workflow-tasks|task-center)(?:\/|$)/),
   capability("files", "core.files", /^\/uploads(?:\/|$)/),
+  capability("tenant-rendering-library-assets", "core.files", /^\/tenant\/rendering-library\/(?:styles|files)(?:\/|$)/),
   capability("notifications", "core.notifications", /^\/notifications(?:\/|$)/),
 ];
 
