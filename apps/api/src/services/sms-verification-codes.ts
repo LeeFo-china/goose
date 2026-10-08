@@ -4,6 +4,7 @@ import {
   type SmsReservationResult,
 } from "@/repositories/sms-verification-codes";
 import { sendSmsCode } from "@/services/sms";
+import { toSmsVerificationSendError } from "@/services/sms-verification-send-error";
 import type { SmsScene } from "@gooes/domain";
 
 const SMS_CODE_COOLDOWN_SECONDS = 60;
@@ -81,7 +82,7 @@ export class SmsVerificationCodeService {
     } catch (smsError) {
       await this.repository.deletePendingById(reservation.id);
 
-      throw Errors.dbError("发送验证码失败", smsError);
+      throw toSmsVerificationSendError(smsError);
     }
 
     return {

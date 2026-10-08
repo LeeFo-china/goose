@@ -9,6 +9,7 @@ import { authorizationService, type AuthContext } from "@/services/authorization
 import { platformAuthorizationService } from "@/services/platform-authorization";
 import { employeeAdminSessionsService } from "@/services/employee-admin-sessions";
 import { sendSmsCode } from "@/services/sms";
+import { toSmsVerificationSendError } from "@/services/sms-verification-send-error";
 import { userIdentityService } from "@/services/user-identities";
 import { isPhoneLoginWithoutCodeEnabled } from "@/utils/auth/test-login";
 import { getAdminJwtExpiresAt, signAdminToken } from "@/utils/jwt";
@@ -208,7 +209,7 @@ class AdminAuthService {
         scene: ADMIN_LOGIN_SCENE,
         code,
       });
-      throw Errors.dbError("发送验证码失败", error);
+      throw toSmsVerificationSendError(error);
     }
 
     return { success: true };

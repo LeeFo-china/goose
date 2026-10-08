@@ -182,6 +182,31 @@ describe("SmsVerificationCodeService atomic rate limits", () => {
     expect(deletePendingById).toHaveBeenCalledWith(reservationId);
   });
 
+  test("returns the provider daily limit after cleaning up the unified login code", async () => {
+    const { SmsVerificationCodeService } = await serviceModule;
+    const reservationId = "00000000-0000-4000-8000-000000000125";
+    const deletePendingById = mock(async () => undefined);
+    const service = new SmsVerificationCodeService({
+      repository: {
+        reservePending: async () => ({ reserved: true, id: reservationId, limitedDimension: null }),
+        deletePendingById,
+      },
+      send: async () => {
+        throw Errors.business(503,
+          "阿里云短信发送失败: isv.BUSINESS_LIMIT_CONTROL 触发天级流控Permits:10",
+          "ALIYUN_SMS_SEND_FAILED");
+      },
+    });
+    await expect(service.sendCode(sendInput(0, { scene: "login_identity" }))).rejects.toMatchObject({
+      statusCode: 429,
+      code: "SMS_CODE_PROVIDER_RATE_LIMITED",
+      message: "验证码发送已达短信服务每日上限，请等待限流恢复后再试",
+      details: { provider: "aliyun", limit_window: "day" },
+    });
+    expect(deletePendingById).toHaveBeenCalledTimes(1);
+    expect(deletePendingById).toHaveBeenCalledWith(reservationId);
+  });
+
   test("propagates cleanup database failures instead of hiding pending residue", async () => {
     const { SmsVerificationCodeService } = await serviceModule;
     const cleanupFailure = Errors.dbError("清理验证码失败", {
