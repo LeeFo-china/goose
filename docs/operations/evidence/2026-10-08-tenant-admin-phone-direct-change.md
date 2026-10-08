@@ -20,4 +20,17 @@
 - 本地试验库不作为迁移账本对齐证据：其历史手工试验缺少部分账本；生产发布单独核对完整 Local/Remote。
 - 独立审查未发现本次新增阻断问题。
 
-浏览器 7/7 通过，覆盖直接变更且零发送请求、权限、必填/移动端、重复提交、未知结果重试、409 刷新和列表恢复。生产发布回执将在实际完成后补录。生产验收仅只读和无效请求，不改真实租户手机号。
+浏览器 7/7 通过，覆盖直接变更且零发送请求、权限、必填/移动端、重复提交、未知结果重试、409 刷新和列表恢复。生产发布回执见下文。生产验收仅只读和无效请求，不改真实租户手机号。
+
+
+## 生产发布
+
+- 发布标签 `v2026.10.08.4`，运行源码 `9a43474c7d3c52528e2ef6ef693ec0e52b19423b`。
+- [迁移预检 37722814276](https://github.com/LeeFo-china/goose/actions/runs/37722814276)：652 项历史一致，仅待 `20261008031744`。
+- [迁移应用 37723028669](https://github.com/LeeFo-china/goose/actions/runs/37723028669)：仅应用上述一项，653 项，latest `20261008031744`。
+- 已通过 `supabase migration list` 及 `scripts/verify-migration-history.mjs` 核对 Local/Remote 全部对齐。生产只读 ACL 检查：直接 RPC 存在，anon/authenticated 无执行权，service_role 有执行权。
+- [API/Admin 候选构建 37722812581](https://github.com/LeeFo-china/goose/actions/runs/37722812581)：成功，已核对候选 SHA、标签及 api/admin 服务范围。
+- [生产部署 37723747016](https://github.com/LeeFo-china/goose/actions/runs/37723747016)：success；API/Admin 运行 revision 均为上述源码，容器均 healthy，工作流公开入口检查通过。
+- API 镜像 `sha256:af524cf589dc9e7b2fe8738e5f40fd8d2e7c57675c8848efded2610e094d6cf2`；Admin 镜像 `sha256:b501a1b30ee9823d13fc990960375fb1152c70160cf386b6a801b73da261577c`。
+- 生产只读 API 验收通过：管理员列表 200、分页上限 400、仅返回脱敏号码、旧 send-code 410、无效 confirm 400、裸认证令牌 401。未发送短信，未修改任何真实手机号。成功写入及后续登录闭环在隔离数据库验证。
+- 发布回执 artifact：`production-deployment-receipt-37722812581`。本地临时 PostgREST 容器已停止移除，试验数据库恢复停止状态，隔离 worktree 已合入并清理。
