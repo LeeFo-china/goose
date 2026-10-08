@@ -21,6 +21,8 @@
 - [x] API子任务：controller/service/repository/schema贯通，租户新建传scope；有效权限和错误包装、接口测试。
 - [x] Admin子任务：复用shadcn组件，完整/自定义选择器；新建租户、审批/授予、策略、试用详情/租户列表范围调整入口；交互状态和契约验证。
 - [x] 集成：API/Admin类型检查构建、定向回归、浏览器smoke、独立代码审查。
-- [ ] 发布：先兼容migration（不写入新范围到既有事实），再API/Admin部署；确认migration list对齐。使用新入口给天喜补齐完整范围，其他现有试用不改；生产只读业务接口验证。
+- [x] 发布：先兼容migration（不写入新范围到既有事实），再API/Admin部署；确认migration list对齐。使用新入口给天喜补齐完整范围，其他现有试用不改；生产只读业务接口验证。
 
 回滚：保留新范围事实与审计；禁止回退到只认识六项范围的运行时。可通过新入口收回新增模块或forward migration恢复映射/停用调整入口；保持试用期限、付费额度与历史审计不变。
+
+生产验收记录：`docs/operations/evidence/2026-10-08-full-business-trial.md`。天喜已由六项扩展为十三项，日期保持不变。登录绑定未变，租户端页面仍需管理员重新登录后验收。
