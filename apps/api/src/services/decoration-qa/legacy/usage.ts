@@ -56,20 +56,8 @@ export async function inferDecorationQaUsageContextFromAuth(
   const employeeContext = await authorizationService.getAuthContextByAuthUserId(
     input.authUserId,
   );
-  if (
-    employeeContext.employeeId &&
-    employeeContext.tenantId &&
-    isEmployeeOperableStatus(employeeContext.employeeStatus)
-  ) {
-    return {
-      authUserId: input.authUserId,
-      tenantId: employeeContext.tenantId,
-      customerId: null,
-      employeeId: employeeContext.employeeId,
-      projectId: input.projectId ?? null,
-      source: "employee_miniprogram",
-      billable: true,
-    };
+  if (employeeContext.employeeId) {
+    return resolveEmployeeUsageContext(input);
   }
 
   return null;
@@ -81,18 +69,26 @@ export async function resolveDecorationQaUsageContext(
     projectId?: string | null;
   },
 ): Promise<DecorationQaUsageContext> {
-  const source = input.role === "customer"
+  // Request context selects prompts, but cannot downgrade an authenticated employee.
+  const authSource = getSourceFromAuth(input);
+  if (authSource === "employee_miniprogram") {
+    return resolveEmployeeUsageContext(input);
+  }
+
+  if (authSource === "visitor" && input.authUserId) {
+    const inferredContext = await inferDecorationQaUsageContextFromAuth(input);
+    if (inferredContext) return inferredContext;
+  }
+
+  const source = authSource !== "visitor"
+    ? authSource
+    : input.role === "customer"
     ? "customer_miniprogram"
     : input.role === "employee"
     ? "employee_miniprogram"
-    : getSourceFromAuth(input);
+    : "visitor";
 
   if (source === "visitor") {
-    const inferredContext = await inferDecorationQaUsageContextFromAuth(input);
-    if (inferredContext) {
-      return inferredContext;
-    }
-
     return {
       authUserId: input.authUserId,
       tenantId: null,
@@ -166,7 +162,20 @@ export async function resolveDecorationQaUsageContext(
     };
   }
 
-  if (!input.tenantId) {
+  return resolveEmployeeUsageContext(input);
+}
+
+async function resolveEmployeeUsageContext(
+  input: DecorationQaAuthInput & { projectId?: string | null },
+): Promise<DecorationQaUsageContext> {
+  const context = await authorizationService.getRequiredAuthContext(input.authUserId, {
+    tenantServiceAccess: input.tenantServiceAccess ?? "write",
+    requiredCapability: "business.ai",
+  });
+  if (!context.employeeId || !isEmployeeOperableStatus(context.employeeStatus)) {
+    throw Errors.forbidden();
+  }
+  if (!context.tenantId) {
     throw Errors.business(
       403,
       "当前员工缺少装修公司上下文",
@@ -176,11 +185,11 @@ export async function resolveDecorationQaUsageContext(
 
   return {
     authUserId: input.authUserId,
-    tenantId: input.tenantId,
+    tenantId: context.tenantId,
     customerId: null,
-    employeeId: input.employeeId ?? null,
+    employeeId: context.employeeId,
     projectId: input.projectId ?? null,
-    source,
+    source: "employee_miniprogram",
     billable: true,
   };
 }

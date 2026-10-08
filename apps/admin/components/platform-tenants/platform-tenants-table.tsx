@@ -6,6 +6,7 @@ import { Eye } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/admin/data-table";
+import { PlatformServiceTrialScopeDialog } from "@/components/platform-service-trials/platform-service-trial-scope-dialog";
 import { PlatformTenantTrialExtension } from "./platform-tenant-trial-extension";
 import { PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME } from "@/components/platform/platform-list-page-size";
 import {
@@ -134,6 +135,8 @@ const columns: ColumnDef<PlatformTenantRecord>[] = [
         </Button>
         <EditPlatformTenantButton tenant={row.original} />
         <PlatformTenantTrialExtension tenant={row.original} />
+        {row.original.service_access?.trial_id ? <PlatformServiceTrialScopeDialog
+          trialId={row.original.service_access.trial_id} tenantName={row.original.name} /> : null}
         <PlatformTenantStatusButton tenant={row.original} />
       </div>
     ),

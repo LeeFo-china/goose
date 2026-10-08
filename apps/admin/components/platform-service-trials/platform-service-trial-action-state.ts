@@ -3,7 +3,7 @@ import type {
   PlatformServiceTrialAvailableActions,
 } from "./platform-service-trial-types";
 
-export const platformTrialActionKeys = ["review", "extend", "revoke", "assign"] as const;
+export const platformTrialActionKeys = ["review", "extend", "revoke", "assign", "update_scope"] as const;
 
 const unavailableAction: PlatformServiceTrialAction = {
   enabled: false,

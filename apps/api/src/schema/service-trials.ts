@@ -194,6 +194,10 @@ export const PlatformServiceTrialExtendSchema = VersionedReasonCommandSchema.ext
     .max(365, '延期天数不能超过 365 天'),
 }).strict();
 
+export const PlatformServiceTrialUpdateScopeSchema = VersionedReasonCommandSchema.extend({
+  scope: PlatformServiceTrialScopeSchema,
+}).strict();
+
 export const PlatformServiceTrialRevokeSchema = VersionedReasonCommandSchema;
 
 export const PlatformServiceTrialAssignSchema = z
@@ -274,6 +278,8 @@ export type PlatformServiceTrialReviewInput =
   z.infer<typeof PlatformServiceTrialReviewSchema>;
 export type PlatformServiceTrialExtendInput =
   z.infer<typeof PlatformServiceTrialExtendSchema>;
+export type PlatformServiceTrialUpdateScopeInput =
+  z.infer<typeof PlatformServiceTrialUpdateScopeSchema>;
 export type PlatformServiceTrialRevokeInput =
   z.infer<typeof PlatformServiceTrialRevokeSchema>;
 export type PlatformServiceTrialAssignInput =

@@ -288,7 +288,7 @@ describe("EffectiveBrandingService request context", () => {
       employee_id: authContext.employeeId,
     }, NOW)).resolves.toEqual(expectedTenant);
     expect(valid.getRequiredAuthContext).toHaveBeenCalledWith(
-      USER_ID, { tenantServiceAccess: "read" },
+      USER_ID, { tenantServiceAccess: "read", requiredCapability: "business.settings" },
     );
     for (const context of [
       { ...authContext, authUserId: CLAIM_TENANT_ID },

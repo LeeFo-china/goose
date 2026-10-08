@@ -210,7 +210,7 @@ const EventSchema = z.object({
     'application_approved', 'application_rejected', 'trial_granted',
     'trial_activated', 'trial_grace_started', 'trial_expired', 'trial_extended',
     'trial_revoked', 'trial_assigned', 'formal_purchase_attributed',
-    'conversion_anomaly']),
+    'conversion_anomaly', 'trial_scope_updated']),
   from_status: z.enum(PLATFORM_SERVICE_TRIAL_STATUS_VALUES).nullable(),
   to_status: z.enum(PLATFORM_SERVICE_TRIAL_STATUS_VALUES).nullable(),
   reason: NullableReasonSchema, actor_employee_id: NullableUuidSchema,

@@ -102,10 +102,14 @@ export async function createWithDefaultTemplate(
   if (!options.manual && input.trial?.enabled) {
     throw Errors.badRequest("合作伙伴建户不能直接开通平台试用");
   }
+  const trialScope = input.trial?.enabled ? input.trial.scope : undefined;
+  const manualRpc = trialScope === undefined
+    ? "create_platform_tenant_with_trial"
+    : "create_platform_tenant_with_trial_scope";
   let result: Awaited<ReturnType<PlatformTenantRpc>>;
   try {
     result = await rpc(options.manual
-      ? "create_platform_tenant_with_trial"
+      ? manualRpc
       : "create_tenant_with_default_template", {
       p_name: input.name,
       p_slug: input.slug,
@@ -131,6 +135,7 @@ export async function createWithDefaultTemplate(
       p_admin_post_code: "SYSTEM_ADMIN",
       p_operator_employee_id: operatorEmployeeId,
       ...(options.manual ? {
+        ...(trialScope === undefined ? {} : { p_trial_scope: trialScope }),
         p_allow_override: options.allowOverride ?? false,
         p_trial_days: input.trial?.enabled ? input.trial.trial_days : null,
         p_trial_reason: input.trial?.enabled ? input.trial.reason : null,

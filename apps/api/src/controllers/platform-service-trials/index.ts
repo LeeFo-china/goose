@@ -11,6 +11,7 @@ import {
   PlatformServiceTrialPolicyUpdateSchema,
   PlatformServiceTrialReviewSchema,
   PlatformServiceTrialRevokeSchema,
+  PlatformServiceTrialUpdateScopeSchema,
   ServiceTrialParamSchema,
 } from '@/schema/service-trials';
 import {
@@ -184,6 +185,22 @@ class PlatformServiceTrialsController extends PlatformBaseController {
       authContext,
       paramsResult.data.id,
       bodyResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Put('/platform/billing/service-trials/:id/scope', {
+    tenantServiceAccess: 'write',
+  })
+  async updateScope(request: FastifyRequest) {
+    const authContext = await this.getRequiredPlatformStaffContext(request);
+    const paramsResult = ServiceTrialParamSchema.safeParse(request.params || {});
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+    const bodyResult = PlatformServiceTrialUpdateScopeSchema.safeParse(request.body || {});
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await platformServiceTrialService.updateScope(
+      authContext, paramsResult.data.id, bodyResult.data,
     );
     return ResponseHandler.success(data);
   }

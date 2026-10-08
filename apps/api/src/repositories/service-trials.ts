@@ -91,8 +91,11 @@ type RevokeCommand = { action: 'revoke'; trialId: string; actorEmployeeId: strin
   expectedVersion: number; idempotencyKey: string; reason: string };
 type AssignCommand = { action: 'assign'; trialId: string; actorEmployeeId: string;
   expectedVersion: number; idempotencyKey: string; assigneeEmployeeId: string | null };
+type UpdateScopeCommand = { action: 'update_scope'; trialId: string; actorEmployeeId: string;
+  expectedVersion: number; idempotencyKey: string; scope: PlatformServiceTrialScopeV1;
+  reason: string };
 export type TrialCommandInput = ApplyCommand | WithdrawCommand | ReviewCommand
-  | GrantCommand | ExtendCommand | RevokeCommand | AssignCommand;
+  | GrantCommand | ExtendCommand | RevokeCommand | AssignCommand | UpdateScopeCommand;
 export type TrialPolicyUpdateCommand = {
   actorEmployeeId: string;
   expectedVersion: number;
@@ -244,6 +247,10 @@ function commandCall(input: TrialCommandInput): [string, Record<string, unknown>
     case 'revoke': return ['platform_service_trial_revoke', { p_trial_id: input.trialId,
       p_actor_employee_id: input.actorEmployeeId, p_expected_version: input.expectedVersion,
       p_idempotency_key: input.idempotencyKey, p_reason: input.reason }];
+    case 'update_scope': return ['platform_service_trial_update_scope', {
+      p_trial_id: input.trialId, p_actor_employee_id: input.actorEmployeeId,
+      p_expected_version: input.expectedVersion, p_idempotency_key: input.idempotencyKey,
+      p_scope: input.scope, p_reason: input.reason }];
     case 'assign': return ['platform_service_trial_assign', { p_trial_id: input.trialId,
       p_actor_employee_id: input.actorEmployeeId, p_expected_version: input.expectedVersion,
       p_idempotency_key: input.idempotencyKey,

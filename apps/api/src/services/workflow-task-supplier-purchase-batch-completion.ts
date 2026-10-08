@@ -1,4 +1,5 @@
 import type { AuthContext } from "@/services/authorization";
+import { assertWorkflowTaskBusinessWriteAccess } from "./workflow-task-service-access";
 import {
   workflowTaskSupplierPurchaseBatchBridge,
   type WorkflowTaskSupplierPurchaseBatchBridge,
@@ -30,6 +31,7 @@ export async function completeSupplierPurchaseBatchWorkflowTask(
     return null;
   }
 
+  await assertWorkflowTaskBusinessWriteAccess(input.authContext, "business.procurement");
   return bridge.complete({
     authContext: input.authContext,
     task: {

@@ -59,7 +59,7 @@ describe("tenant service route access reader", () => {
     ["HEAD", "/warehouses/:id", "read"],
     ["POST", "/warehouses", "write"],
     ["PATCH", "/warehouses/:id", "write"],
-  ] as const)("preserves warehouse %s %s service access without a core trial capability", async (
+  ] as const)("preserves warehouse %s %s service access with the inventory trial capability", async (
     method,
     url,
     access,
@@ -71,7 +71,7 @@ describe("tenant service route access reader", () => {
     expect(getTenantServiceAuthOptions({
       method,
       routeOptions: { url, config: { tenantServiceAccess: access } },
-    })).toEqual({ tenantServiceAccess: access, requiredCapability: null });
+    })).toEqual({ tenantServiceAccess: access, requiredCapability: "business.inventory" });
   });
 
   test.each([null, "", "admin", "READ", 1])(

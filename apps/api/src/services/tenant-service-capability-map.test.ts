@@ -60,17 +60,13 @@ describe("tenant service capability map", () => {
     }
   });
 
-  test("explicitly excludes platform, config, payment, and independent add-ons", async () => {
+  test("keeps platform-only routes excluded from full trial", async () => {
     const { resolveTenantServiceRouteCapability } = await import(
       "./tenant-service-capability-map"
     );
 
     for (const input of [
       route("GET", "/platform/system-settings", "read"),
-      route("PATCH", "/tenant/system-settings/:key", "write"),
-      route("POST", "/payments", "write"),
-      route("POST", "/tenant/branding/entitlement-orders", "write"),
-      route("GET", "/supplier-products", "read"),
     ]) {
       expect(resolveTenantServiceRouteCapability(input)).toMatchObject({
         kind: "excluded",
@@ -92,7 +88,7 @@ describe("tenant service capability map", () => {
     ["POST", "/supplier-purchase-batches/:id/withdraw", "write"],
     ["POST", "/workflow-tasks/:id/complete", "write"],
     ["POST", "/supplier-purchasable-products/:id", "write"],
-  ] as const)("excludes supplier procurement route %s %s from trial capabilities", async (
+  ] as const)("maps supplier procurement route %s %s to its module", async (
     method,
     url,
     access,
@@ -103,7 +99,7 @@ describe("tenant service capability map", () => {
 
     const expected = url.startsWith("/workflow-tasks")
       ? { kind: "capability", capability: "core.workflows" } as const
-      : { kind: "excluded", reason: "not_trial_capability" } as const;
+      : { kind: "capability", capability: "business.procurement" } as const;
     expect(resolveTenantServiceRouteCapability(route(method, url, access)))
       .toEqual(expected);
   });
@@ -121,7 +117,7 @@ describe("tenant service capability map", () => {
     ["POST", "/tenant/douyin-material-notes/:id/publish", "write"],
     ["POST", "/tenant/douyin-material-notes/:id/archive", "write"],
     ["POST", "/tenant/douyin-material-notes/:id/withdraw", "write"],
-  ] as const)("excludes tenant material note route %s %s from trial capabilities", async (
+  ] as const)("maps tenant material note route %s %s to content", async (
     method,
     url,
     access,
@@ -131,7 +127,7 @@ describe("tenant service capability map", () => {
     );
 
     expect(resolveTenantServiceRouteCapability(route(method, url, access)))
-      .toEqual({ kind: "excluded", reason: "not_trial_capability" });
+      .toEqual({ kind: "capability", capability: "business.content" });
   });
 
   test.each([
@@ -143,7 +139,7 @@ describe("tenant service capability map", () => {
     ["PATCH", "/warehouses/:id", "write"],
     ["GET", "/warehouse-stocktakes", "read"],
     ["POST", "/warehouse-stocktakes/:id/complete", "write"],
-  ] as const)("classifies warehouse route %s %s as an independent procurement surface", async (
+  ] as const)("maps warehouse route %s %s to inventory", async (
     method,
     url,
     access,
@@ -153,7 +149,7 @@ describe("tenant service capability map", () => {
     );
 
     expect(resolveTenantServiceRouteCapability(route(method, url, access)))
-      .toEqual({ kind: "excluded", reason: "not_trial_capability" });
+      .toEqual({ kind: "capability", capability: "business.inventory" });
   });
 
   test("does not exclude unrelated warehouse-prefixed routes", async () => {

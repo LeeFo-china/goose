@@ -1,12 +1,10 @@
 "use client";
 
-import { Checkbox } from "@/components/ui/checkbox";
+import { PlatformServiceTrialScopeSelector } from "./platform-service-trial-scope-selector";
 import {
   Field,
   FieldDescription,
   FieldLabel,
-  FieldLegend,
-  FieldSet,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
@@ -18,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-import { trialCapabilityOptions, trialTypeOptions } from "./platform-service-trial-rules";
+import { trialTypeOptions } from "./platform-service-trial-rules";
 import { PlatformServiceTrialAssigneeCombobox } from "./platform-service-trial-assignee-combobox";
 import type {
   PlatformServiceTrialAssigneeCandidate,
@@ -102,27 +100,7 @@ export function PlatformServiceTrialApprovalFields({
           {trialType === "guided" ? "陪跑试用必须选择一位有效平台人员。" : "可按姓名或手机号搜索。"}
         </FieldDescription>
       </Field>
-      <FieldSet
-        aria-describedby={scopeErrorId}
-        aria-invalid={Boolean(scopeErrorId)}
-        data-invalid={Boolean(scopeErrorId)}
-      >
-        <FieldLegend variant="label">试用范围</FieldLegend>
-        <div className="grid gap-2 sm:grid-cols-2">
-          {trialCapabilityOptions.map((option) => (
-            <Field key={option.value} orientation="horizontal">
-              <Checkbox
-                id={`${trialId}-${option.value}`}
-                checked={scope.includes(option.value)}
-                onCheckedChange={(checked) => setScope(checked
-                  ? [...scope, option.value]
-                  : scope.filter((value) => value !== option.value))}
-              />
-              <FieldLabel htmlFor={`${trialId}-${option.value}`} className="font-normal">{option.label}</FieldLabel>
-            </Field>
-          ))}
-        </div>
-      </FieldSet>
+      <PlatformServiceTrialScopeSelector scope={scope} setScope={setScope} scopeErrorId={scopeErrorId} />
     </>
   );
 }

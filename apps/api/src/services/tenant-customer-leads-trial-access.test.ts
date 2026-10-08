@@ -40,7 +40,7 @@ test('all registered customer lead routes respect customer trial scope and the r
 });
 
 test('mapping does not expand unrelated tenant modules or similarly named routes', () => {
-  for (const url of ['/tenant/system-settings', '/tenant/branding/entitlement-orders', '/tenant/douyin-leads',
+  for (const url of ['/tenant/douyin-leads',
     '/tenant/customer-leads-export', '/tenant/customer-leadss']) {
     expect(getTenantServiceAuthOptions({ method: 'GET', routeOptions: { url } }).requiredCapability).toBeNull();
   }

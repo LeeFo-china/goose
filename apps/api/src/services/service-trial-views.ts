@@ -236,6 +236,10 @@ export function buildTrialAvailableActions(
       ? disabled('无跟进人分配权限')
       : ['scheduled', 'active', 'grace_period'].includes(status)
         ? enabled() : disabled('当前状态不可分配跟进人'),
+    update_scope: !has(PLATFORM_PERMISSION.manage)
+      ? disabled('无试用范围修改权限')
+      : ['scheduled', 'active', 'grace_period'].includes(status)
+        ? enabled() : disabled('当前状态不可调整试用范围'),
     purchase: status === 'converted'
       ? disabled('试用已转为正式服务') : enabled(),
   };

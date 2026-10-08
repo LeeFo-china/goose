@@ -15,6 +15,7 @@ import {
   serializeDecorationQaStreamEvent,
   streamDecorationQa,
 } from "@/services/decoration-qa";
+import { resolveDecorationQaUsageContext } from "@/services/decoration-qa/legacy/usage";
 import { getTenantServiceAuthOptions } from "@/services/tenant-service-route-access";
 
 class AiController extends BaseController {
@@ -32,6 +33,7 @@ class AiController extends BaseController {
 
     try {
       const qaResult = await askDecorationQa(result.data, {
+        ...getTenantServiceAuthOptions(request),
         authUserId: request.user?.sub,
         tenantId: request.user?.tenant_id,
         customerId: request.user?.customer_id,
@@ -90,6 +92,21 @@ class AiController extends BaseController {
       throw Errors.fromZod(result.error);
     }
 
+    const authOptions = {
+      ...getTenantServiceAuthOptions(request),
+      authUserId: request.user?.sub,
+      tenantId: request.user?.tenant_id,
+      customerId: request.user?.customer_id,
+      employeeId: request.user?.employee_id,
+      roles: request.user?.roles,
+    };
+    // Preserve capability denials as HTTP errors before taking over the stream.
+    await resolveDecorationQaUsageContext({
+      ...authOptions,
+      role: result.data.context?.role,
+      projectId: result.data.context?.project_id?.trim() || null,
+    });
+
     const extraSystemMessages = await resolveDecorationQaStreamSystemMessages(
       result.data,
       request.user?.sub,
@@ -118,11 +135,7 @@ class AiController extends BaseController {
           }
         },
         {
-          authUserId: request.user?.sub,
-          tenantId: request.user?.tenant_id,
-          customerId: request.user?.customer_id,
-          employeeId: request.user?.employee_id,
-          roles: request.user?.roles,
+          ...authOptions,
           extraSystemMessages,
           signal: abortController.signal,
         },

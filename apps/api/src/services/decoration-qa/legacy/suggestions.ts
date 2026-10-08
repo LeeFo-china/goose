@@ -1,4 +1,4 @@
-import type { TenantServiceRouteAccess } from '@gooes/domain';
+import type { TenantServiceAuthOptions } from '@/services/tenant-service-route-access';
 
 import {
   Errors,
@@ -176,12 +176,11 @@ export function setSuggestionInFlight(
   promise: Promise<DecorationQaSuggestionResult>,
 ) {
   suggestionInFlight.set(cacheKey, promise);
-  void promise.finally(() => {
+  return promise.finally(() => {
     if (suggestionInFlight.get(cacheKey) === promise) {
       suggestionInFlight.delete(cacheKey);
     }
   });
-  return promise;
 }
 
 export async function trySaveSuggestionCache(input: {
@@ -208,7 +207,8 @@ export async function trySaveSuggestionCache(input: {
 
 export async function getDecorationQaSuggestions(input: {
   query: DecorationQaSuggestionQueryInput;
-  tenantServiceAccess: TenantServiceRouteAccess;
+  tenantServiceAccess: TenantServiceAuthOptions["tenantServiceAccess"];
+  requiredCapability?: TenantServiceAuthOptions["requiredCapability"];
   authUserId?: string;
   tenantId?: string | null;
   customerId?: string | null;
@@ -224,7 +224,10 @@ export async function getDecorationQaSuggestions(input: {
     }
     const authContext = await authorizationService.getRequiredAuthContext(
       input.authUserId,
-      { tenantServiceAccess: input.tenantServiceAccess },
+      {
+        tenantServiceAccess: input.tenantServiceAccess,
+        requiredCapability: input.requiredCapability ?? "business.ai",
+      },
     );
     if (!authContext.employeeId) {
       throw Errors.forbidden();
@@ -233,6 +236,18 @@ export async function getDecorationQaSuggestions(input: {
   const projectId = scene === "customer"
     ? input.query.project_id ?? null
     : null;
+  // Authenticated employee eligibility applies to every scene and cache path.
+  const usageContext = await resolveDecorationQaUsageContext({
+    tenantServiceAccess: input.tenantServiceAccess,
+    requiredCapability: input.requiredCapability,
+    authUserId: input.authUserId,
+    tenantId: input.tenantId,
+    customerId: input.customerId,
+    employeeId: input.employeeId,
+    roles: input.roles,
+    role: scene,
+    projectId,
+  });
   const cacheKey = buildSuggestionCacheKey({ scene, projectId, now });
   const expiresAt = getSuggestionExpiresAt({ scene, projectId, now });
   if (!input.query.refresh) {
@@ -268,15 +283,14 @@ export async function getDecorationQaSuggestions(input: {
       }
     }
 
-    const usageContext = await resolveDecorationQaUsageContext({
-      authUserId: input.authUserId,
-      tenantId: input.tenantId,
-      customerId: input.customerId,
-      employeeId: input.employeeId,
-      roles: input.roles,
-      role: scene,
-      projectId,
-    });
+    // Cached reads are allowed in grace; starting billable employee generation is a write.
+    // Keep this outside provider fallback handling so access denials reach the caller.
+    if (usageContext.source === "employee_miniprogram") {
+      await authorizationService.getRequiredAuthContext(input.authUserId, {
+        tenantServiceAccess: "write",
+        requiredCapability: "business.ai",
+      });
+    }
 
     try {
       const aiQuestions = normalizeSuggestionQuestions(

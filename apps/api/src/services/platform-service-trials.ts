@@ -18,6 +18,7 @@ import type {
   PlatformServiceTrialPolicyUpdateInput,
   PlatformServiceTrialReviewInput,
   PlatformServiceTrialRevokeInput,
+  PlatformServiceTrialUpdateScopeInput,
 } from '@/schema/service-trials';
 import type {
   CancelServiceTrialFollowUpInput,
@@ -253,6 +254,19 @@ export class PlatformServiceTrialService {
       expectedVersion: input.expected_version,
       idempotencyKey: input.idempotency_key,
       assigneeEmployeeId: input.assignee_employee_id,
+    });
+    return this.commandResponse(result, authContext);
+  }
+
+  async updateScope(authContext: AuthContext, trialId: string,
+    input: PlatformServiceTrialUpdateScopeInput) {
+    const actorEmployeeId = this.requirePermission(authContext, PERMISSION.manage);
+    const result = await this.repository.executeCommand({
+      action: 'update_scope', trialId, actorEmployeeId,
+      expectedVersion: input.expected_version,
+      idempotencyKey: input.idempotency_key,
+      scope: input.scope,
+      reason: input.reason,
     });
     return this.commandResponse(result, authContext);
   }

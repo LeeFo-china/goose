@@ -8,7 +8,6 @@ import { toast } from "sonner";
 
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -24,8 +23,6 @@ import {
   FieldError,
   FieldGroup,
   FieldLabel,
-  FieldLegend,
-  FieldSet,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -34,7 +31,8 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { requestBackendJson } from "@/lib/backend-client";
 
-import { trialCapabilityOptions } from "./platform-service-trial-rules";
+import { PlatformServiceTrialScopeSelector } from "./platform-service-trial-scope-selector";
+import { isTrialScopeConflict } from "./platform-service-trial-scope-state";
 import { createTrialIdempotencyIntent } from "./platform-service-trial-idempotency";
 import type {
   PlatformServiceTrialCapability,
@@ -50,6 +48,9 @@ export function PlatformServiceTrialPolicyDialog({
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const submitLock = useRef(false);
+  const [reload, setReload] = useState(0);
+  const [conflict, setConflict] = useState(false);
   const [error, setError] = useState("");
   const [data, setData] = useState<PlatformServiceTrialPolicyData | null>(null);
   const [allowRepeat, setAllowRepeat] = useState(false);
@@ -60,6 +61,7 @@ export function PlatformServiceTrialPolicyDialog({
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
+    setData(null);
     setLoading(true);
     setError("");
     requestBackendJson<PlatformServiceTrialPolicyData>(
@@ -69,6 +71,8 @@ export function PlatformServiceTrialPolicyDialog({
       .then((result) => {
         if (cancelled) return;
         setData(result);
+        setConflict(false);
+        idempotencyIntent.beginNew();
         setAllowRepeat(result.policy.allow_repeat);
         setStandardScope(result.policy.standard_scope.capabilities);
         setGuidedScope(result.policy.guided_scope.capabilities);
@@ -84,11 +88,11 @@ export function PlatformServiceTrialPolicyDialog({
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, [open, reload, idempotencyIntent]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!data) return;
+    if (!data || submitLock.current || conflict || !data.available_actions.update_policy.enabled) return;
     const form = new FormData(event.currentTarget);
     const reminderDays = String(form.get("reminder_days") || "")
       .split(",")
@@ -100,30 +104,33 @@ export function PlatformServiceTrialPolicyDialog({
       return;
     }
 
+    submitLock.current = true;
     setSubmitting(true);
     setError("");
     try {
+      const body = {
+        default_trial_days: Number(form.get("default_trial_days")),
+        default_grace_days: Number(form.get("default_grace_days")),
+        max_trial_days: Number(form.get("max_trial_days")),
+        max_grace_days: Number(form.get("max_grace_days")),
+        max_schedule_ahead_days: Number(form.get("max_schedule_ahead_days")),
+        max_extension_count: Number(form.get("max_extension_count")),
+        max_extension_days: Number(form.get("max_extension_days")),
+        reminder_days: reminderDays,
+        reapply_cooldown_days: Number(form.get("reapply_cooldown_days")),
+        allow_repeat_application: allowRepeat,
+        standard_scope: { version: 1, capabilities: standardScope },
+        guided_scope: { version: 1, capabilities: guidedScope },
+        expected_version: data.policy.version,
+        idempotency_key: "",
+        reason: String(form.get("reason") || "").trim(),
+      };
+      body.idempotency_key = idempotencyIntent.forPayload(body);
       const result = await requestBackendJson<PlatformServiceTrialPolicyData>(
         "/platform/billing/service-trial-policy",
         {
           method: "PUT",
-          body: JSON.stringify({
-            default_trial_days: Number(form.get("default_trial_days")),
-            default_grace_days: Number(form.get("default_grace_days")),
-            max_trial_days: Number(form.get("max_trial_days")),
-            max_grace_days: Number(form.get("max_grace_days")),
-            max_schedule_ahead_days: Number(form.get("max_schedule_ahead_days")),
-            max_extension_count: Number(form.get("max_extension_count")),
-            max_extension_days: Number(form.get("max_extension_days")),
-            reminder_days: reminderDays,
-            reapply_cooldown_days: Number(form.get("reapply_cooldown_days")),
-            allow_repeat_application: allowRepeat,
-            standard_scope: { version: 1, capabilities: standardScope },
-            guided_scope: { version: 1, capabilities: guidedScope },
-            expected_version: data.policy.version,
-            idempotency_key: idempotencyIntent.current(),
-            reason: String(form.get("reason") || "").trim(),
-          }),
+          body: JSON.stringify(body),
           fallbackMessage: "试用规则保存失败",
         },
       );
@@ -133,15 +140,18 @@ export function PlatformServiceTrialPolicyDialog({
       router.refresh();
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "试用规则保存失败";
+      setConflict(isTrialScopeConflict(caught));
       setError(message);
       toast.error(message);
     } finally {
+      submitLock.current = false;
       setSubmitting(false);
     }
   }
 
   function handleOpenChange(nextOpen: boolean) {
-    if (nextOpen && !open) idempotencyIntent.beginNew();
+    if (submitLock.current) return;
+    if (nextOpen && !open) { setData(null); idempotencyIntent.beginNew(); }
     setOpen(nextOpen);
   }
 
@@ -178,41 +188,42 @@ export function PlatformServiceTrialPolicyDialog({
           <form key={policy.version} className="flex flex-col gap-4" onSubmit={handleSubmit}>
             <FieldGroup>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <NumberField name="default_trial_days" label="默认试用天数" value={policy.trial_days} min={1} max={60} disabled={!canUpdate} />
-                <NumberField name="default_grace_days" label="默认宽限期" value={policy.grace_days} min={0} max={14} disabled={!canUpdate} />
-                <NumberField name="max_trial_days" label="最大试用天数" value={policy.max_trial_days} min={1} max={60} disabled={!canUpdate} />
-                <NumberField name="max_grace_days" label="最大宽限期" value={policy.max_grace_days} min={0} max={14} disabled={!canUpdate} />
-                <NumberField name="max_schedule_ahead_days" label="最多提前安排" value={policy.max_schedule_days} min={0} max={30} disabled={!canUpdate} />
-                <NumberField name="max_extension_count" label="最多延期次数" value={policy.max_extension_count} min={0} max={10} disabled={!canUpdate} />
-                <NumberField name="max_extension_days" label="单次最大延期" value={policy.max_extension_days} min={1} max={30} disabled={!canUpdate} />
-                <NumberField name="reapply_cooldown_days" label="重复申请冷却期" value={policy.reapply_cooldown_days} min={0} max={365} disabled={!canUpdate} />
+                <NumberField name="default_trial_days" label="默认试用天数" value={policy.trial_days} min={1} max={60} disabled={!canUpdate || submitting || loading || conflict} />
+                <NumberField name="default_grace_days" label="默认宽限期" value={policy.grace_days} min={0} max={14} disabled={!canUpdate || submitting || loading || conflict} />
+                <NumberField name="max_trial_days" label="最大试用天数" value={policy.max_trial_days} min={1} max={60} disabled={!canUpdate || submitting || loading || conflict} />
+                <NumberField name="max_grace_days" label="最大宽限期" value={policy.max_grace_days} min={0} max={14} disabled={!canUpdate || submitting || loading || conflict} />
+                <NumberField name="max_schedule_ahead_days" label="最多提前安排" value={policy.max_schedule_days} min={0} max={30} disabled={!canUpdate || submitting || loading || conflict} />
+                <NumberField name="max_extension_count" label="最多延期次数" value={policy.max_extension_count} min={0} max={10} disabled={!canUpdate || submitting || loading || conflict} />
+                <NumberField name="max_extension_days" label="单次最大延期" value={policy.max_extension_days} min={1} max={30} disabled={!canUpdate || submitting || loading || conflict} />
+                <NumberField name="reapply_cooldown_days" label="重复申请冷却期" value={policy.reapply_cooldown_days} min={0} max={365} disabled={!canUpdate || submitting || loading || conflict} />
               </div>
               <Field>
                 <FieldLabel htmlFor="trial-reminder-days">提醒节点</FieldLabel>
-                <Input id="trial-reminder-days" name="reminder_days" defaultValue={policy.reminder_days.join(", ")} disabled={!canUpdate} />
+                <Input id="trial-reminder-days" name="reminder_days" defaultValue={policy.reminder_days.join(", ")} disabled={!canUpdate || submitting || loading || conflict} />
                 <FieldDescription>使用英文逗号分隔，按距到期日从大到小填写。</FieldDescription>
               </Field>
-              <Field orientation="horizontal" data-disabled={!canUpdate}>
-                <Switch id="allow-repeat-trial" checked={allowRepeat} onCheckedChange={setAllowRepeat} disabled={!canUpdate} />
+              <Field orientation="horizontal" data-disabled={!canUpdate || submitting || loading || conflict}>
+                <Switch id="allow-repeat-trial" checked={allowRepeat} onCheckedChange={setAllowRepeat} disabled={!canUpdate || submitting || loading || conflict} />
                 <div>
                   <FieldLabel htmlFor="allow-repeat-trial">允许租户重复自主申请</FieldLabel>
                   <FieldDescription>仍受冷却期和正式服务状态约束。</FieldDescription>
                 </div>
               </Field>
-              <ScopeFields title="标准试用默认范围" scope={standardScope} setScope={setStandardScope} disabled={!canUpdate} />
-              <ScopeFields title="陪跑试用默认范围" scope={guidedScope} setScope={setGuidedScope} disabled={!canUpdate} />
+              <PlatformServiceTrialScopeSelector title="标准试用默认范围" scope={standardScope} setScope={setStandardScope} disabled={!canUpdate || submitting || loading || conflict} />
+              <PlatformServiceTrialScopeSelector title="陪跑试用默认范围" scope={guidedScope} setScope={setGuidedScope} disabled={!canUpdate || submitting || loading || conflict} />
               <Field data-invalid={Boolean(error)}>
                 <FieldLabel htmlFor="trial-policy-reason">修改原因</FieldLabel>
-                <Textarea id="trial-policy-reason" name="reason" maxLength={500} disabled={!canUpdate} required />
+                <Textarea id="trial-policy-reason" name="reason" maxLength={500} disabled={!canUpdate || submitting || loading || conflict} required />
               </Field>
             </FieldGroup>
             {!canUpdate && updateAction?.disabled_reason ? (
               <p className="text-sm text-muted-foreground">{updateAction.disabled_reason}</p>
             ) : null}
-            <FieldError>{error}</FieldError>
+            <FieldError role="alert">{error}</FieldError>
+            {conflict ? <Button type="button" variant="outline" onClick={() => setReload((value) => value + 1)}>版本已变化，重新加载规则后核对</Button> : null}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={submitting}>关闭</Button>
-              <Button type="submit" disabled={!canUpdate || submitting}>
+              <Button type="submit" disabled={!canUpdate || submitting || loading || conflict}>
                 <span className="relative inline-flex size-4 items-center justify-center">
                   <SlidersHorizontal className={submitting ? "invisible" : undefined} />
                   <Spinner className={submitting ? "absolute" : "invisible absolute"} />
@@ -229,10 +240,6 @@ export function PlatformServiceTrialPolicyDialog({
 
 function NumberField({ name, label, value, min, max, disabled }: { name: string; label: string; value: number; min: number; max: number; disabled: boolean }) {
   return <Field><FieldLabel htmlFor={name}>{label}</FieldLabel><Input id={name} name={name} type="number" min={min} max={max} defaultValue={value} disabled={disabled} required /></Field>;
-}
-
-function ScopeFields({ title, scope, setScope, disabled }: { title: string; scope: PlatformServiceTrialCapability[]; setScope: (scope: PlatformServiceTrialCapability[]) => void; disabled: boolean }) {
-  return <FieldSet><FieldLegend variant="label">{title}</FieldLegend><div className="grid gap-2 sm:grid-cols-3">{trialCapabilityOptions.map((option) => <Field key={option.value} orientation="horizontal" data-disabled={disabled}><Checkbox id={`${title}-${option.value}`} checked={scope.includes(option.value)} onCheckedChange={(checked) => setScope(checked ? [...scope, option.value] : scope.filter((value) => value !== option.value))} disabled={disabled} /><FieldLabel htmlFor={`${title}-${option.value}`} className="font-normal">{option.label}</FieldLabel></Field>)}</div></FieldSet>;
 }
 
 function PolicySkeleton() {

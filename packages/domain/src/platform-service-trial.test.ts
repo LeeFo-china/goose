@@ -51,7 +51,7 @@ describe("platform service trial domain contract", () => {
     ]);
   });
 
-  test("keeps the v1 capability allow-list stable", () => {
+  test("extends the explicit capability list while retaining all original values", () => {
     expect(PLATFORM_SERVICE_TRIAL_CAPABILITY_VALUES).toEqual([
       "core.projects",
       "core.customers",
@@ -59,6 +59,8 @@ describe("platform service trial domain contract", () => {
       "core.workflows",
       "core.files",
       "core.notifications",
+      "business.marketing", "business.finance", "business.procurement",
+      "business.inventory", "business.content", "business.ai", "business.settings",
     ]);
   });
 

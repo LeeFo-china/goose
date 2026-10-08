@@ -29,6 +29,7 @@ export type PlatformServiceTrialAvailableActions = {
   withdraw?: PlatformServiceTrialAction;
   review?: PlatformServiceTrialAction;
   extend?: PlatformServiceTrialAction;
+  update_scope?: PlatformServiceTrialAction;
   revoke?: PlatformServiceTrialAction;
   assign?: PlatformServiceTrialAction;
   purchase?: PlatformServiceTrialAction;

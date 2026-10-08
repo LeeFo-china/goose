@@ -22,6 +22,7 @@ const serviceMethods = {
   extend: mock(async () => ({ trial: { id: TRIAL_ID, version: 2 } })),
   revoke: mock(async () => ({ trial: { id: TRIAL_ID, status: 'revoked' } })),
   assign: mock(async () => ({ trial: { id: TRIAL_ID } })),
+  updateScope: mock(async () => ({ trial: { id: TRIAL_ID, version: 3 }, idempotent: false })),
   listFollowUps: mock(async () => ({
     list: [], pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
   })),
@@ -86,7 +87,7 @@ beforeEach(() => {
 });
 
 describe('PlatformServiceTrialsController routes', () => {
-  test('registers the fourteen platform routes with explicit metadata', async () => {
+  test('registers the fifteen platform routes with explicit metadata', async () => {
     const routes = registeredRoutes(await loadController());
 
     expect(routes.map(({ method, path, tenantServiceAccess }) => ({
@@ -103,6 +104,7 @@ describe('PlatformServiceTrialsController routes', () => {
       { method: 'POST', path: '/platform/billing/service-trials/:id/extend', tenantServiceAccess: 'write' },
       { method: 'POST', path: '/platform/billing/service-trials/:id/revoke', tenantServiceAccess: 'write' },
       { method: 'POST', path: '/platform/billing/service-trials/:id/assign', tenantServiceAccess: 'write' },
+      { method: 'PUT', path: '/platform/billing/service-trials/:id/scope', tenantServiceAccess: 'write' },
       { method: 'GET', path: '/platform/billing/service-trials/:id/follow-ups', tenantServiceAccess: 'read' },
       { method: 'POST', path: '/platform/billing/service-trials/:id/follow-ups', tenantServiceAccess: 'write' },
       { method: 'POST', path: '/platform/billing/service-trials/:id/follow-ups/:followUpId/cancel', tenantServiceAccess: 'write' },
@@ -154,6 +156,7 @@ describe('PlatformServiceTrialsController routes', () => {
       expected_version: 1,
       idempotency_key: IDEMPOTENCY_KEY,
     };
+    const scopeBody = { ...revokeBody, scope: { version: 1, capabilities: ['core.projects'] } };
     const followUpBody = {
       follow_up_type: 'phone', status: 'pending', summary: '电话沟通',
       result: '客户将在内部确认', next_follow_up_at: '2026-08-18T02:00:00.000Z',
@@ -188,6 +191,7 @@ describe('PlatformServiceTrialsController routes', () => {
       ['POST /platform/billing/service-trials/:id/extend', { params: { id: TRIAL_ID }, body: extendBody }],
       ['POST /platform/billing/service-trials/:id/revoke', { params: { id: TRIAL_ID }, body: revokeBody }],
       ['POST /platform/billing/service-trials/:id/assign', { params: { id: TRIAL_ID }, body: assignBody }],
+      ['PUT /platform/billing/service-trials/:id/scope', { params: { id: TRIAL_ID }, body: scopeBody }],
       ['GET /platform/billing/service-trials/:id/follow-ups', {
         params: { id: TRIAL_ID }, query: { page: '2', pageSize: '10', status: 'pending' },
       }],
@@ -226,6 +230,7 @@ describe('PlatformServiceTrialsController routes', () => {
       expect(serviceMethods.extend).toHaveBeenCalledWith(authContext, TRIAL_ID, extendBody);
       expect(serviceMethods.revoke).toHaveBeenCalledWith(authContext, TRIAL_ID, revokeBody);
       expect(serviceMethods.assign).toHaveBeenCalledWith(authContext, TRIAL_ID, assignBody);
+      expect(serviceMethods.updateScope).toHaveBeenCalledWith(authContext, TRIAL_ID, scopeBody);
       expect(serviceMethods.listFollowUps).toHaveBeenCalledWith(authContext, TRIAL_ID, {
         page: 2, pageSize: 10, status: 'pending',
       });
@@ -238,7 +243,7 @@ describe('PlatformServiceTrialsController routes', () => {
       );
       expect(serviceMethods.getPolicy).toHaveBeenCalledWith(authContext);
       expect(serviceMethods.updatePolicy).toHaveBeenCalledWith(authContext, policyBody);
-      expect(requireContext).toHaveBeenCalledTimes(14);
+      expect(requireContext).toHaveBeenCalledTimes(15);
       calls.forEach(([, request], index) => {
         expect(requireContext).toHaveBeenNthCalledWith(index + 1, request);
       });
@@ -253,6 +258,7 @@ describe('PlatformServiceTrialsController routes', () => {
         { trial: { id: TRIAL_ID, version: 2 } },
         { trial: { id: TRIAL_ID, status: 'revoked' } },
         { trial: { id: TRIAL_ID } },
+        { trial: { id: TRIAL_ID, version: 3 }, idempotent: false },
         { list: [], pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 } },
         { id: IDEMPOTENCY_KEY, trial_id: TRIAL_ID },
         { id: IDEMPOTENCY_KEY, trial_id: TRIAL_ID, status: 'canceled' },
@@ -327,6 +333,13 @@ describe('PlatformServiceTrialsController routes', () => {
         payload: policyBody,
       });
 
+      const scopeUpdate = await app.inject({
+        method: 'PUT', url: `/platform/billing/service-trials/${TRIAL_ID}/scope`,
+        payload: { expected_version: 2, idempotency_key: IDEMPOTENCY_KEY,
+          reason: '调整范围', scope: { version: 1, capabilities: ['core.projects'] } },
+      });
+      expect(scopeUpdate.statusCode).toBe(200);
+      expect(scopeUpdate.json().data).toEqual({ trial: { id: TRIAL_ID, version: 3 }, idempotent: false });
       expect(summary.statusCode).toBe(200);
       expect(summary.json().data).toEqual({ pending_review_count: 1 });
       expect(candidates.statusCode).toBe(200);
@@ -373,6 +386,8 @@ describe('PlatformServiceTrialsController routes', () => {
     }
     const routes = registeredRoutes(controller);
     const invalidRequests = [
+      ['PUT /platform/billing/service-trials/:id/scope', { params: { id: TRIAL_ID }, body: {} }],
+      ['PUT /platform/billing/service-trials/:id/scope', { params: { id: 'bad-id' }, body: {} }],
       ['GET /platform/billing/service-trials', { query: { pageSize: '101' } }],
       ['GET /platform/billing/service-trials/assignee-candidates', {
         query: { pageSize: '101', unknown: 'rejected' },
@@ -451,9 +466,9 @@ describe('PlatformServiceTrialsController routes', () => {
     expect(routeIndex.match(/import PlatformServiceTrialsController /g)).toHaveLength(1);
     expect(routeIndex.match(/PlatformServiceTrialsController\.registerExtraRoutes\(app\)/g)).toHaveLength(1);
     expect(source).toContain('extends PlatformBaseController');
-    expect(source.match(/getRequiredPlatformStaffContext\(request\)/g)).toHaveLength(14);
+    expect(source.match(/getRequiredPlatformStaffContext\(request\)/g)).toHaveLength(15);
     expect(source).not.toContain('getRequiredPlatformPermissionContext');
-    expect(source.match(/ResponseHandler\.success/g)).toHaveLength(14);
+    expect(source.match(/ResponseHandler\.success/g)).toHaveLength(15);
     expect(source).not.toContain('throw new Error');
     expect(source).not.toContain('.from(');
     expect(source).not.toContain('.rpc(');

@@ -1,5 +1,7 @@
 import { PaginationQuerySchema } from "@/schema/request";
-import { DEPARTMENT_CODE_VALUES, EMPLOYEE_POST_CODE_VALUES } from "@gooes/domain";
+import {
+  DEPARTMENT_CODE_VALUES, EMPLOYEE_POST_CODE_VALUES, PlatformServiceTrialScopeSchema,
+} from "@gooes/domain";
 import { z } from "zod";
 
 export const PlatformTenantStatusSchema = z.enum(["active", "suspended", "archived"]);
@@ -103,6 +105,7 @@ export const CreatePlatformTenantSchema = z.object({
     z.object({ enabled: z.literal(false) }).strict(),
     z.object({
       enabled: z.literal(true),
+      scope: PlatformServiceTrialScopeSchema.optional(),
       trial_days: z.number().int("试用天数必须为整数").min(1, "至少试用 1 天").max(365, "试用最多 365 天"),
       reason: z.string().trim().min(1, "请填写开通原因").max(500, "开通原因最多 500 字"),
       idempotency_key: z.uuidv4("无效的试用请求标识"),

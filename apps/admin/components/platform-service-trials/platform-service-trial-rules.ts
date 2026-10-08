@@ -1,5 +1,6 @@
 import {
   PLATFORM_SERVICE_TRIAL_CAPABILITY_VALUES,
+  PLATFORM_SERVICE_TRIAL_CAPABILITY_LABELS,
   PLATFORM_SERVICE_TRIAL_SOURCE_VALUES,
   PLATFORM_SERVICE_TRIAL_STATUS_VALUES,
   PLATFORM_SERVICE_TRIAL_TYPE_VALUES,
@@ -49,14 +50,7 @@ const typeLabels: Record<PlatformServiceTrialType, string> = {
   guided: "陪跑试用",
 };
 
-const capabilityLabels: Record<PlatformServiceTrialCapability, string> = {
-  "core.projects": "项目管理",
-  "core.customers": "客户管理",
-  "core.employees": "员工管理",
-  "core.workflows": "流程管理",
-  "core.files": "文件管理",
-  "core.notifications": "通知中心",
-};
+const capabilityLabels = PLATFORM_SERVICE_TRIAL_CAPABILITY_LABELS;
 
 export const trialStatusOptions = PLATFORM_SERVICE_TRIAL_STATUS_VALUES.map((value) => ({
   value,

@@ -1,7 +1,18 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeAll, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { PaymentRecord } from "@/repositories/payments";
 import type { AuthContext } from "@/services/authorization";
-import { WorkflowTaskPaymentBridge } from "./workflow-task-payment-bridge";
+
+process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
+process.env.SUPABASE_PUBLISH ??= "test-publish-key";
+process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
+let WorkflowTaskPaymentBridge: typeof import("./workflow-task-payment-bridge").WorkflowTaskPaymentBridge;
+let resolveTenantServiceRouteDecision: typeof import("./tenant-service-access").resolveTenantServiceRouteDecision;
+let tenantServiceAccessService: typeof import("./tenant-service-access").tenantServiceAccessService;
+beforeAll(async () => {
+  ({ WorkflowTaskPaymentBridge } = await import("./workflow-task-payment-bridge"));
+  ({ resolveTenantServiceRouteDecision, tenantServiceAccessService } =
+    await import("./tenant-service-access"));
+});
 
 const callOrder: string[] = [];
 
@@ -154,7 +165,10 @@ function createBridge() {
 }
 
 describe("workflowTaskPaymentBridge", () => {
+  afterEach(() => mock.restore());
   beforeEach(() => {
+    spyOn(tenantServiceAccessService, "resolveForRoute").mockImplementation(async (input) =>
+      resolveTenantServiceRouteDecision({ ...input, mode: "paid", startsAt: null, endsAt: null }));
     callOrder.length = 0;
     findByWorkflowTaskId.mockClear();
     findByWorkflowTaskId.mockImplementation(async () => null);

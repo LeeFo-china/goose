@@ -10,6 +10,7 @@ import type { AuthContext } from "@/services/authorization";
 import { financeLedgerService } from "@/services/finance-ledger";
 import { projectReceivablesService } from "@/services/project-receivables";
 import { workflowSubjectStateService } from "@/services/workflow-subject-state";
+import { assertWorkflowTaskBusinessWriteAccess } from "./workflow-task-service-access";
 
 const PAYMENT_COLLECTION_TYPES = [
   "deposit",
@@ -105,6 +106,7 @@ export class WorkflowTaskPaymentBridge {
       return null;
     }
 
+    await assertWorkflowTaskBusinessWriteAccess(input.authContext, "business.finance");
     const existing = await this.dependencies.paymentRepository
       .findByWorkflowTaskId(input.task.id);
     if (existing && existing.status !== "confirmed") {

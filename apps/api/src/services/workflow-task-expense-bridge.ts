@@ -7,6 +7,7 @@ import {
 import type { AuthContext } from "@/services/authorization";
 import { expenseRequestService } from "@/services/expense-requests";
 import { workflowSubjectsService } from "@/services/workflow-subjects";
+import { assertWorkflowTaskBusinessWriteAccess } from "./workflow-task-service-access";
 
 type ExpenseWorkflowTaskOperation =
   | {
@@ -110,6 +111,7 @@ class WorkflowTaskExpenseBridge {
     });
     if (!operation) return null;
 
+    await assertWorkflowTaskBusinessWriteAccess(input.authContext, "business.finance");
     const expenseRequestId = input.task.instance.subject_id;
     const expenseRequest = await this.executeOperation(
       input.authContext,

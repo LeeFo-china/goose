@@ -1,9 +1,17 @@
-import { expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test";
 import type { AuthContext } from "@/services/authorization";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
+
+beforeEach(async () => {
+  const { tenantServiceAccessService, resolveTenantServiceRouteDecision } =
+    await import("./tenant-service-access");
+  spyOn(tenantServiceAccessService, "resolveForRoute").mockImplementation(async (input) =>
+    resolveTenantServiceRouteDecision({ ...input, mode: "paid", startsAt: null, endsAt: null }));
+});
+afterEach(() => mock.restore());
 
 const supplierTask = {
   id: "task-1",

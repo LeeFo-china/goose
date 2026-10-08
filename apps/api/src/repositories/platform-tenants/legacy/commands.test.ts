@@ -317,3 +317,44 @@ describe("platform tenant atomic create command", () => {
     }
   });
 });
+
+
+describe("manual tenant trial scope routing", () => {
+  const trial = {
+    enabled: true as const, trial_days: 30, reason: "平台建户试用",
+    idempotency_key: "66666666-6666-4666-8666-666666666666",
+  };
+  const scope = { version: 1 as const, capabilities: ["core.projects" as const] };
+
+  test("adds only p_trial_scope to the legacy arguments and returns the atomic result", async () => {
+    const legacy = CreatePlatformTenantSchema.parse({ name: tenant.name, slug: tenant.slug, trial });
+    const { rpc } = rpcHarness({ data: success, error: null });
+    const options = { manual: true, allowOverride: true };
+    await createWithDefaultTemplate(rpc, legacy, OPERATOR_ID, options);
+    const scoped = { ...legacy, trial: { ...trial, scope } };
+    expect(await createWithDefaultTemplate(rpc, scoped, OPERATOR_ID, options)).toEqual(success);
+    expect(rpc.mock.calls[0]?.[0]).toBe("create_platform_tenant_with_trial");
+    expect(rpc.mock.calls[0]?.[1]).not.toHaveProperty("p_trial_scope");
+    expect(rpc.mock.calls[1]).toEqual([
+      "create_platform_tenant_with_trial_scope",
+      { ...rpc.mock.calls[0]?.[1], p_trial_scope: scope },
+    ]);
+  });
+
+  test.each([undefined, { enabled: false as const }, trial])(
+    "keeps unscoped manual creation on the old RPC: %j", async (trialInput) => {
+      const input = CreatePlatformTenantSchema.parse({ name: tenant.name, slug: tenant.slug, trial: trialInput });
+      const { rpc } = rpcHarness({ data: success, error: null });
+      await createWithDefaultTemplate(rpc, input, OPERATOR_ID, { manual: true });
+      expect(rpc.mock.calls[0]?.[0]).toBe("create_platform_tenant_with_trial");
+      expect(rpc.mock.calls[0]?.[1]).not.toHaveProperty("p_trial_scope");
+    },
+  );
+
+  test.each([trial, { ...trial, scope }])("rejects partner trials before RPC: %j", async (trialInput) => {
+    const input = { ...CreatePlatformTenantSchema.parse({ name: tenant.name, slug: tenant.slug }), trial: trialInput };
+    const { rpc } = rpcHarness({ data: success, error: null });
+    await expect(createWithDefaultTemplate(rpc, input, OPERATOR_ID)).rejects.toMatchObject({ statusCode: 400 });
+    expect(rpc).not.toHaveBeenCalled();
+  });
+});

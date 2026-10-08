@@ -9,6 +9,7 @@ import { PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME } from "@/components/platform
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
+import { PlatformServiceTrialScopeDialog } from "./platform-service-trial-scope-dialog";
 import { PlatformServiceTrialDetail } from "./platform-service-trial-detail";
 import {
   formatTrialDateTime,
@@ -127,6 +128,7 @@ export function PlatformServiceTrialTable({
       id: "actions",
       header: "操作",
       cell: ({ row }) => (
+        <div className="flex justify-end gap-2">
         <Button
           type="button"
           size="sm"
@@ -139,6 +141,9 @@ export function PlatformServiceTrialTable({
           <Eye data-icon="inline-start" />
           查看
         </Button>
+        <PlatformServiceTrialScopeDialog trialId={row.original.id} tenantName={row.original.tenant.name}
+          disabledReason={!canManage ? "无试用管理权限" : undefined} />
+        </div>
       ),
       meta: { cellClassName: "whitespace-nowrap text-right" },
     },

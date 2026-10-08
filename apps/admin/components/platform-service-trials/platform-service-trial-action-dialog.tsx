@@ -1,5 +1,6 @@
 "use client";
 
+import { PLATFORM_SERVICE_TRIAL_FULL_SCOPE } from "@gooes/domain";
 import type { FormEvent } from "react";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -38,7 +39,6 @@ import { PlatformServiceTrialAssigneeCombobox } from "./platform-service-trial-a
 import { createBoundTrialAssigneeCandidate } from "./platform-service-trial-assignee-options";
 import { createTrialIdempotencyIntent } from "./platform-service-trial-idempotency";
 import { PlatformServiceTrialApprovalFields } from "./platform-service-trial-approval-fields";
-import { trialCapabilityOptions } from "./platform-service-trial-rules";
 import type {
   PlatformServiceTrialAction,
   PlatformServiceTrialAssigneeCandidate,
@@ -83,6 +83,7 @@ export function PlatformServiceTrialActionDialog({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const submitLock = useRef(false);
   const [error, setError] = useState("");
   const [reason, setReason] = useState("");
   const boundAssignee = trial.assignee
@@ -112,6 +113,7 @@ export function PlatformServiceTrialActionDialog({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submitLock.current || !action.enabled) return;
     const normalizedReason = reason.trim();
     if (kind !== "assign" && !normalizedReason) {
       setError("请填写操作原因");
@@ -132,26 +134,29 @@ export function PlatformServiceTrialActionDialog({
       return;
     }
 
+    submitLock.current = true;
     setSubmitting(true);
     setError("");
     try {
       const result = await runTrialMutationFlow({
         mutate: async () => {
+          const body = buildPlatformServiceTrialActionBody({
+            kind,
+            trial,
+            reason: normalizedReason,
+            assigneeEmployeeId,
+            trialType,
+            startsAt,
+            trialDays,
+            graceDays,
+            extensionDays,
+            scope,
+            idempotencyKey: "",
+          });
+          body.idempotency_key = idempotencyIntent.forPayload(body);
           await requestBackendJson(actionPath(trial.id, kind), {
             method: "POST",
-            body: JSON.stringify(buildPlatformServiceTrialActionBody({
-              kind,
-              trial,
-              reason: normalizedReason,
-              assigneeEmployeeId,
-              trialType,
-              startsAt,
-              trialDays,
-              graceDays,
-              extensionDays,
-              scope,
-              idempotencyKey: idempotencyIntent.current(),
-            })),
+            body: JSON.stringify(body),
             fallbackMessage: `${meta.label}试用失败`,
           });
         },
@@ -174,13 +179,18 @@ export function PlatformServiceTrialActionDialog({
       setError(message);
       toast.error(message);
     } finally {
+      submitLock.current = false;
       setSubmitting(false);
     }
   }
 
   function handleOpenChange(nextOpen: boolean) {
+    if (submitLock.current) return;
     if (nextOpen && !open) {
       idempotencyIntent.beginNew();
+      setScope([...trial.scope.capabilities]);
+      setReason("");
+      setError("");
       setAssigneeEmployeeId(trial.assignee_employee_id);
       setSelectedAssignee(boundAssignee);
     }
@@ -209,6 +219,7 @@ export function PlatformServiceTrialActionDialog({
           </DialogDescription>
         </DialogHeader>
         <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+          <fieldset disabled={submitting} className="contents">
           <FieldGroup>
             {kind === "approve" ? (
               <PlatformServiceTrialApprovalFields
@@ -276,6 +287,7 @@ export function PlatformServiceTrialActionDialog({
               </Field>
             ) : null}
           </FieldGroup>
+          </fieldset>
           <div id={errorId} role="alert" aria-live="assertive">
             <FieldError>{error}</FieldError>
           </div>
@@ -305,6 +317,7 @@ export function PlatformServiceTrialGrantDialog({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const submitLock = useRef(false);
   const [error, setError] = useState("");
   const [trialType, setTrialType] = useState<PlatformServiceTrialType>("standard");
   const [startsAt, setStartsAt] = useState("");
@@ -315,13 +328,14 @@ export function PlatformServiceTrialGrantDialog({
     PlatformServiceTrialAssigneeCandidate | null
   >(null);
   const [scope, setScope] = useState<PlatformServiceTrialCapability[]>(
-    trialCapabilityOptions.map((option) => option.value),
+    [...PLATFORM_SERVICE_TRIAL_FULL_SCOPE.capabilities],
   );
   const idempotencyIntent = useRef(createTrialIdempotencyIntent()).current;
   const errorId = "grant-trial-error";
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submitLock.current || disabledReason) return;
     const form = new FormData(event.currentTarget);
     const tenantId = String(form.get("tenant_id") || "").trim();
     const reason = String(form.get("reason") || "").trim();
@@ -330,22 +344,25 @@ export function PlatformServiceTrialGrantDialog({
       setError("请完整填写租户、原因、范围和陪跑跟进人");
       return;
     }
+    submitLock.current = true;
     setSubmitting(true);
     setError("");
     try {
+      const body = {
+        tenant_id: tenantId,
+        trial_type: trialType,
+        starts_at: startsAt ? new Date(startsAt).toISOString() : undefined,
+        trial_days: Number(trialDays),
+        grace_days: Number(graceDays),
+        scope: { version: 1, capabilities: scope },
+        assignee_employee_id: assigneeEmployeeId,
+        reason,
+        idempotency_key: "",
+      };
+      body.idempotency_key = idempotencyIntent.forPayload(body);
       await requestBackendJson("/platform/billing/service-trials", {
         method: "POST",
-        body: JSON.stringify({
-          tenant_id: tenantId,
-          trial_type: trialType,
-          starts_at: startsAt ? new Date(startsAt).toISOString() : undefined,
-          trial_days: Number(trialDays),
-          grace_days: Number(graceDays),
-          scope: { version: 1, capabilities: scope },
-          assignee_employee_id: assigneeEmployeeId,
-          reason,
-          idempotency_key: idempotencyIntent.current(),
-        }),
+        body: JSON.stringify(body),
         fallbackMessage: "主动开通试用失败",
       });
       toast.success("试用已开通");
@@ -356,11 +373,13 @@ export function PlatformServiceTrialGrantDialog({
       setError(message);
       toast.error(message);
     } finally {
+      submitLock.current = false;
       setSubmitting(false);
     }
   }
 
   function handleOpenChange(nextOpen: boolean) {
+    if (submitLock.current) return;
     if (nextOpen && !open) idempotencyIntent.beginNew();
     setOpen(nextOpen);
   }
@@ -379,6 +398,7 @@ export function PlatformServiceTrialGrantDialog({
           <DialogDescription>为已核验企业配置一次技术服务试用。</DialogDescription>
         </DialogHeader>
         <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+          <fieldset disabled={submitting} className="contents">
           <FieldGroup>
             <Field><FieldLabel htmlFor="grant-trial-tenant">租户 ID</FieldLabel><Input id="grant-trial-tenant" name="tenant_id" required /></Field>
             <PlatformServiceTrialApprovalFields
@@ -401,6 +421,7 @@ export function PlatformServiceTrialGrantDialog({
             />
             <Field><FieldLabel htmlFor="grant-trial-reason">开通原因</FieldLabel><Textarea id="grant-trial-reason" name="reason" maxLength={500} required /></Field>
           </FieldGroup>
+          </fieldset>
           <div id={errorId} role="alert" aria-live="assertive">
             <FieldError>{error}</FieldError>
           </div>

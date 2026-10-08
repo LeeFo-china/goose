@@ -207,7 +207,8 @@ describe("PlatformTenantService.create", () => {
     expect(createWithDefaultTemplate).not.toHaveBeenCalled();
   });
 
-  test("requires trial management permission before creating a tenant with trial", async () => {
+  test.each([undefined, { version: 1, capabilities: ["core.projects"] }])(
+    "requires trial management permission before creating a tenant with scope %j", async (scope) => {
     const service = await getService();
     const trialInput = CreatePlatformTenantSchema.parse({
       name: tenant.name,
@@ -216,6 +217,7 @@ describe("PlatformTenantService.create", () => {
         enabled: true,
         trial_days: 30,
         reason: "平台建户试用",
+        scope,
         idempotency_key: "66666666-6666-4666-8666-666666666666",
       },
     });
@@ -226,11 +228,13 @@ describe("PlatformTenantService.create", () => {
     expect(createWithDefaultTemplate).not.toHaveBeenCalled();
   });
 
-  test("returns authoritative trial dates and override permission", async () => {
+  test.each([undefined, { version: 1, capabilities: ["core.projects"] }])(
+    "forwards optional scope %j and returns authoritative trial dates", async (scope) => {
     const trial = { id: "66666666-6666-4666-8666-666666666666", status: "active" as const,
       trial_ends_at: "2026-11-06T08:00:00Z", grace_ends_at: "2026-11-13T08:00:00Z" };
     createWithDefaultTemplate.mockResolvedValueOnce({ tenant, initialization, trial });
     const withTrial = CreatePlatformTenantSchema.parse({ ...input, trial: {
+      scope,
       enabled: true, trial_days: 30, reason: "客户评估", idempotency_key: crypto.randomUUID(),
     } });
     const service = await getService();

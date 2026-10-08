@@ -1,11 +1,15 @@
 "use client";
 
+import type { PlatformServiceTrialCapability } from "@gooes/domain";
+import { PlatformServiceTrialScopeSelector } from "@/components/platform-service-trials/platform-service-trial-scope-selector";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 
-export function PlatformTenantTrialFields({ enabled, onEnabledChange, disabled, disabledReason }: {
+export function PlatformTenantTrialFields({ enabled, onEnabledChange, disabled, disabledReason, scope, setScope }: {
+  scope: PlatformServiceTrialCapability[];
+  setScope: (scope: PlatformServiceTrialCapability[]) => void;
   enabled: boolean;
   onEnabledChange: (enabled: boolean) => void;
   disabled: boolean;
@@ -26,6 +30,7 @@ export function PlatformTenantTrialFields({ enabled, onEnabledChange, disabled, 
         </FieldDescription>
       </Field>
       {enabled ? <>
+        <PlatformServiceTrialScopeSelector scope={scope} setScope={setScope} disabled={disabled} />
         <Field>
           <FieldLabel htmlFor="create-tenant-trial-days">试用天数</FieldLabel>
           <Input id="create-tenant-trial-days" name="trial_days" type="number"

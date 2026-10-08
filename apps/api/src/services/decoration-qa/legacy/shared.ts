@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { TenantServiceAuthOptions } from "@/services/tenant-service-route-access";
 import { Errors } from "@/errors/error-factory";
 import { SupabaseDB } from "@/utils/supabase";
 import type {
@@ -314,7 +315,7 @@ export type DecorationQaUsageContext = {
   billable: boolean;
 };
 
-export type DecorationQaAuthInput = {
+export type DecorationQaAuthInput = Partial<TenantServiceAuthOptions> & {
   authUserId?: string | null;
   tenantId?: string | null;
   customerId?: string | null;

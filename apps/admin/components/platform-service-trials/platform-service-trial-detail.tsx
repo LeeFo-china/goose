@@ -17,6 +17,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { requestBackendJson } from "@/lib/backend-client";
 
+import { PlatformServiceTrialScopeDialog } from "./platform-service-trial-scope-dialog";
+import { TRIAL_SCOPE_BILLING_NOTICE } from "./platform-service-trial-scope-selector";
 import { PlatformServiceTrialActionDialog } from "./platform-service-trial-action-dialog";
 import { PlatformServiceTrialFollowUps } from "./platform-service-trial-follow-ups";
 import {
@@ -140,6 +142,7 @@ export function PlatformServiceTrialDetail({
               </DetailSection>
               <Separator />
               <DetailSection title="试用范围">
+                <p className="col-span-full text-sm text-muted-foreground">{TRIAL_SCOPE_BILLING_NOTICE}</p>
                 <div className="col-span-full flex flex-wrap gap-2">
                   {current.scope.capabilities.map((capability) => (
                     <Badge key={capability} variant="outline">
@@ -191,6 +194,8 @@ export function PlatformServiceTrialDetail({
           <div className="flex flex-wrap gap-2">
             <PlatformServiceTrialActionDialog kind="approve" trial={current} action={resolvePlatformTrialAction(actions, "review")} onTrialUpdated={setData} />
             <PlatformServiceTrialActionDialog kind="reject" trial={current} action={resolvePlatformTrialAction(actions, "review")} onTrialUpdated={setData} />
+            <PlatformServiceTrialScopeDialog trialId={current.id} tenantName={current.tenant.name}
+              disabledReason={!canManage ? "无试用管理权限" : undefined} onTrialUpdated={setData} />
             <PlatformServiceTrialActionDialog kind="extend" trial={current} action={resolvePlatformTrialAction(actions, "extend")} onTrialUpdated={setData} />
             <PlatformServiceTrialActionDialog kind="revoke" trial={current} action={resolvePlatformTrialAction(actions, "revoke")} onTrialUpdated={setData} />
             <PlatformServiceTrialActionDialog kind="assign" trial={current} action={resolvePlatformTrialAction(actions, "assign")} onTrialUpdated={setData} />
@@ -221,10 +226,10 @@ function DetailSkeleton() {
   return <div className="flex flex-col gap-4">{Array.from({ length: 5 }).map((_, index) => <Skeleton key={index} className="h-24 w-full" />)}</div>;
 }
 
-function actionLabel(key: "review" | "extend" | "revoke" | "assign") {
-  return ({ review: "审批", extend: "延期", revoke: "撤销", assign: "分配" } as const)[key];
+function actionLabel(key: "review" | "extend" | "revoke" | "assign" | "update_scope") {
+  return ({ review: "审批", extend: "延期", revoke: "撤销", assign: "分配", update_scope: "调整范围" } as const)[key];
 }
 
 function eventLabel(type: string) {
-  return ({ application_submitted: "提交试用申请", application_withdrawn: "撤回试用申请", application_approved: "通过试用申请", application_rejected: "驳回试用申请", trial_granted: "开通试用", trial_activated: "试用生效", trial_grace_started: "进入宽限期", trial_expired: "试用到期", trial_extended: "延长试用", trial_revoked: "撤销试用", trial_assigned: "分配跟进人", trial_follow_up_created: "新增试用跟进", trial_follow_up_canceled: "取消试用跟进", formal_purchase_attributed: "转为正式服务", conversion_anomaly: "转化异常" } as Record<string, string>)[type] || type;
+  return ({ application_submitted: "提交试用申请", application_withdrawn: "撤回试用申请", application_approved: "通过试用申请", application_rejected: "驳回试用申请", trial_granted: "开通试用", trial_activated: "试用生效", trial_grace_started: "进入宽限期", trial_expired: "试用到期", trial_extended: "延长试用", trial_scope_updated: "调整试用范围", trial_revoked: "撤销试用", trial_assigned: "分配跟进人", trial_follow_up_created: "新增试用跟进", trial_follow_up_canceled: "取消试用跟进", formal_purchase_attributed: "转为正式服务", conversion_anomaly: "转化异常" } as Record<string, string>)[type] || type;
 }

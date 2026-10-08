@@ -42,7 +42,7 @@ test('all registered rendering library routes respect file trial scope and the r
 });
 
 test('mapping does not expand unrelated tenant modules or similarly named routes', () => {
-  for (const url of ['/tenant/system-settings', '/tenant/rendering-library/usage', '/tenant/rendering-library/settings',
+  for (const url of ['/tenant/rendering-library/usage', '/tenant/rendering-library/settings',
     '/tenant/rendering-library/styles-export', '/tenant/rendering-library/files-other', '/tenant/rendering-library-ai']) {
     expect(getTenantServiceAuthOptions({ method: 'GET', routeOptions: { url } }).requiredCapability).toBeNull();
   }

@@ -1,6 +1,8 @@
 "use client";
 
-import { type FormEvent, useEffect, useMemo, useState, useTransition } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { PLATFORM_SERVICE_TRIAL_FULL_SCOPE, type PlatformServiceTrialCapability } from "@gooes/domain";
+import { createTrialIdempotencyIntent } from "@/components/platform-service-trials/platform-service-trial-idempotency";
 import { useRouter } from "next/navigation";
 import { Building2, Loader2, RefreshCcw } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
@@ -127,9 +129,11 @@ export function TenantDialog({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const submitLock = useRef(false);
   const [error, setError] = useState("");
   const [trialEnabled, setTrialEnabled] = useState(false);
-  const [trialIntentKey, setTrialIntentKey] = useState("");
+  const trialIntent = useRef(createTrialIdempotencyIntent()).current;
+  const [trialScope, setTrialScope] = useState<PlatformServiceTrialCapability[]>([...PLATFORM_SERVICE_TRIAL_FULL_SCOPE.capabilities]);
   const defaults = useMemo(() => ({
     name: tenant?.name || "",
     slug: tenant?.slug || "",
@@ -144,19 +148,25 @@ export function TenantDialog({
 
     setError("");
     setTrialEnabled(Boolean(trialCreation?.enabled));
-    setTrialIntentKey(crypto.randomUUID());
+    trialIntent.beginNew();
+    setTrialScope([...PLATFORM_SERVICE_TRIAL_FULL_SCOPE.capabilities]);
     setSlugManuallyEdited(false);
     setSlugValue(mode === "create" ? generateTenantSlug() : defaults.slug);
-  }, [defaults.slug, mode, open, trialCreation?.enabled]);
+  }, [defaults.slug, mode, open, trialCreation?.enabled, trialIntent]);
 
   function close() {
-    if (pending) return;
+    if (submitLock.current) return;
     setError("");
     onOpenChange(false);
   }
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submitLock.current) return;
+    if (trialEnabled && trialScope.length === 0) {
+      setError("请至少选择一项试用范围");
+      return;
+    }
     const formData = new FormData(event.currentTarget);
     const name = String(formData.get("name") || "").trim();
     const slug = String(formData.get("slug") || "").trim();
@@ -167,6 +177,7 @@ export function TenantDialog({
     const addressPayload = buildAddressPayload(formData);
 
     setError("");
+    submitLock.current = true;
     startTransition(async () => {
       try {
         const body = mode === "create"
@@ -177,7 +188,7 @@ export function TenantDialog({
               enabled: true,
               trial_days: Number(formData.get("trial_days")),
               reason: String(formData.get("trial_reason") || "").trim(),
-              idempotency_key: trialIntentKey,
+              scope: { version: 1, capabilities: trialScope },
             } : { enabled: false },
             ...addressPayload,
             contact_name: contactName || undefined,
@@ -194,18 +205,23 @@ export function TenantDialog({
             contact_phone: contactPhone || undefined,
           };
 
+        const requestBody = "trial" in body && body.trial.enabled
+          ? { ...body, trial: { ...body.trial, idempotency_key: trialIntent.forPayload(body) } }
+          : body;
         await requestPlatformTenantJson(
           mode === "create" ? "/api/backend/platform/tenants" : `/api/backend/platform/tenants/${tenant?.id}`,
           {
             method: mode === "create" ? "POST" : "PATCH",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify(body),
+            body: JSON.stringify(requestBody),
           },
         );
         onOpenChange(false);
         refreshAfterDialogClose(router);
       } catch (err) {
         setError(err instanceof Error ? err.message : "保存租户失败");
+      } finally {
+        submitLock.current = false;
       }
     });
   }
@@ -230,6 +246,7 @@ export function TenantDialog({
         <form className="flex flex-col gap-4" onSubmit={submit}>
           <FieldGroup>
             {mode === "create" ? <PlatformTenantTrialFields
+              scope={trialScope} setScope={setTrialScope}
               enabled={trialEnabled} onEnabledChange={setTrialEnabled} disabled={pending}
               disabledReason={trialCreation?.enabled ? null
                 : trialCreation?.disabled_reason || "当前无法开通试用"}

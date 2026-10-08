@@ -175,11 +175,7 @@ export async function askDecorationQa(
     await getSystemPrompt(),
   );
   const usageContext = await resolveDecorationQaUsageContext({
-    authUserId: options?.authUserId,
-    tenantId: options?.tenantId,
-    customerId: options?.customerId,
-    employeeId: options?.employeeId,
-    roles: options?.roles,
+    ...options,
   });
 
   let result: Awaited<ReturnType<typeof aiGateway.chat>>;
@@ -239,16 +235,18 @@ export async function askDecorationQa(
 export async function streamDecorationQa(
   input: DecorationQaStreamRequestInput,
   onEvent: (event: DecorationQaStreamEvent) => Promise<void> | void,
-  options?: {
-    authUserId?: string;
-    tenantId?: string | null;
-    customerId?: string | null;
-    employeeId?: string | null;
-    roles?: string[];
+  options?: DecorationQaAuthInput & {
     extraSystemMessages?: string[];
     signal?: AbortSignal;
   },
 ) {
+  const conversationId = input.conversation_id?.trim() || `qa_${randomUUID()}`;
+  const projectId = input.context?.project_id?.trim() || null;
+  const usageContext = await resolveDecorationQaUsageContext({
+    ...options,
+    role: input.context?.role,
+    projectId,
+  });
   const routeConfig = await aiGateway.resolveChatConfig({
     sceneCode: "decoration_qa",
     temperature: 0.7,
@@ -257,19 +255,8 @@ export async function streamDecorationQa(
   const apiKey = routeConfig.apiKey;
   const model = routeConfig.modelName;
   const providerCode = routeConfig.providerCode;
-  const conversationId = input.conversation_id?.trim() || `qa_${randomUUID()}`;
-  const projectId = input.context?.project_id?.trim() || null;
-  const usageContext = await resolveDecorationQaUsageContext({
-    authUserId: options?.authUserId,
-    tenantId: options?.tenantId,
-    customerId: options?.customerId,
-    employeeId: options?.employeeId,
-    roles: options?.roles,
-    role: input.context?.role,
-    projectId,
-  });
   const extraSystemMessages = options?.extraSystemMessages ||
-    await resolveDecorationQaStreamSystemMessages(input, options?.authUserId);
+    await resolveDecorationQaStreamSystemMessages(input, options?.authUserId ?? undefined);
   const startedAt = Date.now();
 
   const decoder = new TextDecoder();

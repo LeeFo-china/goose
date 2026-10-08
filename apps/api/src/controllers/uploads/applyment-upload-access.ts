@@ -11,7 +11,7 @@ export async function assertApplymentUploadSceneAccess(
   if (!user.sub) throw Errors.unauthorized();
   const authContext = await authorizationService.getRequiredAuthContext(
     user.sub,
-    { tenantServiceAccess: "write" },
+    { tenantServiceAccess: "write", requiredCapability: "business.finance" },
   );
   uploadService.assertDirectUploadAccess({ authContext, scene });
   if (

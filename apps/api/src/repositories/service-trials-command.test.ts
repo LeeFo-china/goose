@@ -236,6 +236,20 @@ const commandCases: Array<{
     },
     data: { ...commandResult, assigned: true },
   },
+  {
+    name: 'update_scope',
+    input: {
+      action: 'update_scope', trialId: TRIAL_ID, actorEmployeeId: ACTOR_ID,
+      expectedVersion: 2, idempotencyKey: IDEMPOTENCY_KEY,
+      scope: validScope, reason: '调整范围',
+    },
+    rpc: 'platform_service_trial_update_scope',
+    params: {
+      p_trial_id: TRIAL_ID, p_actor_employee_id: ACTOR_ID,
+      p_expected_version: 2, p_idempotency_key: IDEMPOTENCY_KEY,
+      p_scope: validScope, p_reason: '调整范围',
+    },
+  },
 ];
 
 describe('ServiceTrialRepository commands', () => {
@@ -393,13 +407,15 @@ describe('ServiceTrialRepository commands', () => {
   ] as const)(
     'maps stable postgres error %s without leaking details',
     async (code, statusCode) => {
-      const f = harness({ data: null, error: {
-        code: 'P0001', message: code, details: 'sensitive context',
-      } });
-      const error = await f.repository.executeCommand(commandCases[0]!.input)
-        .catch((caught: unknown) => caught);
-      expect(error).toMatchObject({ statusCode, code, details: undefined });
-      expect(String(error)).not.toContain('sensitive context');
+      for (const command of [commandCases[0]!, commandCases.at(-1)!]) {
+        const f = harness({ data: null, error: {
+          code: 'P0001', message: code, details: 'sensitive context',
+        } });
+        const error = await f.repository.executeCommand(command.input)
+          .catch((caught: unknown) => caught);
+        expect(error).toMatchObject({ statusCode, code, details: undefined });
+        expect(String(error)).not.toContain('sensitive context');
+      }
     },
   );
 

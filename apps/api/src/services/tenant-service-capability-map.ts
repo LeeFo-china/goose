@@ -26,16 +26,30 @@ export type TenantServiceCapabilityResolution =
 
 const CAPABILITY_RULES: readonly TenantServiceCapabilityRule[] = [
   capability("projects", "core.projects", /^\/(?:projects|project[-_][^/]+|properties|front|create_project_page|home_stats)(?:\/|$)/),
+  capability("project-finance", "business.finance", /^\/projects\/[^/]+\/(?:cost-budgets|finance-summary)(?:\/|$)/, 20),
   capability("customer-projects", "core.projects", /^\/customer\/(?:projects|project-acceptances)(?:\/|$)/, 20),
   capability("tenant-owner-dashboard", "core.projects", /^\/tenant-owner\/daily-dashboard(?:\/|$)/, 20),
   capability("customers", "core.customers", /^\/(?:customers|customer-service-tickets|customer_follow_ups|external-referrers)(?:\/|$)/),
   capability("tenant-customer-leads", "core.customers", /^\/tenant\/customer-leads(?:\/|$)/),
   capability("customer-self-service", "core.customers", /^\/customer\/(?:service-tickets|profile|bootstrap)(?:\/|$)/, 20),
-  capability("employees", "core.employees", /^\/(?:employees|departments|roles|permissions|department-post-rules)(?:\/|$)/),
+  capability("employees", "core.employees", /^\/(?:employees|departments|roles|permissions|department-post-rules|posts)(?:\/|$)/),
   capability("employee-self-service", "core.employees", /^\/employee\/(?:bootstrap|personalization)(?:\/|$)/, 20),
   capability("workflows", "core.workflows", /^\/(?:workflows|workflow-subjects|workflow-tasks|task-center)(?:\/|$)/),
   capability("files", "core.files", /^\/uploads(?:\/|$)/),
   capability("tenant-rendering-library-assets", "core.files", /^\/tenant\/rendering-library\/(?:styles|files)(?:\/|$)/),
+  capability("tenant-devices", "core.projects", /^\/tenant-devices(?:\/|$)/),
+  capability("employee-wechat", "core.employees", /^\/employee\/auth\/(?:unbind-wechat|wechat-rebind-requests)(?:\/|$)/, 20),
+  capability("customer-identity-location", "core.customers", /^\/customer\/(?:location(?:\/options)?|location-bootstrap|auth\/(?:select-tenant|unbind-wechat))(?:\/|$)/, 20),
+  capability("marketing", "business.marketing", /^\/(?:marketing-pages|marketing-leads|share-campaigns|share-campaign-claim-vouchers|appointment-reward-claim-vouchers|tenant-share-links)(?:\/|$)/),
+  capability("employee-marketing", "business.marketing", /^\/employee\/(?:marketing-center|share-campaigns|share-campaign-claim-vouchers|projects\/[^/]+\/share-campaign-config)(?:\/|$)/, 20),
+  capability("customer-marketing", "business.marketing", /^\/customer\/share-campaigns(?:\/|$)/, 20),
+  capability("finance", "business.finance", /^\/(?:finance|payments|expense-requests|expense-request-categories|supplier-payables|supplier-payable-filter-options|supplier-payment-requests|supplier-payment-request-payable-facts)(?:\/|$)/),
+  capability("procurement", "business.procurement", /^\/(?:catalog|suppliers|supplier-settings|supplier-products|supplier-price-lists|supplier-purchasable-products|supplier-purchase-(?:batches|orders|requisitions|batch-(?:catalog|cost-categories|category-options|project-options)|order-(?:catalog|project-options|supplier-options)|requisition-(?:catalog|cost-categories|project-options|supplier-options)))(?:\/|$)/),
+  capability("inventory", "business.inventory", /^\/(?:inventory|warehouses|warehouse-issues|warehouse-returns|warehouse-transfers|warehouse-stocktakes)(?:\/|$)/),
+  // Module access preserves the services' own billing, balance and quota checks.
+  capability("content", "business.content", /^\/(?:social-video|tenant\/(?:douyin-miniapp|douyin-material-notes|douyin-material-note-categories))(?:\/|$)/),
+  capability("ai", "business.ai", /^\/(?:ai|ocr)(?:\/|$)/),
+  capability("tenant-settings", "business.settings", /^\/(?:usage|branding|billing|tenant\/(?:branding|location|service-provider-areas|service-provider-profile|system-settings))(?:\/|$)/),
   capability("notifications", "core.notifications", /^\/notifications(?:\/|$)/),
 ];
 
