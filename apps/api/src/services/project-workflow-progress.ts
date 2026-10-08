@@ -35,25 +35,20 @@ import {
 } from "@/services/project-workflow-progress-timing";
 import { ProjectWorkflowProgressReadCache } from "@/services/project-workflow-progress-read-cache";
 import type { WorkflowBusinessKind, WorkflowInstanceStatus } from "@gooes/domain";
-
 export {
   buildUnavailableProjectWorkflowProgress,
   toCustomerProjectWorkflowProgress,
 } from "@/services/project-workflow-progress-empty";
 export { enrichProjectWorkflowProgressWithConstructionStages } from "@/services/project-workflow-progress-construction-stages";
-
 type JsonObject = Record<string, unknown>;
-
 export type WorkflowProgressSource =
   | "workflow_runtime"
   | "missing_runtime"
   | "unavailable";
-
 export type ProjectWorkflowProgressWarning = {
   code: "STALE_SUBJECT_STATE";
   message: string;
 };
-
 export type {
   WorkflowTimelineNode,
   WorkflowTimelineNodeAction,
@@ -61,7 +56,6 @@ export type {
   WorkflowTimelineNodeDisplay,
 } from "@/services/project-workflow-timeline-contract";
 export { enrichWorkflowTimelineNodesWithConstructionStages } from "@/services/project-workflow-timeline-contract";
-
 export type ProjectWorkflowProgress = {
   source: WorkflowProgressSource;
   instance_id: string | null;
@@ -82,12 +76,10 @@ export type ProjectWorkflowProgress = {
   actions: Array<Record<string, unknown>>;
   warnings: ProjectWorkflowProgressWarning[];
 };
-
 export type CustomerProjectWorkflowProgress = Omit<
   ProjectWorkflowProgress,
   "actions" | "warnings"
 >;
-
 type SubjectStateInput = {
   instance_id: string | null;
   instance_status: WorkflowInstanceStatus | null;
@@ -109,6 +101,7 @@ type WorkflowProgressGraphNode = WorkflowFinanceReviewerGraphNode;
 type WorkflowProgressGraph = WorkflowFinanceReviewerGraph;
 
 type BuildProjectWorkflowProgressProjectionInput = {
+  runtimeNodeOutputs?: Array<{ node_key: string; output: unknown }>;
   subjectState: SubjectStateInput | null;
   runtimeInstance: RuntimeInstanceInput | null;
   graph: WorkflowProgressGraph | null;
@@ -142,6 +135,7 @@ export function buildProjectWorkflowProgressProjection(
   const currentNodeTitle = getWorkflowNodeDisplayTitle(currentNode) ??
     input.subjectState?.current_node_title ?? null;
   const timelineNodes = buildWorkflowTimelineNodes({
+    runtimeNodeOutputs: input.runtimeNodeOutputs,
     graph: input.graph,
     currentNodeKey,
     completedNodeKeys: input.completedNodeKeys ?? [],
@@ -319,6 +313,7 @@ export class ProjectWorkflowProgressService {
           .filter((node) => node.status === "completed")
           .map((node) => node.node_key),
         completedNodeActors,
+        runtimeNodeOutputs: runtimeNodes,
         procedureAssignments,
         pendingActions,
       }));
@@ -326,6 +321,7 @@ export class ProjectWorkflowProgressService {
 }
 
 export function buildWorkflowTimelineNodes(input: {
+  runtimeNodeOutputs?: Array<{ node_key: string; output: unknown }>;
   graph: WorkflowProgressGraph | null;
   currentNodeKey: string | null;
   completedNodeKeys?: string[];
@@ -344,6 +340,8 @@ export function buildWorkflowTimelineNodes(input: {
 
   const group = resolveWorkflowGraphGroup(input.graph);
   const completedNodeKeys = new Set(input.completedNodeKeys ?? []);
+  const procedureCompletedKeys = new Set((input.runtimeNodeOutputs ?? [])
+    .filter((node) => asRecord(node.output)?.procedure_completed === true).map((node) => node.node_key));
   const completionsByNodeKey = new Map(
     (input.completedNodeActors ?? [])
       .filter((completion) =>
@@ -376,6 +374,7 @@ export function buildWorkflowTimelineNodes(input: {
       const assignee = assigneesByNodeKey.get(node.node_key);
       const completion = completionsByNodeKey.get(node.node_key);
       return buildWorkflowTimelineNodeContract({
+        procedureCompleted: procedureCompletedKeys.has(node.node_key),
         node: withWorkflowNodeDisplayTitle(node),
         status: resolveTimelineNodeStatus({
           nodeKey: node.node_key,

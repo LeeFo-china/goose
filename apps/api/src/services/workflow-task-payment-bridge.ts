@@ -1,3 +1,4 @@
+import { throwWorkflowRuntimeCompleteError } from "./workflow-runtime-completion-error";
 import { z } from "zod";
 import { Errors } from "@/errors/error-factory";
 import { paymentRepository, type PaymentRecord } from "@/repositories/payments";
@@ -151,7 +152,7 @@ export class WorkflowTaskPaymentBridge {
       output: input.output as JsonObject,
       actorEmployeeId: input.authContext.employeeId,
     });
-    this.throwRuntimeCompleteError(result);
+    if (!result.ok) throwWorkflowRuntimeCompleteError(result);
 
     const workflowState = await this.dependencies.workflowSubjectStateService
       .syncFromRuntimeInstance({
@@ -258,30 +259,7 @@ export class WorkflowTaskPaymentBridge {
     return parsed.data;
   }
 
-  private throwRuntimeCompleteError(result: RuntimeCompleteResultForBridge) {
-    if (result.ok) {
-      return;
-    }
 
-    switch (result.reason) {
-      case "instance_not_found":
-        throw Errors.notFound("流程实例不存在");
-      case "instance_not_running":
-        throw Errors.badRequest("流程实例不在运行中");
-      case "node_not_current":
-        throw Errors.business(409, "节点不是当前待处理节点", "WORKFLOW_NODE_NOT_CURRENT", {
-          current_node_key: result.currentNodeKey ?? null,
-        });
-      case "node_run_not_found":
-        throw Errors.badRequest("当前节点运行记录不存在");
-      case "graph_invalid":
-        throw Errors.badRequest("流程发布版本图结构无效");
-      case "invalid_output":
-        throw Errors.badRequest("节点输出必须是对象");
-      case "no_matching_edge":
-        throw Errors.badRequest("当前节点没有匹配的分支条件");
-    }
-  }
 }
 
 function buildPaymentCollectionValidationError(error: z.ZodError) {

@@ -143,6 +143,11 @@ function applyProcedureAssignmentActions(input: {
   actions: WorkflowTaskActionPayload[];
   procedureAssignment?: ProcedureAssignmentRow | null;
 }): WorkflowTaskActionPayload[] {
+  const config = asRecord(asRecord(input.task.instance?.current_node_snapshot)?.config);
+  if (input.task.instance?.subject_type === "project" && input.task.node_type === "procedure" &&
+    config?.trigger_acceptance === true &&
+    (input.task.instance_node?.procedure_completed === true ||
+      input.procedureAssignment?.status === "completed")) return [];
   if (!input.procedureAssignment) return input.actions;
   if (input.task.instance?.subject_type !== "project") return input.actions;
   if (input.task.node_type !== "procedure") return input.actions;

@@ -44,6 +44,7 @@ type ProjectWorkflowTaskBridgeInput = {
     tenant_id: string;
     instance_id: string;
     instance_node_id: string | null;
+    instance_node?: { procedure_completed?: unknown } | null;
     node_key: string;
     instance: {
       subject_id: string;

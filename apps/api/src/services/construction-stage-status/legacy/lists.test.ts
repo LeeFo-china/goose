@@ -114,6 +114,16 @@ function procedureTimelineNode(input: {
 }
 
 describe("buildProjectConstructionStagesFromRows", () => {
+  test("allows acceptance while the current node stays running after procedure completion", async () => {
+    const node = procedureTimelineNode({ stageCode: "plumbing_electrical", title: "水电",
+      status: "current", acceptanceEnabled: true });
+    node.attributes.procedure_completed = true;
+    const result = await buildProjectConstructionStagesFromRows({ project, acceptanceRows: [],
+      logRows: [], latestLogRows: [], canReadAcceptance: true, canCreateAcceptance: true,
+      workflowProgress: workflowProgress({ timeline_nodes: [node] }), sourceMode: "workflow_runtime" });
+    expect(result.stages.find((stage) => stage.stage_code === "plumbing_electrical"))
+      .toMatchObject({ can_create_acceptance: true, acceptance_action: { type: "create", enabled: true } });
+  });
   test("does not expose acceptance before the current procedure is completed", async () => {
     const result = await buildProjectConstructionStagesFromRows({
       project,

@@ -299,10 +299,6 @@ function buildProcedureActions(
     ];
   }
 
-  if (config.trigger_acceptance === true) {
-    return [];
-  }
-
   return [
     {
       key: "complete_procedure",

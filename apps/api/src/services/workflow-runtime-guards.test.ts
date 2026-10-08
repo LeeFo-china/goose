@@ -186,6 +186,26 @@ mock.module("@/repositories/project-log-evidence", () => ({
 }));
 
 describe("assertRuntimeNodeCompletionAllowed", () => {
+  test.each(["complete", "approve"])("rejects %s on construction nodes requiring acceptance", async (action) => {
+    const instance = procedureInstance();
+    const graph = constructionProcedureGraph();
+    graph.nodes[0]!.config = { stage_key: "plumbing_electrical", trigger_acceptance: true };
+    getGraph.mockImplementationOnce(async () => graph);
+    const { assertRuntimeNodeCompletionAllowed } = await import("./workflow-runtime-guards");
+    await expect(assertRuntimeNodeCompletionAllowed({ tenantId: "tenant-1", definitionId: "definition-1",
+      instanceId: "instance-1", nodeKey: instance.current_node_key!, action, output: {}, instance,
+    })).rejects.toMatchObject({ code: "WORKFLOW_ACCEPTANCE_REQUIRED", statusCode: 409 });
+  });
+  test("allows complete_procedure to enter waiting without applying next-node final acceptance checks", async () => {
+    const instance = procedureInstance();
+    const graph = constructionProcedureGraph();
+    graph.nodes[0]!.config = { stage_key: "plumbing_electrical", trigger_acceptance: true };
+    getGraph.mockImplementationOnce(async () => graph);
+    const { assertRuntimeNodeCompletionAllowed } = await import("./workflow-runtime-guards");
+    await expect(assertRuntimeNodeCompletionAllowed({ tenantId: "tenant-1", definitionId: "definition-1",
+      instanceId: "instance-1", nodeKey: instance.current_node_key!, action: "complete_procedure", output: {}, instance,
+    })).resolves.toBeUndefined();
+  });
   beforeEach(() => {
     getRuntimeInstanceById.mockClear();
     getRuntimeInstanceById.mockImplementation(async () => paymentInstance());

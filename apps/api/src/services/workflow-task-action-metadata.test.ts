@@ -493,6 +493,6 @@ describe("buildWorkflowTaskActions", () => {
           min_image_count: 2,
         },
       },
-    })).toEqual([]);
+    })).toMatchObject([{ key: "complete_procedure", business_action: "complete_procedure" }]);
   });
 });

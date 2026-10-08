@@ -39,6 +39,24 @@ export function assertProjectWorkflowStageMutationAllowedFromProgress(input: {
 
   if (input.workflowProgress.current_stage_code === input.stageCode) {
     assertAcceptanceEnabledIfNeeded(input);
+    if (input.mutation === "customer_confirm_acceptance" &&
+      input.workflowProgress.current_node_type === "procedure") {
+      const currentNode = input.workflowProgress.timeline_nodes.find((node) =>
+        node.node_key === input.workflowProgress.current_node_key &&
+        node.attributes.stage_code === input.stageCode
+      );
+      // Persist confirmation only after the current required procedure is finished.
+      // Missing projection facts must not turn an unfinished procedure into an approval.
+      if (!currentNode || (currentNode.attributes.acceptance_required === true &&
+        currentNode.attributes.procedure_completed !== true)) {
+        throw Errors.business(
+          409,
+          "当前工序尚未完工",
+          "WORKFLOW_PROCEDURE_NOT_COMPLETED",
+          { stage_code: input.stageCode, current_node_key: input.workflowProgress.current_node_key },
+        );
+      }
+    }
     return input.workflowProgress;
   }
 

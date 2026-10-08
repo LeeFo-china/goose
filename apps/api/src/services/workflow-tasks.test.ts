@@ -1,13 +1,12 @@
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import type { AuthContext } from "@/services/authorization";
 import { projectWorkflowProgressService } from "@/services/project-workflow-progress";
-
 const completeRuntimeNode = mock(async () => ({
   ok: true,
   instance: {},
   completedNode: {},
   nextNode: null,
-  task: null,
+  task: null, awaitingAcceptance: false,
 }));
 const completePaymentBridge = mock(async (): Promise<unknown> => null);
 const completeProjectBridge = mock(async () => null);
@@ -24,7 +23,6 @@ const shouldRequireProjectWorkflowRebuild = mock((input: {
   ["designing", "proposal_confirmed", "signed", "design_finalized", "pending_start"]
     .includes(input.nodeKey)
 );
-
 const paymentTask = {
   id: "task-1",
   tenant_id: "tenant-1",
@@ -52,7 +50,6 @@ const paymentTask = {
     },
   },
 };
-
 const stalePaymentTask = {
   ...paymentTask,
   id: "task-stale-payment",
@@ -67,7 +64,6 @@ const stalePaymentTask = {
     },
   },
 };
-
 const customerDesignTask = {
   ...paymentTask,
   id: "task-customer-designing",
@@ -89,7 +85,6 @@ const customerDesignTask = {
     },
   },
 };
-
 const legacyProjectDesigningTask = {
   ...paymentTask,
   id: "task-legacy-project-designing",
@@ -111,7 +106,6 @@ const legacyProjectDesigningTask = {
     },
   },
 };
-
 const procedureTask = {
   ...paymentTask,
   id: "task-procedure-demolition",
@@ -274,13 +268,16 @@ describe("workflowTaskService", () => {
     expect(completeRuntimeNode).not.toHaveBeenCalled();
   });
 
-  test("allows procedure completion permission to advance procedure tasks", async () => {
+  test.each([false, true])("completes procedure and skips duplicate assignment write when waiting=%s", async (awaitingAcceptance) => {
     const { workflowTaskService } = await import("./workflow-tasks");
     findById.mockImplementationOnce(async () => procedureTask as unknown as typeof paymentTask);
     completePaymentBridge.mockImplementationOnce(async () => null);
     completeProjectBridge.mockImplementationOnce(async () => null);
     completeRuntimeNode.mockClear();
     invalidateProjectProgress.mockClear();
+    completeRuntimeNode.mockResolvedValueOnce({ ok: true, instance: {}, completedNode: {}, nextNode: null, task: null, awaitingAcceptance });
+    shouldRequireAssignmentForTask.mockImplementation(() => true);
+    markProcedureCompleted.mockClear();
 
     const result = await workflowTaskService.completeTask(
       authContext({
@@ -307,6 +304,8 @@ describe("workflowTaskService", () => {
       }),
     );
     expect(invalidateProjectProgress).toHaveBeenCalledWith({ tenantId: "tenant-1", projectId: "project-1" });
+    expect(markProcedureCompleted).toHaveBeenCalledTimes(awaitingAcceptance ? 0 : 1);
+    shouldRequireAssignmentForTask.mockImplementation(() => false);
   });
 
   test("denies procedure completion when project scope is not visible", async () => {

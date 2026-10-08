@@ -3,6 +3,7 @@ export const WORKFLOW_TASK_SELECT = [
   "tenant_id",
   "instance_id",
   "instance_node_id",
+  "instance_node:workflow_instance_nodes!workflow_tasks_instance_node_id_fkey(procedure_completed:output->procedure_completed)",
   "definition_id",
   "version_id",
   "node_id",

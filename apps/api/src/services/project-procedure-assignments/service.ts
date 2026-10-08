@@ -17,7 +17,7 @@ import {
   serializeProcedureCandidate,
 } from "./candidates";
 import type { ProcedureAssignmentRow } from "./types";
-
+import { isProcedureAwaitingAcceptance } from "./acceptance-gate";
 type AssignmentRepositoryLike = Pick<
   typeof projectProcedureAssignmentRepository,
   | "findActiveByNode"
@@ -31,7 +31,6 @@ type AssignmentRepositoryLike = Pick<
   | "updateAssignmentSchedule"
   | "markAssignmentCompleted"
 >;
-
 type WorkflowTaskRepositoryLike = Pick<typeof workflowTaskRepository, "findById">;
 type ProjectLogAccessPolicyLike = Pick<typeof accessPolicyService, "canWriteProjectLog">;
 
@@ -40,6 +39,7 @@ type ProcedureWorkflowTask = {
   tenant_id: string;
   instance_id: string;
   instance_node_id: string | null;
+  instance_node?: { procedure_completed?: unknown } | null;
   node_key: string;
   instance: {
     subject_id: string;
@@ -72,6 +72,10 @@ export class ProjectProcedureAssignmentService {
     output: Record<string, unknown>;
   }) {
     const tenantId = this.assertTenantId(input.authContext);
+    if (await isProcedureAwaitingAcceptance({ tenantId, task: input.task, repository: this.repository })) {
+      if (input.action === "complete_procedure") return null;
+      throw this.staleActionError();
+    }
     const requiresAssignment = this.shouldRequireAssignmentForTask(input.task);
     if (input.action === "complete_procedure" && !requiresAssignment) {
       return null;

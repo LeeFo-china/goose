@@ -370,7 +370,8 @@ function resolveWorkflowAcceptanceStageCodes(
     if (!stageCode) continue;
 
     if (
-      (node.status === "done" || node.status === "blocked") &&
+      (node.status === "done" || node.status === "blocked" ||
+        (node.status === "current" && node.attributes.procedure_completed === true)) &&
       (node.attributes.acceptance_enabled === true ||
         node.attributes.acceptance_required === true)
     ) {

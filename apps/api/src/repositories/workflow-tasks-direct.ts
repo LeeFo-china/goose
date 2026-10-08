@@ -85,6 +85,7 @@ export async function listAccessibleTasksViaDirectSql(params: {
       task.tenant_id,
       task.instance_id,
       task.instance_node_id,
+      jsonb_build_object('procedure_completed', node_run.output->'procedure_completed') AS instance_node,
       task.definition_id,
       task.version_id,
       task.node_id,
@@ -123,6 +124,9 @@ export async function listAccessibleTasksViaDirectSql(params: {
       ON instance.id = task.instance_id
       AND instance.tenant_id = task.tenant_id
     ${supplierBatchJoin}
+    LEFT JOIN public.workflow_instance_nodes AS node_run
+      ON node_run.id = task.instance_node_id AND node_run.tenant_id = task.tenant_id
+      AND node_run.instance_id = task.instance_id
     LEFT JOIN public.employees AS employee
       ON employee.id = task.assignee_employee_id
       AND employee.tenant_id = task.tenant_id
@@ -224,6 +228,7 @@ export async function listAccessiblePendingByProjectIdsViaDirectSql(input: {
       task.tenant_id,
       task.instance_id,
       task.instance_node_id,
+      jsonb_build_object('procedure_completed', node_run.output->'procedure_completed') AS instance_node,
       task.definition_id,
       task.version_id,
       task.node_id,
@@ -260,6 +265,9 @@ export async function listAccessiblePendingByProjectIdsViaDirectSql(input: {
     JOIN public.workflow_instances AS instance
       ON instance.id = task.instance_id
       AND instance.tenant_id = task.tenant_id
+    LEFT JOIN public.workflow_instance_nodes AS node_run
+      ON node_run.id = task.instance_node_id AND node_run.tenant_id = task.tenant_id
+      AND node_run.instance_id = task.instance_id
     LEFT JOIN public.employees AS employee
       ON employee.id = task.assignee_employee_id
       AND employee.tenant_id = task.tenant_id
@@ -291,6 +299,7 @@ export async function listAccessiblePendingBySubjectIdsViaDirectSql(input: {
       task.id,
       task.instance_id,
       task.instance_node_id,
+      jsonb_build_object('procedure_completed', node_run.output->'procedure_completed') AS instance_node,
       task.node_id,
       task.node_key,
       task.node_type,
@@ -313,6 +322,9 @@ export async function listAccessiblePendingBySubjectIdsViaDirectSql(input: {
     JOIN public.workflow_instances AS instance
       ON instance.id = task.instance_id
       AND instance.tenant_id = task.tenant_id
+    LEFT JOIN public.workflow_instance_nodes AS node_run
+      ON node_run.id = task.instance_node_id AND node_run.tenant_id = task.tenant_id
+      AND node_run.instance_id = task.instance_id
     WHERE task.tenant_id = ${input.tenantId}::uuid
       AND task.status = 'pending'
       AND instance.subject_type = ${input.subjectType}

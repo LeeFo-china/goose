@@ -206,7 +206,7 @@ export async function customerConfirmAcceptance(this: any,
       customerId?: string | null;
     },
   ) {
-    const row = await this.getRequiredAcceptance(id);
+    const row: ProjectAcceptanceRow = await this.getRequiredAcceptance(id);
     const customer = await this.resolveCustomerActor({
       authUserId,
       tenantId: scope?.tenantId,
@@ -215,18 +215,30 @@ export async function customerConfirmAcceptance(this: any,
       ticket: input.ticket,
       projectId: input.project_id,
     });
+    // Catchup may not invoke the completion RPC, so validate the current owner here too.
+    const project = await projectAcceptanceRepository.getProject(
+      row.project_id,
+      row.tenant_id ?? scope?.tenantId,
+    );
+    if (!project || project.tenant_id !== row.tenant_id ||
+      project.customer_id !== customer.id || row.customer_id !== customer.id) {
+      throw Errors.forbidden();
+    }
     if (
       row.status === "customer_confirmed" &&
       isWorkflowAcceptanceStageCode(row.stage_code)
     ) {
-      await syncConfirmedAcceptanceRuntime({
-        row,
-        stageCode: row.stage_code,
-        tenantId: row.tenant_id ?? scope?.tenantId ?? null,
-        customerId: customer.id,
-        comment: input.comment,
-      });
-      this.invalidateAcceptanceRelatedCaches(row.project_id);
+      try {
+        await syncConfirmedAcceptanceRuntime({
+          row,
+          stageCode: row.stage_code,
+          tenantId: row.tenant_id ?? scope?.tenantId ?? null,
+          customerId: customer.id,
+          comment: input.comment,
+        });
+      } finally {
+        this.invalidateAcceptanceRelatedCaches(row.project_id);
+      }
       return this.buildDetail(row);
     }
 
@@ -259,27 +271,30 @@ export async function customerConfirmAcceptance(this: any,
       completed_at: now,
     }, row.tenant_id);
 
-    await this.recordAction({
-      row: nextRow,
-      action: "customer_confirm",
-      fromStatus: row.status,
-      toStatus: "customer_confirmed",
-      operatorType: "customer",
-      operatorId: customer.id,
-      comment: input.comment,
-    });
-
-    if (isWorkflowAcceptanceStageCode(row.stage_code)) {
-      await syncConfirmedAcceptanceRuntime({
+    try {
+      await this.recordAction({
         row: nextRow,
-        stageCode: row.stage_code,
-        tenantId: nextRow.tenant_id ?? row.tenant_id ?? scope?.tenantId ?? null,
-        customerId: customer.id,
+        action: "customer_confirm",
+        fromStatus: row.status,
+        toStatus: "customer_confirmed",
+        operatorType: "customer",
+        operatorId: customer.id,
         comment: input.comment,
       });
-    }
 
-    this.invalidateAcceptanceRelatedCaches(nextRow.project_id);
+      if (isWorkflowAcceptanceStageCode(row.stage_code)) {
+        await syncConfirmedAcceptanceRuntime({
+          row: nextRow,
+          stageCode: row.stage_code,
+          tenantId: nextRow.tenant_id ?? row.tenant_id ?? scope?.tenantId ?? null,
+          customerId: customer.id,
+          comment: input.comment,
+        });
+      }
+    } finally {
+      // The acceptance is already committed even if audit/runtime synchronization fails.
+      this.invalidateAcceptanceRelatedCaches(nextRow.project_id);
+    }
     return this.buildDetail(nextRow);
   }
 

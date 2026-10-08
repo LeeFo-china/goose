@@ -429,6 +429,7 @@ export type WorkflowRuntimeCompleteNodeResult =
       ok: true;
       instance: WorkflowInstanceRow;
       completedNode: JsonObject;
+      awaitingAcceptance?: boolean;
       nextNode: JsonObject | null;
       task: WorkflowTaskRow | null;
     }
@@ -441,7 +442,10 @@ export type WorkflowRuntimeCompleteNodeResult =
         | "node_run_not_found"
         | "graph_invalid"
         | "invalid_output"
-        | "no_matching_edge";
+        | "no_matching_edge"
+        | "acceptance_required"
+        | "acceptance_not_confirmed"
+        | "procedure_not_completed";
       currentNodeKey?: string | null;
     };
 

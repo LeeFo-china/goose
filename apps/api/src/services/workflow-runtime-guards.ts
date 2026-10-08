@@ -71,6 +71,12 @@ export async function assertRuntimeNodeCompletionAllowed(input: {
     return;
   }
 
+  const requiresAcceptance = currentNode?.node_type === "procedure" &&
+    currentNode.config.trigger_acceptance === true;
+  if (requiresAcceptance && !["complete_procedure", "customer_confirm_acceptance"].includes(input.action?.trim() ?? "")) {
+    throw Errors.business(409, "当前工序必须经业主确认验收后才能推进", "WORKFLOW_ACCEPTANCE_REQUIRED");
+  }
+
   assertFinalAcceptanceReportGate({
     node: currentNode,
     action: input.action,
@@ -85,6 +91,7 @@ export async function assertRuntimeNodeCompletionAllowed(input: {
   }
 
   const nextNode = getNextWorkflowNode(graph, instance.current_node_id);
+  if (requiresAcceptance && input.action?.trim() === "complete_procedure") return;
   if (!isFinalAcceptanceNode(currentNode) && !isFinalAcceptanceNode(nextNode)) {
     return;
   }

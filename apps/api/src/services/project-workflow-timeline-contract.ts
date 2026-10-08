@@ -18,15 +18,12 @@ import {
 } from "@/services/project-workflow-procedure-assignment-contract";
 import { buildReceivableTimelineAttributes } from "@/services/workflow-timeline-receivables";
 import type { ProcedureAssignmentRow } from "@/services/project-procedure-assignments";
-
 type JsonObject = Record<string, unknown>;
-
 export type WorkflowTimelineNodeStatus =
   | "done"
   | "current"
   | "pending"
   | "blocked";
-
 export type WorkflowTimelineNodeDisplay = {
   label: string;
   status_label: string;
@@ -34,6 +31,7 @@ export type WorkflowTimelineNodeDisplay = {
 };
 
 export type WorkflowTimelineNodeAttributes = {
+  procedure_completed?: boolean;
   stage_code?: string | null;
   require_log?: boolean;
   min_image_count?: number;
@@ -154,12 +152,15 @@ export function buildWorkflowTimelineNodeContract(input: {
   completion?: WorkflowTimelineNodeCompletion;
   actions?: Array<Record<string, unknown>>;
   procedureAssignment?: ProcedureAssignmentRow | null;
+  procedureCompleted?: boolean;
   tenantToday?: string;
 }): WorkflowTimelineNode {
   const normalizedActions = (input.actions ?? [])
     .map(normalizeTimelineAction)
     .filter((action): action is WorkflowTimelineNodeAction => Boolean(action));
   const attributes = {
+    ...(input.node.node_type === "procedure" && (input.procedureCompleted ||
+      input.procedureAssignment?.status === "completed") ? { procedure_completed: true } : {}),
     ...buildTimelineNodeAttributes({
       node: input.node,
       assignee: input.assignee,
@@ -185,7 +186,8 @@ export function buildWorkflowTimelineNodeContract(input: {
     status: input.status,
     display: buildTimelineNodeDisplay(input.node.title, input.status),
     attributes,
-    actions,
+    actions: attributes.procedure_completed && input.node.config.trigger_acceptance === true
+      ? actions.filter((action) => action.business_domain !== "project_procedure") : actions,
     ...(input.assignee
       ? {
         assignee_employee_id: input.assignee.assignee_employee_id,
@@ -297,6 +299,7 @@ export function enrichWorkflowTimelineNodesWithConstructionStages(
     };
     const shouldExposeAcceptanceAction =
       node.status === "done" || node.status === "blocked" ||
+      (node.status === "current" && attributes.procedure_completed === true) ||
       (node.status === "current" && attributes.acceptance_type === "final") ||
       Boolean(readString(stage.acceptance_id));
     const acceptanceAction = shouldExposeAcceptanceAction
@@ -316,10 +319,11 @@ export function enrichWorkflowTimelineNodesWithConstructionStages(
       attributes.acceptance_required === true &&
       acceptanceStatus !== "customer_confirmed";
 
+    const waiting = node.status === "current" && attributes.procedure_completed === true && acceptanceStatus !== "customer_confirmed";
     return {
       ...node,
       status: shouldBlockCompletion ? "blocked" : node.status,
-      display: shouldBlockCompletion
+      display: shouldBlockCompletion || waiting
         ? {
           ...node.display,
           status_label: getAcceptanceStatusLabel(acceptanceStatus),

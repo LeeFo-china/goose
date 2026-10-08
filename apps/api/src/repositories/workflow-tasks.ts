@@ -1,3 +1,4 @@
+import { attachProcedureNodeOutputs } from "./workflow-task-procedure-output";
 import { Errors } from "@/errors/error-factory";
 import { SupabaseDB } from "@/utils/supabase";
 import {
@@ -36,6 +37,7 @@ type WorkflowTaskInstanceSummary = Pick<
 > & { context?: Record<string, unknown> };
 
 export type WorkflowTaskWithInstanceRow = WorkflowTaskRow & {
+  instance_node?: { procedure_completed?: unknown } | null;
   instance: WorkflowTaskInstanceSummary | null;
   assignee_employee?: {
     id: string;
@@ -48,7 +50,7 @@ export type WorkflowTaskActionRow = Pick<WorkflowTaskWithInstanceRow,
   "id" | "instance_id" | "instance_node_id" | "node_id" | "node_key" |
   "node_type" | "title" | "status" | "assignee_employee_id" |
   "assignee_role_code" | "assignee_permission_code" | "created_at" |
-  "instance">;
+  "instance" | "instance_node">;
 
 export type WorkflowTransitionLogRow = {
   id: string;
@@ -158,13 +160,14 @@ class WorkflowTaskRepository {
       }
     }
 
-    return scopedInput.supplierPurchaseBatchAccess === undefined
-      ? this.listAccessibleTasksViaRpc(scopedInput, page, pageSize)
-      : listAccessibleTasksWithSupplierScopeViaRpc({
+    const result = scopedInput.supplierPurchaseBatchAccess === undefined
+      ? await this.listAccessibleTasksViaRpc(scopedInput, page, pageSize)
+      : await listAccessibleTasksWithSupplierScopeViaRpc({
         taskInput: scopedInput,
         page,
         pageSize,
       });
+    return { ...result, list: await attachProcedureNodeOutputs(input.tenantId, result.list) };
   }
 
   async listAccessibleSupplierPurchaseBatchTasks(
@@ -263,11 +266,9 @@ class WorkflowTaskRepository {
       }
     }
 
-    return this.listAccessiblePendingByProjectIdsViaRpc({
-      ...input,
-      projectIds,
-      limit,
-    });
+    return attachProcedureNodeOutputs(input.tenantId, await this.listAccessiblePendingByProjectIdsViaRpc({
+      ...input, projectIds, limit,
+    }));
   }
 
   async listAccessiblePendingBySubjectIds(input: {
@@ -294,7 +295,7 @@ class WorkflowTaskRepository {
         // Keep direct SQL eligible after a transient connection failure.
       }
     }
-    return this.listAccessiblePendingBySubjectIdsViaRpc(scopedInput);
+    return attachProcedureNodeOutputs(input.tenantId, await this.listAccessiblePendingBySubjectIdsViaRpc(scopedInput));
   }
 
   async assignPendingTask(input: {

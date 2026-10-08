@@ -413,6 +413,8 @@ function normalizeCompleteResult(data: unknown): WorkflowRuntimeCompleteNodeResu
     ok: true,
     instance: data.instance as WorkflowInstanceRow,
     completedNode: data.completed_node,
+    ...(typeof data.awaiting_acceptance === "boolean"
+      ? { awaitingAcceptance: data.awaiting_acceptance } : {}),
     nextNode: isRecord(data.next_node) ? data.next_node : null,
     task: isRecord(data.task) ? data.task as WorkflowTaskRow : null,
   };

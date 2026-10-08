@@ -1,3 +1,4 @@
+import { throwWorkflowRuntimeCompleteError } from "./workflow-runtime-completion-error";
 import { Errors } from "@/errors/error-factory";
 import {
   workflowRepository,
@@ -368,7 +369,7 @@ class WorkflowService {
     });
 
     if (!result.ok) {
-      this.throwRuntimeCompleteError(result);
+      throwWorkflowRuntimeCompleteError(result);
     }
     invalidateProjectWorkflowProgress({ tenantId, subjectType: result.instance.subject_type, subjectId: result.instance.subject_id });
 
@@ -457,28 +458,7 @@ class WorkflowService {
     }
   }
 
-  private throwRuntimeCompleteError(
-    result: Exclude<Awaited<ReturnType<typeof workflowRepository.completeRuntimeNode>>, { ok: true }>,
-  ): never {
-    switch (result.reason) {
-      case "instance_not_found":
-        throw Errors.notFound("流程实例不存在");
-      case "instance_not_running":
-        throw Errors.badRequest("流程实例不在运行中");
-      case "node_not_current":
-        throw Errors.business(409, "节点不是当前待处理节点", "WORKFLOW_NODE_NOT_CURRENT", {
-          current_node_key: result.currentNodeKey ?? null,
-        });
-      case "node_run_not_found":
-        throw Errors.badRequest("当前节点运行记录不存在");
-      case "graph_invalid":
-        throw Errors.badRequest("流程发布版本图结构无效");
-      case "invalid_output":
-        throw Errors.badRequest("节点输出必须是对象");
-      case "no_matching_edge":
-        throw Errors.badRequest("当前节点没有匹配的分支条件");
-    }
-  }
+
 
   private throwRuntimeRebuildError(
     result: Exclude<Awaited<ReturnType<typeof workflowRepository.rebuildRuntimeInstance>>, { ok: true }>,

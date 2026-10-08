@@ -28,6 +28,30 @@ const baseAssignment: ProcedureAssignmentRow = {
 };
 
 describe("ProjectProcedureAssignmentService", () => {
+  test.each(["complete_procedure", "start_procedure", "adjust_procedure_schedule"])("handles %s after atomic completion without reopening dispatch", async (action) => {
+    let mutated = false;
+    const service = new ProjectProcedureAssignmentService({
+      findActiveByNode: async () => null,
+      listActiveForProject: async () => [{ ...baseAssignment, status: "completed" }],
+      createAssignment: async () => { mutated = true; return baseAssignment; },
+      updateAssignmentSchedule: async () => { mutated = true; return baseAssignment; },
+    } as never);
+    const result = service.handleWorkflowTaskAction({
+      authContext: { tenantId: "tenant-1", employeeId: "manager-1" } as never,
+      task: { id: "task-1", tenant_id: "tenant-1", instance_id: "instance-1",
+        instance_node_id: "node-1", node_key: "procedure_demolition",
+        instance: { subject_id: "project-1", current_node_snapshot: {
+          config: { stage_key: "demolition", trigger_acceptance: true },
+        } } }, action, reason: null, output: {
+        assignee_employee_id: baseAssignment.assignee_employee_id,
+        planned_start_date: baseAssignment.planned_start_date,
+        planned_duration_days: 3,
+      },
+    });
+    if (action === "complete_procedure") await expect(result).resolves.toBeNull();
+    else await expect(result).rejects.toMatchObject({ code: "WORKFLOW_ACTION_STALE" });
+    expect(mutated).toBe(false);
+  });
   test("rejects start when an active assignment already exists with a different payload", async () => {
     const service = new ProjectProcedureAssignmentService({
       findActiveByNode: async () => baseAssignment,

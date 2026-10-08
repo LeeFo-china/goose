@@ -364,6 +364,7 @@ class WorkflowSubjectsService {
       : [];
 
     return buildWorkflowTimelineNodes({
+      runtimeNodeOutputs: runtimeNodes,
       graph: enrichedGraph,
       currentNodeKey: runtimeInstance.current_node_key,
       completedNodeKeys: runtimeNodes

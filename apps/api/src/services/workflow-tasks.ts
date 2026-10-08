@@ -1,3 +1,4 @@
+import { throwWorkflowRuntimeCompleteError } from "./workflow-runtime-completion-error";
 import { Errors } from "@/errors/error-factory";
 import { workflowTaskRepository } from "@/repositories/workflow-tasks";
 import {
@@ -233,6 +234,7 @@ export class WorkflowTaskService {
           tenant_id: task.tenant_id,
           instance_id: task.instance_id,
           instance_node_id: task.instance_node_id,
+          instance_node: task.instance_node,
           node_key: task.node_key,
           instance: {
             subject_id: task.instance.subject_id,
@@ -269,12 +271,13 @@ export class WorkflowTaskService {
     });
 
     if (!result.ok) {
-      this.throwRuntimeCompleteError(result);
+      throwWorkflowRuntimeCompleteError(result);
     }
 
     if (
       task.instance.subject_type === "project" &&
       input.action.trim() === "complete_procedure" &&
+      !result.awaitingAcceptance &&
       projectProcedureAssignmentService.shouldRequireAssignmentForTask({
         instance: {
           current_node_snapshot: task.instance.current_node_snapshot,
@@ -466,28 +469,7 @@ export class WorkflowTaskService {
     return candidateActive && !currentActive;
   }
 
-  private throwRuntimeCompleteError(
-    result: Exclude<WorkflowRuntimeCompleteNodeResult, { ok: true }>,
-  ): never {
-    switch (result.reason) {
-      case "instance_not_found":
-        throw Errors.notFound("流程实例不存在");
-      case "instance_not_running":
-        throw Errors.badRequest("流程实例不在运行中");
-      case "node_not_current":
-        throw Errors.business(409, "节点不是当前待处理节点", "WORKFLOW_NODE_NOT_CURRENT", {
-          current_node_key: result.currentNodeKey ?? null,
-        });
-      case "node_run_not_found":
-        throw Errors.badRequest("当前节点运行记录不存在");
-      case "graph_invalid":
-        throw Errors.badRequest("流程发布版本图结构无效");
-      case "invalid_output":
-        throw Errors.badRequest("节点输出必须是对象");
-      case "no_matching_edge":
-        throw Errors.badRequest("当前节点没有匹配的分支条件");
-    }
-  }
+
 }
 
 export const workflowTaskService = new WorkflowTaskService();

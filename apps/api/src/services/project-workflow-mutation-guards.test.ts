@@ -17,6 +17,7 @@ function procedureTimelineNode(input: {
   title: string;
   status?: WorkflowTimelineNode["status"];
   acceptanceEnabled?: boolean;
+  procedureCompleted?: boolean;
 }): WorkflowTimelineNode {
   return {
     node_key: `procedure_${input.stageCode}`,
@@ -34,6 +35,7 @@ function procedureTimelineNode(input: {
       stage_code: input.stageCode,
       acceptance_enabled: input.acceptanceEnabled ?? true,
       acceptance_required: input.acceptanceEnabled ?? true,
+      ...(input.procedureCompleted === undefined ? {} : { procedure_completed: input.procedureCompleted }),
     },
     actions: [],
   };
@@ -64,6 +66,70 @@ function workflowProgress(
 }
 
 describe("assertProjectWorkflowStageMutationAllowedFromProgress", () => {
+  test.each([false, undefined])("rejects current required acceptance before persisted completion (%s)", (procedureCompleted) => {
+    const progress = workflowProgress({ timeline_nodes: [procedureTimelineNode({
+      stageCode: "plumbing_electrical", title: "水电", procedureCompleted,
+    })] });
+    expect(() => assertProjectWorkflowStageMutationAllowedFromProgress({
+      workflowProgress: progress, mutation: "customer_confirm_acceptance", stageCode: "plumbing_electrical",
+    })).toThrow(expect.objectContaining({ statusCode: 409, code: "WORKFLOW_PROCEDURE_NOT_COMPLETED" }));
+    // Preparing the acceptance is still allowed before construction finishes.
+    expect(assertProjectWorkflowStageMutationAllowedFromProgress({
+      workflowProgress: progress, mutation: "create_stage_acceptance", stageCode: "plumbing_electrical",
+    })).toBe(progress);
+  });
+
+  test("rejects confirmation when the current procedure projection is missing", () => {
+    expect(() => assertProjectWorkflowStageMutationAllowedFromProgress({
+      workflowProgress: workflowProgress({}), mutation: "customer_confirm_acceptance", stageCode: "plumbing_electrical",
+    })).toThrow(expect.objectContaining({ statusCode: 409 }));
+  });
+
+  test("allows confirmation only after current required procedure has persisted completion", () => {
+    const progress = workflowProgress({ timeline_nodes: [procedureTimelineNode({
+      stageCode: "plumbing_electrical", title: "水电", procedureCompleted: true,
+    })] });
+    expect(assertProjectWorkflowStageMutationAllowedFromProgress({
+      workflowProgress: progress, mutation: "customer_confirm_acceptance", stageCode: "plumbing_electrical",
+    })).toBe(progress);
+  });
+
+  test("does not borrow completion from a different node with the same stage", () => {
+    const oldNode = procedureTimelineNode({ stageCode: "plumbing_electrical", title: "旧水电", procedureCompleted: true, status: "done" });
+    oldNode.node_key = "old_plumbing";
+    expect(() => assertProjectWorkflowStageMutationAllowedFromProgress({
+      workflowProgress: workflowProgress({ timeline_nodes: [oldNode, procedureTimelineNode({ stageCode: "plumbing_electrical", title: "水电" })] }),
+      mutation: "customer_confirm_acceptance", stageCode: "plumbing_electrical",
+    })).toThrow(expect.objectContaining({ statusCode: 409 }));
+  });
+
+  test("preserves confirmation for current procedures without required acceptance", () => {
+    const progress = workflowProgress({ timeline_nodes: [procedureTimelineNode({
+      stageCode: "plumbing_electrical", title: "水电", acceptanceEnabled: false,
+    })] });
+    expect(assertProjectWorkflowStageMutationAllowedFromProgress({
+      workflowProgress: progress, mutation: "customer_confirm_acceptance", stageCode: "plumbing_electrical",
+    })).toBe(progress);
+  });
+
+  test("preserves historical water catch-up while unrelated current wood remains unfinished", () => {
+    const progress = workflowProgress({ current_node_key: "procedure_woodwork", current_stage_code: "woodwork", timeline_nodes: [
+      procedureTimelineNode({ stageCode: "plumbing_electrical", title: "水电", status: "done" }),
+      procedureTimelineNode({ stageCode: "woodwork", title: "木工", procedureCompleted: false }),
+    ] });
+    expect(assertProjectWorkflowStageMutationAllowedFromProgress({
+      workflowProgress: progress, mutation: "customer_confirm_acceptance", stageCode: "plumbing_electrical",
+    })).toBe(progress);
+    expect(progress.current_node_key).toBe("procedure_woodwork");
+  });
+
+  test("preserves final acceptance without a procedure completion marker", () => {
+    const progress = workflowProgress({ current_node_key: "final_acceptance", current_node_type: "construction_stage", current_stage_code: "completion" });
+    expect(assertProjectWorkflowStageMutationAllowedFromProgress({
+      workflowProgress: progress, mutation: "customer_confirm_acceptance", stageCode: "completion",
+    })).toBe(progress);
+  });
+
   test("blocks construction log creation when stage differs from current workflow procedure", () => {
     expect(() =>
       assertProjectWorkflowStageMutationAllowedFromProgress({
