@@ -8,6 +8,30 @@ let Repository: typeof import("./wechat-employee-identities").WechatEmployeeIden
 beforeAll(async () => { Repository = (await import("./wechat-employee-identities")).WechatEmployeeIdentityRepository; });
 
 describe("WeChat employee conditional binding", () => {
+  test("an auth user already bound to another employee returns an actionable conflict without raw identifiers", async () => {
+    const client = createClient("http://127.0.0.1:54321", "dummy-key", {
+      global: { fetch: Object.assign(async () => Response.json({
+        code: "23505", message: 'duplicate key value violates unique constraint "employees_user_id_unique"',
+        details: "Key (user_id)=(private-user-id) already exists.", hint: null,
+      }, { status: 409 }), { preconnect() {} }) },
+    });
+    await expect(new Repository(client).bindEmployeeAuthUser({ employeeId: "employee-a", authUserId: "verified-user", expected: {
+      phone: "18800000001", version: 4, user_id: null, tenant_id: "tenant-a", status: "active",
+    } })).rejects.toMatchObject({ statusCode: 409, code: "WECHAT_EMPLOYEE_BINDING_CONFLICT",
+      message: "当前微信已绑定其他员工身份，请使用该管理员本人的其他微信登录", details: undefined });
+  });
+
+  test("unrelated unique constraint errors remain database failures", async () => {
+    const client = createClient("http://127.0.0.1:54321", "dummy-key", {
+      global: { fetch: Object.assign(async () => Response.json({
+        code: "23505", message: 'duplicate key value violates unique constraint "unrelated_unique"',
+      }, { status: 409 }), { preconnect() {} }) },
+    });
+    await expect(new Repository(client).bindEmployeeAuthUser({ employeeId: "employee-a", authUserId: "verified-user", expected: {
+      phone: "18800000001", version: 4, user_id: null, tenant_id: "tenant-a", status: "active",
+    } })).rejects.toMatchObject({ statusCode: 500, code: "DB_ERROR" });
+  });
+
   for (const userId of [null, "canonical-user"]) {
     test(`compares phone, version and original binding ${userId} in the update itself`, async () => {
       const requests: Array<{ url: URL; method: string; body: unknown }> = [];

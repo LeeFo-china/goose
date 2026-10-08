@@ -16,6 +16,7 @@ const original = {
 };
 let current = { ...original };
 let clearedOtherBindings = 0;
+let occupiedAuthUser = false;
 const client = createClient(process.env.SUPABASE_URL, "dummy-key", {
   global: { fetch: Object.assign(async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(String(input));
@@ -29,6 +30,9 @@ const client = createClient(process.env.SUPABASE_URL, "dummy-key", {
       return !filter || (filter === "is.null" ? value === null : filter === `eq.${value}`);
     });
     if (matches && init?.method === "PATCH") {
+      if (occupiedAuthUser) return Response.json({ code: "23505",
+        message: 'duplicate key value violates unique constraint "employees_user_id_unique"',
+      }, { status: 409 });
       const patch = JSON.parse(String(init.body)) as { user_id: string };
       if (patch.user_id !== current.user_id) current.version += 1;
       current.user_id = patch.user_id;
@@ -55,7 +59,7 @@ beforeAll(async () => {
   rebindService = (await import("@/services/wechat-rebind-requests")).wechatRebindRequestService;
   ({ signToken } = await import("@/utils/jwt"));
 });
-beforeEach(() => { current = { ...original }; clearedOtherBindings = 0; });
+beforeEach(() => { current = { ...original }; clearedOtherBindings = 0; occupiedAuthUser = false; });
 afterEach(async () => {
   await Promise.all(apps.splice(0).map((app) => app.close()));
   for (const spy of spies.splice(0)) spy.mockRestore();
@@ -96,6 +100,19 @@ async function fixture() {
 }
 
 describe("phone identity binding versus concurrent administrator phone change", () => {
+  test("an existing employee binding is preserved and no identity side effects run on conflict", async () => {
+    occupiedAuthUser = true;
+    const { app, syncMembership, syncOauth, signEmployeeAuth } = await fixture();
+    const response = await app.inject({ method: "POST", url: "/select" });
+    expect(response.statusCode).toBe(409);
+    expect(response.json().code).toBe("WECHAT_EMPLOYEE_BINDING_CONFLICT");
+    expect(current.user_id).toBeNull();
+    expect(clearedOtherBindings).toBe(0);
+    expect(syncMembership).not.toHaveBeenCalled();
+    expect(syncOauth).not.toHaveBeenCalled();
+    expect(signEmployeeAuth).not.toHaveBeenCalled();
+  });
+
   for (const initialUser of [null, "canonical-employee-user"]) {
     test(`rejects a phone change after loading employee with user ${initialUser} before identity side effects`, async () => {
       current.user_id = initialUser;

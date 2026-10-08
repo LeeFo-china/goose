@@ -81,6 +81,15 @@ export class WechatEmployeeIdentityRepository {
     const { data, error } = await bindingQuery.select("id").maybeSingle();
 
     if (error) {
+      // The unique constraint also covers concurrent binds. Never free the
+      // existing employee (which may be a platform superadmin) to make room.
+      if (error.code === "23505" && error.message.includes('"employees_user_id_unique"')) {
+        throw Errors.business(
+          409,
+          "当前微信已绑定其他员工身份，请使用该管理员本人的其他微信登录",
+          ErrorCodes.WECHAT_EMPLOYEE_BINDING_CONFLICT,
+        );
+      }
       throw Errors.dbError(input.errorMessage || "绑定员工身份失败", error);
     }
     if (!data) {
