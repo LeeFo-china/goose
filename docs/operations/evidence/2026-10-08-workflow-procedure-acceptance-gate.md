@@ -37,6 +37,20 @@
 
 聚焦 API 回归共 156 项通过（按隔离进程/兼容测试分组执行），包含既有收款、流程投影、免验收、历史补验收、竣工验收以及提前确认阻断。独立审查提出的提前确认状态写入问题已添加红绿回归。测试使用显式 dummy 环境，无生产写入。
 
-生产版本和执行记录在发布验证后追加。
-
 查询性能：生产最新阶段验收查询 `EXPLAIN ANALYZE` 执行 0.117ms；当前表 36 行，优化器选择顺序扫描。查询使用 tenant/project/stage 条件及 LIMIT 1，保留可使用既有 project/stage、tenant/project/created_at 索引的 UUID 比较。任务查询只增加完工布尔标记，不返回原始节点 output；旧 RPC 兼容补齐按最多 100 个节点批量查询。
+
+## 生产发布结果
+
+- 源码提交 `297bde33a63e7b1eaff4eac896b14a0d9a38f6ed`，Tag `v2026.10.08.12`，仅发布 API。
+- [迁移预检 37793695821](https://github.com/LeeFo-china/goose/actions/runs/37793695821)：657 条已应用，仅 `20261008140000` 待应用。
+- [API 候选 37793702860](https://github.com/LeeFo-china/goose/actions/runs/37793702860)：构建、生产拉取和标签校验成功；拉取发生超时，既有重试成功，没有绕过校验。
+- [API 部署 37795546371](https://github.com/LeeFo-china/goose/actions/runs/37795546371)：2026-10-08T14:51:11Z 完成；容器 healthy，revision 与源码提交一致；镜像摘要 `sha256:a445b323f7b0e68242528b20ba5358b4451d6ceeb02b41f65dcbbc3ca4bce17b`。
+- [迁移应用 37796009172](https://github.com/LeeFo-china/goose/actions/runs/37796009172)：2026-10-08T14:53:39Z 完成，仅应用 1 条，共 658 条。
+- 实际运行 `supabase migration list`，`scripts/verify-migration-history.mjs` 验证 Local/Remote 658 条逐条对齐，目标 migration 存在。
+- 数据库函数包含 awaiting_acceptance 分支；anon/authenticated EXECUTE=false，service_role EXECUTE=true。
+- API 全量类型检查、构建、文件大小检查通过；合并后 22 项关键投影/前置门禁回归通过。
+- 生产实际员工权限下 `GET /projects/:id/employee-detail-bootstrap` 和分页 `GET /workflow-tasks` 均 200。水电 blocked/draft，edit_acceptance 可用；当前木工，1 条 pending task，任务响应不含完整节点 output。
+- 在生产容器中调用真实 guard，使用只存在内存中的“当前水电”快照验证 generic complete 返回 409 / WORKFLOW_ACCEPTANCE_REQUIRED；未调用任何业务变更 RPC。
+- 迁移前后目标实例均 running / procedure_woodwork，推进日志均为 6 条，水电验收仍 draft。未代客户确认、未回退施工或收款。
+- 切换后早于 2026-10-08T14:53:17Z 启动的其他 client backend 事务数为 0。
+- 未修改或发布 orange；真机交互全链路由小程序团队在测试样例上验收，合同见 `docs/application_integration_documentation/2026-10-08-procedure-acceptance-gate.md`。
