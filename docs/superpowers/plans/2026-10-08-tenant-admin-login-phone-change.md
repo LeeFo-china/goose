@@ -1,6 +1,6 @@
 # 租户管理员登录手机号变更 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking. 当前会话顺序执行，认证、数据库和页面存在依赖，不并行修改公共认证文件。
+> **For agentic workers:** REQUIRED SUB-SKILL: Use executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking. 按依赖推进；独立认证、数据库测试及页面由不同工作单元负责，公共认证文件不并行修改。
 
 **Goal:** 超管验证新手机号后，为同一租户管理员变更登录号码，保留身份与历史记录，并使旧后台会话失效。
 
@@ -122,7 +122,7 @@ test("rejects missing and stale versions", () => {
 
 **Files:** 用 `supabase migration new tenant_admin_phone_change_foundation` 与 `supabase migration new tenant_admin_phone_change_commands` 生成新 migration；实际时间戳由 CLI 生成并写入执行记录，禁止修改既有 migration。新增 `supabase/tests/tenant_admin_phone_change.sql`。
 
-- [x] 新挑战表 `tenant_admin_phone_change_challenges`：id、actor_employee_id、actor_user_id、tenant_id、employee_id、expected_version、old_phone、new_phone、sms_verification_id（唯一）、status、failed_attempts、expires_at、created_at、confirmed_at、send_idempotency_key、request_fingerprint、result。状态为 `sending/ready/failed/superseded/consumed`，failed_attempts 为 0..5。
+- [x] 新挑战表 `tenant_admin_phone_change_challenges`：id、actor_employee_id、actor_user_id、tenant_id、employee_id、expected_version、old_phone、new_phone、sms_verification_id（唯一）、status、failed_attempts、expires_at、created_at、confirmed_at、send_idempotency_key；确认请求指纹和结果存放在原子审计 metadata.request/result。状态为 `sending/ready/failed/superseded/consumed`，failed_attempts 为 0..5。
 - [x] 对操作者+发送幂等键设唯一约束；按 employee_id/created_at 和过期时间建立必要索引。启用 RLS，撤销普通角色表访问；不存第二份明文验证码。
 - [x] 短信 scene CHECK 在保留所有现有 scene 的基础上增加 `tenant_admin_phone_change`；新增场景同时加入 domain 常量。
 - [x] 建立 `reserve_tenant_admin_phone_change`：服务端校验操作者和目标，原子调用现有 `reserve_sms_verification_code` 并保存其返回 ID，建立 `sending` 挑战。5 分钟过期、60 秒冷却；相同发送幂等键不能重复发送。
@@ -287,11 +287,11 @@ bun scripts/tenant-admin-phone-change-concurrency.ts
 
 **Files:** 新增 `docs/operations/evidence/2026-10-08-tenant-admin-phone-change.md`，执行日期不同时改用实际日期。
 
-- [ ] 审查最终 diff，无 orange 变更、真实个人数据、验证码日志、新依赖及与目标无关的重构。
-- [ ] migration 为向前兼容新增；发布前列出实际待应用文件，检查 Local/Remote。先应用基础/命令 migration，再部署已含会话校验的 API，最后部署 Admin 开放入口。
-- [ ] 若生产短信 provider 为 mock/disabled、模板不适配或认证旧号恢复链路未闭合，不开放入口，明确记录具体原因；不能用免验证码或放宽 JWT 校验代替修复。
-- [ ] 应用后 `supabase migration list` 验证对齐，确认函数 ACL、API/Admin 健康和版本一致。只读生产检查默认不消耗用户验证码、不修改真实租户号码。
-- [ ] 发布回执关联构建 commit、镜像、migration 和工作流，注明真实用户换号需由超管执行验证。回退保留已生效号码及会话撤销，只关闭新入口并向前修正。
+- [x] 审查最终 diff，无 orange 变更、真实个人数据、验证码日志、新依赖及与目标无关的重构。
+- [x] migration 为向前兼容新增；发布前列出实际待应用文件，检查 Local/Remote。先应用基础/命令 migration，再部署已含会话校验的 API，最后部署 Admin 开放入口。
+- [x] 若生产短信 provider 为 mock/disabled、模板不适配或认证旧号恢复链路未闭合，不开放入口，明确记录具体原因；不能用免验证码或放宽 JWT 校验代替修复。
+- [x] 应用后 `supabase migration list` 验证对齐，确认函数 ACL、API/Admin 健康和版本一致。只读生产检查默认不消耗用户验证码、不修改真实租户号码。
+- [x] 发布回执关联构建 commit、镜像、migration 和工作流，注明真实用户换号需由超管执行验证。回退保留已生效号码及会话撤销，只关闭新入口并向前修正。
 
 ## 设计覆盖检查
 

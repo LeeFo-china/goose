@@ -42,4 +42,18 @@
 
 ## 最终验收与发布
 
-发布前只读 CLI 核对：650 条匹配、待应用上述 2 条 migration、无生产独有版本。最终检查通过后提交发布候选；构建、应用及部署回执将在完成后补充。生产真实用户换号由超管自行验证，不消耗真实用户验证码或替用户修改号码。
+发布前只读 CLI 核对：650 条匹配、待应用上述 2 条 migration、无生产独有版本。发布已完成，构建、迁移和部署回执如下。生产真实用户换号由超管自行验证，不消耗真实用户验证码或替用户修改号码。
+
+
+- 发布版本：`v2026.10.08.3`。
+- 构建/运行提交：`717e0ee135d7f3744dbe07743aeedcf010ec1247`。
+- [生产候选构建 37717802120](https://github.com/LeeFo-china/goose/actions/runs/37717802120)：成功，API/Admin 镜像完成生产服务器拉取及完整性校验。
+- [迁移预检 37717804087](https://github.com/LeeFo-china/goose/actions/runs/37717804087)：仅上述 2 条待应用。
+- [迁移应用 37717968482](https://github.com/LeeFo-china/goose/actions/runs/37717968482)：成功，650 → 652。应用后 CLI `supabase migration list` 与本地 652 条全部对齐，`verify-migration-history.mjs` 通过。SSH 隧道复查遇到连接重置，改在生产服务器 Docker 内网运行相同 CLI 后完成核对。
+- [生产部署 37718630643](https://github.com/LeeFo-china/goose/actions/runs/37718630643)：成功，先 API 后 Admin；回执时间 `2026-10-08T02:38:03Z`（北京时间 10:38）。
+- API 镜像摘要：`sha256:58f69e814b36c5d477f190d6e569c136931ecd60ad8da173e8d095ba017477a9`。
+- Admin 镜像摘要：`sha256:2cc8554907761a993565d2fb66be8b83ce59b367cd7177b1224ce03042a69be1`。
+- 独立 Docker 检查：两项服务均 healthy，运行 revision 与提交一致，镜像摘要与构建 manifest 一致。
+- 生产数据库：4 个入口仅 service_role 可执行，anon/authenticated 无执行权限；2 张私有表均启用 RLS。
+- 生产真实 API 只读 smoke：超管当前管理员列表 200、pageSize=101 拒绝、只返回脱敏号码、无效发送/确认请求在参数校验处拒绝、底层认证令牌 401。没有发送真实短信、消费真实验证码或修改真实租户号码。
+- 原有本地测试数据库已恢复为停止状态，新建 PostgREST 容器及临时 worktree 已清理。源码已合入 main 并推送；本次最后的提交仅补充此验收记录，不改变已部署代码。
