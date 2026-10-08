@@ -210,6 +210,11 @@ test("HTTP smoke verifies JWT/session isolation and employee-only list through r
     oauth_matched: true, employee_user_matched: true,
     customer_membership_matched: true, employee_membership_matched: true,
   } as never);
+  const { employeeAdminSessionsRepository } = await import("@/repositories/employee-admin-sessions");
+  const adminSnapshot = spyOn(employeeAdminSessionsRepository, "findByAuthUserId").mockResolvedValue([{
+    id: employee, user_id: employee, tenant_id: tenant, status: "active", phone: "13800138000",
+    version: 1, admin_auth_version: 1,
+  }]);
   const app = Fastify({ logger: false });
   errorHandler(app);
   authPlugin(app);
@@ -217,7 +222,8 @@ test("HTTP smoke verifies JWT/session isolation and employee-only list through r
   new TenantCustomerLeadsController(context.service).registerExtraRoutes(app);
   try {
     const url = "/tenant/customer-leads";
-    const adminToken = jwt.signToken({ sub: employee, token_type: "auth" });
+    const adminToken = jwt.signAdminToken({ sub: employee, login_channel: "admin_web", admin_auth_version: 1 }, { platform: false });
+    const rawAuthToken = jwt.signToken({ sub: employee, token_type: "auth" });
     const employeeToken = jwt.signToken({ sub: employee, token_type: "auth",
       openid: "customer-lead-employee-fixture", employee_id: employee, tenant_id: tenant });
     const customerToken = jwt.signToken({ sub: "customer-http-fixture", token_type: "auth",
@@ -226,7 +232,7 @@ test("HTTP smoke verifies JWT/session isolation and employee-only list through r
     const douyinToken = jwt.signDouyinMiniappToken({ tenant_id: tenant, douyin_installation_id: leadId,
       douyin_app_id: "tt-fixture", subject_hash: "a".repeat(64) });
     for (const [token, expected] of [[adminToken, 200], [employeeToken, 200], [customerToken, 403],
-      [visitorToken, 401], [douyinToken, 401], ["invalid-token", 401]] as const) {
+      [visitorToken, 401], [douyinToken, 401], [rawAuthToken, 401], ["invalid-token", 401]] as const) {
       const response = await app.inject({ method: "GET", url, headers: { authorization: `Bearer ${token}` } });
       expect(response.statusCode).toBe(expected);
       if (expected === 200) expect(response.json()).toMatchObject({ data: {
@@ -249,5 +255,6 @@ test("HTTP smoke verifies JWT/session isolation and employee-only list through r
     await app.close();
     contextLookup.mockRestore();
     binding.mockRestore();
+    adminSnapshot.mockRestore();
   }
 });

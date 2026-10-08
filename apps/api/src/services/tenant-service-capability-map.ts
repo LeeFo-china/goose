@@ -29,6 +29,7 @@ const CAPABILITY_RULES: readonly TenantServiceCapabilityRule[] = [
   capability("customer-projects", "core.projects", /^\/customer\/(?:projects|project-acceptances)(?:\/|$)/, 20),
   capability("tenant-owner-dashboard", "core.projects", /^\/tenant-owner\/daily-dashboard(?:\/|$)/, 20),
   capability("customers", "core.customers", /^\/(?:customers|customer-service-tickets|customer_follow_ups|external-referrers)(?:\/|$)/),
+  capability("tenant-customer-leads", "core.customers", /^\/tenant\/customer-leads(?:\/|$)/),
   capability("customer-self-service", "core.customers", /^\/customer\/(?:service-tickets|profile|bootstrap)(?:\/|$)/, 20),
   capability("employees", "core.employees", /^\/(?:employees|departments|roles|permissions|department-post-rules)(?:\/|$)/),
   capability("employee-self-service", "core.employees", /^\/employee\/(?:bootstrap|personalization)(?:\/|$)/, 20),
