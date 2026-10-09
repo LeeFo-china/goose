@@ -1,6 +1,6 @@
 # 租户员工活跃统计：小程序配套与平台展示
 
-本次实现于 gooes；不修改 orange。本文件记录接口及统计口径，尚未上线生产。
+本次实现于 gooes；不修改 orange。API与后台已随 `v2026.10.09.3` 上线生产，见 [发布验收](../operations/evidence/2026-10-09-tenant-activity-production-release.md)。小程序主动浏览仍待客户端接入。
 
 ## 目标与范围
 
