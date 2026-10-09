@@ -30,6 +30,9 @@ describe("tenant owner gantt acceptance evidence", () => {
     });
 
     expect(blocked[0]?.status).toBe("blocked");
+    expect(blocked[0]?.actual_completed_at).toBeNull();
+    expect(blocked[0]?.completed_by_employee_id).toBeNull();
+    expect(confirmed[0]?.actual_completed_at).toBe("2026-09-01T08:00:00.000Z");
     expect(blocked[0]?.attributes.acceptance_status).toBeNull();
     expect(confirmed[0]?.status).toBe("done");
     expect(confirmed[0]?.attributes.acceptance_status).toBe(
@@ -40,6 +43,9 @@ describe("tenant owner gantt acceptance evidence", () => {
 
 function acceptanceNode(status: WorkflowTimelineNode["status"]): WorkflowTimelineNode {
   return {
+    actual_completed_at: "2026-09-01T08:00:00.000Z",
+    completed_by_employee_id: "operator",
+    completion_actor_type: "employee",
     node_key: "procedure_plumbing_electrical",
     node_title: "水电",
     node_type: "procedure",

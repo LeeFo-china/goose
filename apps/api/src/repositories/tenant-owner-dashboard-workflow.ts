@@ -46,6 +46,23 @@ export type TenantOwnerDashboardAcceptanceRow = {
 class TenantOwnerDashboardWorkflowRepository {
   private readonly adminClient = SupabaseDB.getAdminClient();
 
+  async listCompletionEmployees(input: {
+    tenantId: string;
+    employeeIds: string[];
+  }): Promise<Array<{ id: string; name: string | null }>> {
+    const ids = [...new Set(input.employeeIds)];
+    const employees: Array<{ id: string; name: string | null }> = [];
+    // Current page only; bounded batches avoid node/project-level N+1 and URL limits.
+    for (let offset = 0; offset < ids.length; offset += 100) {
+      const batch = ids.slice(offset, offset + 100);
+      const { data, error } = await this.adminClient.from("employees")
+        .select("id, name").eq("tenant_id", input.tenantId).in("id", batch).limit(batch.length);
+      if (error) throw Errors.dbError("批量查询甘特图节点完成人失败", error);
+      employees.push(...(data ?? []));
+    }
+    return employees;
+  }
+
   async listProcedureAssignmentsForRuntimeIds(input: {
     tenantId: string;
     runtimeInstanceIds: string[];

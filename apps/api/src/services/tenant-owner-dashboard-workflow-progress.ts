@@ -33,6 +33,7 @@ type TenantOwnerDashboardWorkflowRepositoryPort = Pick<
   typeof tenantOwnerDashboardWorkflowRepository,
   | "listProcedureAssignmentsForRuntimeIds"
   | "listLatestAcceptancesForProjects"
+  | "listCompletionEmployees"
 >;
 
 export type TenantOwnerDashboardWorkflowProgressReaderPort = {
@@ -88,7 +89,15 @@ class TenantOwnerDashboardWorkflowProgressReader
       }),
     ]);
 
-    const graphByRuntimeKey = await this.loadGraphs(input.tenantId, runtimeInstances);
+    const [graphByRuntimeKey, employees] = await Promise.all([
+      this.loadGraphs(input.tenantId, runtimeInstances),
+      this.repository.listCompletionEmployees({
+        tenantId: input.tenantId,
+        employeeIds: runtimeNodes.filter((node) => node.status === "completed")
+          .flatMap((node) => node.completed_by ? [node.completed_by] : []),
+      }),
+    ]);
+    const employeeNames = new Map(employees.map((employee) => [employee.id, employee.name]));
     const subjectStateByProjectId = new Map(
       subjectStates.map((state) => [state.subject_id, state]),
     );
@@ -120,15 +129,18 @@ class TenantOwnerDashboardWorkflowProgressReader
         completedNodeKeys: instanceNodes
           .filter((node) => node.status === "completed")
           .map((node) => node.node_key),
+        runtimeNodeOutputs: instanceNodes,
         completedNodeActors: instanceNodes
-          .filter((node) => node.status === "completed")
           .map((node) => ({
             node_key: node.node_key,
-            completed_by_employee_id: node.completed_by,
-            completed_at: node.completed_at,
+            started_at: node.started_at,
+            completed_by_employee_id: node.status === "completed" ? node.completed_by : null,
+            completed_by_employee_name: node.status === "completed" && node.completed_by
+              ? employeeNames.get(node.completed_by) ?? null : null,
+            completed_at: node.status === "completed" ? node.completed_at : null,
           })),
         procedureAssignments: runtimeInstance
-          ? assignmentsByInstanceId.get(runtimeInstance.id) ?? []
+          ? (assignmentsByInstanceId.get(runtimeInstance.id) ?? []).filter((assignment) => assignment.project_id === projectId)
           : [],
         tenantToday: input.businessDate,
         pendingActions: [],

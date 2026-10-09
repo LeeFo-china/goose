@@ -1,3 +1,4 @@
+import { serializeGanttNode } from "./tenant-owner-gantt-node";
 import { EMPTY_TENANT_OWNER_CUSTOMER_FOLLOW_UP } from "@/services/tenant-owner-daily-dashboard-types";
 import {
   tenantOwnerDailyDashboardRepository,
@@ -28,7 +29,6 @@ import {
   resolveTenantOwnerBusinessDay,
 } from "@/services/tenant-owner-dashboard-date";
 import type {
-  WorkflowTimelineNode,
   WorkflowProgressSource,
 } from "@/services/project-workflow-progress";
 
@@ -365,26 +365,6 @@ export class TenantOwnerDailyDashboardService {
   }
 }
 
-function serializeGanttNode(node: WorkflowTimelineNode) {
-  return {
-    node_key: node.node_key,
-    node_title: node.node_title,
-    node_type: node.node_type,
-    business_kind: node.business_kind,
-    stage_code: node.attributes.stage_code ?? null,
-    status: node.status,
-    planned_start_date: node.attributes.planned_start_date ?? null,
-    planned_end_date: node.attributes.planned_end_date ?? null,
-    schedule_status: normalizeScheduleStatus(node.attributes.schedule_status),
-    assignee_employee_name:
-      node.attributes.procedure_assignee_employee_name ??
-        node.attributes.assignee_employee_name ??
-        node.assignee_employee_name ??
-        null,
-    blocked_reason: node.status === "blocked" ? node.display.status_label : null,
-  };
-}
-
 function buildGanttRiskSummary(
   timelineNodes: Array<ReturnType<typeof serializeGanttNode>>,
 ): TenantOwnerGanttRiskSummary {
@@ -422,13 +402,6 @@ function buildGanttRiskSummary(
         ? `${delayedNode.node_title} 已逾期`
         : `${unscheduledNode?.node_title ?? "施工工序"} 尚未排期`,
   };
-}
-
-function normalizeScheduleStatus(value: string | null | undefined) {
-  if (value === "overdue") return "delayed";
-  if (value === "completed") return "done";
-  if (value === "on_track" || value === "due_today") return "on_track";
-  return "unscheduled";
 }
 
 function readErrorCode(error: unknown) {

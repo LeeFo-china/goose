@@ -345,7 +345,7 @@ export function buildWorkflowTimelineNodes(input: {
   const completionsByNodeKey = new Map(
     (input.completedNodeActors ?? [])
       .filter((completion) =>
-        completion.node_key && completion.completed_by_employee_id
+        completion.node_key
       )
       .map((completion) => [completion.node_key, completion]),
   );

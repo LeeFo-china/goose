@@ -1,3 +1,5 @@
+import { buildWorkflowCompletionMetadata, type WorkflowCompletionMetadata, type WorkflowTimelineNodeCompletion } from "./workflow-completion-metadata";
+export type { WorkflowTimelineNodeCompletion } from "./workflow-completion-metadata";
 import {
   WorkflowCategoryConfig,
   type WorkflowBusinessKind,
@@ -91,7 +93,7 @@ export type WorkflowTimelineNodeAction = {
   [key: string]: unknown;
 };
 
-export type WorkflowTimelineNode = {
+export type WorkflowTimelineNode = Partial<WorkflowCompletionMetadata> & {
   node_key: string;
   node_title: string;
   node_type: string | null;
@@ -120,13 +122,6 @@ export type WorkflowTimelineNodeAssignee = {
   assignee_employee_id?: string;
   assignee_employee_name?: string | null;
   assignee_employee?: WorkflowAssigneeEmployee;
-};
-
-export type WorkflowTimelineNodeCompletion = {
-  node_key: string;
-  completed_by_employee_id?: string | null;
-  completed_by_employee_name?: string | null;
-  completed_at?: string | null;
 };
 
 export type ConstructionStagesForWorkflowTimeline = {
@@ -178,6 +173,7 @@ export function buildWorkflowTimelineNodeContract(input: {
   });
 
   return {
+    ...buildWorkflowCompletionMetadata(input),
     node_key: input.node.node_key,
     node_title: input.node.title,
     node_type: input.node.node_type,
@@ -323,6 +319,10 @@ export function enrichWorkflowTimelineNodesWithConstructionStages(
     return {
       ...node,
       status: shouldBlockCompletion ? "blocked" : node.status,
+      ...(shouldBlockCompletion ? {
+        actual_completed_at: null, completed_by_employee_id: null,
+        completed_by_employee_name: null, completion_actor_type: "unknown" as const,
+      } : {}),
       display: shouldBlockCompletion || waiting
         ? {
           ...node.display,
