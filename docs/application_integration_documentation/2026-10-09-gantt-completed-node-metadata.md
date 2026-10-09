@@ -1,7 +1,7 @@
 # 甘特图节点完成元数据：后端核查与最终契约
 
 日期：2026-10-09。需求来源：orange 只读交接文档 `docs/miniprogram/2026-10-09-gantt-completed-node-metadata-handoff.md`。
-本次范围为 gooes 只读投影与验证；不修改 orange、不写生产数据、不新增 migration。本文件记录源码实现，尚未部署到生产。
+本次范围为 gooes 只读投影与验证；不修改 orange、不写生产数据、不新增 migration。已于北京时间 2026-10-09 18:22:23 发布 API 到生产（Tag `v2026.10.09.2`，源码 `a1f4f6f6c`），真实分页接口只读验收通过。发布证据见 [生产记录](../operations/evidence/2026-10-09-gantt-completion-metadata-production-release.md)。
 
 ## 生产事实核查
 
@@ -53,7 +53,7 @@ reader 原本只传完成时间/ID，未批量关联姓名；通用 timeline 的
 
 ## 脱敏响应样例
 
-以下为根据已核查记录按新源码生成的字段示例，不是声称生产新接口已经发布；ID/姓名已替换。
+以下字段已通过生产真实接口核验，ID/姓名已替换。
 
 ```json
 {
@@ -103,4 +103,4 @@ bun test src/controllers/tenant-owner-daily-dashboard/routes.test.ts
 bun run check
 ```
 
-生产接口验收须在 API 发布后进行；小程序展示与默认选中由小程序团队完成。
+生产接口已验收通过，包含真实节点元数据、分页上限 400、未登录 401、partial_errors=[]。小程序展示与默认选中仍由小程序团队配套完成。
