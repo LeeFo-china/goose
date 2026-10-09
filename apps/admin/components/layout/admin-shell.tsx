@@ -7,6 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import { type AdminSession } from "@/lib/backend";
 import { LogoutButton } from "@/components/layout/logout-button";
 import { AdminSidebarScrollArea } from "@/components/layout/admin-sidebar-scroll-area";
+import { TenantActivityTracker } from "@/components/layout/tenant-activity-tracker";
 import { AdminSessionGuard } from "@/components/layout/admin-session-guard";
 import { AdminSessionScopeProvider } from "@/components/layout/admin-session-scope";
 import {
@@ -186,7 +187,10 @@ export function AdminShell({
           mainWidthClassName,
           preferences.compact ? "py-3" : "py-5",
         )}>
-          <ServiceAccessGate>{children}</ServiceAccessGate>
+          <ServiceAccessGate>
+            <TenantActivityTracker session={session} />
+            {children}
+          </ServiceAccessGate>
         </main>
       </div>
       </div>

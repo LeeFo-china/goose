@@ -204,7 +204,7 @@ export async function recordAction(this: any, input: {
     comment?: string | null;
     metadata?: Record<string, unknown> | null;
   }) {
-    await projectAcceptanceRepository.createAction({
+    const action = await projectAcceptanceRepository.createAction({
       tenant_id: input.row.tenant_id,
       acceptance_id: input.row.id,
       operator_type: input.operatorType,
@@ -216,6 +216,7 @@ export async function recordAction(this: any, input: {
       metadata: input.metadata ?? {},
     });
     this.clearCustomerAcceptanceListCache();
+    return action;
   }
 
 export function maskPhone(this: any, phone: string) {

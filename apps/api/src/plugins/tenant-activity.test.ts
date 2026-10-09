@@ -1,0 +1,38 @@
+import { expect, mock, test } from "bun:test";
+import Fastify from "fastify";
+process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
+process.env.SUPABASE_PUBLISH ??= "test-publish";
+process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-role";
+const id="00000000-0000-4000-8000-000000000001";
+test("post-response analytics failure never changes successful business response and logs no payload", async () => {
+  const {default:plugin}=await import("./tenant-activity");
+  const app=Fastify();
+  const captured:unknown[]=[];
+  const warnings:unknown[]=[];
+  const recordResponse=mock(async (input:unknown) => {captured.push(input);throw new Error("secret-token-do-not-log");});
+  app.addHook("onRequest",async req=>{req.log.warn=((data:unknown)=>{warnings.push(data);}) as typeof req.log.warn;});
+  plugin(app,{recordResponse});
+  app.post("/customers",async()=>({data:{id,phone:"sensitive-phone"}}));
+  const response=await app.inject({method:"POST",url:"/customers"});
+  expect(response.statusCode).toBe(200);
+  expect(response.json().data.id).toBe(id);
+  expect(captured).toHaveLength(1);
+  expect(warnings).toHaveLength(1);
+  expect(JSON.stringify(warnings)).not.toContain("secret-token");
+  expect(JSON.stringify(warnings)).not.toContain("sensitive-phone");
+  await app.close();
+});
+test("failed writes, GET polls and non-business routes are ignored", async () => {
+  const {default:plugin}=await import("./tenant-activity");
+  const app=Fastify();
+  const recordResponse=mock(async()=>{});
+  plugin(app,{recordResponse});
+  app.post("/customers",async(_req,reply)=>reply.code(409).send({data:{id}}));
+  app.get("/customers",async()=>({data:{id}}));
+  app.post("/auth",async()=>({data:{token:"silent-token"}}));
+  await app.inject({method:"POST",url:"/customers"});
+  await app.inject({method:"GET",url:"/customers"});
+  await app.inject({method:"POST",url:"/auth"});
+  expect(recordResponse).not.toHaveBeenCalled();
+  await app.close();
+});

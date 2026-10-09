@@ -76,6 +76,7 @@ const EXCLUDED_TOP_LEVEL = [
 ] as const;
 
 const EXCLUDED_RULES: readonly TenantServiceCapabilityRule[] = [
+  excluded("tenant-activity", /^\/tenant-activity\/view$/, "screen_capability_checked_in_service"),
   excluded(
     "non-trial-products",
     new RegExp(`^/(?:${EXCLUDED_TOP_LEVEL.join("|")})(?:/|$)`),

@@ -11,15 +11,17 @@ import { platformAuthorizationService } from "@/services/platform-authorization"
 import { platformServiceTrialRollout } from "@/services/platform-service-trial-rollout";
 import { tenantServiceAccessBatchRepository } from "@/repositories/tenant-service-access-batch";
 import { tenantServiceAccessService } from "@/services/tenant-service-access";
-import type { PermissionCode } from "@gooes/domain";
+import type { PermissionCode, TenantActivitySummary } from "@gooes/domain";
+import { tenantActivityRepository } from "@/repositories/tenant-activity";
 
 class PlatformTenantService {
   async list(query: PlatformTenantListQuery, authContext: AuthContext) {
     this.assertPermission(authContext, "platform.tenant.read");
     const page = await platformTenantRepository.list(query);
-    const [factsById, trialAccessEnabled] = await Promise.all([
+    const [factsById, trialAccessEnabled, activityById] = await Promise.all([
       tenantServiceAccessBatchRepository.getByTenantIds(page.list.map((item) => item.id)),
       platformServiceTrialRollout.isAccessEnabled(),
+      this.getActivitySummaries(page.list.map((item) => item.id)),
     ]);
     const hasPermission = (code: string) => authContext.isPlatformSuperAdmin
       || authContext.permissions.some((item) => item.code === code);
@@ -40,6 +42,7 @@ class PlatformTenantService {
         const trial = facts.latestTrial;
         return {
           ...item,
+          activity: activityById.get(item.id),
           service_access: {
             mode: decision.mode,
             trial_id: trial?.id ?? null,
@@ -133,11 +136,12 @@ class PlatformTenantService {
   async getDetail(id: string, authContext: AuthContext) {
     this.assertPermission(authContext, "platform.tenant.read");
     const record = await this.getRequiredTenant(id);
-    const [usage, templateApplication, adminEmployees, roles] = await Promise.all([
+    const [usage, templateApplication, adminEmployees, roles, activityById] = await Promise.all([
       platformTenantRepository.getUsageStats([id]),
       platformTenantRepository.getLatestTemplateApplication(id),
       platformTenantRepository.findTenantAdminEmployees(id),
       platformTenantRepository.listTenantRoles(id),
+      this.getActivitySummaries([id]),
     ]);
     const result = templateApplication?.result || {};
     const adminEmployeeId = typeof result.admin_employee_id === "string"
@@ -159,6 +163,7 @@ class PlatformTenantService {
     return {
       ...record,
       usage: usage.get(id) ?? null,
+      activity: activityById.get(id),
       initialization: templateApplication
         ? {
           id: templateApplication.id,
@@ -283,6 +288,22 @@ class PlatformTenantService {
       ...record,
       activated: true,
     };
+  }
+
+  private async getActivitySummaries(tenantIds: string[]): Promise<Map<string, TenantActivitySummary>> {
+    if (!tenantIds.length) return new Map();
+    try {
+      return await tenantActivityRepository.listSummaries(tenantIds);
+    } catch {
+      // This read is optional; report the outage without logging RPC payloads or credentials.
+      console.warn({ event: "tenant_activity_summary_unavailable", tenant_count: tenantIds.length });
+      return new Map(tenantIds.map((id) => [id, {
+        status: "unavailable", collection_started_at: null, window_start: null, window_end: null,
+        observed_days: 0, last_active_at: null, active_employee_count: null,
+        admin_active_employee_count: null, mini_active_employee_count: null, active_days: null,
+        admin_login_count: null, mini_login_count: null, business_actions: null,
+      }]));
+    }
   }
 
   private assertPermission(authContext: AuthContext, code: PermissionCode) {

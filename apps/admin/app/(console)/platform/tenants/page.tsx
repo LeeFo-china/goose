@@ -4,6 +4,7 @@ import { CreatePlatformTenantButton } from "@/components/platform-tenants/platfo
 import {
   PlatformTenantFilters,
 } from "@/components/platform-tenants/platform-tenant-list-actions";
+import { TENANT_ACTIVITY_COVERAGE_NOTICE } from "@/components/platform-tenants/tenant-activity";
 import { PlatformTenantsTable } from "@/components/platform-tenants/platform-tenants-table";
 import {
   type PlatformTenantListData,
@@ -132,7 +133,7 @@ export default async function PlatformTenantsPage({
       <Tabs value="tenants" className="contents">
         <PlatformListPageShell
           title="租户管理"
-          description="维护租户基础资料、初始化管理员账号，并查看当前业务用量。"
+          description={`维护租户资料，查看近 7 日使用情况与业务用量。${TENANT_ACTIVITY_COVERAGE_NOTICE}。`}
           leading={
             <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground">
               <Building2 className="size-4" aria-hidden="true" />

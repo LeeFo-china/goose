@@ -1,4 +1,5 @@
 import { Errors } from "@/errors/error-factory";
+import { withTenantActivityEventKey } from "@/utils/tenant-activity-evidence";
 import { ErrorCodes } from "@/errors/error-codes";
 import type {
   ApproveProjectAcceptanceInput,
@@ -423,7 +424,7 @@ export async function rectifyAcceptance(this: any,
       paths: input.referenced_image_paths,
       catalog: imageReferenceCatalog,
     });
-    await this.recordAction({
+    const action: ProjectAcceptanceActionRow = await this.recordAction({
       row,
       action: "employee_rectify",
       fromStatus: row.status,
@@ -449,7 +450,8 @@ export async function rectifyAcceptance(this: any,
     });
 
     this.invalidateAcceptanceRelatedCaches(row.project_id);
-    return this.buildDetail(row);
+    const detail = await this.buildDetail(row);
+    return withTenantActivityEventKey(detail, `acceptance_handled:${action.id}`);
   }
 
 export async function cancelAcceptance(this: any, 

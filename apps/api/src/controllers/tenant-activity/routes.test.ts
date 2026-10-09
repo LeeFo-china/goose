@@ -1,0 +1,23 @@
+import { expect, mock, test } from "bun:test";
+import Fastify from "fastify";
+process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
+process.env.SUPABASE_PUBLISH ??= "test-publish";
+process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-role";
+const recordView=mock(async()=>({recorded:true}));
+mock.module("@/services/tenant-activity-collection",()=>({tenantActivityCollectionService:{recordView}}));
+test("view endpoint uses read gate and strict body, no CRUD is exposed", async()=>{
+  const {default:controller}=await import("./index");
+  const app=Fastify();
+  const routes:Array<{method:unknown;url:string;access:unknown}>=[];
+  app.addHook("onRoute",route=>{routes.push({method:route.method,url:route.url,access:route.config?.tenantServiceAccess});});
+  controller.registerExtraRoutes(app);
+  const good=await app.inject({method:"POST",url:"/tenant-activity/view",payload:{screen:"projects"}});
+  expect(good.statusCode).toBe(200);
+  expect(routes).toContainEqual({method:"POST",url:"/tenant-activity/view",access:"read"});
+  recordView.mockClear();
+  const invalid=await app.inject({method:"POST",url:"/tenant-activity/view",payload:{screen:"projects",tenantId:"another"}});
+  expect(invalid.statusCode).toBe(400);
+  expect(recordView).not.toHaveBeenCalled();
+  expect((await app.inject({method:"GET",url:"/tenant-activity"})).statusCode).toBe(404);
+  await app.close();
+});

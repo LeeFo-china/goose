@@ -2,6 +2,8 @@ import { describe, expect, mock, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { ErrorCodes } from "@/errors/error-codes";
 import { Errors } from "@/errors/error-factory";
+import { getTenantActivityEventKey } from "@/utils/tenant-activity-evidence";
+import { classifyTenantActivityResponse } from "@/services/tenant-activity-capture";
 import {
   PhoneIdentityLoginService,
   type PhoneIdentityLoginServiceDependencies,
@@ -17,6 +19,28 @@ const CUSTOMER_ID = "00000000-0000-4000-8000-000000000004";
 const SELECTION_TOKEN = "selection-token-abcdefghijklmnopqrstuvwxyz1234567890";
 
 describe("PhoneIdentityLoginService.select", () => {
+  test("a consumed selection retry keeps the same analytics identity despite a new token", async () => {
+    let attempts = 0;
+    const deps = dependencies({
+      reserveSelection: mock(async () => ({
+        ...reserveResult(attempts === 0 ? "reserved" : "same_candidate_consumed"),
+        candidate: { ...reserveResult("reserved").candidate, targetMode: "tenant_employee" as const,
+          employeeId: AUTH_USER_ID, customerId: null },
+      })),
+      authenticate: mock(async () => ({ mode: "tenant_employee", token: `signed-${++attempts}` })),
+    });
+    const service = new PhoneIdentityLoginService(deps);
+    const params = { input: { selection_token: SELECTION_TOKEN, candidate_id: CANDIDATE_ID }, request: request() };
+    const first = await service.select(params);
+    const retry = await service.select(params);
+    const eventKey = `login:phone-session:${SESSION_ID}`;
+    expect(first.auth.token).not.toBe(retry.auth.token);
+    expect(getTenantActivityEventKey(first)).toBe(eventKey);
+    expect(getTenantActivityEventKey(retry)).toBe(eventKey);
+    expect(classifyTenantActivityResponse("POST", "/auth/phone-login/select", { data: retry }))
+      .toMatchObject({ kind: "login", eventKey });
+    expect(JSON.stringify(retry)).not.toContain(SESSION_ID);
+  });
   test("reserves a selected candidate, authenticates, and finalizes the session", async () => {
     const deps = dependencies();
 

@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { ArrowLeft, Building2, ClipboardList, ShieldCheck, UserRoundCog } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
+import { TenantActivitySection } from "@/components/platform-tenants/tenant-activity";
 import { PlatformTenantAdminsCard } from "@/components/platform-tenants/platform-tenant-admins-card";
 import { ServiceProviderPublicProfileCard } from "@/components/platform-tenants/service-provider-public-profile-card";
 import { TenantSupplierSettingsCard } from "@/components/platform-tenants/tenant-supplier-settings-card";
@@ -340,6 +341,8 @@ export default async function PlatformTenantDetailPage({
 
       {tenant ? (
         <>
+          <TenantActivitySection activity={tenant.activity} />
+
           <UsageCards tenant={tenant} />
 
           <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">

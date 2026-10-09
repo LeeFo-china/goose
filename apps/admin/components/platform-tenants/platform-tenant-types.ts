@@ -1,3 +1,5 @@
+import type { TenantActivitySummary } from "@gooes/domain";
+
 export type PlatformTenantStatus = "active" | "suspended" | "archived";
 export type PlatformTenantAddressSource = "manual" | "tencent_suggestion" | "tencent_geocoder" | "map_picker";
 
@@ -50,6 +52,7 @@ export type PlatformTenantRoleLite = {
 };
 
 export type PlatformTenantRecord = {
+  activity?: TenantActivitySummary;
   service_access?: {
     mode: "paid" | "paid_onboarding" | "trial" | "grace" | "legacy" | "service_blocked" | "hard_blocked";
     trial_id: string | null;

@@ -17,6 +17,7 @@ import type {
 import type { SmsVerificationCodeService } from "@/services/sms-verification-codes";
 import { isPhoneLoginWithoutCodeEnabled } from "@/utils/auth/test-login";
 import type { JwtPayload } from "@/utils/jwt";
+import { withTenantActivityEventKey } from "@/utils/tenant-activity-evidence";
 import { buildPhoneIdentityCandidates } from "./candidates";
 import type { PhoneIdentityBindings } from "./bindings";
 import {
@@ -196,10 +197,10 @@ export class PhoneIdentityLoginService {
         phone: params.input.phone,
         request: params.request as FastifyRequest,
       });
-      return {
+      return withTenantActivityEventKey({
         status: "authenticated" as const,
         auth,
-      };
+      }, `login:phone-session:${verification.sessionId}`);
     }
 
     const selectionToken = this.createSelectionToken();
@@ -277,10 +278,10 @@ export class PhoneIdentityLoginService {
         }
       }
 
-      return {
+      return withTenantActivityEventKey({
         status: "authenticated" as const,
         auth,
-      };
+      }, `login:phone-session:${reservation.sessionId}`);
     } catch (error) {
       if (reservation.status !== "same_candidate_consumed") {
         await this.releaseReservedSelection(

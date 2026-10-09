@@ -43,6 +43,7 @@ export * from './supplier-procurement';
 export * from './supplier-purchase-batch';
 export * from './supplier-product';
 export * from './tenant';
+export * from './tenant-activity';
 export * from './virtual-product';
 export * from './location';
 export * from './warehouse';

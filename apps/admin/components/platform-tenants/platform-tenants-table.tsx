@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/admin/data-table";
 import { PlatformServiceTrialScopeDialog } from "@/components/platform-service-trials/platform-service-trial-scope-dialog";
+import { TenantActivityCell } from "./tenant-activity";
 import { PlatformTenantTrialExtension } from "./platform-tenant-trial-extension";
 import { PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME } from "@/components/platform/platform-list-page-size";
 import {
@@ -99,6 +100,12 @@ const columns: ColumnDef<PlatformTenantRecord>[] = [
     },
   },
   {
+    id: "activity",
+    header: "使用情况",
+    cell: ({ row }) => <TenantActivityCell activity={row.original.activity} />,
+    meta: { cellClassName: "min-w-[280px]" },
+  },
+  {
     id: "usage",
     header: "用量",
     cell: ({ row }) => (
@@ -153,7 +160,7 @@ export function PlatformTenantsTable({ tenants }: { tenants: PlatformTenantRecor
       columns={columns}
       data={tenants}
       emptyText="还没有创建租户"
-      minWidth="min-w-[1400px]"
+      minWidth="min-w-[1680px]"
       tableClassName="border-t-0"
       rowClassName={() => PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME}
     />

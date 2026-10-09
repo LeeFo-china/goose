@@ -6,6 +6,7 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import errorHandler from "./plugins/error-handler";
 import authPlugin from "./plugins/auth";
+import tenantActivityPlugin from "./plugins/tenant-activity";
 import requestLoggingPlugin from "./plugins/request-logging";
 import { refreshPlatformCosPublicBaseUrlCache } from "@/services/files/file-url-resolver";
 import { administrativeAreaService } from "@/services/administrative-areas";
@@ -60,6 +61,7 @@ app.register(multipart, {
 errorHandler(app);
 requestLoggingPlugin(app);
 authPlugin(app);
+tenantActivityPlugin(app);
 app.register(AutoLoad, {
   dir: join(__dirname, "routes"),
 });
