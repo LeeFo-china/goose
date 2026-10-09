@@ -26,4 +26,18 @@
 - 截图人工核查：1920/1440/390px 总览、财务明细展开；状态完整、无整页横向滚动、区块无嵌套卡片。
 - 审查修正：页头最多占内容工作区45%，超长摘要可滚动，保留正文空间；状态预警移出财务 auto-fit 网格以避免空列；无关联房产时回退项目地址。
 - 已有失败：`project-management-page-layout.test.ts:69` 的项目列表 loading class 字符串断言在未修改的主工作区同样失败（9 pass / 1 fail），该文件和对应列表实现均未改动。
-- `git diff --check` 通过。无新依赖、数据库迁移或小程序仓库改动；未部署线上。
+- `git diff --check` 通过。无新依赖、数据库迁移或小程序仓库改动。完成后按用户授权发布生产，见下文。
+
+
+## 生产发布（2026-10-09 15:27 北京时间）
+
+- 用户授权“生产部署”，仅发布 admin。
+- Tag：`v2026.10.09.1`；源码：`b02b259e9a76c264fa44687409c5fba9721fea5e`。
+- [生产候选构建 37898168711](https://github.com/LeeFo-china/goose/actions/runs/37898168711)：成功；生产服务器拉取和镜像来源校验通过。
+- [生产部署 37898899511](https://github.com/LeeFo-china/goose/actions/runs/37898899511)：成功；回执完成时间 `2026-10-09T07:27:09Z`。
+- 镜像：`useccr.ccs.tencentyun.com/america_goose/goose-admin@sha256:b64fbf4c8f1243ed87fd32bd049a890e638bf0cce2c7abb008d435a129c553ae`。
+- 生产容器 `gooes-admin` healthy；运行 revision、镜像摘要和 build run 标签与候选一致。
+- 独立公网验证：`https://admin.goodcms.cn/login` HTTP 200；未认证项目详情 HTTP 307 跳转登录，认证边界保持。
+- 页面交互及响应式验证来自部署前本地模拟后端的 10 项浏览器测试；本轮未使用生产账号执行项目业务动作。
+- 上一生产 admin 镜像：`sha256:13d809a3a7694fa6821ba37508295fea44e13d5f17a458f297ed8d329f94962c`，候选 `37745677372`，源码 `a460c2010044930d719bc90924da0fed5ea6e4ea`，Tag `v2026.10.08.9`。若需回退，按既有流程以旧源码重新构建候选并部署，不能重放已消费的部署回执。
+- 本次未发布 API、worker、Web、H5，未应用数据库迁移。
