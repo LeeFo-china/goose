@@ -54,9 +54,11 @@ function hasCompleteLocation(property: PropertyLocationView) {
 
 export function PropertyLocationStatus({
   property,
+  embedded = false,
   onConfirmed,
 }: {
   property: PropertyLocationView;
+  embedded?: boolean;
   onConfirmed?: () => Promise<void> | void;
 }) {
   const [pending, startTransition] = useTransition();
@@ -89,7 +91,7 @@ export function PropertyLocationStatus({
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-md bg-muted/30 p-3">
+    <div className={embedded ? "flex min-w-0 flex-col gap-3" : "flex flex-col gap-2 rounded-md bg-muted/30 p-3"}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-sm font-medium">
           <MapPin />
@@ -97,7 +99,7 @@ export function PropertyLocationStatus({
         </div>
         <Badge variant={status.variant}>{status.label}</Badge>
       </div>
-      <div className="grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
+      <div className="grid gap-2 text-xs text-muted-foreground [grid-template-columns:repeat(auto-fit,minmax(min(100%,15rem),1fr))]">
         <div>行政区：{area || "-"}</div>
         <div>adcode：{property.adcode || "-"}</div>
         <div>纬度：{formatCoordinate(property.latitude)}</div>

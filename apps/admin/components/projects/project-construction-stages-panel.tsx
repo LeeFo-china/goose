@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { requestBackendJson } from "@/lib/backend-client";
+import { instanceStatusLabel, instanceStatusVariant } from "@/components/projects/project-workflow-runtime-format";
 import { cn } from "@/lib/utils";
 
 type ConstructionStageStatus =
@@ -67,6 +68,7 @@ type WorkflowProgressGate = {
 };
 
 type WorkflowProgressPayload = {
+  instance_status?: string | null;
   source: "workflow_runtime" | "missing_runtime" | "unavailable";
   current_node_key: string | null;
   current_node_title: string | null;
@@ -166,6 +168,9 @@ function workflowProgressBadge(progress: WorkflowProgressPayload | null) {
   if (progress.source === "unavailable") {
     return { label: "流程不可用", variant: "warning" as const };
   }
+  if (progress.instance_status && progress.instance_status !== "running") {
+    return { label: instanceStatusLabel(progress.instance_status), variant: instanceStatusVariant(progress.instance_status) };
+  }
   if (progress.current_gate?.type === "payment_collection") {
     return { label: "收款节点", variant: "warning" as const };
   }
@@ -175,10 +180,10 @@ function workflowProgressBadge(progress: WorkflowProgressPayload | null) {
   return { label: "流程运行中", variant: "secondary" as const };
 }
 
-function ConstructionStageSkeleton({ compact }: { compact: boolean }) {
+function ConstructionStageSkeleton({ compact, embedded }: { compact: boolean; embedded: boolean }) {
   if (compact) {
     return (
-      <section className="border-y bg-background/60 px-4 py-3">
+      <section className={embedded ? "mt-4 min-w-0 border-t pt-3" : "border-y bg-background/60 px-4 py-3"}>
         <Skeleton className="h-4 w-32" />
         <div className="mt-2 flex flex-wrap gap-3">
           <Skeleton className="h-3 w-40" />
@@ -233,10 +238,14 @@ export function ProjectConstructionStagesPanel({
   projectId,
   active = true,
   compact = false,
+  embedded = false,
+  refreshVersion = 0,
 }: {
   projectId: string;
   active?: boolean;
   compact?: boolean;
+  embedded?: boolean;
+  refreshVersion?: number;
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -267,7 +276,7 @@ export function ProjectConstructionStagesPanel({
     if (!active) return;
     void loadStages();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, projectId]);
+  }, [active, projectId, refreshVersion]);
 
   const stages = useMemo(() => data?.stages || [], [data?.stages]);
   const visibleStages = stages;
@@ -295,12 +304,12 @@ export function ProjectConstructionStagesPanel({
     : "暂无最近日志";
 
   if (loading && !data) {
-    return <ConstructionStageSkeleton compact={compact} />;
+    return <ConstructionStageSkeleton compact={compact} embedded={embedded} />;
   }
 
   if (compact) {
     return (
-      <section className="border-y bg-background/60 px-4 py-3">
+      <section className={embedded ? "mt-4 min-w-0 border-t pt-3" : "border-y bg-background/60 px-4 py-3"}>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <h3 className="text-sm font-semibold">施工阶段</h3>
           {progressBadge ? (

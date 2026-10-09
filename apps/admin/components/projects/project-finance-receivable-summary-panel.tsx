@@ -42,8 +42,10 @@ function statusVariant(row: FinanceReceivableRecord) {
 
 export function ProjectFinanceReceivableSummaryPanel({
   projectId,
+  embedded = false,
 }: {
   projectId: string;
+  embedded?: boolean;
 }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -86,7 +88,7 @@ export function ProjectFinanceReceivableSummaryPanel({
   }, [projectId]);
 
   return (
-    <section className="rounded-lg border bg-card p-4">
+    <section className={embedded ? "min-w-0 border-b pb-5" : "rounded-lg border bg-card p-4"}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <CalendarClock className="size-4 text-muted-foreground" />
@@ -151,7 +153,7 @@ export function ProjectFinanceReceivableSummaryPanel({
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md border bg-background px-3 py-2">
+    <div className="min-w-0 border-l-2 pl-3 py-1">
       <dt className="text-xs text-muted-foreground">{label}</dt>
       <dd className="mt-1 truncate text-sm font-semibold tabular-nums">{value}</dd>
     </div>

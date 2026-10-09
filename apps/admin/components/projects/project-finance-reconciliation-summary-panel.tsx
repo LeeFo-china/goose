@@ -52,9 +52,11 @@ function emptySummary(projectId: string): ProjectFinanceReconciliationSummary {
 
 export function ProjectFinanceReconciliationSummaryPanel({
   projectId,
+  embedded = false,
   refreshVersion = 0,
 }: {
   projectId: string;
+  embedded?: boolean;
   refreshVersion?: number;
 }) {
   const [loading, setLoading] = useState(true);
@@ -92,7 +94,7 @@ export function ProjectFinanceReconciliationSummaryPanel({
       : "success";
 
   return (
-    <section className="rounded-md border bg-card px-4 py-3">
+    <section className={embedded ? "min-w-0 border-b pb-5" : "rounded-md border bg-card px-4 py-3"}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <BadgeCheck className="size-4 text-muted-foreground" />
@@ -116,9 +118,9 @@ export function ProjectFinanceReconciliationSummaryPanel({
         </div>
       ) : null}
 
-      <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-3 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,13rem),1fr))]">
         {checks.map((item) => (
-          <ReconciliationCheckCard
+          <ReconciliationCheckItem
             key={item.key}
             item={item}
             loading={loading}
@@ -156,7 +158,7 @@ export function ProjectFinanceReconciliationSummaryPanel({
   );
 }
 
-function ReconciliationCheckCard({
+function ReconciliationCheckItem({
   item,
   loading,
 }: {
@@ -164,7 +166,7 @@ function ReconciliationCheckCard({
   loading: boolean;
 }) {
   return (
-    <div className="min-w-0 rounded-md border bg-background px-3 py-2">
+    <div className="min-w-0 border-l-2 pl-3 py-1">
       <div className="flex items-center justify-between gap-2">
         <div className="truncate text-xs font-medium text-muted-foreground">
           {item.label}

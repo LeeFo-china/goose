@@ -33,7 +33,7 @@ import {
   validateEditRows,
 } from "@/components/projects/project-cost-budget-panel-utils";
 
-export function ProjectCostBudgetPanel({ projectId }: { projectId: string }) {
+export function ProjectCostBudgetPanel({ projectId, embedded = false }: { projectId: string; embedded?: boolean }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -151,7 +151,7 @@ export function ProjectCostBudgetPanel({ projectId }: { projectId: string }) {
   }
 
   return (
-    <section className="rounded-lg border bg-card p-4">
+    <section className={embedded ? "min-w-0" : "rounded-lg border bg-card p-4"}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <Calculator className="size-4 text-muted-foreground" />
@@ -449,7 +449,7 @@ function Metric({
   title?: string;
 }) {
   return (
-    <div className="rounded-md border bg-background px-3 py-2">
+    <div className="min-w-0 border-l-2 pl-3 py-1">
       <dt className="text-xs text-muted-foreground">{label}</dt>
       <dd
         className={`mt-1 truncate text-sm font-semibold tabular-nums ${

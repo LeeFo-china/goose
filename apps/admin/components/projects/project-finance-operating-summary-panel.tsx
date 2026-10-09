@@ -38,9 +38,11 @@ import {
 
 export function ProjectFinanceOperatingSummaryPanel({
   projectId,
+  embedded = false,
   refreshVersion = 0,
 }: {
   projectId: string;
+  embedded?: boolean;
   refreshVersion?: number;
 }) {
   const [loading, setLoading] = useState(true);
@@ -88,7 +90,7 @@ export function ProjectFinanceOperatingSummaryPanel({
   return (
     <section
       data-testid="project-finance-operating-summary"
-      className="rounded-md border bg-card px-4 py-3"
+      className={embedded ? "min-w-0 border-b pb-5" : "rounded-md border bg-card px-4 py-3"}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
@@ -116,7 +118,7 @@ export function ProjectFinanceOperatingSummaryPanel({
         </div>
       ) : null}
 
-      <div className="mt-3 grid min-w-0 gap-4 lg:grid-cols-[minmax(14rem,0.9fr)_minmax(16rem,1.1fr)]">
+      <div className="mt-3 grid min-w-0 gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,24rem),1fr))]">
         <section
           data-testid="project-finance-core-progress"
           className="min-w-0"
@@ -133,11 +135,14 @@ export function ProjectFinanceOperatingSummaryPanel({
               loading={loading}
               primaryLabel="已收金额"
               primaryValue={formatFinanceMoney(summary.received_amount)}
-              secondaryLabel="待收金额"
-              secondaryValue={formatFinanceMoney(summary.receivable_remaining_amount)}
+              secondaryLabel="合同未收金额"
+              secondaryValue={formatFinanceMoney(Math.max(0, summary.contract_amount - summary.received_amount))}
               emptyText={summary.contract_amount > 0 ? "暂无收款" : "未录入合同额"}
               overLimit={false}
             />
+            <p className="px-1 text-xs text-muted-foreground">
+              应收计划待收：{loading ? "加载中…" : formatFinanceMoney(summary.receivable_remaining_amount)}；收款进度按合同金额计算。
+            </p>
             <ProgressTile
               title="预算执行率"
               progress={budgetUsageRatio}
@@ -213,58 +218,59 @@ export function ProjectFinanceOperatingSummaryPanel({
           </div>
         </section>
 
-        <section
-          data-testid="project-finance-status-rail"
-          className="min-w-0 border-t pt-4 lg:col-span-2"
-        >
-          <SectionHeading
-            icon={<AlertTriangle className="size-4" />}
-            title="状态预警"
-            helper="优先处理影响利润的数据"
-          />
-          <div className="mt-3 space-y-2">
-            {statusItems.map((item) => (
-              <StatusListItem key={item.key} item={item} loading={loading} />
-            ))}
-          </div>
-          {!loading && summary.risk_reasons.length ? (
-            <div className="mt-3 border-t pt-3">
-              <div className="text-xs font-medium text-muted-foreground">
-                风险说明
-              </div>
-              <div className="mt-2 space-y-2">
-                {summary.risk_reasons.slice(0, 3).map((reason) => {
-                  const href = financeRiskActionHref(reason.action);
-                  return (
-                    <div key={reason.code} className="space-y-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex min-w-0 items-center gap-2">
-                          <Badge variant={financeRiskVariant(reason.level)}>
-                            {financeRiskLabel(reason.level)}
-                          </Badge>
-                          <span className="truncate text-sm font-medium">
-                            {reason.title}
-                          </span>
-                        </div>
-                        {href ? (
-                          <Button asChild type="button" variant="outline" size="sm">
-                            <Link href={href}>
-                              {reason.action?.label || "处理"}
-                            </Link>
-                          </Button>
-                        ) : null}
-                      </div>
-                      <p className="line-clamp-2 text-xs text-muted-foreground">
-                        {reason.description}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ) : null}
-        </section>
       </div>
+
+      <section
+        data-testid="project-finance-status-rail"
+        className="mt-4 min-w-0 border-t pt-4"
+      >
+        <SectionHeading
+          icon={<AlertTriangle className="size-4" />}
+          title="状态预警"
+          helper="优先处理影响利润的数据"
+        />
+        <div className="mt-3 space-y-2">
+          {statusItems.map((item) => (
+            <StatusListItem key={item.key} item={item} loading={loading} />
+          ))}
+        </div>
+        {!loading && summary.risk_reasons.length ? (
+          <div className="mt-3 border-t pt-3">
+            <div className="text-xs font-medium text-muted-foreground">
+              风险说明
+            </div>
+            <div className="mt-2 space-y-2">
+              {summary.risk_reasons.slice(0, 3).map((reason) => {
+                const href = financeRiskActionHref(reason.action);
+                return (
+                  <div key={reason.code} className="space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <Badge variant={financeRiskVariant(reason.level)}>
+                          {financeRiskLabel(reason.level)}
+                        </Badge>
+                        <span className="truncate text-sm font-medium">
+                          {reason.title}
+                        </span>
+                      </div>
+                      {href ? (
+                        <Button asChild type="button" variant="outline" size="sm">
+                          <Link href={href}>
+                            {reason.action?.label || "处理"}
+                          </Link>
+                        </Button>
+                      ) : null}
+                    </div>
+                    <p className="line-clamp-2 text-xs text-muted-foreground">
+                      {reason.description}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+      </section>
     </section>
   );
 }

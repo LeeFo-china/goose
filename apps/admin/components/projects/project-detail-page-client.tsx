@@ -1,15 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { Loader2 } from "lucide-react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { StatusAlert } from "@/components/admin/status-alert";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { ProjectAcceptanceWorkbench } from "@/components/projects/project-acceptance-workbench";
 import { ProjectConstructionStagesPanel } from "@/components/projects/project-construction-stages-panel";
 import { ProjectDetailOverviewPanel } from "@/components/projects/project-detail-overview-panel";
-import { ProjectDetailSideRail } from "@/components/projects/project-detail-side-rail";
+import { ProjectDetailHeader } from "@/components/projects/project-detail-header";
 import {
   projectDetailHref,
   type ProjectDetailPageTab,
@@ -60,13 +57,6 @@ export function ProjectDetailPageClient({
     setAcceptanceId(initialAcceptanceId);
   }, [initialAcceptanceId]);
 
-  const title = useMemo(() => {
-    if (activeTab === "logs") return "施工日志";
-    if (activeTab === "members") return "成员/状态";
-    if (activeTab === "overview") return "总览";
-    return "工序验收";
-  }, [activeTab]);
-
   function navigate(tab: ProjectDetailPageTab, nextAcceptanceId = "") {
     latestActiveTabRef.current = tab;
     setActiveTab(tab);
@@ -115,49 +105,21 @@ export function ProjectDetailPageClient({
   return (
     <div
       data-testid="project-detail-workspace"
-      className="flex h-[calc(100dvh-6.5625rem)] min-h-0 flex-col overflow-hidden rounded-md border bg-card [contain:layout_paint] lg:grid lg:grid-cols-[280px_minmax(0,1fr)]"
+      className="flex h-[calc(100dvh-6.5625rem)] min-h-0 flex-col overflow-hidden bg-card"
     >
-      <ProjectDetailSideRail
+      <ProjectDetailHeader
         project={currentProject}
         activeTab={activeTab}
         onNavigate={navigate}
+        refreshing={refreshing}
+        onRefresh={refreshProject}
       />
 
       <main
+        aria-label="项目详情内容"
         data-testid="project-detail-content"
-        className="flex min-h-0 min-w-0 flex-1 flex-col bg-background lg:h-full"
+        className="flex min-h-0 min-w-0 flex-1 flex-col"
       >
-        <div className="shrink-0 border-b bg-card px-4 py-3 lg:px-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-base font-semibold tracking-normal">{title}</h2>
-                {refreshing ? (
-                  <Badge variant="secondary">
-                    <Loader2 className="animate-spin" data-icon="inline-start" />
-                    正在刷新
-                  </Badge>
-                ) : null}
-              </div>
-              <div className="mt-1 truncate text-sm text-muted-foreground">
-                {currentProject.name || "未命名项目"}
-              </div>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={refreshing}
-              onClick={refreshProject}
-            >
-              {refreshing ? (
-                <Loader2 className="animate-spin" data-icon="inline-start" />
-              ) : null}
-              刷新
-            </Button>
-          </div>
-        </div>
-
         <div
           data-testid="project-detail-scroll-region"
           className={isAcceptanceTab

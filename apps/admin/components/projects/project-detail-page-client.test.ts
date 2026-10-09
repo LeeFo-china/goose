@@ -8,7 +8,7 @@ function readProjectDetailSources() {
     page: readFileSync(new URL("./project-detail-page-client.tsx", import.meta.url), "utf8"),
     financeSummary: readFileSync(new URL("./project-finance-operating-summary-panel.tsx", import.meta.url), "utf8"),
     financeWidgets: readFileSync(new URL("./project-finance-operating-summary-widgets.tsx", import.meta.url), "utf8"),
-    rail: readFileSync(new URL("./project-detail-side-rail.tsx", import.meta.url), "utf8"),
+    header: readFileSync(new URL("./project-detail-header.tsx", import.meta.url), "utf8"),
     stageList: readFileSync(new URL("./project-acceptance-stage-list.tsx", import.meta.url), "utf8"),
     workbench: readFileSync(new URL("./project-acceptance-workbench.tsx", import.meta.url), "utf8"),
   };
@@ -16,22 +16,16 @@ function readProjectDetailSources() {
 
 describe("Project detail page layout", () => {
   test("contains page scroll inside fixed-height project workspace", () => {
-    const { detail, page, rail, stageList, workbench } = readProjectDetailSources();
+    const { detail, page, header, stageList, workbench } = readProjectDetailSources();
 
     expect(page).toContain('data-testid="project-detail-workspace"');
     expect(page).toContain("h-[calc(100dvh-6.5625rem)]");
     expect(page).toContain("min-h-0 flex-col overflow-hidden");
-    expect(page).toContain("overflow-hidden rounded-md border bg-card");
+    expect(page).toContain("overflow-hidden bg-card");
     expect(page).toContain('data-testid="project-detail-content"');
     expect(page).toContain('data-testid="project-detail-scroll-region"');
     expect(page).toContain("overflow-y-auto p-4 [scrollbar-gutter:stable]");
     expect(page).toContain("min-h-0 flex-1 overflow-y-auto p-4 [scrollbar-gutter:stable] lg:overflow-hidden lg:p-5");
-
-    expect(rail).toContain('data-testid="project-detail-side-rail"');
-    expect(rail).toContain("lg:h-full");
-    expect(rail).toContain("overflow-y-auto p-4 [scrollbar-gutter:stable]");
-    expect(rail).not.toContain("lg:sticky");
-    expect(rail).not.toContain("lg:self-start");
 
     expect(workbench).toContain("flex h-full min-h-0 min-w-0 flex-col");
     expect(stageList).toContain("flex h-full min-h-0 min-w-0 flex-col");
@@ -39,7 +33,7 @@ describe("Project detail page layout", () => {
   });
 
   test("keeps overview as a lightweight workbench instead of stacked detail panels", () => {
-    const { financeSummary, financeWidgets, overview, page, rail } = readProjectDetailSources();
+    const { financeSummary, financeWidgets, overview, page, header } = readProjectDetailSources();
 
     expect(page).toContain("ProjectDetailOverviewPanel");
     expect(page).not.toContain("<ProjectCostBudgetPanel projectId={currentProject.id} />");
@@ -52,10 +46,10 @@ describe("Project detail page layout", () => {
     expect(overview).toContain("compact");
     expect(financeSummary).toContain('data-testid="project-finance-flow-analysis"');
     expect(financeSummary).toContain('data-testid="project-finance-status-rail"');
-    expect(financeSummary).toContain("lg:grid-cols-[minmax(14rem,0.9fr)_minmax(16rem,1.1fr)]");
+
     expect(financeSummary).not.toContain("repeat(auto-fit,minmax(min(100%,22rem),1fr))");
     expect(financeWidgets).toContain("moneyFlowAxisLabel");
     expect(financeWidgets).not.toContain("rounded-md border bg-card px-3 py-3");
-    expect(rail).not.toContain("rounded-md border bg-background p-3");
+    expect(header).not.toContain("rounded-md border bg-background p-3");
   });
 });

@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ProjectStatusActionDialog } from "@/components/projects/project-status-action-dialog";
 import type { ProjectRecord, ProjectStatusActionItem } from "@/components/projects/project-mutation-types";
 import type { WorkflowSubjectAction, WorkflowSubjectState, WorkflowSubjectTimelineItem, WorkflowSubjectTimelineResponse } from "@/components/workflows/workflow-subject-state-panel";
+import { instanceStatusLabel, instanceStatusVariant } from "@/components/projects/project-workflow-runtime-format";
 import { requestBackendJson } from "@/lib/backend-client";
 import {
   buildActionOutput,
@@ -35,11 +36,15 @@ type WorkflowStateResponse = {
 export function ProjectWorkflowRuntimePanel({
   active = true,
   compact = false,
+  embedded = false,
+  refreshVersion = 0,
   onChanged,
   project,
 }: {
   active?: boolean;
   compact?: boolean;
+  embedded?: boolean;
+  refreshVersion?: number;
   onChanged?: () => Promise<void>;
   project: ProjectRecord;
 }) {
@@ -160,14 +165,14 @@ export function ProjectWorkflowRuntimePanel({
     if (!active) return;
     loadRuntime();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, project.id]);
+  }, [active, project.id, refreshVersion]);
 
   if (compact) {
     return (
-      <section className="border-y bg-card">
-        <div className="flex items-start justify-between gap-3 px-4 py-3">
+      <section className={embedded ? "min-w-0" : "border-y bg-card"}>
+        <div className={embedded ? "flex items-start justify-between gap-3" : "flex items-start justify-between gap-3 px-4 py-3"}>
           <div className="flex min-w-0 items-start gap-3">
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-background">
+            <span className="flex size-8 shrink-0 items-center justify-center">
               <Workflow className="size-4" />
             </span>
             <div className="min-w-0">
@@ -189,7 +194,7 @@ export function ProjectWorkflowRuntimePanel({
             <RefreshCw className={refreshing ? "animate-spin" : ""} />
           </Button>
         </div>
-        <div className="border-t px-4 py-3">
+        <div className={embedded ? "pt-4" : "border-t px-4 py-3"}>
           {error ? <StatusAlert>{error}</StatusAlert> : null}
           {!loaded && refreshing ? (
             <div className="text-sm text-muted-foreground">
@@ -201,7 +206,7 @@ export function ProjectWorkflowRuntimePanel({
               当前项目暂无流程运行数据。
             </div>
           ) : (
-            <div className="flex flex-col gap-4">
+            <div className="grid min-w-0 gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr))]">
               <CurrentNodeSummary
                 currentNode={currentNode}
                 currentNodeAttributes={currentNodeAttributes}
@@ -338,16 +343,16 @@ function CurrentNodeSummary({
   return (
     <div className="min-w-0">
       <div className="flex flex-wrap items-center gap-2">
-        <Badge variant="default">当前节点</Badge>
+        <Badge variant={instanceStatusVariant(state.instance_status)}>{instanceStatusLabel(state.instance_status)}</Badge>
         {currentNode ? (
           <Badge variant={nodeStatusVariant(currentNode)}>{nodeStatusLabel(currentNode)}</Badge>
         ) : null}
       </div>
       <h3 className="mt-3 truncate text-base font-semibold tracking-normal">
-        {currentNode ? timelineNodeTitle(currentNode) : state.current_node_title || "-"}
+        {state.instance_status === "completed" ? "流程已结束" : currentNode ? timelineNodeTitle(currentNode) : state.current_node_title || "-"}
       </h3>
       <div className="mt-1 break-all text-xs text-muted-foreground">
-        {currentNode ? "节点来自流程运行数据" : "未定位当前节点"}
+        {state.instance_status === "completed" ? "全部流程节点已处理完成。" : currentNode ? "当前流程节点" : "未定位当前节点"}
       </div>
       {currentNodeInsight ? (
         <p className="mt-3 max-w-3xl text-sm text-muted-foreground">{currentNodeInsight}</p>

@@ -41,7 +41,7 @@ test.describe("project detail", () => {
 
     await expect(page.getByTestId("project-detail-workspace"))
       .toBeVisible({ timeout: 20_000 });
-    await expect(page.getByTestId("project-detail-content").getByRole("heading", {
+    await expect(page.getByRole("navigation", { name: "项目详情导航" }).getByRole("button", {
       name: "工序验收",
     }))
       .toBeVisible();
