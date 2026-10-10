@@ -1,7 +1,8 @@
 import { Errors } from "@/errors/error-factory";
 
-// Product-wide suspension: no tenant, role, client version or review-build override.
-// Reopening requires category qualification, content moderation and a new release review.
+// Legacy mixed/public communication remains suspended for every tenant and client.
+// The separate employee-only internal text channel has its own project access and moderation;
+// this switch must not be enabled to restore it or any legacy media scene.
 export const COMMENT_COMMUNICATION_ENABLED = false;
 
 export function assertCommentCommunicationAvailable(): void {

@@ -20,6 +20,8 @@ type TenantServiceAccessServicePort = Pick<
 >;
 
 export type GetRequiredAuthContextOptions = {
+  /** Sensitive operations may bypass cached roles, permissions and department scope. */
+  freshPermissions?: boolean;
   tenantServiceAccess?: TenantServiceRouteAccess;
   requiredCapability?: PlatformServiceTrialCapability | null;
 };
@@ -246,7 +248,12 @@ export class AuthorizationService {
       throw Errors.unauthorized();
     }
 
-    const authContext = await this.getAuthContextByAuthUserId(authUserId);
+    const authContext = options.freshPermissions
+      ? buildAuthContext(
+        await permissionRepository.getEmployeePermissionContextByAuthUserId(authUserId),
+        authUserId,
+      )
+      : await this.getAuthContextByAuthUserId(authUserId);
 
     this.assertTenantAvailable(authContext);
     await this.assertTenantServiceAccess(authContext, options);

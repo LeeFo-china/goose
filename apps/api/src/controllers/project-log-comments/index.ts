@@ -7,6 +7,8 @@ import {
   ProjectLogCommentsQuerySchema,
   type ProjectLogCommentsQueryType,
 } from "@/schema/project-log-comments";
+import { InternalCommentCreateSchema, InternalCommentParamsSchema, InternalCommentQuerySchema } from "@/schema/project-log-internal-comments";
+import { projectLogInternalCommentsService } from "@/services/project-log-internal-comments";
 import { projectLogCommentsService } from "@/services/project-log-comments";
 import { getTenantServiceAuthOptions } from "@/services/tenant-service-route-access";
 import { Get, Post } from "@/utils/decorators/route";
@@ -49,6 +51,28 @@ class ProjectLogCommentsController extends BaseController {
     return ResponseHandler.success({
       list: comments,
     });
+  }
+
+  @Get("/project_logs/:logId/internal-comments")
+  async listInternalComments(request: FastifyRequest) {
+    const params = InternalCommentParamsSchema.safeParse(request.params);
+    const query = InternalCommentQuerySchema.safeParse(request.query);
+    if (!params.success) throw Errors.fromZod(params.error);
+    if (!query.success) throw Errors.fromZod(query.error);
+    return ResponseHandler.success(await projectLogInternalCommentsService.list({
+      actor: request.user, logId: params.data.logId, ...query.data,
+    }));
+  }
+
+  @Post("/project_logs/:logId/internal-comments")
+  async createInternalComment(request: FastifyRequest) {
+    const params = InternalCommentParamsSchema.safeParse(request.params);
+    const body = InternalCommentCreateSchema.safeParse(request.body);
+    if (!params.success) throw Errors.fromZod(params.error);
+    if (!body.success) throw Errors.fromZod(body.error);
+    return ResponseHandler.success(await projectLogInternalCommentsService.create({
+      actor: request.user, logId: params.data.logId, payload: body.data,
+    }));
   }
 
   private getTokenRoles(request: FastifyRequest) {
