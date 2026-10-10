@@ -1,0 +1,105 @@
+{
+  "checked_at": "2026-10-10T15:02:20.221Z",
+  "release": "v2026.10.10.3",
+  "verification_kind": "server_generated_short_lived_credentials_not_device_sessions",
+  "checks": [
+    {
+      "name": "new-disabled-old-not-retired",
+      "pass": true
+    },
+    {
+      "name": "new-list-disabled",
+      "method": "GET",
+      "path": "/project_logs/d4cc338a-4d4f-469b-ad01-619533304e72/project-comments",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-3j",
+      "pass": true
+    },
+    {
+      "name": "new-create-disabled",
+      "method": "POST",
+      "path": "/project_logs/d4cc338a-4d4f-469b-ad01-619533304e72/project-comments",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-3k",
+      "pass": true
+    },
+    {
+      "name": "new-anonymous-list",
+      "method": "GET",
+      "path": "/project_logs/d4cc338a-4d4f-469b-ad01-619533304e72/project-comments",
+      "status": 401,
+      "code": "TOKEN_MISSING",
+      "request_id": "req-3l",
+      "pass": true
+    },
+    {
+      "name": "new-visitor-list",
+      "method": "GET",
+      "path": "/project_logs/d4cc338a-4d4f-469b-ad01-619533304e72/project-comments",
+      "status": 401,
+      "code": "TOKEN_INVALID",
+      "request_id": "req-3m",
+      "pass": true
+    },
+    {
+      "name": "new-pagination-max",
+      "method": "GET",
+      "path": "/project_logs/d4cc338a-4d4f-469b-ad01-619533304e72/project-comments",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "request_id": "req-3n",
+      "pass": true
+    },
+    {
+      "name": "new-forged-review-state",
+      "method": "POST",
+      "path": "/project_logs/d4cc338a-4d4f-469b-ad01-619533304e72/project-comments",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "request_id": "req-3o",
+      "pass": true
+    },
+    {
+      "name": "new-edit-absent",
+      "method": "PATCH",
+      "path": "/project_logs/d4cc338a-4d4f-469b-ad01-619533304e72/project-comments",
+      "status": 404,
+      "code": "ROUTE_NOT_FOUND",
+      "request_id": "req-3p",
+      "pass": true
+    },
+    {
+      "name": "old-internal-list-staged",
+      "method": "GET",
+      "path": "/project_logs/d4cc338a-4d4f-469b-ad01-619533304e72/internal-comments",
+      "status": 200,
+      "code": null,
+      "request_id": null,
+      "pass": true
+    },
+    {
+      "name": "old-list-contract",
+      "pass": true
+    },
+    {
+      "name": "real-service-active-employee-fresh-scope",
+      "pass": true
+    },
+    {
+      "name": "no-test-or-history-records-created",
+      "pass": true
+    }
+  ],
+  "passed": 12,
+  "total": 12,
+  "all_passed": true,
+  "remaining": [
+    "customer/employee positive posting and replies with real WeChat sessions",
+    "retirement 410 after coordinated client cutover",
+    "phone screenshots and moderation/revocation/identity switching joint acceptance"
+  ],
+  "new_enabled": false,
+  "old_retired": false
+}
