@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "workflow_run_id": 38059792523,
+  "mode": "plan",
+  "commit_sha": "18fac771252513ce323a6a3522e2f574e67db929",
+  "before_count": 660,
+  "before_latest": "20261010111529",
+  "after_count": 660,
+  "after_latest": "20261010111529",
+  "pending_count": 1,
+  "pending_versions": [
+    "20261010140944"
+  ],
+  "applied_count": 0,
+  "applied_versions": [],
+  "checked_at": "2026-10-10T14:30:27Z"
+}

@@ -1,0 +1,38 @@
+     ?column?     |      max       | count
+------------------+----------------+-------
+ migration_latest | 20261010140944 |   661
+(1 row)
+
+ ?column?  |           relname            | relrowsecurity
+-----------+------------------------------+----------------
+ table_rls | project_log_project_comments | t
+(1 row)
+
+   grantee    | privilege_type
+--------------+----------------
+ postgres     | DELETE
+ postgres     | INSERT
+ postgres     | REFERENCES
+ postgres     | SELECT
+ postgres     | TRIGGER
+ postgres     | TRUNCATE
+ postgres     | UPDATE
+ service_role | INSERT
+ service_role | SELECT
+(9 rows)
+
+    ?column?     | has_function_privilege | has_function_privilege | has_function_privilege
+-----------------+------------------------+------------------------+------------------------
+ rpc_permissions | f                      | f                      | t
+(1 row)
+
+  ?column?   | count
+-------------+-------
+ new_records |     0
+(1 row)
+
+                  key                  | value_text
+---------------------------------------+------------
+ PROJECT_LOG_COMMUNICATION_ENABLED     | false
+ PROJECT_LOG_INTERNAL_COMMENTS_RETIRED | false
+(2 rows)

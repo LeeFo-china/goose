@@ -1,0 +1,6 @@
+supabase/postgres:15.8.1.085|sha256:af083ef64d0408c8f098ee6f5c364a59b26f36fbc0f3a334a62c5c1d57362e9b|network=none|memory=268435456|cpu=500000000|mounts=[]
+PostgreSQL 15.8 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 13.2.0, 64-bit
+UTF8
+
+UTF8
+gooes-project-comments-pg15-verify

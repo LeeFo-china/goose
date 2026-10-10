@@ -75,8 +75,8 @@ POST 无自动重试；本期不新增幂等键，网络结果不确定时刷新
 
 - [x] 在 gooes `docs/miniprogram/` 输出最终接口契约及请求/响应实例，逐项标记拟议字段是否已经实现。orange 只读，禁止代改客户端。
 - [ ] 小程序先按最终契约接入体验包；保留未上线/关闭时的受控提示，不降级请求旧评论接口。
-- [ ] 按 `.github/workflows/migrate-production-database.yml` 检查待执行 migration、备份及应用；用 supabase migration list 验证 Local/Remote 对齐。
-- [ ] 按 `.github/workflows/release-production.yml` 部署 API，核验 revision/health，先验证默认关闭及旧版本兼容。
+- [x] 按 `.github/workflows/migrate-production-database.yml` 检查待执行 migration、备份及应用；用 supabase migration list 验证 Local/Remote 对齐。
+- [x] 按 `.github/workflows/release-production.yml` 部署 API，核验 revision/health，先验证默认关闭及旧版本兼容。
 - [ ] 客户参与正式开放前，核实微信对当前项目沟通实际形态的审核要求。部署成功不等于类目问题解决，不承诺可通过审核。
 - [ ] 使用明确指定的测试项目及体验成员联验，通过正常业务接口发布/回复；其他分支在隔离环境受控复现并标明证据来源，不冒充微信或生产实测。
 - [ ] 回传部署版本、migration 状态、API 结果、requestId/记录 ID、真机版本及截图；全部门槛通过后再安排小程序提审与正式发布。
@@ -96,11 +96,11 @@ POST 无自动重试；本期不新增幂等键，网络结果不确定时刷新
 | 分享/图库/上传 | 不带项目沟通内容和计数，旧评论与评论图片仍停用 |
 | 手机证据 | 版本、双方发布回复、越权/撤权、身份切换、异常提示的真实截图及时间 |
 
-## 可直接发给小程序团队的预告
+## 小程序对接说明（实施后更新）
 
-> 下一轮计划增加“项目沟通”：仅本项目客户与有项目权限的员工可查看、发布和回复文字。保留服务端自动内容检测，首期不开放评论图片、评分、编辑或访客参与。
+> 本轮已实现“项目沟通”：仅本项目客户与有项目权限的员工可查看、发布和回复文字。保留服务端自动内容检测，首期不开放评论图片、评分、编辑或访客参与。
 >
-> 后端将新增独立的 project-comments 接口，不直接放宽现有 internal-comments。已有内部记录和旧混合评论均不迁移、不展示，记录保留；旧内部入口在切换时关闭。本文路由和字段目前是拟议契约，请等待最终接口回执后接入，不将生产现有版本视为已支持客户。
+> 后端已新增独立的 project-comments 接口，不直接放宽现有 internal-comments。已有内部记录和旧混合评论均不迁移、不展示，记录保留；旧内部入口在切换时关闭。最终接口契约见 `docs/miniprogram/2026-10-10-project-log-project-comments-handoff.md`；部署和实际开放状态以发布回执为准。
 >
 > 客户端入口提示“本项目客户及有权限的员工可见”；区分 employee/customer 作者，按服务端 can_write 控制输入；待审不可插入列表，失败不自动重发、不降级到旧接口。身份/租户/项目切换及退出时清空记录、计数和草稿，忽略迟到响应。
 >
@@ -114,3 +114,5 @@ POST 无自动重试；本期不新增幂等键，网络结果不确定时刷新
 兼容当前客户签发链路缺少 login_channel、roles 可能包含账号多身份的有效凭证；以 customer_id 且无 employee_id 选中客户范围，无员工授权回退。GET 再检查实时 OAuth，POST 检测前后检查。只读员工不调用会抛无权限的写方法，返回 can_write=false。
 
 正式接口交接：`docs/miniprogram/2026-10-10-project-log-project-comments-handoff.md`。未来客户端工作、生产 migration/发布及手机联验状态独立记录，不以本地测试代替上线验收。
+
+实施回执：生产 v2026.10.10.3 已部署，661 条迁移对齐，43/43 线上检查通过；新能力关闭、旧入口未退休。客户端配套、开关切换、真实微信发布回复和手机截图仍待联合验收。详见 `docs/operations/2026-10-10-project-communication-release.md`。

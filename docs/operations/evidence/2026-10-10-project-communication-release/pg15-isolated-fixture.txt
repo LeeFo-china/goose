@@ -1,0 +1,635 @@
+DO
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+CREATE INDEX
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+ALTER DEFAULT PRIVILEGES
+GRANT
+GRANT
+BEGIN
+CREATE TABLE
+CREATE INDEX
+CREATE FUNCTION
+CREATE TRIGGER
+REVOKE
+ALTER TABLE
+REVOKE
+GRANT
+CREATE POLICY
+CREATE POLICY
+COMMENT
+CREATE FUNCTION
+REVOKE
+GRANT
+COMMENT
+INSERT 0 2
+COMMIT
+DO
+CREATE FUNCTION
+INSERT 0 2
+INSERT 0 4
+INSERT 0 3
+INSERT 0 3
+INSERT 0 6
+CREATE FUNCTION
+CREATE FUNCTION
+ add_comment
+-------------
+
+(1 row)
+
+ add_comment
+-------------
+
+(1 row)
+
+ add_comment
+-------------
+
+(1 row)
+
+ add_comment
+-------------
+
+(1 row)
+
+ add_comment
+-------------
+
+(1 row)
+
+ add_comment
+-------------
+
+(1 row)
+
+ add_comment
+-------------
+
+(1 row)
+
+ reject
+--------
+
+(1 row)
+
+ reject
+--------
+
+(1 row)
+
+ reject
+--------
+
+(1 row)
+
+ reject
+--------
+
+(1 row)
+
+ reject
+--------
+
+(1 row)
+
+ reject
+--------
+
+(1 row)
+
+ reject
+--------
+
+(1 row)
+
+ reject
+--------
+
+(1 row)
+
+ reject
+--------
+
+(1 row)
+
+ reject
+--------
+
+(1 row)
+
+ reject
+--------
+
+(1 row)
+
+ reject
+--------
+
+(1 row)
+
+ reject
+--------
+
+(1 row)
+
+ reject
+--------
+
+(1 row)
+
+ reject
+--------
+
+(1 row)
+
+ reject
+--------
+
+(1 row)
+
+ reject
+--------
+
+(1 row)
+
+ reject
+--------
+
+(1 row)
+
+ reject
+--------
+
+(1 row)
+
+ reject
+--------
+
+(1 row)
+
+ reject
+--------
+
+(1 row)
+
+ reject
+--------
+
+(1 row)
+
+BEGIN
+UPDATE 1
+ reject
+--------
+
+(1 row)
+
+ROLLBACK
+DO
+ reject
+--------
+
+(1 row)
+
+BEGIN
+ALTER TABLE
+ reject
+--------
+
+(1 row)
+
+ reject
+--------
+
+(1 row)
+
+ reject
+--------
+
+(1 row)
+
+ reject
+--------
+
+(1 row)
+
+ reject
+--------
+
+(1 row)
+
+ reject
+--------
+
+(1 row)
+
+ROLLBACK
+DO
+SET
+ reject
+--------
+
+(1 row)
+
+ reject
+--------
+
+(1 row)
+
+RESET
+SET
+ reject
+--------
+
+(1 row)
+
+ reject
+--------
+
+(1 row)
+
+RESET
+BEGIN
+GRANT
+SET
+DO
+ reject
+--------
+
+(1 row)
+
+SET
+DO
+ reject
+--------
+
+(1 row)
+
+ROLLBACK
+SET
+ add_comment
+-------------
+
+(1 row)
+
+ add_comment
+-------------
+
+(1 row)
+
+DO
+ reject
+--------
+
+(1 row)
+
+ reject
+--------
+
+(1 row)
+
+RESET
+INSERT 0 5000
+ANALYZE
+                                                                                        QUERY PLAN
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=3.11..5.93 rows=20 width=118) (actual time=0.019..0.028 rows=20 loops=1)
+   Buffers: shared hit=36
+   ->  Index Scan using project_log_project_comments_approved_page_idx on project_log_project_comments  (cost=0.28..707.67 rows=5006 width=118) (actual time=0.009..0.025 rows=40 loops=1)
+         Index Cond: ((tenant_id = '00000000-0000-4000-8000-000000000001'::uuid) AND (log_id = '00000000-0000-4000-8000-000000000001'::uuid))
+         Buffers: shared hit=36
+ Planning:
+   Buffers: shared hit=62
+ Planning Time: 0.187 ms
+ Execution Time: 0.038 ms
+(9 rows)
+
+DO
+CREATE FUNCTION
+ assert_access
+---------------
+
+(1 row)
+
+ assert_access
+---------------
+
+(1 row)
+
+ assert_access
+---------------
+
+(1 row)
+
+ assert_access
+---------------
+
+(1 row)
+
+ assert_access
+---------------
+
+(1 row)
+
+ assert_access
+---------------
+
+(1 row)
+
+ assert_access
+---------------
+
+(1 row)
+
+ assert_access
+---------------
+
+(1 row)
+
+ assert_access
+---------------
+
+(1 row)
+
+ assert_access
+---------------
+
+(1 row)
+
+ assert_access
+---------------
+
+(1 row)
+
+ assert_access
+---------------
+
+(1 row)
+
+INSERT 0 1
+ assert_access
+---------------
+
+(1 row)
+
+ assert_access
+---------------
+
+(1 row)
+
+UPDATE 1
+ assert_access
+---------------
+
+(1 row)
+
+ assert_access
+---------------
+
+(1 row)
+
+UPDATE 1
+UPDATE 1
+ assert_access
+---------------
+
+(1 row)
+
+ assert_access
+---------------
+
+(1 row)
+
+UPDATE 1
+DELETE 1
+ assert_access
+---------------
+
+(1 row)
+
+UPDATE 1
+ assert_access
+---------------
+
+(1 row)
+
+ assert_access
+---------------
+
+(1 row)
+
+UPDATE 1
+ assert_access
+---------------
+
+(1 row)
+
+ assert_access
+---------------
+
+(1 row)
+
+ assert_access
+---------------
+
+(1 row)
+
+UPDATE 1
+ assert_access
+---------------
+
+(1 row)
+
+UPDATE 1
+UPDATE 2
+INSERT 0 1
+ assert_access
+---------------
+
+(1 row)
+
+ assert_access
+---------------
+
+(1 row)
+
+ assert_access
+---------------
+
+(1 row)
+
+ assert_access
+---------------
+
+(1 row)
+
+UPDATE 1
+ assert_access
+---------------
+
+(1 row)
+
+UPDATE 1
+ assert_access
+---------------
+
+(1 row)
+
+UPDATE 1
+UPDATE 1
+ assert_access
+---------------
+
+(1 row)
+
+ assert_access
+---------------
+
+(1 row)
+
+UPDATE 1
+UPDATE 1
+ assert_access
+---------------
+
+(1 row)
+
+UPDATE 1
+ assert_access
+---------------
+
+(1 row)
+
+UPDATE 1
+ assert_access
+---------------
+
+(1 row)
+
+UPDATE 1
+UPDATE 1
+ assert_access
+---------------
+
+(1 row)
+
+UPDATE 1
+UPDATE 1
+ assert_access
+---------------
+
+(1 row)
+
+UPDATE 1
+INSERT 0 1
+ assert_access
+---------------
+
+(1 row)
+
+UPDATE 1
+ assert_access
+---------------
+
+(1 row)
+
+UPDATE 1
+ assert_access
+---------------
+
+(1 row)
+
+UPDATE 1
+DO
+SET
+ reject
+--------
+
+(1 row)
+
+RESET
+SET
+ reject
+--------
+
+(1 row)
+
+RESET
+SET
+ assert_access
+---------------
+
+(1 row)
+
+ assert_access
+---------------
+
+(1 row)
+
+RESET
+INSERT 0 5000
+INSERT 0 5000
+ANALYZE
+ANALYZE
+ANALYZE
+ANALYZE
+                                     QUERY PLAN
+------------------------------------------------------------------------------------
+ Result  (cost=0.00..0.26 rows=1 width=1) (actual time=0.837..0.838 rows=1 loops=1)
+   Buffers: shared hit=168
+ Planning Time: 0.010 ms
+ Execution Time: 0.843 ms
+(4 rows)
+
+PREPARE
+                                                                                                                      QUERY PLAN
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Result  (cost=20.91..20.92 rows=1 width=1) (actual time=0.018..0.019 rows=1 loops=1)
+   Buffers: shared hit=9
+   InitPlan 5 (returns $4)
+     ->  Nested Loop  (cost=0.28..20.91 rows=1 width=0) (actual time=0.017..0.018 rows=1 loops=1)
+           Buffers: shared hit=9
+           ->  Index Scan using projects_pkey on projects project  (cost=0.28..19.82 rows=1 width=0) (actual time=0.015..0.016 rows=1 loops=1)
+                 Index Cond: (id = '00000000-0000-4000-8000-000000000001'::uuid)
+                 Filter: ((tenant_id = '00000000-0000-4000-8000-000000000001'::uuid) AND ((SubPlan 1) OR (hashed SubPlan 4)))
+                 Buffers: shared hit=8
+                 SubPlan 1
+                   ->  Nested Loop  (cost=0.28..9.39 rows=1 width=0) (actual time=0.009..0.009 rows=1 loops=1)
+                         Join Filter: (member.employee_id = employee.id)
+                         Rows Removed by Join Filter: 2
+                         Buffers: shared hit=5
+                         ->  Index Scan using idx_project_members_project_id on project_members member  (cost=0.28..8.30 rows=1 width=16) (actual time=0.002..0.003 rows=2 loops=1)
+                               Index Cond: (project_id = project.id)
+                               Buffers: shared hit=3
+                         ->  Seq Scan on employees employee  (cost=0.00..1.06 rows=2 width=16) (actual time=0.002..0.002 rows=2 loops=2)
+                               Filter: ((tenant_id = '00000000-0000-4000-8000-000000000001'::uuid) AND (tenant_department_id = '00000000-0000-4000-8000-000000000010'::uuid))
+                               Rows Removed by Filter: 2
+                               Buffers: shared hit=2
+                 SubPlan 4
+                   ->  Hash Join  (cost=1.06..2.14 rows=1 width=16) (never executed)
+                         Hash Cond: (owner.id = customer.owner_id)
+                         ->  Seq Scan on employees owner  (cost=0.00..1.06 rows=2 width=16) (never executed)
+                               Filter: ((tenant_id = '00000000-0000-4000-8000-000000000001'::uuid) AND (tenant_department_id = '00000000-0000-4000-8000-000000000010'::uuid))
+                         ->  Hash  (cost=1.04..1.04 rows=2 width=32) (never executed)
+                               ->  Seq Scan on customers customer  (cost=0.00..1.04 rows=2 width=32) (never executed)
+                                     Filter: (tenant_id = '00000000-0000-4000-8000-000000000001'::uuid)
+           ->  Seq Scan on employees requester  (cost=0.00..1.08 rows=1 width=0) (actual time=0.002..0.002 rows=1 loops=1)
+                 Filter: ((id = '00000000-0000-4000-8000-000000000001'::uuid) AND (tenant_id = '00000000-0000-4000-8000-000000000001'::uuid) AND (status = 'active'::text) AND (tenant_department_id = '00000000-0000-4000-8000-000000000010'::uuid))
+                 Rows Removed by Filter: 3
+                 Buffers: shared hit=1
+ Planning Time: 0.414 ms
+ Execution Time: 0.044 ms
+(35 rows)
+
+DEALLOCATE
+                         result
+---------------------------------------------------------
+ Project comment migration and fresh scope checks passed
+(1 row)
