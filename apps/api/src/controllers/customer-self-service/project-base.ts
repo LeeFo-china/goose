@@ -1,3 +1,4 @@
+import { COMMENT_COMMUNICATION_ENABLED } from "@/services/comment-communication";
 import { Errors } from "@/errors/error-factory";
 import {
   measureCustomerProjectDetailStep,
@@ -26,7 +27,6 @@ import {
 } from "@gooes/domain";
 import { CustomerSelfServiceBaseController } from "./shared";
 import { deriveCustomerProjectTeam } from "./customer-project-team";
-
 type CustomerProjectLogCommentAuthor = {
   id: string;
   name: string | null;
@@ -276,9 +276,9 @@ export abstract class CustomerSelfServiceProjectBaseController
       stage_label: stageCode ? PROJECT_LOG_STAGE_CONFIG[stageCode].label : null,
       node_name: row.node_name,
       created_at: row.created_at,
-      comment_count: Number(row.comment_count ?? 0),
-      rating_count: Number(row.rating_count ?? 0),
-      average_rating: row.average_rating == null ? null : Number(row.average_rating),
+      comment_count: COMMENT_COMMUNICATION_ENABLED ? Number(row.comment_count ?? 0) : 0,
+      rating_count: COMMENT_COMMUNICATION_ENABLED ? Number(row.rating_count ?? 0) : 0,
+      average_rating: !COMMENT_COMMUNICATION_ENABLED || row.average_rating == null ? null : Number(row.average_rating),
       image_count: Number(row.image_count ?? 0),
       cover_thumb_url: this.getImagePublicUrl(row.cover_image_path),
     };

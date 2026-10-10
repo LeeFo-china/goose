@@ -1,3 +1,4 @@
+import { assertCommentMediaAvailable } from "@/services/comment-communication";
 import { z } from "zod";
 
 import { ErrorCodes } from "@/errors/error-codes";
@@ -75,6 +76,7 @@ function assertStoredFileAccess(
   actorContext: UploadPublicUrlActorContext,
 ) {
   const parsed = parseStoredObjectKey(path);
+  assertCommentMediaAvailable(parsed.scene);
   if (!parsed.isPlatformObjectKey) {
     return;
   }

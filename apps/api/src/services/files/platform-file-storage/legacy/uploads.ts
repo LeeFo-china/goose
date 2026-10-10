@@ -1,3 +1,4 @@
+import { assertCommentMediaAvailable } from "@/services/comment-communication";
 import {
   ErrorCodes,
   Errors,
@@ -15,6 +16,7 @@ import {
 import type { StorageUploadResult, UploadImageInput } from "./shared";
 
 export async function uploadToTencentCos(this: any, input: UploadImageInput): Promise<StorageUploadResult> {
+  assertCommentMediaAvailable(input.scene);
   const uploadStartedAt = now();
   const config = await this.getCosConfig();
   const objectKey = this.buildCosObjectKey(input);
@@ -87,6 +89,7 @@ export async function uploadToTencentCos(this: any, input: UploadImageInput): Pr
 }
 
 export async function uploadToSupabase(this: any, input: UploadImageInput): Promise<StorageUploadResult> {
+  assertCommentMediaAvailable(input.scene);
   const extension = getFileExtension(input);
   const objectKey = this.buildLegacyObjectPath({
     scene: input.scene,
@@ -123,6 +126,7 @@ export async function uploadToSupabase(this: any, input: UploadImageInput): Prom
 }
 
 export async function uploadImage(this: any, input: UploadImageInput) {
+  assertCommentMediaAvailable(input.scene);
   const uploadStartedAt = now();
   const providerStartedAt = now();
   const provider = await this.getStorageProvider();

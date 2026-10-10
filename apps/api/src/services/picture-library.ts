@@ -1,3 +1,4 @@
+import { assertCommentCommunicationAvailable } from "@/services/comment-communication";
 import { Errors } from "@/errors/error-factory";
 import { pictureLibraryCommentsRepository } from "@/repositories/picture-library-comments";
 import { pictureLibraryRepository } from "@/repositories/picture-library";
@@ -147,6 +148,7 @@ class PictureLibraryService {
 
   async showComment(id: string, authContext: AuthContext) {
     this.assertPermission(authContext, "platform.picture.manage");
+    assertCommentCommunicationAvailable();
     const comment = await pictureLibraryCommentsRepository.updateCommentStatus(id, "visible");
     if (!comment) throw Errors.notFound("图片评论不存在");
     await this.recordAudit(authContext, "picture_comment_show", comment.id, comment.content, {

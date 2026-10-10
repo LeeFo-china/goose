@@ -1,3 +1,4 @@
+import { assertCommentMediaAvailable } from "@/services/comment-communication";
 import { uploadRepository } from "@/repositories/uploads";
 import { platformFileObjectRepository } from "@/repositories/platform-file-objects";
 import { findWechatPayApplymentAttachmentOwner } from "@/repositories/wechat-pay-applyment-attachment-repository";
@@ -55,6 +56,7 @@ class UploadService {
       throw Errors.forbidden();
     }
 
+    assertCommentMediaAvailable(file.scene);
     const publicUrl = resolveStoredFileUrl(file.object_key);
     if (!publicUrl) {
       throw Errors.badRequest("图片路径不合法");

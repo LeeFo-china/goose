@@ -7,11 +7,9 @@ import { PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME } from "@/components/platform
 import {
   DeletePictureCommentButton,
   HidePictureCommentButton,
-  ShowPictureCommentButton,
 } from "@/components/picture-library/picture-comment-actions";
 import type { PictureCommentRecord } from "@/components/picture-library/picture-library-types";
 import {
-  buildStoredFilePreviewUrl,
   formatPictureDate,
   getAssetStatusMeta,
   getCommentStatusMeta,
@@ -63,37 +61,13 @@ function createColumns(): ColumnDef<PictureCommentRecord>[] {
     {
       id: "images",
       header: "图片附件",
-      cell: ({ row }) => {
-        const images = row.original.images.slice(0, 3);
-        if (images.length === 0) {
-          return <span className="text-sm text-muted-foreground">无</span>;
-        }
-        return (
-          <div className="flex gap-1">
-            {images.map((image) => {
-              const url = buildStoredFilePreviewUrl(image.file_object
-                ? {
-                  id: image.file_object.id,
-                  asset_id: row.original.asset_id,
-                  variant: "comment",
-                  file_object_id: image.file_object_id,
-                  object_key: image.file_object.object_key,
-                  width: image.file_object.width,
-                  height: image.file_object.height,
-                  file_size: image.file_object.size_bytes,
-                  mime_type: image.file_object.mime_type,
-                  created_at: image.created_at,
-                }
-                : null);
-              return (
-                <div key={image.id} className="flex size-10 items-center justify-center overflow-hidden rounded-md border bg-muted">
-                  {url ? <img src={url} alt="评论图片" className="size-full object-cover" /> : <span className="text-xs text-muted-foreground">图</span>}
-                </div>
-              );
-            })}
-          </div>
-        );
-      },
+      cell: ({ row }) => (
+        <span className="text-sm text-muted-foreground">
+          {row.original.images.length > 0
+            ? `${row.original.images.length} 张（图片访问已停用）`
+            : "无"}
+        </span>
+      ),
       meta: { cellClassName: "whitespace-nowrap" },
     },
     {
@@ -110,7 +84,6 @@ function createColumns(): ColumnDef<PictureCommentRecord>[] {
       cell: ({ row }) => (
         <div className="flex justify-end gap-2">
           <HidePictureCommentButton comment={row.original} />
-          <ShowPictureCommentButton comment={row.original} />
           <DeletePictureCommentButton comment={row.original} />
         </div>
       ),
@@ -124,13 +97,18 @@ function createColumns(): ColumnDef<PictureCommentRecord>[] {
 
 export function PictureCommentsTable({ comments }: { comments: PictureCommentRecord[] }) {
   return (
-    <DataTable
-      columns={createColumns()}
-      data={comments}
-      emptyText="还没有图片评论"
-      minWidth="min-w-[1080px]"
-      tableClassName="border-t-0"
-      rowClassName={() => PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME}
-    />
+    <>
+      <p className="mb-3 text-sm text-muted-foreground">
+        评论交流已停用。下方保留历史记录及原始状态，仅供治理，不代表当前对用户公开。
+      </p>
+      <DataTable
+        columns={createColumns()}
+        data={comments}
+        emptyText="还没有图片评论"
+        minWidth="min-w-[1080px]"
+        tableClassName="border-t-0"
+        rowClassName={() => PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME}
+      />
+    </>
   );
 }

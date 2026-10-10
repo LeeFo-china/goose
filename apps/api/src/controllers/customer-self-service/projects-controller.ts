@@ -1,3 +1,4 @@
+import { COMMENT_COMMUNICATION_ENABLED } from "@/services/comment-communication";
 import type { FastifyRequest } from "fastify";
 import { Errors } from "@/errors/error-factory";
 import { constructionStageStatusService } from "@/services/construction-stage-status";
@@ -234,15 +235,15 @@ class CustomerProjectsController extends CustomerSelfServiceProjectBaseControlle
             ? { id: item.employee_id, name: item.employee_name, avatar: item.employee_avatar }
             : null,
         });
-        const ratingCount = Number(item.rating_count ?? 0);
+        const ratingCount = COMMENT_COMMUNICATION_ENABLED ? Number(item.rating_count ?? 0) : 0;
         const ratingSum = Number(item.rating_sum ?? 0);
 
         return {
           ...base,
-          comment_count: Number(item.comment_count ?? 0),
+          comment_count: COMMENT_COMMUNICATION_ENABLED ? Number(item.comment_count ?? 0) : 0,
           rating_count: ratingCount,
           average_rating: ratingCount ? Number((ratingSum / ratingCount).toFixed(1)) : null,
-          my_rating: item.my_rating == null ? null : Number(item.my_rating),
+          my_rating: !COMMENT_COMMUNICATION_ENABLED || item.my_rating == null ? null : Number(item.my_rating),
         };
       }),
       pagination: { page: 1, pageSize: input.pageSize, total: 0, totalPages: 0 },

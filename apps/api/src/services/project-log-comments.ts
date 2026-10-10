@@ -1,3 +1,4 @@
+import { assertCommentCommunicationAvailable } from "@/services/comment-communication";
 import { Errors } from "@/errors/error-factory";
 import {
   projectLogCommentsRepository,
@@ -48,6 +49,7 @@ class ProjectLogCommentsService {
     tokenRoles: string[];
     payload: CreateProjectLogCommentInput;
   }) {
+    assertCommentCommunicationAvailable();
     const author = await this.resolveCurrentAuthor(input);
     const log = await this.assertProjectLogReadable({
       logId: input.payload.log_id,
@@ -111,6 +113,7 @@ class ProjectLogCommentsService {
     tokenRoles: string[];
     logId: string;
   }) {
+    assertCommentCommunicationAvailable();
     const viewer = await this.resolveCurrentAuthor(input);
     const log = await this.assertProjectLogReadable({
       logId: input.logId,

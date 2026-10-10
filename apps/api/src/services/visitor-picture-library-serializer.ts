@@ -1,3 +1,4 @@
+import { COMMENT_COMMUNICATION_ENABLED } from "@/services/comment-communication";
 import { Errors } from "@/errors/error-factory";
 import type {
   PictureCommentImageRecord,
@@ -34,7 +35,7 @@ export function toAssetListItem(
     favorite_count: asset.favorite_count,
     liked_by_me: state?.likedByMe ?? false,
     favorited_by_me: state?.favoritedByMe ?? false,
-    comment_count: asset.comment_count,
+    comment_count: COMMENT_COMMUNICATION_ENABLED ? asset.comment_count : 0,
     share_count: asset.share_count,
     image: toImage(asset, LIST_IMAGE_VARIANTS),
     categories: toCategories(asset),

@@ -1,3 +1,4 @@
+import { COMMENT_COMMUNICATION_ENABLED } from "@/services/comment-communication";
 import { Errors } from "@/errors/error-factory";
 import { ErrorCodes } from "@/errors/error-codes";
 import {
@@ -377,6 +378,7 @@ class ProjectLogService {
       new Set(input.logIds.filter((item) => typeof item === "string" && item)),
     );
 
+    if (!COMMENT_COMMUNICATION_ENABLED) return this.buildCommentSummaryMap([]);
     return this.buildCommentSummaryMap(
       await projectLogCommentsRepository.listSummariesByLogIds({
         logIds: normalizedLogIds,
@@ -394,6 +396,7 @@ class ProjectLogService {
       new Set(input.logIds.filter((item) => typeof item === "string" && item)),
     );
 
+    if (!COMMENT_COMMUNICATION_ENABLED) return this.buildCommentCountMap([]);
     return this.buildCommentCountMap(
       await projectLogCommentsRepository.listCountRowsByLogIds({
         logIds: normalizedLogIds,

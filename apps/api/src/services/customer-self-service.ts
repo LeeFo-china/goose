@@ -1,3 +1,4 @@
+import { COMMENT_COMMUNICATION_ENABLED, assertCommentCommunicationAvailable } from "@/services/comment-communication";
 import {
   customerSelfServiceRepository,
   type CustomerSelfServiceCustomerContextRow,
@@ -436,10 +437,9 @@ class CustomerSelfServiceService {
     tenantId: string | null;
   }) {
     const normalizedLogIds = Array.from(new Set(input.logIds)).sort();
-    if (normalizedLogIds.length === 0) {
+    if (!COMMENT_COMMUNICATION_ENABLED || normalizedLogIds.length === 0) {
       return Promise.resolve([] as CustomerSelfServiceProjectLogCommentAggregateRow[]);
     }
-
     const cacheKey = [input.tenantId ?? "", normalizedLogIds.join(",")].join(":");
     const cached = this.getCachedValue(this.projectLogCommentAggregatesCache, cacheKey);
     if (cached) {
@@ -474,6 +474,7 @@ class CustomerSelfServiceService {
     from: number;
     to: number;
   }) {
+    assertCommentCommunicationAvailable();
     return customerSelfServiceRepository.listProjectLogComments(input);
   }
 
@@ -485,7 +486,6 @@ class CustomerSelfServiceService {
     return customerSelfServiceRepository.listCommentAuthorCustomers(customerIds);
   }
 }
-
 export type CustomerContextRow = CustomerSelfServiceCustomerContextRow;
 export type CustomerProjectLogCommentAggregateRow = CustomerSelfServiceProjectLogCommentAggregateRow;
 export type CustomerProjectLogCommentAuthorCustomer = CustomerSelfServiceProjectLogCommentAuthorCustomer;

@@ -1,3 +1,4 @@
+import { COMMENT_COMMUNICATION_ENABLED } from "@/services/comment-communication";
 import { PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE } from "./shared";
 import type {
   BootstrapPermissions,
@@ -34,7 +35,7 @@ export function buildLogsFromBundle(this: any,
       total,
       totalPages: total ? Math.ceil(total / pageSize) : 0,
     },
-    commentSummaries: this.buildCommentAggregateMap(bundle.logs.comment_counts),
+    commentSummaries: this.buildCommentAggregateMap(COMMENT_COMMUNICATION_ENABLED ? bundle.logs.comment_counts : []),
   };
 }
 

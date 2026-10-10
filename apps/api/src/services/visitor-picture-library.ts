@@ -1,3 +1,4 @@
+import { assertCommentCommunicationAvailable } from "@/services/comment-communication";
 import { Errors } from "@/errors/error-factory";
 import {
   visitorPictureCommentsRepository,
@@ -39,7 +40,6 @@ const PUBLIC_PREVIEW_PAGE_SIZE = 6;
 
 type AssetListDebugTiming = PublicCacheTiming;
 type DebugTiming = PublicCacheTiming;
-type CommentDebugTiming = pictureLibraryTiming.CommentDebugTiming;
 type AssetDetailResponse = ReturnType<typeof toAssetDetail>;
 
 type NavigationResponse = {
@@ -175,6 +175,7 @@ class VisitorPictureLibraryService {
   }
 
   async listComments(assetId: string, query: VisitorPictureCommentListQuery) {
+    assertCommentCommunicationAvailable();
     const timing = query.debug_timing ? pictureLibraryTiming.createCommentTiming() : null;
     const startedAt = Date.now();
     const page = await visitorPictureCommentsRepository.list(assetId, query, timing);
@@ -195,6 +196,7 @@ class VisitorPictureLibraryService {
     visitorId: string;
     body: CreateVisitorPictureCommentInput;
   }) {
+    assertCommentCommunicationAvailable();
     const comment = await visitorPictureCommentsRepository.create(input);
     this.clearPublicCache();
     return toComment(comment);
@@ -491,7 +493,6 @@ class VisitorPictureLibraryService {
     if (!visitorId) throw Errors.unauthorized("请先完成手机号验证");
     return visitorId;
   }
-
 }
 
 export const visitorPictureLibraryService = new VisitorPictureLibraryService();

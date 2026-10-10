@@ -1,3 +1,4 @@
+import { assertCommentMediaAvailable } from "@/services/comment-communication";
 import { ErrorCodes, Errors, getFilenameFromObjectKey, getMimeTypeFromObjectKey, normalizeEtag, platformFileObjectRepository, resolveStoredFileUrl } from "./shared";
 import type { CompleteDirectUploadInput, DirectUploadInput, RegisterExistingCosObjectInput } from "./shared";
 import { buildTenantOnboardingLicenseVisitorPrefix } from "./object-owner-prefixes";
@@ -53,6 +54,7 @@ const PRIVATE_APPLYMENT_SCENE = "wechat_pay_applyment";
 const PRIVATE_SUPPLIER_LICENSE_SCENE = "supplier_business_license";
 
 export async function createDirectUpload(this: any, input: DirectUploadInput) {
+  assertCommentMediaAvailable(input.scene);
   const provider = await this.getStorageProvider();
   if (provider !== "tencent_cos") {
     throw Errors.business(
@@ -173,6 +175,7 @@ export async function createDirectUpload(this: any, input: DirectUploadInput) {
 }
 
 export async function completeDirectUpload(this: any, input: CompleteDirectUploadInput) {
+  assertCommentMediaAvailable(input.scene);
   const isPrivateObject = input.visibility === "private";
   const isBrandLogo = input.scene === "brand_logo";
   const isVirtualGoodsImage = input.scene === "branding_virtual_goods";
@@ -188,6 +191,7 @@ export async function completeDirectUpload(this: any, input: CompleteDirectUploa
 }
 
 export async function registerExistingCosObject(this: any, input: RegisterExistingCosObjectInput) {
+  assertCommentMediaAvailable(input.scene);
   const config = await this.getCosConfig();
   const cos = this.getCosClient(config);
   this.setCosAccessCache(config);

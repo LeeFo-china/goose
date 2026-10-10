@@ -1,3 +1,4 @@
+import { COMMENT_COMMUNICATION_ENABLED, assertCommentCommunicationAvailable } from "@/services/comment-communication";
 import { Errors } from "@/errors/error-factory";
 import { customerFollowUpCommentRepository } from "@/repositories/customer-follow-up-comments";
 import { accessPolicyService } from "@/services/access-policy";
@@ -140,6 +141,7 @@ class CustomerFollowUpCommentService {
     authContext: AuthContext,
     input: { followUpId: string; page: number; pageSize: number },
   ) {
+    assertCommentCommunicationAvailable();
     const followUp = await this.assertAccessibleFollowUp(
       authContext,
       input.followUpId,
@@ -182,6 +184,7 @@ class CustomerFollowUpCommentService {
       payload: CreateCustomerFollowUpCommentInput;
     },
   ) {
+    assertCommentCommunicationAvailable();
     const followUp = await this.assertAccessibleFollowUp(
       authContext,
       input.followUpId,
@@ -232,6 +235,10 @@ class CustomerFollowUpCommentService {
     customer: FollowUpAccessTarget,
     followUps: T[],
   ) {
+    if (!COMMENT_COMMUNICATION_ENABLED) {
+      return followUps.map((item) => ({ ...item, comment_count: 0, latest_comment_preview: null,
+        can_comment: false, can_view_comments: false, can_moderate_comments: false }));
+    }
     const followUpIds = followUps.map((item) => item.id);
     const summaryRows = await customerFollowUpCommentRepository
       .listCommentSummariesByFollowUpIds(followUpIds);
