@@ -1,0 +1,153 @@
+{
+  "checked_at": "2026-10-10T10:59:36.541Z",
+  "read_only": true,
+  "public_host": "windwill-1259348056.cos.ap-nanjing.myqcloud.com",
+  "origin_host": "windwill-1259348056.cos.ap-nanjing.myqcloud.com",
+  "bucket_acl": {
+    "status": "read",
+    "acl": "private"
+  },
+  "bucket_policy": {
+    "status": "unavailable",
+    "code": "404",
+    "http_status": 404
+  },
+  "samples": [
+    {
+      "scene": "project_log_comment",
+      "file_id": "ad5110b3-f3f2-48ad-9a14-f38523163a49",
+      "key_hash": "a5e7c97a19bad944523ff7b5d78af4c6c778bfc6bbf76d9cef54e2138de74b76",
+      "visibility": "public",
+      "provider": "tencent_cos",
+      "public": {
+        "host": "windwill-1259348056.cos.ap-nanjing.myqcloud.com",
+        "status": 403,
+        "content_type": "application/xml",
+        "cache_control": null,
+        "age": null,
+        "content_range": null,
+        "via": null,
+        "x_cache": null
+      },
+      "origin": {
+        "host": "windwill-1259348056.cos.ap-nanjing.myqcloud.com",
+        "status": 403,
+        "content_type": "application/xml",
+        "cache_control": null,
+        "age": null,
+        "content_range": null,
+        "via": null,
+        "x_cache": null
+      }
+    },
+    {
+      "scene": "project_log_comment",
+      "file_id": "9b7fbd20-bca9-48e0-b3ec-8c015e6130bf",
+      "key_hash": "d75d42365d246de161b6313842fca5c93098833da64c10c3d0ce6907d9ac127b",
+      "visibility": "public",
+      "provider": "tencent_cos",
+      "public": {
+        "host": "windwill-1259348056.cos.ap-nanjing.myqcloud.com",
+        "status": 403,
+        "content_type": "application/xml",
+        "cache_control": null,
+        "age": null,
+        "content_range": null,
+        "via": null,
+        "x_cache": null
+      },
+      "origin": {
+        "host": "windwill-1259348056.cos.ap-nanjing.myqcloud.com",
+        "status": 403,
+        "content_type": "application/xml",
+        "cache_control": null,
+        "age": null,
+        "content_range": null,
+        "via": null,
+        "x_cache": null
+      }
+    },
+    {
+      "scene": "project_log_comment",
+      "file_id": "3234c51a-f76c-444f-a4b9-e92d45a75729",
+      "key_hash": "5cb73ae691fbaee0a3b0f53bcfea804e7700036942340b8c4823697e98220450",
+      "visibility": "public",
+      "provider": "tencent_cos",
+      "public": {
+        "host": "windwill-1259348056.cos.ap-nanjing.myqcloud.com",
+        "status": 403,
+        "content_type": "application/xml",
+        "cache_control": null,
+        "age": null,
+        "content_range": null,
+        "via": null,
+        "x_cache": null
+      },
+      "origin": {
+        "host": "windwill-1259348056.cos.ap-nanjing.myqcloud.com",
+        "status": 403,
+        "content_type": "application/xml",
+        "cache_control": null,
+        "age": null,
+        "content_range": null,
+        "via": null,
+        "x_cache": null
+      }
+    },
+    {
+      "scene": "customer_follow_up_comment",
+      "sample_count": 0
+    },
+    {
+      "scene": "picture_comment",
+      "sample_count": 0
+    }
+  ],
+  "legacy_samples": [
+    {
+      "table": "project_log_comments",
+      "comment_id": "d9484f60-83c8-466c-a634-c22ba4b70cec",
+      "reference_hash": "5b5cf78dc616dab36a92866c438b6bb8606a772b56d5132d63a13bef88d33439",
+      "probe": {
+        "host": "windwill-1259348056.cos.ap-nanjing.myqcloud.com",
+        "status": 403,
+        "content_type": "application/xml",
+        "cache_control": null,
+        "age": null,
+        "content_range": null,
+        "via": null,
+        "x_cache": null
+      }
+    },
+    {
+      "table": "project_log_comments",
+      "comment_id": "1ace59de-24c9-4606-939f-741a1b187c21",
+      "reference_hash": "063141d9339f3a87ea0b86267686ac63dac3b2616c2e1f408b59357fa6ce9d3d",
+      "probe": {
+        "host": "windwill-1259348056.cos.ap-nanjing.myqcloud.com",
+        "status": 403,
+        "content_type": "application/xml",
+        "cache_control": null,
+        "age": null,
+        "content_range": null,
+        "via": null,
+        "x_cache": null
+      }
+    },
+    {
+      "table": "project_log_comments",
+      "comment_id": "45ae7078-be4b-48f1-9cd0-028b190e57bd",
+      "reference_hash": "b704d628d5478c112e9e7af485d7c08275095886c2a112025dfe1b0bca69232c",
+      "probe": {
+        "host": "windwill-1259348056.cos.ap-nanjing.myqcloud.com",
+        "status": 403,
+        "content_type": "application/xml",
+        "cache_control": null,
+        "age": null,
+        "content_range": null,
+        "via": null,
+        "x_cache": null
+      }
+    }
+  ]
+}

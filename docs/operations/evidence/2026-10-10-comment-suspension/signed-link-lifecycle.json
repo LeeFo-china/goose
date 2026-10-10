@@ -1,0 +1,18 @@
+{
+  "file_id": "ad5110b3-f3f2-48ad-9a14-f38523163a49",
+  "head_status": 200,
+  "upload_ttl_seconds": 900,
+  "signed_expiry_epoch": 1791625495,
+  "signed": true,
+  "before": {
+    "status": 206,
+    "content_type": "image/jpeg"
+  },
+  "started_at_epoch": 1791623696,
+  "after": {
+    "status": 206,
+    "content_type": "image/jpeg"
+  },
+  "finished_at_epoch": 1791624101,
+  "target_revision": "8112d16362285c1c36c90f9dd1c6ff1b1e669394"
+}

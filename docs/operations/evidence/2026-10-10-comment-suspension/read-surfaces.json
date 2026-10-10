@@ -1,0 +1,36 @@
+{
+  "checked_at": "2026-10-10T11:02:50.556Z",
+  "read_only": true,
+  "checks": [
+    {
+      "name": "customer-business-logs",
+      "status": 200,
+      "count": 2,
+      "comment_counts": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "visitor-public-project-list",
+      "status": 200,
+      "count": 2
+    },
+    {
+      "name": "visitor-public-project-logs",
+      "status": 200,
+      "count": 2,
+      "has_text": true,
+      "image_count": 2
+    },
+    {
+      "name": "admin-comment-governance",
+      "status": 200,
+      "suspension_notice": true,
+      "restore_button_present": false,
+      "blocked_image_notice": false,
+      "empty_comments": false,
+      "login_page": false
+    }
+  ]
+}

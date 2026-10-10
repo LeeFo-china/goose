@@ -1,0 +1,339 @@
+{
+  "summary": true,
+  "checks": [
+    {
+      "name": "employee-list",
+      "method": "GET",
+      "path": "/project_log_comments",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-ad",
+      "pass": true
+    },
+    {
+      "name": "employee-create",
+      "method": "POST",
+      "path": "/project_log_comments",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-ae",
+      "pass": true
+    },
+    {
+      "name": "employee-reply",
+      "method": "POST",
+      "path": "/project_log_comments",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-af",
+      "pass": true
+    },
+    {
+      "name": "customer-create",
+      "method": "POST",
+      "path": "/project_log_comments",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-ag",
+      "pass": true
+    },
+    {
+      "name": "customer-list",
+      "method": "GET",
+      "path": "/customer/projects/1c245715-dd5e-47b5-93bc-6ec6864c3716/logs/d4cc338a-4d4f-469b-ad01-619533304e72/comments",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-ah",
+      "pass": true
+    },
+    {
+      "name": "followup-list",
+      "method": "GET",
+      "path": "/customer_follow_ups/f49ad2fe-9ad8-43fb-8f9d-d044caf1f2e6/comments",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-ai",
+      "pass": true
+    },
+    {
+      "name": "followup-create",
+      "method": "POST",
+      "path": "/customer_follow_ups/f49ad2fe-9ad8-43fb-8f9d-d044caf1f2e6/comments",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-aj",
+      "pass": true
+    },
+    {
+      "name": "followup-reply",
+      "method": "POST",
+      "path": "/customer_follow_ups/f49ad2fe-9ad8-43fb-8f9d-d044caf1f2e6/comments",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-ak",
+      "pass": true
+    },
+    {
+      "name": "anonymous-gallery-list",
+      "method": "GET",
+      "path": "/visitor/picture-library/assets/2905b3f4-5f65-4876-9442-f50a12a4b40f/comments",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-al",
+      "pass": true
+    },
+    {
+      "name": "visitor-gallery-list",
+      "method": "GET",
+      "path": "/visitor/picture-library/assets/2905b3f4-5f65-4876-9442-f50a12a4b40f/comments",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-am",
+      "pass": true
+    },
+    {
+      "name": "visitor-gallery-create",
+      "method": "POST",
+      "path": "/visitor/picture-library/assets/2905b3f4-5f65-4876-9442-f50a12a4b40f/comments",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-an",
+      "pass": true
+    },
+    {
+      "name": "platform-restore",
+      "method": "POST",
+      "path": "/platform/picture-library/comments/d4cc338a-4d4f-469b-ad01-619533304e72/show",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-ao",
+      "pass": true
+    },
+    {
+      "name": "old-edit-route",
+      "method": "PATCH",
+      "path": "/project_log_comments/d4cc338a-4d4f-469b-ad01-619533304e72",
+      "status": 404,
+      "code": "ROUTE_NOT_FOUND",
+      "request_id": "req-ap",
+      "pass": true
+    },
+    {
+      "name": "employee-init-project_log_comment",
+      "method": "POST",
+      "path": "/uploads/cos/direct-init",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-ar",
+      "pass": true
+    },
+    {
+      "name": "employee-complete-project_log_comment",
+      "method": "POST",
+      "path": "/uploads/cos/direct-complete",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-at",
+      "pass": true
+    },
+    {
+      "name": "employee-init-customer_follow_up_comment",
+      "method": "POST",
+      "path": "/uploads/cos/direct-init",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-au",
+      "pass": true
+    },
+    {
+      "name": "employee-complete-customer_follow_up_comment",
+      "method": "POST",
+      "path": "/uploads/cos/direct-complete",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-av",
+      "pass": true
+    },
+    {
+      "name": "employee-init-picture_comment",
+      "method": "POST",
+      "path": "/uploads/cos/direct-init",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-aw",
+      "pass": true
+    },
+    {
+      "name": "employee-complete-picture_comment",
+      "method": "POST",
+      "path": "/uploads/cos/direct-complete",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-ax",
+      "pass": true
+    },
+    {
+      "name": "customer-init-project_log_comment",
+      "method": "POST",
+      "path": "/uploads/cos/direct-init",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-ay",
+      "pass": true
+    },
+    {
+      "name": "customer-complete-project_log_comment",
+      "method": "POST",
+      "path": "/uploads/cos/direct-complete",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-az",
+      "pass": true
+    },
+    {
+      "name": "customer-init-customer_follow_up_comment",
+      "method": "POST",
+      "path": "/uploads/cos/direct-init",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-b0",
+      "pass": true
+    },
+    {
+      "name": "customer-complete-customer_follow_up_comment",
+      "method": "POST",
+      "path": "/uploads/cos/direct-complete",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-b1",
+      "pass": true
+    },
+    {
+      "name": "customer-init-picture_comment",
+      "method": "POST",
+      "path": "/uploads/cos/direct-init",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-b2",
+      "pass": true
+    },
+    {
+      "name": "customer-complete-picture_comment",
+      "method": "POST",
+      "path": "/uploads/cos/direct-complete",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-b3",
+      "pass": true
+    },
+    {
+      "name": "visitor-init-picture_comment",
+      "method": "POST",
+      "path": "/uploads/cos/direct-init",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-b4",
+      "pass": true
+    },
+    {
+      "name": "visitor-complete-picture_comment",
+      "method": "POST",
+      "path": "/uploads/cos/direct-complete",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-b5",
+      "pass": true
+    },
+    {
+      "name": "historical-file-id",
+      "method": "GET",
+      "path": "/uploads/public-url",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-b6",
+      "pass": true
+    },
+    {
+      "name": "historical-file-path",
+      "method": "GET",
+      "path": "/uploads/public-url",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-b7",
+      "pass": true
+    },
+    {
+      "name": "historical-file-id",
+      "method": "GET",
+      "path": "/uploads/public-url",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-b8",
+      "pass": true
+    },
+    {
+      "name": "historical-file-path",
+      "method": "GET",
+      "path": "/uploads/public-url",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-b9",
+      "pass": true
+    },
+    {
+      "name": "historical-file-id",
+      "method": "GET",
+      "path": "/uploads/public-url",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-ba",
+      "pass": true
+    },
+    {
+      "name": "historical-file-path",
+      "method": "GET",
+      "path": "/uploads/public-url",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-bb",
+      "pass": true
+    },
+    {
+      "name": "missing-auth",
+      "method": "GET",
+      "path": "/project_log_comments",
+      "status": 401,
+      "code": "TOKEN_MISSING",
+      "request_id": "req-bc",
+      "pass": true
+    },
+    {
+      "name": "invalid-body",
+      "method": "POST",
+      "path": "/project_log_comments",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "request_id": "req-bd",
+      "pass": true
+    },
+    {
+      "name": "gallery-remains-readable",
+      "method": "GET",
+      "path": "/visitor/picture-library/assets",
+      "status": 200,
+      "code": null,
+      "request_id": null,
+      "pass": true
+    },
+    {
+      "name": "gallery-comment-count-zero",
+      "pass": true
+    }
+  ],
+  "passed": 37,
+  "total": 37,
+  "production_business_records_not_created": true,
+  "environment": "production",
+  "commit_sha": "8112d16362285c1c36c90f9dd1c6ff1b1e669394",
+  "credential_handling": "existing identities; short-lived credentials created and used in server process memory only; no token stored"
+}

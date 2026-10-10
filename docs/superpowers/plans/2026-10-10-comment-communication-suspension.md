@@ -22,4 +22,4 @@
 
 其余施工日志、昵称、头像、公司/项目展示、客服工单与验收文本不是本次三类评论接口，不擅自删除核心业务功能；必须由提审团队按实际可见范围继续核验，不能声称关闭评论后已免除内容安全要求。
 
-实施结果：见 [后端对接回执](../../miniprogram/2026-10-10-wechat-review-comment-suspension-backend-feedback.md)。本地82项相关测试、API/Admin类型检查、API构建、文件行数与diff检查通过。生产部署已获用户授权，候选构建及线上验证结果将记录在生产验收回执中；本地验证不代表线上已经关闭。
+实施结果：见 [后端对接回执](../../miniprogram/2026-10-10-wechat-review-comment-suspension-backend-feedback.md)。本地82项相关测试、API/Admin类型检查、API构建、文件行数与diff检查通过。API/Admin已部署 `v2026.10.10.1`，37项生产接口检查通过；[生产验收回执](../../miniprogram/2026-10-10-comment-suspension-production-acceptance.md)记录镜像/发布凭据、签名直链残留、公开内容缺口与截图。联合真机及整体内容安全验收尚未通过，未安排提审。
