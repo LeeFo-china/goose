@@ -6,7 +6,7 @@
 - 新增本项目当前客户与有权限员工的文字评论/回复；服务端自动内容检测，待审不进入列表。
 - 独立 `project-comments` 表与 GET/POST；不迁移、不展示旧内部和混合评论；施工日志正文、照片及进度历史不变。
 - 橙色小程序仓库只读参考，未修改。
-- **生产部署完成**：API healthy、restart=0；新项目沟通仍关闭，等待客户端配套及联合验收。
+- **生产部署完成**：API healthy、restart=0。部署时新能力默认关闭；23:25 用户确认客户端 .5 后已完成顺序切换，新能力开启、旧入口退休。最新状态见 `docs/miniprogram/2026-10-10-project-communication-client-v5-joint-acceptance.md`；下文默认关闭检查保留发布当时事实。
 
 ## 本地验证
 
@@ -50,7 +50,7 @@
 契约：`docs/miniprogram/2026-10-10-project-log-project-comments-handoff.md`。
 
 
-## 可转发给小程序团队
+## 原部署阶段回执（后续开关切换见上方链接）
 
 > 后端已部署 v2026.10.10.3，数据库迁移及默认关闭状态检查通过。请按 `docs/miniprogram/2026-10-10-project-log-project-comments-handoff.md` 接入独立 `project-comments`：仅本项目客户与有权限员工的文字发布/回复，历史内部及旧混合评论不迁移、不展示，原日志和施工照片保留。
 >

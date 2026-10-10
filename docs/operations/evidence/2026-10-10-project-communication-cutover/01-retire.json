@@ -1,0 +1,31 @@
+{
+  "checked_at": "2026-10-10T15:23:09.206Z",
+  "phase": "retire",
+  "release": "v2026.10.10.3",
+  "client_version_confirmed_by_user": "2026.10.10.5",
+  "verification_kind": "server_generated_short_lived_credentials_not_device_sessions",
+  "before_flags": {
+    "PROJECT_LOG_COMMUNICATION_ENABLED": "false",
+    "PROJECT_LOG_INTERNAL_COMMENTS_RETIRED": "false"
+  },
+  "after_flags": {
+    "PROJECT_LOG_COMMUNICATION_ENABLED": "false",
+    "PROJECT_LOG_INTERNAL_COMMENTS_RETIRED": "true"
+  },
+  "checks": [
+    {
+      "name": "patch-PROJECT_LOG_INTERNAL_COMMENTS_RETIRED",
+      "method": "PATCH",
+      "path": "/platform/system-settings/PROJECT_LOG_INTERNAL_COMMENTS_RETIRED",
+      "status": 200,
+      "code": null,
+      "request_id": null,
+      "pass": true
+    }
+  ],
+  "passed": 1,
+  "total": 1,
+  "all_passed": true,
+  "real_device_joint_acceptance": "pending",
+  "real_wechat_post_reply": "not_executed"
+}

@@ -1,0 +1,178 @@
+{
+  "checked_at": "2026-10-10T15:25:05.505Z",
+  "phase": "verify-enabled",
+  "release": "v2026.10.10.3",
+  "client_version_confirmed_by_user": "2026.10.10.5",
+  "verification_kind": "server_generated_short_lived_credentials_not_device_sessions",
+  "before_flags": {
+    "PROJECT_LOG_INTERNAL_COMMENTS_RETIRED": "true",
+    "PROJECT_LOG_COMMUNICATION_ENABLED": "true"
+  },
+  "after_flags": {
+    "PROJECT_LOG_INTERNAL_COMMENTS_RETIRED": "true",
+    "PROJECT_LOG_COMMUNICATION_ENABLED": "true"
+  },
+  "checks": [
+    {
+      "name": "old-get-retired",
+      "method": "GET",
+      "path": "/project_logs/d4cc338a-4d4f-469b-ad01-619533304e72/internal-comments",
+      "status": 410,
+      "code": "PROJECT_LOG_INTERNAL_COMMENTS_RETIRED",
+      "request_id": "req-7b",
+      "pass": true
+    },
+    {
+      "name": "old-post-retired",
+      "method": "POST",
+      "path": "/project_logs/d4cc338a-4d4f-469b-ad01-619533304e72/internal-comments",
+      "status": 410,
+      "code": "PROJECT_LOG_INTERNAL_COMMENTS_RETIRED",
+      "request_id": "req-7c",
+      "pass": true
+    },
+    {
+      "name": "old-log-no-added-records",
+      "pass": true
+    },
+    {
+      "name": "employee-new-list",
+      "method": "GET",
+      "path": "/project_logs/d4cc338a-4d4f-469b-ad01-619533304e72/project-comments",
+      "status": 200,
+      "code": null,
+      "request_id": null,
+      "pass": true
+    },
+    {
+      "name": "new-page-contract",
+      "pass": true
+    },
+    {
+      "name": "wechat-employee-new-list",
+      "method": "GET",
+      "path": "/project_logs/d4cc338a-4d4f-469b-ad01-619533304e72/project-comments",
+      "status": 200,
+      "code": null,
+      "request_id": null,
+      "pass": true
+    },
+    {
+      "name": "anonymous-new-list",
+      "method": "GET",
+      "path": "/project_logs/d4cc338a-4d4f-469b-ad01-619533304e72/project-comments",
+      "status": 401,
+      "code": "TOKEN_MISSING",
+      "request_id": "req-7f",
+      "pass": true
+    },
+    {
+      "name": "visitor-new-list",
+      "method": "GET",
+      "path": "/project_logs/d4cc338a-4d4f-469b-ad01-619533304e72/project-comments",
+      "status": 401,
+      "code": "TOKEN_INVALID",
+      "request_id": "req-7g",
+      "pass": true
+    },
+    {
+      "name": "employee-cross-tenant-new-list",
+      "method": "GET",
+      "path": "/project_logs/4ca02c00-f133-450a-901e-65e49523661d/project-comments",
+      "status": 403,
+      "code": "FORBIDDEN",
+      "request_id": "req-7h",
+      "pass": true
+    },
+    {
+      "name": "new-pagination-limit",
+      "method": "GET",
+      "path": "/project_logs/d4cc338a-4d4f-469b-ad01-619533304e72/project-comments",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "request_id": "req-7i",
+      "pass": true
+    },
+    {
+      "name": "new-forged-moderation",
+      "method": "POST",
+      "path": "/project_logs/d4cc338a-4d4f-469b-ad01-619533304e72/project-comments",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "request_id": "req-7j",
+      "pass": true
+    },
+    {
+      "name": "new-image-comment-disabled",
+      "method": "POST",
+      "path": "/project_logs/d4cc338a-4d4f-469b-ad01-619533304e72/project-comments",
+      "status": 403,
+      "code": "COMMENT_MEDIA_DISABLED",
+      "request_id": "req-7k",
+      "pass": true
+    },
+    {
+      "name": "new-admin-cannot-bypass-wechat-check",
+      "method": "POST",
+      "path": "/project_logs/d4cc338a-4d4f-469b-ad01-619533304e72/project-comments",
+      "status": 503,
+      "code": "CONTENT_CHECK_UNAVAILABLE",
+      "request_id": "req-7l",
+      "pass": true
+    },
+    {
+      "name": "new-edit-absent",
+      "method": "PATCH",
+      "path": "/project_logs/d4cc338a-4d4f-469b-ad01-619533304e72/project-comments",
+      "status": 404,
+      "code": "ROUTE_NOT_FOUND",
+      "request_id": "req-7n",
+      "pass": true
+    },
+    {
+      "name": "legacy-mixed-comments-disabled",
+      "method": "GET",
+      "path": "/project_log_comments",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-7o",
+      "pass": true
+    },
+    {
+      "name": "comment-upload-disabled-project_log_comment",
+      "method": "POST",
+      "path": "/uploads/cos/direct-init",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-7q",
+      "pass": true
+    },
+    {
+      "name": "comment-upload-disabled-customer_follow_up_comment",
+      "method": "POST",
+      "path": "/uploads/cos/direct-init",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-7s",
+      "pass": true
+    },
+    {
+      "name": "comment-upload-disabled-picture_comment",
+      "method": "POST",
+      "path": "/uploads/cos/direct-init",
+      "status": 403,
+      "code": "COMMENT_COMMUNICATION_DISABLED",
+      "request_id": "req-7v",
+      "pass": true
+    },
+    {
+      "name": "new-log-no-test-records-created",
+      "pass": true
+    }
+  ],
+  "passed": 19,
+  "total": 19,
+  "all_passed": true,
+  "real_device_joint_acceptance": "pending",
+  "real_wechat_post_reply": "not_executed"
+}

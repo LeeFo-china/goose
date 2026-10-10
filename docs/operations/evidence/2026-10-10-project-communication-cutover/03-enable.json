@@ -1,0 +1,53 @@
+{
+  "checked_at": "2026-10-10T15:24:06.544Z",
+  "phase": "enable",
+  "release": "v2026.10.10.3",
+  "client_version_confirmed_by_user": "2026.10.10.5",
+  "verification_kind": "server_generated_short_lived_credentials_not_device_sessions",
+  "before_flags": {
+    "PROJECT_LOG_COMMUNICATION_ENABLED": "false",
+    "PROJECT_LOG_INTERNAL_COMMENTS_RETIRED": "true"
+  },
+  "after_flags": {
+    "PROJECT_LOG_INTERNAL_COMMENTS_RETIRED": "true",
+    "PROJECT_LOG_COMMUNICATION_ENABLED": "true"
+  },
+  "checks": [
+    {
+      "name": "old-get-retired",
+      "method": "GET",
+      "path": "/project_logs/d4cc338a-4d4f-469b-ad01-619533304e72/internal-comments",
+      "status": 410,
+      "code": "PROJECT_LOG_INTERNAL_COMMENTS_RETIRED",
+      "request_id": "req-72",
+      "pass": true
+    },
+    {
+      "name": "old-post-retired",
+      "method": "POST",
+      "path": "/project_logs/d4cc338a-4d4f-469b-ad01-619533304e72/internal-comments",
+      "status": 410,
+      "code": "PROJECT_LOG_INTERNAL_COMMENTS_RETIRED",
+      "request_id": "req-73",
+      "pass": true
+    },
+    {
+      "name": "old-log-no-added-records",
+      "pass": true
+    },
+    {
+      "name": "patch-PROJECT_LOG_COMMUNICATION_ENABLED",
+      "method": "PATCH",
+      "path": "/platform/system-settings/PROJECT_LOG_COMMUNICATION_ENABLED",
+      "status": 200,
+      "code": null,
+      "request_id": null,
+      "pass": true
+    }
+  ],
+  "passed": 4,
+  "total": 4,
+  "all_passed": true,
+  "real_device_joint_acceptance": "pending",
+  "real_wechat_post_reply": "not_executed"
+}
