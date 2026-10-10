@@ -1,0 +1,13 @@
+{
+    "rows": 0,
+    "anon_select": false,
+    "rls_enabled": true,
+    "service_insert": true,
+    "service_select": true,
+    "scoped_parent_fk": true,
+    "migration_present": true,
+    "approved_index_ready": true,
+    "authenticated_insert": false,
+    "authenticated_select": false,
+    "scope_trigger_enabled": true
+}

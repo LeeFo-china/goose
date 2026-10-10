@@ -1,0 +1,1 @@
+{"schema_version":2,"build_run_id":38049150266,"tag":"v2026.10.10.2","commit_sha":"abc16bd5018bfd3693cd7a49b19cd5612c3bbc39","requested_services":["api"],"build_services":["api"],"target_environment":"production","build_plan_artifact":"production-build-plan","deployment_source_artifact":"production-deploy-source"}

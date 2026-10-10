@@ -1,0 +1,2 @@
+/gooes-api|healthy|abc16bd5018bfd3693cd7a49b19cd5612c3bbc39|useccr.ccs.tencentyun.com/america_goose/goose-api@sha256:c3843d33b86ac6fe39c60caad0ec12db6bfa2bc780205d2f99484d2255dd58e6|2026-10-10T11:47:38.465681745Z|0
+/gooes-admin|healthy|8112d16362285c1c36c90f9dd1c6ff1b1e669394|useccr.ccs.tencentyun.com/america_goose/goose-admin@sha256:2bd65935ea749a8a6771897dcc216a3396935205c1d08fc008b6f90dfd7aae53|2026-10-10T09:21:28.89456177Z|0

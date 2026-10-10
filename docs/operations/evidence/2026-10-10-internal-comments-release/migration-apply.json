@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "workflow_run_id": 38049269746,
+  "mode": "apply",
+  "commit_sha": "abc16bd5018bfd3693cd7a49b19cd5612c3bbc39",
+  "before_count": 659,
+  "before_latest": "20261009190000",
+  "after_count": 660,
+  "after_latest": "20261010111529",
+  "pending_count": 1,
+  "pending_versions": [
+    "20261010111529"
+  ],
+  "applied_count": 1,
+  "applied_versions": [
+    "20261010111529"
+  ],
+  "checked_at": "2026-10-10T11:41:58Z"
+}
