@@ -10,6 +10,8 @@ const id = "00000000-0000-4000-8000-000000000001";
 const actor: JwtPayload = { sub: id, employee_id: id, tenant_id: id, roles: ["employee"], login_channel: "wechat", openid: "bound" };
 
 test("real controller/service serialize approved, pending, rejected and unavailable without audit leaks", async () => {
+  const { projectLogCommunicationRollout } = await import("./project-log-communication-rollout");
+  spyOn(projectLogCommunicationRollout, "assertInternalAvailable").mockResolvedValue();
   const { default: Fastify } = await import("fastify");
   const { default: errorHandler } = await import("@/plugins/error-handler");
   const { default: controller } = await import("@/controllers/project-log-comments");

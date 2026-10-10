@@ -9,6 +9,8 @@ import {
 } from "@/schema/project-log-comments";
 import { InternalCommentCreateSchema, InternalCommentParamsSchema, InternalCommentQuerySchema } from "@/schema/project-log-internal-comments";
 import { projectLogInternalCommentsService } from "@/services/project-log-internal-comments";
+import { ProjectCommentCreateSchema, ProjectCommentParamsSchema, ProjectCommentQuerySchema } from "@/schema/project-log-project-comments";
+import { projectLogProjectCommentsService } from "@/services/project-log-project-comments";
 import { projectLogCommentsService } from "@/services/project-log-comments";
 import { getTenantServiceAuthOptions } from "@/services/tenant-service-route-access";
 import { Get, Post } from "@/utils/decorators/route";
@@ -71,6 +73,28 @@ class ProjectLogCommentsController extends BaseController {
     if (!params.success) throw Errors.fromZod(params.error);
     if (!body.success) throw Errors.fromZod(body.error);
     return ResponseHandler.success(await projectLogInternalCommentsService.create({
+      actor: request.user, logId: params.data.logId, payload: body.data,
+    }));
+  }
+
+  @Get("/project_logs/:logId/project-comments")
+  async listProjectComments(request: FastifyRequest) {
+    const params = ProjectCommentParamsSchema.safeParse(request.params);
+    const query = ProjectCommentQuerySchema.safeParse(request.query);
+    if (!params.success) throw Errors.fromZod(params.error);
+    if (!query.success) throw Errors.fromZod(query.error);
+    return ResponseHandler.success(await projectLogProjectCommentsService.list({
+      actor: request.user, logId: params.data.logId, ...query.data,
+    }));
+  }
+
+  @Post("/project_logs/:logId/project-comments")
+  async createProjectComment(request: FastifyRequest) {
+    const params = ProjectCommentParamsSchema.safeParse(request.params);
+    const body = ProjectCommentCreateSchema.safeParse(request.body);
+    if (!params.success) throw Errors.fromZod(params.error);
+    if (!body.success) throw Errors.fromZod(body.error);
+    return ResponseHandler.success(await projectLogProjectCommentsService.create({
       actor: request.user, logId: params.data.logId, payload: body.data,
     }));
   }

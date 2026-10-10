@@ -27,8 +27,9 @@ function setup(status: "approved" | "pending" | "rejected" = "approved") {
   const policy = { canAccessProject: mock(async () => true), canWriteProjectLog: mock(async () => true) };
   const identity = { findActiveOauthIdentity: mock(async () => ({ user_id: id })) };
   const moderation = { checkText: mock(async () => ({ status, traceId: "trace" })) };
-  const service = new ProjectLogInternalCommentsService({ repository, authorization, policy, identity, moderation });
-  return { service, repository, authorization, policy, identity, moderation };
+  const rollout = { assertInternalAvailable: mock(async () => {}) };
+  const service = new ProjectLogInternalCommentsService({ repository, authorization, policy, identity, moderation, rollout });
+  return { service, repository, authorization, policy, identity, moderation, rollout };
 }
 test("approved employee comment is audited and internal only", async () => {
   const f = setup();
@@ -99,4 +100,13 @@ test("pagination is bounded and client cannot supply audit/identity fields", asy
   expect(await f.service.list({ actor, logId: id, page: 2, pageSize: 20 })).toMatchObject({ list: [], total: 0, page: 2, pageSize: 20 });
   expect(f.repository.listApproved).toHaveBeenCalledWith({ tenantId: id, logId: id, from: 20, to: 39 });
   expect(f.authorization.getRequiredAuthContext).toHaveBeenCalledWith(id, { tenantServiceAccess: "read", requiredCapability: "core.projects", freshPermissions: true });
+});
+
+test("retired internal endpoints cannot read history or create records", async () => {
+  const f = setup();
+  f.rollout.assertInternalAvailable.mockRejectedValue(Errors.business(410, "功能已调整，请更新小程序", "PROJECT_LOG_INTERNAL_COMMENTS_RETIRED"));
+  await expect(f.service.list({actor,logId:id,page:1,pageSize:20})).rejects.toMatchObject({statusCode:410});
+  await expect(f.service.create(input)).rejects.toMatchObject({code:"PROJECT_LOG_INTERNAL_COMMENTS_RETIRED"});
+  expect(f.repository.listApproved).not.toHaveBeenCalled();
+  expect(f.repository.create).not.toHaveBeenCalled();
 });

@@ -11,8 +11,10 @@ import { authorizationService } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
 import { contentCheckUnavailable, wechatContentSafetyGateway } from "@/services/wechat-content-safety-gateway";
 import type { JwtPayload } from "@/utils/jwt";
+import { projectLogCommunicationRollout } from "./project-log-communication-rollout";
 
 type Dependencies = {
+  rollout?: Pick<typeof projectLogCommunicationRollout, "assertInternalAvailable">;
   repository?: typeof projectLogInternalCommentsRepository;
   authorization?: Pick<typeof authorizationService, "getRequiredAuthContext">;
   policy?: Pick<typeof accessPolicyService, "canAccessProject" | "canWriteProjectLog">;
@@ -22,6 +24,7 @@ type Dependencies = {
 type RequestActor = { actor: JwtPayload | undefined; logId: string };
 
 export class ProjectLogInternalCommentsService {
+  private readonly rollout;
   private readonly repository;
   private readonly authorization;
   private readonly policy;
@@ -29,6 +32,7 @@ export class ProjectLogInternalCommentsService {
   private readonly moderation;
 
   constructor(dependencies: Dependencies = {}) {
+    this.rollout = dependencies.rollout ?? projectLogCommunicationRollout;
     this.repository = dependencies.repository ?? projectLogInternalCommentsRepository;
     this.authorization = dependencies.authorization ?? authorizationService;
     this.policy = dependencies.policy ?? accessPolicyService;
@@ -41,6 +45,7 @@ export class ProjectLogInternalCommentsService {
     if (!parsed.success) throw Errors.fromZod(parsed.error);
     const payload = parsed.data;
     await this.authorize(input, true);
+    await this.rollout.assertInternalAvailable();
     if (payload.images?.length) {
       throw Errors.business(403, "内部评论暂不支持图片", "COMMENT_MEDIA_DISABLED");
     }
@@ -55,6 +60,7 @@ export class ProjectLogInternalCommentsService {
     }
     // Moderation is a network round trip: check current employee binding and project rights again.
     const { tenantId, employee } = await this.authorize(input, true);
+    await this.rollout.assertInternalAvailable();
     await this.assertParent(input, payload.parent_id);
     const row = await this.repository.create({
       tenant_id: tenantId, log_id: input.logId, author_id: employee.id,
@@ -76,6 +82,7 @@ export class ProjectLogInternalCommentsService {
     if (!parsed.success) throw Errors.fromZod(parsed.error);
     const { page, pageSize } = parsed.data;
     const { tenantId } = await this.authorize(input, false);
+    await this.rollout.assertInternalAvailable();
     const from = (page - 1) * pageSize;
     const result = await this.repository.listApproved({ tenantId, logId: input.logId, from, to: from + pageSize - 1 });
     const authors = await this.repository.listAuthors({ tenantId, employeeIds: result.list.map(row => row.author_id) });

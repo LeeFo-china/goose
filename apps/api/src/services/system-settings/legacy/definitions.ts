@@ -7,6 +7,7 @@ import { DEFINITIONS_VISITOR } from './definitions-visitor';
 import { DEFINITIONS_PAYMENT } from './definitions-payment';
 import { DEFINITIONS_OCR_VISITOR } from './definitions-ocr-visitor';
 import { DEFINITIONS_SERVICE_TRIAL } from './definitions-service-trial';
+import { DEFINITIONS_PROJECT_LOG } from './definitions-project-log';
 import type { SettingDefinition } from './shared';
 
 export const SETTING_DEFINITIONS: SettingDefinition[] = [
@@ -19,6 +20,7 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
   ...DEFINITIONS_PAYMENT,
   ...DEFINITIONS_OCR_VISITOR,
   ...DEFINITIONS_SERVICE_TRIAL,
+  ...DEFINITIONS_PROJECT_LOG,
 ];
 
 export const definitionByKey = new Map(SETTING_DEFINITIONS.map((item) => [item.key, item]));
