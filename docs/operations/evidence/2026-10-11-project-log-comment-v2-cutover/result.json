@@ -1,0 +1,108 @@
+{
+  "at": "2026-10-11T12:50:08.622Z",
+  "release": "v2026.10.11.1",
+  "client_binding": "confirmed_by_user_not_independently_observed",
+  "before_flags": {
+    "PROJECT_LOG_INTERNAL_COMMENTS_RETIRED": "true",
+    "PROJECT_LOG_COMMUNICATION_ENABLED": "true",
+    "PROJECT_LOG_COMMENT_V2_ENABLED": "false"
+  },
+  "after_flags": {
+    "PROJECT_LOG_INTERNAL_COMMENTS_RETIRED": "true",
+    "PROJECT_LOG_COMMUNICATION_ENABLED": "true",
+    "PROJECT_LOG_COMMENT_V2_ENABLED": "true"
+  },
+  "checks": [
+    {
+      "name": "preflight-v1-readable",
+      "status": 200,
+      "code": null,
+      "request_id": null,
+      "pass": true
+    },
+    {
+      "name": "preflight-v2-disabled",
+      "status": 403,
+      "code": "PROJECT_COMMENT_V2_DISABLED",
+      "request_id": "req-a7",
+      "pass": true
+    },
+    {
+      "name": "enable-v2-platform-api",
+      "status": 200,
+      "code": null,
+      "request_id": null,
+      "pass": true
+    },
+    {
+      "name": "v2-employee-page",
+      "status": 200,
+      "code": null,
+      "request_id": null,
+      "pass": true
+    },
+    {
+      "name": "v2-page-contract",
+      "pass": true
+    },
+    {
+      "name": "v2-wechat-bound-employee",
+      "status": 200,
+      "code": null,
+      "request_id": null,
+      "pass": true
+    },
+    {
+      "name": "v2-inline-preview",
+      "status": 200,
+      "code": null,
+      "request_id": null,
+      "pass": true
+    },
+    {
+      "name": "v2-preview-contract",
+      "pass": true
+    },
+    {
+      "name": "old-v1-get-update-required",
+      "status": 410,
+      "code": "PROJECT_COMMENT_CLIENT_UPDATE_REQUIRED",
+      "request_id": "req-ad",
+      "pass": true
+    },
+    {
+      "name": "old-v1-post-update-required",
+      "status": 410,
+      "code": "PROJECT_COMMENT_CLIENT_UPDATE_REQUIRED",
+      "request_id": "req-ae",
+      "pass": true
+    },
+    {
+      "name": "old-internal-retired",
+      "status": 410,
+      "code": "PROJECT_LOG_INTERNAL_COMMENTS_RETIRED",
+      "request_id": "req-af",
+      "pass": true
+    },
+    {
+      "name": "anonymous-v2-denied",
+      "status": 401,
+      "code": "TOKEN_MISSING",
+      "request_id": "req-ag",
+      "pass": true
+    },
+    {
+      "name": "invalid-empty-v2-denied",
+      "status": 400,
+      "code": "VALIDATION_ERROR",
+      "request_id": "req-ah",
+      "pass": true
+    }
+  ],
+  "pass": true,
+  "setting_mutation": "platform API PATCH",
+  "business_comments_created": 0,
+  "uploads_created": 0,
+  "real_device_acceptance": "pending",
+  "credentials": "server-generated-short-lived-not-phone-sessions"
+}
