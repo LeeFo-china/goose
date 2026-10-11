@@ -1,0 +1,8 @@
+Independent validator -> Laplace01a12a6f-167e-78c3-8791-09d6d8cca2b3
+P2 FINAL: actual PG15.8 UTF8 fixture and supplemental validation PASS; no SQL runtime blockers.
+Migration f73df2c5e889fccc75362c1b164898f3544565ca001c5dc7f5cd03d2963b5de2
+Fixture 46aefbdd1046251d0317bc9cb462911ac14227698f6528766e6138966488c64e
+59->60 concurrent admission across logs: one commit, one PT429, 60files/60uploads, zero orphan/rejected rows.
+All7RPC role-denial checks and original concurrent image-comment idempotency passed.
+Final source hashes matched; owned container removed in finally. Previous snapshot: initial/pre-p2-admission/.
+Source belongs to Laplace; validator edited evidence only, no commit, no production DB connection/mutation.

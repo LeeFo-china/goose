@@ -150,3 +150,55 @@ describe("ProjectLogProjectCommentsRepository", () => {
     for (const action of actions) await expect(action()).rejects.toMatchObject({ statusCode: 500 });
   });
 });
+
+describe("project comment v2 data boundary", () => {
+  test("cursor retains PostgreSQL microseconds and bounded newest-first page", async () => {
+    const requests = stubDatabase(() => Response.json({ list: [row], total: 22, hasMore: true }));
+    const before = { createdAt: "2026-10-11T10:00:00.123456+00:00", id: "00000000-0000-4000-8000-000000000001" };
+    await repository.listPublished({ tenantId: "t", logId: "l", pageSize: 20, before });
+    const body = await requests[0]!.json() as Record<string, unknown>;
+    expect(body.p_before_created_at).toBe(before.createdAt);
+    expect(body.p_before_id).toBe(before.id);
+    expect(body.p_page_size).toBe(20);
+  });
+
+  test("v2 create maps idempotency conflict to stable 409", async () => {
+    stubDatabase(() => Response.json({ code: "PT409", message: "COMMENT_REQUEST_CONFLICT" }, { status: 409 }));
+    await expect(repository.createV2({ tenantId: "t", logId: "l", authUserId: "u", authorType: "customer", authorId: "c", content: "", parentId: null, attachmentIds: ["f"], clientRequestId: "r", payloadSha256: "b".repeat(64) }))
+      .rejects.toMatchObject({ statusCode: 409, code: "COMMENT_REQUEST_CONFLICT" });
+  });
+
+  test("v2 rejects unbounded pages and previews without querying", async () => {
+    const requests = stubDatabase(() => Response.json([]));
+    for (const pageSize of [0, 101, 1.5, NaN]) {
+      await expect(repository.listPublished({ tenantId: "t", logId: "l", pageSize })).rejects.toMatchObject({ statusCode: 400 });
+    }
+    await expect(repository.listPreviews({ tenantId: "t", projectId: "p", logIds: Array.from({ length: 21 }, (_, i) => String(i)) })).rejects.toMatchObject({ statusCode: 400 });
+    expect(requests).toHaveLength(0);
+  });
+});
+
+describe("project comment v2 preview scope", () => {
+  test("missing or foreign log rejects the entire requested batch even without comments", async () => {
+    const requests = stubDatabase(() => Response.json([{ id: "l1", tenant_id: "t", project_id: "p" }]));
+    await expect(repository.findLogsForProject({ tenantId: "t", projectId: "p", logIds: ["l1", "foreign"] })).rejects.toMatchObject({ statusCode: 400 });
+    const params = new URL(requests[0]!.url).searchParams;
+    expect(params.get("tenant_id")).toBe("eq.t");
+    expect(params.get("project_id")).toBe("eq.p");
+    expect(params.get("limit")).toBe("20");
+  });
+  test("preview RPC rejects invalid scope instead of silently returning partial results", async () => {
+    stubDatabase(() => Response.json({ code: "PT400", message: "invalid logs" }, { status: 400 }));
+    await expect(repository.listPreviews({ tenantId: "t", projectId: "p", logIds: ["l1", "foreign"] })).rejects.toMatchObject({ statusCode: 400 });
+  });
+  test("parent summary batch requires visibility and same tenant/logs", async () => {
+    const requests = stubDatabase(() => Response.json([]));
+    await repository.listPublishedParents({ tenantId: "t", logIds: ["l"], commentIds: ["c", "c"] });
+    const params = new URL(requests[0]!.url).searchParams;
+    expect(params.get("published")).toBe("eq.true");
+    expect(params.get("tenant_id")).toBe("eq.t");
+    expect(params.get("log_id")).toBe('in.(l)');
+    expect(params.get("id")).toBe('in.(c)');
+    expect(params.get("limit")).toBe("100");
+  });
+});

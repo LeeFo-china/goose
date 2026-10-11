@@ -1,0 +1,4 @@
+SELECT indexname,indexdef FROM pg_indexes WHERE indexname IN ('project_comment_upload_identity_recent_idx','project_comment_upload_identity_outstanding_idx');
+ANALYZE public.project_log_comment_uploads;
+EXPLAIN (ANALYZE,BUFFERS) SELECT count(*) FROM (SELECT 1 FROM public.project_log_comment_uploads WHERE tenant_id='00000000-0000-4000-8000-000000000001' AND auth_user_id='00000000-0000-4000-8000-000000700001' AND author_type='employee' AND author_id='00000000-0000-4000-8000-000000700001' AND created_at>TIMESTAMPTZ '2026-10-11 10:18:59.348586+00' LIMIT 60)recent;
+EXPLAIN (ANALYZE,BUFFERS) SELECT count(*) FROM (SELECT 1 FROM public.project_log_comment_uploads WHERE tenant_id='00000000-0000-4000-8000-000000000001' AND auth_user_id='00000000-0000-4000-8000-000000700001' AND author_type='employee' AND author_id='00000000-0000-4000-8000-000000700001' AND status IN('uploading','complete') LIMIT 90)outstanding;

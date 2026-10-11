@@ -77,6 +77,8 @@ services:
       - ${GOOES_API_ENV_FILE:-./.env.api}
     environment:
       SERVICE_NAME: gooes-cos-reconcile-worker
+      # Apply the comment-upload migration before deploying this worker revision.
+      PROJECT_LOG_COMMENT_ATTACHMENT_CLEANUP_ENABLED: ${PROJECT_LOG_COMMENT_ATTACHMENT_CLEANUP_ENABLED:-true}
       # Opt in through env_file only after private-input migration and COS readiness.
       # CUSTOMER_RENDERING_INPUT_CLEANUP_ENABLED defaults to false in the worker.
       NODE_ENV: production

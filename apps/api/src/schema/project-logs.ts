@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { hasProjectCommentPrivateFileReference } from "@/utils/project-comment-private-file-reference";
 import {
   PROJECT_LOG_STAGE_CODE_VALUES,
   type ProjectLogStageCode,
@@ -43,7 +44,10 @@ export const ProjectLogBaseSchema = z.object({
   }),
   node_name: NullableProjectLogNodeNameSchema,
   content: z.string().trim().min(1, "日志内容不能为空"),
-  images: z.any().nullable().optional(),
+  images: z.any().nullable().optional().refine(
+    (images: unknown) => !hasProjectCommentPrivateFileReference(images),
+    "项目沟通私有图片不能用于施工日志图片",
+  ),
   created_at: z.string().datetime("无效的时间格式").optional(),
 });
 

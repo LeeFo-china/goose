@@ -1,0 +1,7 @@
+{
+  "at": "2026-10-11T10:18:40.565Z",
+  "source": "Read-only COS SDK queries inside current production API container; credentials not logged",
+  "bucket_acl": "private",
+  "bucket_policy_lookup_error_code": "404",
+  "scope": "Configuration readiness only; no test image uploaded and no phone upload or CDN cache behavior proven"
+}

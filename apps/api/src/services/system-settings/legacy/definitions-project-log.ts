@@ -2,6 +2,15 @@ import type { SettingDefinition } from './shared';
 
 export const DEFINITIONS_PROJECT_LOG: SettingDefinition[] = [
   {
+    key: 'PROJECT_LOG_COMMENT_V2_ENABLED',
+    groupCode: 'project_log',
+    name: '项目日志图片评论新版契约',
+    description: '启用无需内容检测的项目内文字和图片评论；须在新版客户端就绪后切换，旧请求返回更新提示。',
+    valueType: 'boolean',
+    envNames: ['PROJECT_LOG_COMMENT_V2_ENABLED'],
+    defaultValue: 'false',
+  },
+  {
     key: 'PROJECT_LOG_COMMUNICATION_ENABLED',
     groupCode: 'project_log',
     name: '项目日志沟通开关',

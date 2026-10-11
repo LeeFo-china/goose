@@ -17,7 +17,7 @@ async function setup(status: "approved" | "pending" | "rejected" = "approved") {
   const access = { resolve: mock(async (): Promise<ProjectCommunicationActor> => ({ tenantId: id, type: "customer", author: { id, name: "业主" }, canWrite: true })) };
   const identity = { findActiveOauthIdentity: mock(async () => ({ user_id: id })) };
   const moderation = { checkText: mock(async () => ({ status, traceId: "private-trace" })) };
-  const rollout = { assertProjectAvailable: mock(async () => { }) };
+  const rollout = { assertProjectAvailable: mock(async () => { }), assertContract: mock(async (_version: 1 | 2) => {}) };
   const service = new ProjectLogProjectCommentsService({ repository, access, identity, moderation, rollout });
   return { service, repository, access, identity, moderation, rollout };
 }

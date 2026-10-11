@@ -1,0 +1,506 @@
+DO
+DO
+CREATE SCHEMA
+CREATE TABLE
+CREATE FUNCTION
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+CREATE INDEX
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+ALTER DEFAULT PRIVILEGES
+GRANT
+GRANT
+BEGIN
+CREATE TABLE
+CREATE INDEX
+CREATE FUNCTION
+CREATE TRIGGER
+REVOKE
+ALTER TABLE
+REVOKE
+GRANT
+CREATE POLICY
+CREATE POLICY
+COMMENT
+CREATE FUNCTION
+REVOKE
+GRANT
+COMMENT
+INSERT 0 2
+COMMIT
+DO
+CREATE FUNCTION
+INSERT 0 2
+INSERT 0 4
+INSERT 0 3
+INSERT 0 3
+INSERT 0 6
+INSERT 0 2
+CREATE TABLE
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+DROP TRIGGER
+CREATE TRIGGER
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+INSERT 0 2
+BEGIN
+ALTER TABLE
+CREATE INDEX
+CREATE INDEX
+CREATE TABLE
+CREATE INDEX
+CREATE INDEX
+ALTER TABLE
+REVOKE
+GRANT
+CREATE POLICY
+CREATE POLICY
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+REVOKE
+REVOKE
+GRANT
+INSERT 0 1
+COMMENT
+COMMENT
+COMMIT
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+ check_true 
+------------
+ 
+(1 row)
+
+ check_true 
+------------
+ 
+(1 row)
+
+SET
+INSERT 0 2
+RESET
+ check_true 
+------------
+ 
+(1 row)
+
+                add_v2                
+--------------------------------------
+ f416a025-acfa-466e-8733-d7994606cd2e
+(1 row)
+
+ check_true 
+------------
+ 
+(1 row)
+
+ check_true 
+------------
+ 
+(1 row)
+
+ expect_failure 
+----------------
+ 
+(1 row)
+
+ expect_failure 
+----------------
+ 
+(1 row)
+
+ expect_failure 
+----------------
+ 
+(1 row)
+
+ expect_failure 
+----------------
+ 
+(1 row)
+
+ expect_failure 
+----------------
+ 
+(1 row)
+
+                add_v2                
+--------------------------------------
+ 1e3a436d-4dc5-40d4-9ccb-23740332b417
+(1 row)
+
+ expect_failure 
+----------------
+ 
+(1 row)
+
+ expect_failure 
+----------------
+ 
+(1 row)
+
+                add_v2                
+--------------------------------------
+ cd36f535-c514-456a-a59e-d806a93041cc
+(1 row)
+
+                add_v2                
+--------------------------------------
+ 940c7d4f-778f-49aa-a143-07a73d09fff4
+(1 row)
+
+ expect_failure 
+----------------
+ 
+(1 row)
+
+ expect_failure 
+----------------
+ 
+(1 row)
+
+             upload_file              
+--------------------------------------
+ 00000000-0000-4000-8000-000000000401
+(1 row)
+
+                add_v2                
+--------------------------------------
+ 7844bcbb-9893-4fc1-9a37-ee3ccc79f670
+(1 row)
+
+ check_true 
+------------
+ 
+(1 row)
+
+ check_true 
+------------
+ 
+(1 row)
+
+ expect_failure 
+----------------
+ 
+(1 row)
+
+             upload_file              
+--------------------------------------
+ 00000000-0000-4000-8000-000000000410
+(1 row)
+
+             upload_file              
+--------------------------------------
+ 00000000-0000-4000-8000-000000000411
+(1 row)
+
+             upload_file              
+--------------------------------------
+ 00000000-0000-4000-8000-000000000412
+(1 row)
+
+             upload_file              
+--------------------------------------
+ 00000000-0000-4000-8000-000000000413
+(1 row)
+
+             upload_file              
+--------------------------------------
+ 00000000-0000-4000-8000-000000000414
+(1 row)
+
+ expect_failure 
+----------------
+ 
+(1 row)
+
+ expect_failure 
+----------------
+ 
+(1 row)
+
+ expect_failure 
+----------------
+ 
+(1 row)
+
+ expect_failure 
+----------------
+ 
+(1 row)
+
+ expect_failure 
+----------------
+ 
+(1 row)
+
+ expect_failure 
+----------------
+ 
+(1 row)
+
+             upload_file              
+--------------------------------------
+ 00000000-0000-4000-8000-000000000430
+ 00000000-0000-4000-8000-000000000431
+ 00000000-0000-4000-8000-000000000432
+ 00000000-0000-4000-8000-000000000433
+ 00000000-0000-4000-8000-000000000434
+ 00000000-0000-4000-8000-000000000435
+ 00000000-0000-4000-8000-000000000436
+ 00000000-0000-4000-8000-000000000437
+ 00000000-0000-4000-8000-000000000438
+ 00000000-0000-4000-8000-000000000439
+(10 rows)
+
+ expect_failure 
+----------------
+ 
+(1 row)
+
+                add_v2                
+--------------------------------------
+ af8360b7-2b24-401e-99bd-f3a5e8e82fda
+(1 row)
+
+ check_true 
+------------
+ 
+(1 row)
+
+ expect_failure 
+----------------
+ 
+(1 row)
+
+ check_true 
+------------
+ 
+(1 row)
+
+             upload_file              
+--------------------------------------
+ 00000000-0000-4000-8000-000000000450
+(1 row)
+
+             upload_file              
+--------------------------------------
+ 00000000-0000-4000-8000-000000000451
+(1 row)
+
+             upload_file              
+--------------------------------------
+ 00000000-0000-4000-8000-000000000452
+(1 row)
+
+ check_true 
+------------
+ 
+(1 row)
+
+ expect_failure 
+----------------
+ 
+(1 row)
+
+ expect_failure 
+----------------
+ 
+(1 row)
+
+ finish_project_log_comment_orphan 
+-----------------------------------
+ t
+(1 row)
+
+ check_true 
+------------
+ 
+(1 row)
+
+ expect_failure 
+----------------
+ 
+(1 row)
+
+ expect_failure 
+----------------
+ 
+(1 row)
+
+ expect_failure 
+----------------
+ 
+(1 row)
+
+ expect_failure 
+----------------
+ 
+(1 row)
+
+ expect_failure 
+----------------
+ 
+(1 row)
+
+ check_true 
+------------
+ 
+(1 row)
+
+ expect_failure 
+----------------
+ 
+(1 row)
+
+ expect_failure 
+----------------
+ 
+(1 row)
+
+DO
+SET
+ expect_failure 
+----------------
+ 
+(1 row)
+
+                  id                  
+--------------------------------------
+ a37feec7-c62d-4770-badf-c86830e118b8
+(1 row)
+
+RESET
+SET
+ expect_failure 
+----------------
+ 
+(1 row)
+
+RESET
+ check_true 
+------------
+ 
+(1 row)
+
+ check_true 
+------------
+ 
+(1 row)
+
+INSERT 0 5000
+ANALYZE
+DO
+                                                                QUERY PLAN                                                                 
+-------------------------------------------------------------------------------------------------------------------------------------------
+ Function Scan on preview_project_log_project_comments_v2  (cost=0.25..10.25 rows=1000 width=56) (actual time=1.838..1.838 rows=2 loops=1)
+   Buffers: shared hit=306
+ Planning Time: 0.122 ms
+ Execution Time: 1.924 ms
+(4 rows)
+
+                                                  result                                                  
+----------------------------------------------------------------------------------------------------------
+ PASS: inline image comments constraints, compatibility, permissions, idempotency and 5000-row pagination
+(1 row)
+
+psql:/tmp/sql-validation/supabase/migrations/20260514170000_create_platform_file_objects.sql:66: NOTICE:  trigger "tr_platform_file_objects_updated_at" for relation "public.platform_file_objects" does not exist, skipping
+psql:/tmp/sql-validation/supabase/tests/project_log_inline_image_comments.sql:241: NOTICE:  5000-row cursor plan: [
+  {
+    "Plan": {
+      "Node Type": "Limit",
+      "Parallel Aware": false,
+      "Async Capable": false,
+      "Startup Cost": 0.28,
+      "Total Cost": 3.65,
+      "Plan Rows": 21,
+      "Plan Width": 24,
+      "Actual Startup Time": 0.018,
+      "Actual Total Time": 0.024,
+      "Actual Rows": 21,
+      "Actual Loops": 1,
+      "Shared Hit Blocks": 4,
+      "Shared Read Blocks": 0,
+      "Shared Dirtied Blocks": 0,
+      "Shared Written Blocks": 0,
+      "Local Hit Blocks": 0,
+      "Local Read Blocks": 0,
+      "Local Dirtied Blocks": 0,
+      "Local Written Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0,
+      "Plans": [
+        {
+          "Node Type": "Index Only Scan",
+          "Parent Relationship": "Outer",
+          "Parallel Aware": false,
+          "Async Capable": false,
+          "Scan Direction": "Forward",
+          "Index Name": "project_comment_published_page_idx",
+          "Relation Name": "project_log_project_comments",
+          "Alias": "project_log_project_comments",
+          "Startup Cost": 0.28,
+          "Total Cost": 800.45,
+          "Plan Rows": 4988,
+          "Plan Width": 24,
+          "Actual Startup Time": 0.018,
+          "Actual Total Time": 0.022,
+          "Actual Rows": 21,
+          "Actual Loops": 1,
+          "Index Cond": "((tenant_id = '00000000-0000-4000-8000-000000000001'::uuid) AND (log_id = '00000000-0000-4000-8000-000000000001'::uuid) AND (ROW(created_at, id) < ROW('2030-01-01 00:00:00.125946+00'::timestamp with time zone, '00000000-0000-4000-8000-000000014981'::uuid)))",
+          "Rows Removed by Index Recheck": 0,
+          "Heap Fetches": 21,
+          "Shared Hit Blocks": 4,
+          "Shared Read Blocks": 0,
+          "Shared Dirtied Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Dirtied Blocks": 0,
+          "Local Written Blocks": 0,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0
+        }
+      ]
+    },
+    "Planning": {
+      "Shared Hit Blocks": 0,
+      "Shared Read Blocks": 0,
+      "Shared Dirtied Blocks": 0,
+      "Shared Written Blocks": 0,
+      "Local Hit Blocks": 0,
+      "Local Read Blocks": 0,
+      "Local Dirtied Blocks": 0,
+      "Local Written Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    "Planning Time": 0.061,
+    "Triggers": [
+    ],
+    "Execution Time": 0.034
+  }
+]

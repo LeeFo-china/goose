@@ -1,0 +1,6 @@
+UTC 2026-10-11T10:29:02.600180+00:00
+Verified ownership label=project-log-inline-image-comments-sql
+Before cleanup: gooes-inline-sql-20261011-independent CPU=2.75% MEM=78.74MiB / 256MiB PIDS=6
+Removed: gooes-inline-sql-20261011-independent
+Exact-name container count after cleanup=0
+No exec/write operation targeted a production container or database.

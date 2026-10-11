@@ -1,0 +1,7 @@
+               total        used        free      shared  buff/cache   available
+Mem:            3719        2015         249         178        1454        1235
+Swap:           2047        1785         262
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/vda2        50G   35G   13G  73% /
+/dev/vda2        50G   35G   13G  73% /
+sha256:af083ef64d0408c8f098ee6f5c364a59b26f36fbc0f3a334a62c5c1d57362e9b 680807311

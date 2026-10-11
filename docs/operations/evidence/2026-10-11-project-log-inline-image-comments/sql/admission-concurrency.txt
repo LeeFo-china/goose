@@ -1,0 +1,27 @@
+Seeded using actual service-role reservation RPC: 59 files + 59 uploads.
+Observed overlap: inline_admission_B|Lock|advisory|blockers=1
+A exit=0
+SET
+SET
+BEGIN
+SET
+ADMITTED:00000000-0000-4000-8000-000000710060
+
+COMMIT
+
+B exit=3 (expected PT429)
+SET
+SET
+BEGIN
+SET
+ERROR:  PT429: COMMENT_ATTACHMENT_RATE_LIMITED
+CONTEXT:  PL/pgSQL function reserve_project_log_comment_upload(uuid,uuid,uuid,uuid,text,uuid,text,text,text,text,text,bigint,text) line 28 at RAISE
+LOCATION:  exec_stmt_raise, pl_exec.c:3904
+
+uploads=60
+files=60
+orphans=0
+rejected_file=0
+rejected_upload=0
+paired=60
+PASS two concurrent init requests across different logs at59: one admitted, one PT429, no orphan file.

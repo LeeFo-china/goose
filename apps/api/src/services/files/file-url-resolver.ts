@@ -3,6 +3,7 @@ import { ErrorCodes } from "@/errors/error-codes";
 import { Errors } from "@/errors/error-factory";
 import { SupabaseDB } from "@/utils/supabase";
 import { systemSettingsService } from "@/services/system-settings";
+import { isProjectCommentPrivateFileReference } from "@/utils/project-comment-private-file-reference";
 
 const LEGACY_PROJECT_LOGS_BUCKET = "project-logs";
 const COS_PUBLIC_BASE_URL_CACHE_TTL_MS = 30 * 1000;
@@ -437,9 +438,7 @@ function getPublicCosUrl(objectKey: string) {
 
 export function resolveStoredFileUrl(value: string | null | undefined) {
   const normalized = value?.trim();
-  if (!normalized) {
-    return null;
-  }
+  if (!normalized || isProjectCommentPrivateFileReference(normalized)) return null;
 
   if (isHttpUrl(normalized)) {
     const objectKey = getObjectKeyFromCosUrl(normalized);
@@ -494,6 +493,7 @@ export function resolveStoredFileUrlList(value: unknown) {
   return listValue
     .filter((item): item is string => typeof item === "string")
     .map((item) => item.trim())
-    .filter(Boolean)
+    // Filter before the legacy fallback can restore a deliberately rejected URL.
+    .filter((item) => item && !isProjectCommentPrivateFileReference(item))
     .map((item) => resolveStoredFileUrl(item) || item);
 }

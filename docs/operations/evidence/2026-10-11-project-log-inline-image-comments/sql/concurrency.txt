@@ -1,0 +1,21 @@
+Observed overlap: inline_independent_B|Lock|advisory|blockers=1
+A exit=0
+SET
+SET
+BEGIN
+SET
+RESULT:7aa01088-ad19-4e7b-85c3-404e1b7ef1df
+
+COMMIT
+
+B exit=0
+SET
+SET
+BEGIN
+SET
+RESULT:7aa01088-ad19-4e7b-85c3-404e1b7ef1df
+COMMIT
+
+Same returned id=7aa01088-ad19-4e7b-85c3-404e1b7ef1df
+Committed comments=1; attached files at position0=1
+PASS concurrent same request key, image-only payload: one comment and one attachment.

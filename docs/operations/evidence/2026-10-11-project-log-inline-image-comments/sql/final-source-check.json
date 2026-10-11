@@ -1,0 +1,18 @@
+{
+  "supabase/migrations/20261010140944_project_log_project_comments.sql": {
+    "applied_sha256": "e6f399048302ec84b32aa2bc3f14e3b60493c2b9a0b52db3e509c06c6f115c8b",
+    "current_sha256": "e6f399048302ec84b32aa2bc3f14e3b60493c2b9a0b52db3e509c06c6f115c8b"
+  },
+  "supabase/migrations/20260514170000_create_platform_file_objects.sql": {
+    "applied_sha256": "6feb37873c2d348fbbdd7c49ed5e2013bda0bf4490bea192bed089b9ee3f85b9",
+    "current_sha256": "6feb37873c2d348fbbdd7c49ed5e2013bda0bf4490bea192bed089b9ee3f85b9"
+  },
+  "supabase/migrations/20261011100853_project_log_inline_image_comments.sql": {
+    "applied_sha256": "f73df2c5e889fccc75362c1b164898f3544565ca001c5dc7f5cd03d2963b5de2",
+    "current_sha256": "f73df2c5e889fccc75362c1b164898f3544565ca001c5dc7f5cd03d2963b5de2"
+  },
+  "supabase/tests/project_log_inline_image_comments.sql": {
+    "applied_sha256": "46aefbdd1046251d0317bc9cb462911ac14227698f6528766e6138966488c64e",
+    "current_sha256": "46aefbdd1046251d0317bc9cb462911ac14227698f6528766e6138966488c64e"
+  }
+}

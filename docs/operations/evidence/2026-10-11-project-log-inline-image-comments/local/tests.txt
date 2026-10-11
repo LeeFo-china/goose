@@ -1,0 +1,164 @@
+bun test v1.3.2 (b131639c)
+
+src/repositories/project-log-project-comments.test.ts:
+(pass) ProjectLogProjectCommentsRepository > findLog returns the nullable tenant and project using a scoped singular lookup [1.82ms]
+(pass) ProjectLogProjectCommentsRepository > findLog and findApprovedParent return null for missing rows [0.47ms]
+(pass) ProjectLogProjectCommentsRepository > create preserves raw author columns and moderation metadata [0.52ms]
+(pass) ProjectLogProjectCommentsRepository > parent lookup requires approved status and matching tenant/log [0.29ms]
+(pass) ProjectLogProjectCommentsRepository > approved page uses tenant/log filters, stable ordering, exact total and inclusive bounds [0.30ms]
+(pass) ProjectLogProjectCommentsRepository > invalid or over-100 page ranges fail before any query [0.62ms]
+(pass) ProjectLogProjectCommentsRepository > author lookup batches both types, deduplicates IDs and keeps identical IDs distinct by type [0.72ms]
+(pass) ProjectLogProjectCommentsRepository > empty author batches skip queries, each populated type permits up to 100 IDs [0.60ms]
+(pass) ProjectLogProjectCommentsRepository > oversized author batches fail instead of silently dropping names [0.24ms]
+(pass) ProjectLogProjectCommentsRepository > database failures are wrapped for every method [0.60ms]
+(pass) project comment v2 data boundary > cursor retains PostgreSQL microseconds and bounded newest-first page [0.57ms]
+(pass) project comment v2 data boundary > v2 create maps idempotency conflict to stable 409
+(pass) project comment v2 data boundary > v2 rejects unbounded pages and previews without querying [0.75ms]
+(pass) project comment v2 preview scope > missing or foreign log rejects the entire requested batch even without comments [0.37ms]
+(pass) project comment v2 preview scope > preview RPC rejects invalid scope instead of silently returning partial results [0.20ms]
+(pass) project comment v2 preview scope > parent summary batch requires visibility and same tenant/logs [0.24ms]
+
+src/repositories/project-log-comment-attachments.test.ts:
+(pass) cleanup fails closed on malformed claim IDs [2.77ms]
+(pass) empty cleanup is valid and oversized claims fail before RPC [0.71ms]
+(pass) upload lookup binds tenant log auth user and selected author [0.71ms]
+(pass) complete sends verified content hash and final key through the atomic RPC [0.32ms]
+(pass) attachment batch is bounded and excludes unpublished comments [0.45ms]
+(pass) claim ownership failures retain forbidden semantics [0.12ms]
+(pass) claimed IDs load in one bounded table batch [0.50ms]
+(pass) reserve admission uses a single RPC before either metadata table is created [0.23ms]
+(pass) admission quota rejection maps to stable 429 [0.22ms]
+
+src/schema/project-log-project-comments-v2.test.ts:
+(pass) image-only comments/replies valid, empty, duplicates, remote URLs, forged fields rejected [1.15ms]
+(pass) bounded preview and cursor pagination [0.80ms]
+
+src/services/project-log-comment-serializer.test.ts:
+(pass) resolves parent outside preview with batched authors and signs attachments once [158.14ms]
+(pass) same-page parent needs no parent query; foreign or pending parents are never exposed [0.22ms]
+(pass) 100 replies plus 100 off-page parents use two bounded author batches [1.07ms]
+(pass) empty serialization does no I/O; unpublished legacy pending cannot be serialized [0.08ms]
+
+src/services/project-log-project-comments-v2-post.test.ts:
+(pass) successful v2 image reply POST runs service/RPC/serializer and returns only public response fields [103.77ms]
+
+src/services/project-log-comment-previews.test.ts:
+(pass) 0/1/3/4/21 previews count replies and display latest three in ascending order [1.52ms]
+(pass) foreign, missing or wrong-tenant logs reject whole preview before reading counts/signing [0.47ms]
+(pass) preview has no cached access: current revocation prevents counts and signing on next request [0.23ms]
+(pass) 21 logs, duplicates and empty batches reject without I/O; current log movement fails closed [0.34ms]
+
+src/services/project-log-comment-session.test.ts:
+(pass) admin session publishes without a content-detection openid dependency [0.33ms]
+(pass) WeChat and legacy bound sessions recheck OAuth before every operation
+(pass) anonymous, missing identity channel and missing log fail closed
+
+src/services/project-log-communication-access.test.ts:
+(pass) customer requires current membership and owned project, never employee fallback [0.89ms]
+(pass) revoked membership and ambiguous identity cannot read [0.20ms]
+(pass) grace read returns can_write false, write has stable tenant error [0.14ms]
+(pass) employee uses fresh permissions and scoped write permission [0.18ms]
+(pass) real policy with read-only permission must not throw during list [0.08ms]
+(pass) project membership is read freshly on every call, without visible-id cache [0.22ms]
+(pass) legacy customer token may carry account-wide roles but stays customer-scoped [0.15ms]
+
+src/services/comment-communication.test.ts:
+(pass) all consumer comment services reject text, replies, images and reads before repository access [7.09ms]
+(pass) follow-up previews and comment capabilities are suppressed without loading historical content
+(pass) comment image upload, direct initialization, completion and re-registration stop before storage [5.55ms]
+(pass) existing comment image public-url conversion is denied, including platform identity [1.57ms]
+(pass) platform may not restore public comments, and permission checks still run [1.58ms]
+(pass) customer and employee log summaries are empty without reading comment repositories [9.17ms]
+(pass) comment media file-id lookup cannot bypass the scene guard
+(pass) business image scenes remain available to existing storage permission checks
+(pass) real routes serialize the disabled contract; absent edit routes cannot publish [11.87ms]
+(pass) real authentication still rejects missing credentials before a protected comment route [13.00ms]
+
+src/services/project-log-communication-rollout.test.ts:
+(pass) new communication defaults closed; retirement is independent and explicit
+(pass) v2 cutover closes legacy contract and preparation leaves v1 available [1.21ms]
+
+src/services/project-log-project-comments.test.ts:
+(pass) approved customer and employee text gets project visibility and exact author type [0.90ms]
+(pass) pending does not return body; rejection and unavailable never create [0.59ms]
+(pass) revocation or unbinding during moderation cannot persist [0.11ms]
+(pass) invalid parent and images fail before moderation; forged state fails validation [0.22ms]
+(pass) reply validates scoped parent twice and includes parent id
+(pass) paginated list exposes can_write and mapped authors only; flag blocks access
+(pass) legacy bound customer session without login_channel may publish
+(pass) wechat unbinding prevents reading on next request despite shared auth cache
+
+src/services/project-log-comment-cursor.test.ts:
+(pass) cursor preserves PostgreSQL microseconds and same-timestamp UUID tie breaker
+(pass) rejects foreign-log, malformed, noncanonical and invalid date cursors [0.46ms]
+
+src/services/project-log-project-comments-v2.test.ts:
+(pass) atomic create normalizes content, uses selected author/auth user and returns published response [0.78ms]
+(pass) idempotency hashes normalized payload and retains file order, parent and log distinctions [0.40ms]
+(pass) same-key retries reauthorize and current revocation blocks repository access [0.31ms]
+(pass) validates content/image limits before mutation and supports image-only reply [0.22ms]
+(pass) 0/1/3/4/21 comments load newest page then display ascending and preserve cursor collision position [0.63ms]
+(pass) read-only list uses read authorization and rejects unbounded pages or foreign cursor
+(pass) text and images publish without invoking the shared moderation gateway [0.32ms]
+(pass) atomic repository rejects invalid parent/attachment or idempotency conflict before serialization
+
+src/services/project-log-comment-attachments.test.ts:
+(pass) init binds private file to auth subject, selected identity and log [0.98ms]
+(pass) complete reauthorizes after freeze and records verified metadata; retry does not rewrite [0.75ms]
+(pass) revocation during verification, unowned file and expired upload cannot complete
+(pass) URL requires fresh access and linked published attachment; batch signing has no DB calls
+(pass) orphan cleanup deletes only claimed expired unreferenced rows and leaves failed rows retryable
+(pass) strict init/complete schemas reject keys, URLs, identity overrides and oversized claims [1.47ms]
+(pass) published URL fails closed on inactive, public, wrong-scene or cross-log files [0.50ms]
+(pass) cleanup dry run never claims or deletes any row
+(pass) admission quota rejects before any signed credentials or separate file creation
+(pass) init reserves both records atomically before signing and returns no credential exceeding reservation [0.25ms]
+(pass) invalid or expired reservation never reaches signing [0.23ms]
+(pass) post-reservation signing failure or revoked session never returns credentials
+(pass) issued credentials expiring during fresh authorization are not returned
+
+src/services/project-log-project-comments-http.test.ts:
+(pass) new controller routes preserve project contract and validate pagination [6.23ms]
+(pass) real authentication rejects anonymous access to project communication [1.76ms]
+
+src/services/project-log-project-comments-v2-http.test.ts:
+(pass) v2 dispatch validates images and previews; preview is read-only POST [3.58ms]
+(pass) cutover rejects old valid requests with 410 before v1 service executes [1.78ms]
+(pass) all new routes reject anonymous requests [1.23ms]
+
+src/gateways/project-log-comment-attachment-storage/transport.test.ts:
+(pass) installed COS SDK streams conditional reads and sends private frozen bytes over HTTP [20.54ms]
+
+src/gateways/project-log-comment-attachment-storage/client.test.ts:
+(pass) private PUT signs exact staging key and ACL; GET signs final only for 300 seconds [2.21ms]
+(pass) freezes verified actual bytes to an unsigned private final key, never copies mutable raw [3.45ms]
+(pass) rejects spoofed MIME, truncation, weak ETag, oversized HEAD and actual body [4.19ms]
+(pass) changed staging bytes produce different final keys even with versioning enabled [3.98ms]
+(pass) 540 attachment GET signatures use one config load and no storage I/O [15.63ms]
+(pass) cleanup bounds listing to assigned prefix, removes raw and hash variants, retries truncated pages [2.52ms]
+
+src/services/files/file-url-resolver-project-comments.test.ts:
+(pass) does not forward a live private comment capability through generic public output or fallback
+(pass) blocks reserved reference: raw key [1.84ms]
+(pass) blocks reserved reference: staging key [0.18ms]
+(pass) blocks reserved reference: signed URL [0.07ms]
+(pass) blocks reserved reference: encoded path
+(pass) blocks reserved reference: double encoding [0.31ms]
+(pass) blocks reserved reference: encoded scene letters
+(pass) blocks reserved reference: protocol relative [0.42ms]
+(pass) blocks reserved reference: backslash alias
+(pass) blocks reserved reference: dot segment alias
+(pass) blocks reserved reference: malformed host [0.26ms]
+(pass) blocks reserved reference: malformed percent escape
+(pass) blocks reserved reference: malformed UTF-8 before encoded path [0.22ms]
+(pass) preserves unrelated normal images, private files and legacy image representations [0.48ms]
+
+src/services/files/file-url-resolver-private.test.ts:
+(pass) private stored file URL resolver > always signs a private COS key and clamps TTL to 600 seconds
+(pass) private stored file URL resolver > rejects public URLs and non-platform object keys
+(pass) private stored file URL resolver > signs only a verified Tencent COS file record for OCR [0.50ms]
+
+ 118 pass
+ 0 fail
+ 658 expect() calls
+Ran 118 tests across 20 files. [508.00ms]

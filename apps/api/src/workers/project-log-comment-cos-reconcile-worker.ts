@@ -1,4 +1,5 @@
 import { setTimeout as sleep } from "node:timers/promises";
+import { runProjectCommentAttachmentCleanupTick } from "@/services/project-log-comment-attachments";
 import { runCustomerRenderingInputCleanupTick } from "./customer-rendering-input-cleanup-worker";
 import {
   reconcileProjectLogCosObjects,
@@ -59,6 +60,7 @@ function getWorkerConfig() {
   return {
     enabled: parseBooleanEnv("PROJECT_LOG_COMMENT_COS_RECONCILE_WORKER_ENABLED", true),
     apply: parseBooleanEnv("PROJECT_LOG_COMMENT_COS_RECONCILE_APPLY", true),
+    commentAttachmentCleanupEnabled: parseBooleanEnv("PROJECT_LOG_COMMENT_ATTACHMENT_CLEANUP_ENABLED", false),
     privateInputCleanupEnabled: parseBooleanEnv("CUSTOMER_RENDERING_INPUT_CLEANUP_ENABLED", false),
     intervalMs: parseNumberEnv(
       "PROJECT_LOG_COMMENT_COS_RECONCILE_INTERVAL_MS",
@@ -160,6 +162,11 @@ async function tick() {
       apply: config.apply,
     });
     if (privateInputs) log(privateInputs.failed ? "warn" : "info", "private input cleanup completed", { private_inputs: privateInputs });
+    const attachments = await runProjectCommentAttachmentCleanupTick({
+      enabled: config.commentAttachmentCleanupEnabled,
+      apply: config.apply,
+    });
+    if (attachments) log(attachments.failed ? "warn" : "info", "private comment attachment cleanup completed", { attachments });
     running = false;
   }
 }

@@ -20,6 +20,7 @@ test("new controller routes preserve project contract and validate pagination", 
     const { userIdentityRepository } = await import("@/repositories/user-identities");
     const { wechatContentSafetyGateway } = await import("./wechat-content-safety-gateway");
     spyOn(rollout, "assertProjectAvailable").mockResolvedValue();
+    spyOn(rollout, "assertContract").mockResolvedValue();
     spyOn(access, "resolve").mockResolvedValue({ tenantId: id, type: "customer", author: { id, name: "业主" }, canWrite: true });
     spyOn(repo, "findLog").mockResolvedValue({ id, tenant_id: id, project_id: id });
     spyOn(repo, "listApproved").mockResolvedValue({ list: [], total: 0 });

@@ -1,0 +1,4 @@
+Image=supabase/postgres:15.8.1.085 Network=none Memory=268435456 NanoCpus=500000000 Pids=128 Readonly=true User=postgres CapDrop=["ALL"] Mounts=[] Tmpfs={"/tmp":"rw,nosuid,nodev,size=128m,mode=1777"}
+PostgreSQL 15.8 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 13.2.0, 64-bit
+UTF8
+

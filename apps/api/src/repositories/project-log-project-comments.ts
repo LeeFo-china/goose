@@ -2,6 +2,9 @@ import { Errors } from "@/errors/error-factory";
 import { SupabaseDB } from "@/utils/supabase";
 import { projectLogInternalCommentsRepository } from "./project-log-internal-comments";
 
+export type { ProjectCommentV2Row, ProjectCommentV2Insert, ProjectCommentCursor, ProjectCommentPage, ProjectCommentPreview } from "./project-log-project-comments-v2";
+import { ProjectLogProjectCommentsV2Repository } from "./project-log-project-comments-v2";
+
 const FIELDS = "id, log_id, parent_id, author_type, employee_author_id, customer_author_id, content, moderation_status, created_at";
 const MAX_PAGE_SIZE = 100;
 
@@ -30,7 +33,7 @@ export interface ProjectCommentAuthor {
   type: "employee" | "customer";
 }
 
-export class ProjectLogProjectCommentsRepository {
+export class ProjectLogProjectCommentsRepository extends ProjectLogProjectCommentsV2Repository {
   async findLog(logId: string): Promise<{ id: string; tenant_id: string | null; project_id: string } | null> {
     return projectLogInternalCommentsRepository.findLog(logId);
   }

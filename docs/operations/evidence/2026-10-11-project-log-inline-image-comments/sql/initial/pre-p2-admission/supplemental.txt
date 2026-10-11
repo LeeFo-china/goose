@@ -1,0 +1,378 @@
+DO
+CREATE FUNCTION
+CREATE FUNCTION
+SET
+ reject 
+--------
+ 
+(1 row)
+
+ reject 
+--------
+ 
+(1 row)
+
+ reject 
+--------
+ 
+(1 row)
+
+ reject 
+--------
+ 
+(1 row)
+
+ reject 
+--------
+ 
+(1 row)
+
+ reject 
+--------
+ 
+(1 row)
+
+ reject 
+--------
+ 
+(1 row)
+
+RESET
+SET
+ reject 
+--------
+ 
+(1 row)
+
+ reject 
+--------
+ 
+(1 row)
+
+ reject 
+--------
+ 
+(1 row)
+
+ reject 
+--------
+ 
+(1 row)
+
+ reject 
+--------
+ 
+(1 row)
+
+ reject 
+--------
+ 
+(1 row)
+
+ reject 
+--------
+ 
+(1 row)
+
+ reject 
+--------
+ 
+(1 row)
+
+RESET
+SET
+ reject 
+--------
+ 
+(1 row)
+
+ reject 
+--------
+ 
+(1 row)
+
+ reject 
+--------
+ 
+(1 row)
+
+ reject 
+--------
+ 
+(1 row)
+
+RESET
+BEGIN
+ reject 
+--------
+ 
+(1 row)
+
+ROLLBACK
+BEGIN
+SET CONSTRAINTS
+ reject 
+--------
+ 
+(1 row)
+
+ROLLBACK
+BEGIN
+SET
+                  id                  | author_type | published 
+--------------------------------------+-------------+-----------
+ d457d26b-8752-47a4-ac60-45b451dfc13c | customer    | t
+(1 row)
+
+ reject 
+--------
+ 
+(1 row)
+
+ROLLBACK
+                    result                     
+-----------------------------------------------
+ PASS supplemental permissions and constraints
+(1 row)
+
+LOAD
+SET
+SET
+SET
+SET
+SET
+SET
+                log_id                | total | recent_count 
+--------------------------------------+-------+--------------
+ 00000000-0000-4000-8000-000000000001 |  5009 |            3
+ 00000000-0000-4000-8000-000000000002 |     0 |            0
+(2 rows)
+
+ page_count | total | has_more 
+------------+-------+----------
+         20 | 5009  | true
+(1 row)
+
+VACUUM
+                log_id                | total | recent_count 
+--------------------------------------+-------+--------------
+ 00000000-0000-4000-8000-000000000001 |  5009 |            3
+ 00000000-0000-4000-8000-000000000002 |     0 |            0
+(2 rows)
+
+NOTICE:  PASS expected 42501: SELECT * FROM public.project_log_comment_uploads
+NOTICE:  PASS expected 42501: SELECT public.list_project_log_project_comments_v2(NULL,NULL)
+NOTICE:  PASS expected 42501: SELECT public.preview_project_log_project_comments_v2(NULL,NULL,ARRAY[]::uuid[])
+NOTICE:  PASS expected 42501: SELECT public.create_project_log_project_comment_v2(NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL)
+NOTICE:  PASS expected 42501: SELECT public.complete_project_log_comment_upload(NULL,NULL,NULL,NULL,NULL,NULL,NULL)
+NOTICE:  PASS expected 42501: SELECT public.claim_project_log_comment_orphans(1)
+NOTICE:  PASS expected 42501: SELECT public.finish_project_log_comment_orphan(NULL)
+NOTICE:  PASS expected 42501: SELECT * FROM public.project_log_project_comments
+NOTICE:  PASS expected 42501: SELECT * FROM public.project_log_comment_uploads
+NOTICE:  PASS expected 42501: SELECT public.list_project_log_project_comments_v2(NULL,NULL)
+NOTICE:  PASS expected 42501: SELECT public.preview_project_log_project_comments_v2(NULL,NULL,ARRAY[]::uuid[])
+NOTICE:  PASS expected 42501: SELECT public.create_project_log_project_comment_v2(NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL)
+NOTICE:  PASS expected 42501: SELECT public.complete_project_log_comment_upload(NULL,NULL,NULL,NULL,NULL,NULL,NULL)
+NOTICE:  PASS expected 42501: SELECT public.claim_project_log_comment_orphans(1)
+NOTICE:  PASS expected 42501: SELECT public.finish_project_log_comment_orphan(NULL)
+NOTICE:  PASS expected 42501: UPDATE public.project_log_comment_uploads SET position=0 WHERE false
+NOTICE:  PASS expected 42501: DELETE FROM public.project_log_comment_uploads WHERE false
+NOTICE:  PASS expected 42501: UPDATE public.project_log_project_comments SET content='bypass' WHERE false
+NOTICE:  PASS expected 42501: DELETE FROM public.project_log_project_comments WHERE false
+NOTICE:  PASS expected 23514: UPDATE public.project_log_comment_uploads SET status='attached',comment_id=(SELECT id FROM public.project_log_project_comments WHERE client_request_id=pg_temp.uid(301)),position=NULL WHERE file_id=pg_temp.uid(439)
+NOTICE:  PASS expected 23514: INSERT INTO public.project_log_project_comments(tenant_id,log_id,author_type,employee_author_id,content,moderation_status,auth_user_id,client_request_id,payload_sha256) VALUES(pg_temp.uid(1),pg_temp.uid(1),'employee',pg_temp.uid(1),'','unchecked',pg_temp.uid(101),pg_temp.uid(88001),repeat('e',64))
+NOTICE:  PASS expected 23514: SELECT * FROM public.create_project_log_project_comment_v2(pg_temp.uid(1),pg_temp.uid(1),pg_temp.uid(101),'customer',pg_temp.uid(3),'wrong customer',NULL,ARRAY[]::uuid[],pg_temp.uid(88003),repeat('e',64))
+LOG:  duration: 0.004 ms  plan:
+Query Text:  SELECT ('00000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid 
+Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.003..0.003 rows=1 loops=1)
+LOG:  duration: 0.003 ms  plan:
+Query Text:  SELECT ('00000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid 
+Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.002..0.002 rows=1 loops=1)
+LOG:  duration: 0.004 ms  plan:
+Query Text:  SELECT ('00000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid 
+Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.002..0.002 rows=1 loops=1)
+LOG:  duration: 0.003 ms  plan:
+Query Text:  SELECT ('00000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid 
+Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.002..0.002 rows=1 loops=1)
+LOG:  duration: 0.022 ms  plan:
+Query Text: EXISTS (SELECT 1 FROM unnest(p_log_ids) requested(id) WHERE NOT EXISTS (
+    SELECT 1 FROM public.project_logs l JOIN public.projects p ON p.id=l.project_id
+    WHERE l.id=requested.id AND l.tenant_id=p_tenant_id AND l.project_id=p_project_id AND p.tenant_id=p_tenant_id))
+Result  (cost=16.53..16.54 rows=1 width=1) (actual time=0.020..0.021 rows=1 loops=1)
+  Buffers: shared hit=8
+  InitPlan 1 (returns $1)
+    ->  Nested Loop Anti Join  (cost=0.31..32.76 rows=2 width=0) (actual time=0.019..0.020 rows=0 loops=1)
+          Buffers: shared hit=8
+          ->  Function Scan on unnest requested  (cost=0.00..0.02 rows=2 width=16) (actual time=0.006..0.006 rows=2 loops=1)
+          ->  Nested Loop  (cost=0.30..16.36 rows=1 width=16) (actual time=0.006..0.006 rows=1 loops=2)
+                Buffers: shared hit=8
+                ->  Index Scan using project_logs_pkey on project_logs l  (cost=0.15..8.18 rows=1 width=32) (actual time=0.003..0.003 rows=1 loops=2)
+                      Index Cond: (id = requested.id)
+                      Filter: ((project_id = '00000000-0000-4000-8000-000000000001'::uuid) AND (tenant_id = '00000000-0000-4000-8000-000000000001'::uuid))
+                      Buffers: shared hit=4
+                ->  Index Scan using projects_pkey on projects p  (cost=0.15..8.17 rows=1 width=16) (actual time=0.001..0.001 rows=1 loops=2)
+                      Index Cond: (id = '00000000-0000-4000-8000-000000000001'::uuid)
+                      Filter: (tenant_id = '00000000-0000-4000-8000-000000000001'::uuid)
+                      Buffers: shared hit=4
+LOG:  duration: 3.207 ms  plan:
+Query Text: SELECT requested.id,
+    (SELECT count(*) FROM public.project_log_project_comments c WHERE c.tenant_id=p_tenant_id AND c.log_id=requested.id AND c.published),
+    coalesce((SELECT jsonb_agg(to_jsonb(latest) ORDER BY latest.created_at DESC,latest.id DESC) FROM (
+      SELECT c.id,c.log_id,c.parent_id,c.author_type,c.employee_author_id,c.customer_author_id,c.content,c.moderation_status,c.published,c.created_at
+      FROM public.project_log_project_comments c WHERE c.tenant_id=p_tenant_id AND c.log_id=requested.id AND c.published
+      ORDER BY c.created_at DESC,c.id DESC LIMIT 3
+    ) latest),'[]'::jsonb)
+    FROM (SELECT DISTINCT unnest(p_log_ids) AS id) requested
+Subquery Scan on requested  (cost=0.04..473.09 rows=2 width=56) (actual time=2.247..3.204 rows=2 loops=1)
+  Buffers: shared hit=304
+  ->  Unique  (cost=0.04..0.05 rows=2 width=16) (actual time=0.011..0.013 rows=2 loops=1)
+        ->  Sort  (cost=0.04..0.04 rows=2 width=16) (actual time=0.010..0.011 rows=2 loops=1)
+              Sort Key: (unnest('{00000000-0000-4000-8000-000000000001,00000000-0000-4000-8000-000000000002}'::uuid[]))
+              Sort Method: quicksort  Memory: 25kB
+              ->  ProjectSet  (cost=0.00..0.03 rows=2 width=16) (actual time=0.002..0.003 rows=2 loops=1)
+                    ->  Result  (cost=0.00..0.01 rows=1 width=0) (actual time=0.000..0.001 rows=1 loops=1)
+  SubPlan 1
+    ->  Aggregate  (cost=235.69..235.70 rows=1 width=8) (actual time=1.507..1.508 rows=1 loops=2)
+          Buffers: shared hit=296
+          ->  Seq Scan on project_log_project_comments c  (cost=0.00..223.16 rows=5009 width=0) (actual time=0.451..1.316 rows=2504 loops=2)
+                Filter: (published AND (tenant_id = '00000000-0000-4000-8000-000000000001'::uuid) AND (log_id = requested.id))
+                Rows Removed by Filter: 2506
+                Buffers: shared hit=296
+  SubPlan 2
+    ->  Aggregate  (cost=0.80..0.81 rows=1 width=32) (actual time=0.083..0.083 rows=1 loops=2)
+          Buffers: shared hit=8
+          ->  Subquery Scan on latest  (cost=0.28..0.78 rows=3 width=165) (actual time=0.041..0.043 rows=2 loops=2)
+                Buffers: shared hit=5
+                ->  Limit  (cost=0.28..0.75 rows=3 width=117) (actual time=0.036..0.037 rows=2 loops=2)
+                      Buffers: shared hit=5
+                      ->  Index Scan using project_comment_published_page_idx on project_log_project_comments c_1  (cost=0.28..788.40 rows=5009 width=117) (actual time=0.014..0.015 rows=2 loops=2)
+                            Index Cond: ((tenant_id = '00000000-0000-4000-8000-000000000001'::uuid) AND (log_id = requested.id))
+                            Buffers: shared hit=5
+LOG:  duration: 11.326 ms  plan:
+Query Text: SELECT log_id,total,jsonb_array_length(recent_comments) AS recent_count FROM public.preview_project_log_project_comments_v2(pg_temp.uid(1),pg_temp.uid(1),ARRAY[pg_temp.uid(1),pg_temp.uid(2)]);
+Function Scan on preview_project_log_project_comments_v2  (cost=0.25..12.75 rows=1000 width=28) (actual time=11.320..11.321 rows=2 loops=1)
+  Buffers: shared hit=454
+LOG:  duration: 0.004 ms  plan:
+Query Text:  SELECT ('00000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid 
+Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.003..0.003 rows=1 loops=1)
+LOG:  duration: 0.004 ms  plan:
+Query Text:  SELECT ('00000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid 
+Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.002..0.003 rows=1 loops=1)
+LOG:  duration: 2.096 ms  plan:
+Query Text: WITH page AS MATERIALIZED (
+    SELECT id,log_id,parent_id,author_type,employee_author_id,customer_author_id,content,moderation_status,published,created_at
+    FROM public.project_log_project_comments WHERE tenant_id=p_tenant_id AND log_id=p_log_id AND published
+      AND (p_before_created_at IS NULL OR (created_at,id)<(p_before_created_at,p_before_id))
+    ORDER BY created_at DESC,id DESC LIMIT p_page_size+1
+  ), kept AS (SELECT * FROM page ORDER BY created_at DESC,id DESC LIMIT p_page_size)
+  SELECT jsonb_build_object('list',coalesce((SELECT jsonb_agg(to_jsonb(k) ORDER BY k.created_at DESC,k.id DESC) FROM kept k),'[]'::jsonb),
+    'total',(SELECT count(*) FROM public.project_log_project_comments WHERE tenant_id=p_tenant_id AND log_id=p_log_id AND published),
+    'hasMore',(SELECT count(*)>p_page_size FROM page))
+Result  (cost=241.01..241.03 rows=1 width=32) (actual time=2.083..2.085 rows=1 loops=1)
+  Buffers: shared hit=151
+  CTE page
+    ->  Limit  (cost=0.28..3.59 rows=21 width=117) (actual time=0.015..0.023 rows=21 loops=1)
+          Buffers: shared hit=3
+          ->  Index Scan using project_comment_published_page_idx on project_log_project_comments  (cost=0.28..788.40 rows=5009 width=117) (actual time=0.014..0.021 rows=21 loops=1)
+                Index Cond: ((tenant_id = '00000000-0000-4000-8000-000000000001'::uuid) AND (log_id = '00000000-0000-4000-8000-000000000001'::uuid))
+                Buffers: shared hit=3
+  InitPlan 2 (returns $1)
+    ->  Aggregate  (cost=1.23..1.24 rows=1 width=32) (actual time=0.328..0.329 rows=1 loops=1)
+          Buffers: shared hit=3
+          ->  Subquery Scan on k  (cost=0.88..1.13 rows=20 width=233) (actual time=0.064..0.079 rows=20 loops=1)
+                Buffers: shared hit=3
+                ->  Limit  (cost=0.88..0.93 rows=20 width=185) (actual time=0.058..0.062 rows=20 loops=1)
+                      Buffers: shared hit=3
+                      ->  Sort  (cost=0.88..0.93 rows=21 width=185) (actual time=0.058..0.059 rows=20 loops=1)
+                            Sort Key: page.created_at DESC, page.id DESC
+                            Sort Method: quicksort  Memory: 27kB
+                            Buffers: shared hit=3
+                            ->  CTE Scan on page  (cost=0.00..0.42 rows=21 width=185) (actual time=0.016..0.038 rows=21 loops=1)
+                                  Buffers: shared hit=3
+  InitPlan 3 (returns $2)
+    ->  Aggregate  (cost=235.69..235.70 rows=1 width=8) (actual time=1.663..1.663 rows=1 loops=1)
+          Buffers: shared hit=148
+          ->  Seq Scan on project_log_project_comments project_log_project_comments_1  (cost=0.00..223.16 rows=5009 width=0) (actual time=0.004..1.285 rows=5009 loops=1)
+                Filter: (published AND (tenant_id = '00000000-0000-4000-8000-000000000001'::uuid) AND (log_id = '00000000-0000-4000-8000-000000000001'::uuid))
+                Rows Removed by Filter: 2
+                Buffers: shared hit=148
+  InitPlan 4 (returns $3)
+    ->  Aggregate  (cost=0.47..0.48 rows=1 width=1) (actual time=0.007..0.007 rows=1 loops=1)
+          ->  CTE Scan on page page_1  (cost=0.00..0.42 rows=21 width=0) (actual time=0.001..0.003 rows=21 loops=1)
+LOG:  duration: 8.180 ms  plan:
+Query Text: WITH q AS MATERIALIZED (SELECT public.list_project_log_project_comments_v2(pg_temp.uid(1),pg_temp.uid(1),20) r) SELECT jsonb_array_length(r->'list') AS page_count,r->>'total' AS total,r->>'hasMore' AS has_more FROM q;
+CTE Scan on q  (cost=0.26..0.29 rows=1 width=68) (actual time=8.175..8.176 rows=1 loops=1)
+  Buffers: shared hit=210
+  CTE q
+    ->  Result  (cost=0.00..0.26 rows=1 width=32) (actual time=8.168..8.168 rows=1 loops=1)
+          Buffers: shared hit=210
+LOG:  duration: 0.006 ms  plan:
+Query Text:  SELECT ('00000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid 
+Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.004..0.004 rows=1 loops=1)
+LOG:  duration: 0.004 ms  plan:
+Query Text:  SELECT ('00000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid 
+Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.002..0.002 rows=1 loops=1)
+LOG:  duration: 0.004 ms  plan:
+Query Text:  SELECT ('00000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid 
+Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.002..0.003 rows=1 loops=1)
+LOG:  duration: 0.004 ms  plan:
+Query Text:  SELECT ('00000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid 
+Result  (cost=0.00..0.03 rows=1 width=16) (actual time=0.003..0.003 rows=1 loops=1)
+LOG:  duration: 0.024 ms  plan:
+Query Text: EXISTS (SELECT 1 FROM unnest(p_log_ids) requested(id) WHERE NOT EXISTS (
+    SELECT 1 FROM public.project_logs l JOIN public.projects p ON p.id=l.project_id
+    WHERE l.id=requested.id AND l.tenant_id=p_tenant_id AND l.project_id=p_project_id AND p.tenant_id=p_tenant_id))
+Result  (cost=16.53..16.54 rows=1 width=1) (actual time=0.022..0.023 rows=1 loops=1)
+  Buffers: shared hit=8
+  InitPlan 1 (returns $1)
+    ->  Nested Loop Anti Join  (cost=0.31..32.76 rows=2 width=0) (actual time=0.021..0.022 rows=0 loops=1)
+          Buffers: shared hit=8
+          ->  Function Scan on unnest requested  (cost=0.00..0.02 rows=2 width=16) (actual time=0.003..0.004 rows=2 loops=1)
+          ->  Nested Loop  (cost=0.30..16.36 rows=1 width=16) (actual time=0.008..0.008 rows=1 loops=2)
+                Buffers: shared hit=8
+                ->  Index Scan using project_logs_pkey on project_logs l  (cost=0.15..8.18 rows=1 width=32) (actual time=0.005..0.005 rows=1 loops=2)
+                      Index Cond: (id = requested.id)
+                      Filter: ((project_id = '00000000-0000-4000-8000-000000000001'::uuid) AND (tenant_id = '00000000-0000-4000-8000-000000000001'::uuid))
+                      Buffers: shared hit=4
+                ->  Index Scan using projects_pkey on projects p  (cost=0.15..8.17 rows=1 width=16) (actual time=0.002..0.002 rows=1 loops=2)
+                      Index Cond: (id = '00000000-0000-4000-8000-000000000001'::uuid)
+                      Filter: (tenant_id = '00000000-0000-4000-8000-000000000001'::uuid)
+                      Buffers: shared hit=4
+LOG:  duration: 2.671 ms  plan:
+Query Text: SELECT requested.id,
+    (SELECT count(*) FROM public.project_log_project_comments c WHERE c.tenant_id=p_tenant_id AND c.log_id=requested.id AND c.published),
+    coalesce((SELECT jsonb_agg(to_jsonb(latest) ORDER BY latest.created_at DESC,latest.id DESC) FROM (
+      SELECT c.id,c.log_id,c.parent_id,c.author_type,c.employee_author_id,c.customer_author_id,c.content,c.moderation_status,c.published,c.created_at
+      FROM public.project_log_project_comments c WHERE c.tenant_id=p_tenant_id AND c.log_id=requested.id AND c.published
+      ORDER BY c.created_at DESC,c.id DESC LIMIT 3
+    ) latest),'[]'::jsonb)
+    FROM (SELECT DISTINCT unnest(p_log_ids) AS id) requested
+Subquery Scan on requested  (cost=0.04..473.09 rows=2 width=56) (actual time=1.862..2.668 rows=2 loops=1)
+  Buffers: shared hit=301
+  ->  Unique  (cost=0.04..0.05 rows=2 width=16) (actual time=0.009..0.012 rows=2 loops=1)
+        ->  Sort  (cost=0.04..0.04 rows=2 width=16) (actual time=0.009..0.010 rows=2 loops=1)
+              Sort Key: (unnest('{00000000-0000-4000-8000-000000000001,00000000-0000-4000-8000-000000000002}'::uuid[]))
+              Sort Method: quicksort  Memory: 25kB
+              ->  ProjectSet  (cost=0.00..0.03 rows=2 width=16) (actual time=0.002..0.003 rows=2 loops=1)
+                    ->  Result  (cost=0.00..0.01 rows=1 width=0) (actual time=0.000..0.001 rows=1 loops=1)
+  SubPlan 1
+    ->  Aggregate  (cost=235.69..235.70 rows=1 width=8) (actual time=1.275..1.275 rows=1 loops=2)
+          Buffers: shared hit=296
+          ->  Seq Scan on project_log_project_comments c  (cost=0.00..223.16 rows=5009 width=0) (actual time=0.396..1.085 rows=2504 loops=2)
+                Filter: (published AND (tenant_id = '00000000-0000-4000-8000-000000000001'::uuid) AND (log_id = requested.id))
+                Rows Removed by Filter: 2506
+                Buffers: shared hit=296
+  SubPlan 2
+    ->  Aggregate  (cost=0.80..0.81 rows=1 width=32) (actual time=0.048..0.048 rows=1 loops=2)
+          Buffers: shared hit=5
+          ->  Subquery Scan on latest  (cost=0.28..0.78 rows=3 width=165) (actual time=0.017..0.019 rows=2 loops=2)
+                Buffers: shared hit=5
+                ->  Limit  (cost=0.28..0.75 rows=3 width=117) (actual time=0.015..0.016 rows=2 loops=2)
+                      Buffers: shared hit=5
+                      ->  Index Scan using project_comment_published_page_idx on project_log_project_comments c_1  (cost=0.28..788.40 rows=5009 width=117) (actual time=0.014..0.015 rows=2 loops=2)
+                            Index Cond: ((tenant_id = '00000000-0000-4000-8000-000000000001'::uuid) AND (log_id = requested.id))
+                            Buffers: shared hit=5
+LOG:  duration: 10.646 ms  plan:
+Query Text: SELECT log_id,total,jsonb_array_length(recent_comments) AS recent_count FROM public.preview_project_log_project_comments_v2(pg_temp.uid(1),pg_temp.uid(1),ARRAY[pg_temp.uid(1),pg_temp.uid(2)]);
+Function Scan on preview_project_log_project_comments_v2  (cost=0.25..12.75 rows=1000 width=28) (actual time=10.637..10.639 rows=2 loops=1)
+  Buffers: shared hit=359

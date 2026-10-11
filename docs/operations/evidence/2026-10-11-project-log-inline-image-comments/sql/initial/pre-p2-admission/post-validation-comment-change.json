@@ -1,0 +1,9 @@
+{
+  "file": "supabase/migrations/20261011100853_project_log_inline_image_comments.sql",
+  "applied_sha256": "f54d98862f53a59cbcfd2fd40afb9962fa74455b5ade09f36df8ac660ebfe9eb",
+  "current_sha256": "5e0be432bb95f2b54273dcf0eb1c9ed5634cacb574e3760d6897a778693b9ea5",
+  "verification": "Replacing exactly the new single comment with the applied original comment reproduces the applied SHA256. All other input files remain identical.",
+  "old_comment": "-- <=20 index count scans, each followed by a three-row index seek; never rank full comment histories.",
+  "new_comment": "-- <=20 scoped exact counts (O(history)), each followed by a three-row index seek; never rank full histories.",
+  "rerun_required": false
+}

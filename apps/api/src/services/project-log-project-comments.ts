@@ -20,7 +20,7 @@ type Dependencies = {
     } | null>;
   };
   moderation?: Pick<typeof wechatContentSafetyGateway, "checkText">;
-  rollout?: Pick<typeof projectLogCommunicationRollout, "assertProjectAvailable">;
+  rollout?: Pick<typeof projectLogCommunicationRollout, "assertProjectAvailable" | "assertContract">;
 };
 export class ProjectLogProjectCommentsService {
   private readonly repository;
@@ -95,6 +95,7 @@ export class ProjectLogProjectCommentsService {
     if (!input.actor?.sub)
       throw Errors.unauthorized();
     await this.rollout.assertProjectAvailable();
+    await this.rollout.assertContract(1);
     const log = await this.repository.findLog(input.logId);
     if (!log)
       throw Errors.forbidden();
