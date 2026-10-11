@@ -1,0 +1,104 @@
+{
+  "phase": "preparation-v2-disabled",
+  "at": "2026-10-11T10:43:25.949Z",
+  "flags": {
+    "PROJECT_LOG_INTERNAL_COMMENTS_RETIRED": "true",
+    "PROJECT_LOG_COMMUNICATION_ENABLED": "true",
+    "PROJECT_LOG_COMMENT_V2_ENABLED": "false"
+  },
+  "checks": [
+    {
+      "name": "v1-list-still-available",
+      "method": "GET",
+      "status": 200,
+      "code": null,
+      "request_id": null,
+      "pass": true
+    },
+    {
+      "name": "v1-contract",
+      "pass": true
+    },
+    {
+      "name": "v2-list-disabled",
+      "method": "GET",
+      "status": 403,
+      "code": "PROJECT_COMMENT_V2_DISABLED",
+      "request_id": "req-a",
+      "pass": true
+    },
+    {
+      "name": "v2-create-disabled",
+      "method": "POST",
+      "status": 403,
+      "code": "PROJECT_COMMENT_V2_DISABLED",
+      "request_id": "req-b",
+      "pass": true
+    },
+    {
+      "name": "v2-preview-disabled",
+      "method": "POST",
+      "status": 403,
+      "code": "PROJECT_COMMENT_V2_DISABLED",
+      "request_id": "req-c",
+      "pass": true
+    },
+    {
+      "name": "v2-upload-init-disabled",
+      "method": "POST",
+      "status": 403,
+      "code": "PROJECT_COMMENT_V2_DISABLED",
+      "request_id": "req-d",
+      "pass": true
+    },
+    {
+      "name": "v2-upload-complete-disabled",
+      "method": "POST",
+      "status": 403,
+      "code": "PROJECT_COMMENT_V2_DISABLED",
+      "request_id": "req-e",
+      "pass": true
+    },
+    {
+      "name": "v2-url-disabled",
+      "method": "GET",
+      "status": 403,
+      "code": "PROJECT_COMMENT_V2_DISABLED",
+      "request_id": "req-f",
+      "pass": true
+    },
+    {
+      "name": "legacy-internal-stays-retired",
+      "method": "GET",
+      "status": 410,
+      "code": "PROJECT_LOG_INTERNAL_COMMENTS_RETIRED",
+      "request_id": "req-g",
+      "pass": true
+    },
+    {
+      "name": "anonymous-new-list-rejected",
+      "method": "GET",
+      "status": 401,
+      "code": "TOKEN_MISSING",
+      "request_id": "req-h",
+      "pass": true
+    },
+    {
+      "name": "anonymous-new-preview-rejected",
+      "method": "POST",
+      "status": 401,
+      "code": "TOKEN_MISSING",
+      "request_id": "req-i",
+      "pass": true
+    },
+    {
+      "name": "no-comment-or-upload-created",
+      "pass": true
+    }
+  ],
+  "pass": true,
+  "limits": [
+    "Short-lived server-generated employee token; not phone-session evidence",
+    "No real image upload or v2 publication while disabled"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "at": "2026-10-11T10:36:45.419Z",
+  "checks": {
+    "page_rpc": true,
+    "preview_rpc": true,
+    "postgrest_relationships": true,
+    "settings": true
+  },
+  "error_codes": [],
+  "flags": {
+    "PROJECT_LOG_INTERNAL_COMMENTS_RETIRED": "true",
+    "PROJECT_LOG_COMMUNICATION_ENABLED": "true",
+    "PROJECT_LOG_COMMENT_V2_ENABLED": "false"
+  },
+  "writes": 0
+}

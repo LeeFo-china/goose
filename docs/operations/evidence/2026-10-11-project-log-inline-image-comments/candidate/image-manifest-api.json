@@ -1,0 +1,8 @@
+{
+  "service": "api",
+  "image": "useccr.ccs.tencentyun.com/america_goose/goose-api:run-38132263787-f415c5cb83c840203d878cca37858c504b069e05",
+  "digest": "sha256:266c34146cbead8b84325769a3530bb345e08f41e161960d04b27951d838815c",
+  "build_run_id": 38132263787,
+  "commit_sha": "f415c5cb83c840203d878cca37858c504b069e05",
+  "target_environment": "production"
+}

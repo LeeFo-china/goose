@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "build_run_id": 38132263787,
+  "deploy_run_id": 38132669163,
+  "tag": "v2026.10.11.1",
+  "commit_sha": "f415c5cb83c840203d878cca37858c504b069e05",
+  "services": [
+    "api",
+    "cos-reconcile-worker"
+  ],
+  "completed_at": "2026-10-11T10:40:26Z"
+}

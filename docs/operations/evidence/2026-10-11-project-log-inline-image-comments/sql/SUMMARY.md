@@ -1,8 +1,10 @@
 # Independent SQL revalidation — P2 upload admission
 
-**PASS — no SQL runtime blockers.** Final migration SHA-256: `f73df2c5e889fccc75362c1b164898f3544565ca001c5dc7f5cd03d2963b5de2`. Final fixture SHA-256: `46aefbdd1046251d0317bc9cb462911ac14227698f6528766e6138966488c64e`. All source inputs still matched after execution (`source-sha256.json`, `final-source-check.json`). Completed 2026-10-11 at 10:29 UTC.
+**CURRENT FINAL SQL RECEIPT: PASS — no SQL runtime blockers or pending SQL tests.** Final migration SHA-256: `f73df2c5e889fccc75362c1b164898f3544565ca001c5dc7f5cd03d2963b5de2`. Final fixture SHA-256: `46aefbdd1046251d0317bc9cb462911ac14227698f6528766e6138966488c64e`. All source inputs still matched after execution (`source-sha256.json`, `final-source-check.json`). Completed 2026-10-11 at 10:29 UTC.
 
-The previous completed verification snapshot, including its original source hashes and comment-only follow-up, is preserved under `initial/pre-p2-admission/`. Files at this directory's root describe this P2 run.
+**Current evidence:** `final-source-check.json` and the actual source files were rechecked and match the hashes above. `admission-concurrency.txt` is the latest actual 59→60 quota evidence; cleanup is confirmed in `cleanup.txt` (zero remaining task containers).
+
+**Historical evidence only:** `initial/pre-p2-admission/` contains superseded pre-quota snapshots. Its older hashes and PASS statements apply only to those historical runs and are not the final P2 receipt. Files at this directory's root describe the current P2 run.
 
 | Check | Result / evidence |
 |---|---|

@@ -1,0 +1,33 @@
+{
+  "at": "2026-10-11T10:43:27.746Z",
+  "kind": "synthetic-private-COS-gateway-probe-not-phone-or-business-comment",
+  "checks": [
+    {
+      "name": "private-presigned-put",
+      "status": 200,
+      "pass": true
+    },
+    {
+      "name": "verified-frozen-bytes",
+      "pass": true
+    },
+    {
+      "name": "signed-get",
+      "status": 200,
+      "pass": true
+    },
+    {
+      "name": "anonymous-final-denied",
+      "status": 403,
+      "pass": true
+    },
+    {
+      "name": "anonymous-raw-denied",
+      "status": 403,
+      "pass": true
+    }
+  ],
+  "cleanup": true,
+  "sql_writes": 0,
+  "pass": true
+}

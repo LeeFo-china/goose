@@ -1,3 +1,5 @@
+> **HISTORICAL / SUPERSEDED — NOT THE FINAL SQL RECEIPT.** This pre-P2 snapshot does not validate atomic upload admission. Use [the current P2 SUMMARY](../../SUMMARY.md) for final source hashes, quota concurrency, permissions and cleanup evidence.
+
 # Independent SQL validation — 2026-10-11
 
 **PASS for the applied source snapshot.** Actual v1 migration, actual platform-file migration, new `20261011100853_project_log_inline_image_comments.sql`, and the new fixture were executed in a fresh `gooes_inline_comments_test` database on isolated PostgreSQL 15.8 / UTF8. No feature-source edits or commits by this validator.

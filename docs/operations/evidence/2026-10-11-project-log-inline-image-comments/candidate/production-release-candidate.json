@@ -1,0 +1,1 @@
+{"schema_version":2,"build_run_id":38132263787,"tag":"v2026.10.11.1","commit_sha":"f415c5cb83c840203d878cca37858c504b069e05","requested_services":["api","cos-reconcile-worker"],"build_services":["api"],"target_environment":"production","build_plan_artifact":"production-build-plan","deployment_source_artifact":"production-deploy-source"}

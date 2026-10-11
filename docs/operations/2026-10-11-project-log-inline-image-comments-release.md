@@ -1,6 +1,6 @@
 # 项目日志图文评论 v2 后端准备版
 
-状态：实施及两轮复审通过，正在准备生产候选，尚未生产部署。当前生产 v1 行为与开关未修改。
+状态：代码 `f415c5cb83c840203d878cca37858c504b069e05` / `v2026.10.11.1` 的兼容准备版已于 2026-10-11 18:40:26（北京时间）部署成功。迁移已应用，API/COS worker健康，v2保持关闭；当前小程序仍使用原v1行为。
 
 ## 变更范围
 
@@ -20,7 +20,7 @@
 
 5,000 条评论下分页使用 `project_comment_published_page_idx`，微秒时间相同的游标无重复/遗漏。最近三条查询有 LIMIT 3；精确总数仍需扫描相应历史，不能把 LIMIT 的输出边界解释成总计数查询恒定开销。未引入缓存/计数表/队列。
 
-生产 COS 只读配置查询：bucket ACL=private，bucket policy 查询404。不是实际图片上传、CDN行为或手机证据。
+生产 COS 配置查询：bucket ACL=private，bucket policy 查询404。随后使用实际新网关与真实COS服务，对临时生成的4×4 PNG完成PUT、服务端格式验证和内容寻址固化、签名GET；匿名读取临时/成品对象均403。5项检查通过，两个测试对象已清理，SQL写入0。这是服务端存储传输证据，不是手机域名/二进制PUT适配或业务评论验收。
 
 单元、服务与 HTTP 检查使用受控存储/鉴权依赖；不向微信发送测试检测请求。20个相关测试文件共118项通过、658次断言；API typecheck、build、文件大小检查通过。测试及检查输出保存在同目录 local/。最终规格与独立质量复审均通过，无剩余确认的P1/P2。上传名额真实并发验证通过：已有59次申请时，不同日志的两个同身份请求仅一个成功，另一个PT429；最终60个上传/文件一一配对，无孤立记录。
 
@@ -40,3 +40,26 @@
 两种身份的真实手机发布、纯图片/图文回复、上传网络重试、图片预览刷新、三条直显、展开收起、撤权/身份切换及截图待客户端联验。仓库内 mocked HTTP 和 SQL 并发结果不能替代这些证据。
 
 交接：`docs/miniprogram/2026-10-11-project-log-inline-image-comments-handoff.md`。
+
+## 生产迁移实录
+
+- plan：`38132265261` 成功，仅待执行版本 `20261011100853`。
+- apply：`38132399007` 成功，661→662，仅应用该版本；由生产 workflow 执行备份与迁移。
+- `supabase migration list` 验证 Local/Remote 662条全部对齐；归档输出仅裁剪行尾空白。
+- 生产只读验证：分页/预览 RPC、PostgREST 文件与评论关联及平台设置均可读取；新开关 false、原评论开关 true、旧内部退休 true。没有测试业务写入。
+- 证据：同目录 migration-plan、migration-apply、migration-list-after.txt、schema-check.json。
+
+## 生产部署及 smoke 实录
+
+- [候选构建38132263787](https://github.com/LeeFo-china/goose/actions/runs/38132263787) 成功，仅构建API镜像。
+- [部署38132669163](https://github.com/LeeFo-china/goose/actions/runs/38132669163) 成功，API及COS worker使用同一不可变镜像，revision均为上述源码提交。
+- 镜像digest：`sha256:266c34146cbead8b84325769a3530bb345e08f41e161960d04b27951d838815c`。
+- 两服务健康、重启次数0；admin仍为原`8112d16362285c1c36c90f9dd1c6ff1b1e669394`，未随本轮发布。
+- worker的`PROJECT_LOG_COMMENT_ATTACHMENT_CLEANUP_ENABLED=true`，部署后直接读取该单项环境配置确认；没有执行删除业务文件的额外探针。
+- 生产开关：`PROJECT_LOG_COMMUNICATION_ENABLED=true`、`PROJECT_LOG_INTERNAL_COMMENTS_RETIRED=true`、`PROJECT_LOG_COMMENT_V2_ENABLED=false`。
+- preparation-smoke 12/12：v1读取与旧契约正常；v2列表/发布/预览/上传/链接均返回403 `PROJECT_COMMENT_V2_DISABLED`；internal入口410；匿名401；前后业务评论/上传数量不变。
+- legacy-media-smoke 11/11：旧内部410，图库交流仍403且计数0，图库业务读取200；抽样3个`project_log_comment`历史图片，经fileId和path请求公共URL均403。仅覆盖该抽样场景及签名接口，不宣称遍历所有历史对象或所有CDN缓存。
+- storage-probe 5/5：实际上传200、冻结图片字节/尺寸一致、签名读取200、临时/成品匿名读取403；测试对象清理完成，无SQL记录写入。
+- 证据目录：`deployment/production-deployment-receipt.json`、`runtime.txt`、`preparation-smoke.json`、`legacy-media-smoke.json`、`storage-probe.json`。
+
+接口 smoke 使用服务器生成的短期凭证，不等同员工/客户实际手机登录。v2发布、两种身份真实图片回复及UI仍待新版小程序联验；不得把准备版发布理解为新模式已向用户开放。
