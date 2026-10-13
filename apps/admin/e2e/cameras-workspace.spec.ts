@@ -109,3 +109,16 @@ test('unrefreshed offline status is labeled as recent and does not prevent a pre
  await expect(page.getByText('最近记录',{exact:true})).toBeVisible();
  await expect(page.getByRole('button',{name:'预览',exact:true})).toBeEnabled();
 });
+
+test('long customer names do not squeeze project or monitoring columns',async({page},info)=>{
+ await page.setViewportSize({width:1440,height:1000});
+ await page.goto('/cameras?binding=all');
+ const monitor=page.getByRole('columnheader',{name:'最近监控状态',exact:true});
+ await expect(monitor).toBeVisible();
+ expect((await monitor.boundingBox())?.width).toBeGreaterThanOrEqual(160);
+ expect((await monitor.boundingBox())?.height).toBeLessThanOrEqual(44);
+ const longName=page.getByText('WF Service Smoke 跨区域项目客户名称 2026-10-14T00:00:00.000Z',{exact:true});
+ await expect(longName).toHaveCSS('text-overflow','ellipsis');
+ expect((await longName.boundingBox())?.width).toBeLessThan(180);
+ await page.screenshot({path:info.outputPath('long-customer-columns.png'),fullPage:true});
+});

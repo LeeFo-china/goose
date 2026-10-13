@@ -3,7 +3,7 @@ import { sessionFor, serviceAccess } from './rendering-library-mock-fixture.mjs'
 const id=n=>`50000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const projects=[{id:id(1),name:'梁森施工项目',address:'寺东嘉园 15号3单元1702',customer_name:'梁森',status:'constructing'},
  {id:id(2),name:'陈芳施工项目',address:'中牟县新城花园 2号楼1201',customer_name:'陈芳',status:'pending_start'},
- {id:id(3),name:'已验收项目',address:'绿城花园 8号楼101',customer_name:'张磊',status:'acceptance'}];
+ {id:id(3),name:'已验收项目',address:'绿城花园 8号楼101',customer_name:'WF Service Smoke 跨区域项目客户名称 2026-10-14T00:00:00.000Z',status:'acceptance'}];
 const camera={id:id(10),name:'大厅',position:'入户门',vendor:'tencent_iotvideo_industry',status:'offline',status_source:'live',can_view:true,can_control:false,capabilities:['live','ptz'],sort_order:0,video_encrypted:false,cover_url:null};
 const asset={id:id(20),vendor:'tencent_iotvideo_industry',vendor_device_serial:'device-20',vendor_channel_id:'channel-20',hardware_serial:'TEST-SN-20',status:'online',bound_camera_id:null,bound_project_id:null};
 let submitted=[];
