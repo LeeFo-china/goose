@@ -1,7 +1,8 @@
 "use client";
 
 import {
-  WorkflowProcedureStageOptions,
+  ALL_PROCEDURE_STAGES_USED_MESSAGE,
+  type WorkflowProcedureStageAvailability,
   isWorkflowProcedureStageKey,
 } from "@/components/workflows/workflow-procedure-stages";
 import type {
@@ -37,12 +38,12 @@ const CANDIDATE_DEPARTMENT_CODES = Object.fromEntries(
 export function ProcedureConfigFields({
   config,
   disabled,
-  usedStageKeys,
+  stageOptions,
   onChangeConfig,
 }: {
   config: WorkflowNodeConfig;
   disabled?: boolean;
-  usedStageKeys: string[];
+  stageOptions: WorkflowProcedureStageAvailability[];
   onChangeConfig: (patch: Partial<WorkflowProcedureNodeConfig>) => void;
 }) {
   const procedureConfig = config as WorkflowProcedureNodeConfig;
@@ -62,21 +63,28 @@ export function ProcedureConfigFields({
             onChangeConfig({ stage_key: value });
           }}
         >
-          <SelectTrigger id="workflow-node-stage-key">
+          <SelectTrigger id="workflow-node-stage-key" aria-describedby="workflow-node-stage-help">
             <SelectValue placeholder="选择工序类型" />
           </SelectTrigger>
-          <SelectContent>
-            {WorkflowProcedureStageOptions.map((option) => (
+          <SelectContent className="max-w-[min(28rem,calc(100vw-2rem))]">
+            {stageOptions.map((option) => (
               <SelectItem
                 key={option.value}
                 value={option.value}
-                disabled={usedStageKeys.includes(option.value)}
+                disabled={option.disabled}
+                textValue={option.label}
+                className="whitespace-normal break-words"
               >
-                {option.label}
+                {option.label}{option.usedBy.length > 0 ? `（已用于：${option.usedBy.join("、")}）` : ""}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
+        <p id="workflow-node-stage-help" className="text-xs leading-5 text-muted-foreground">
+          {stageOptions.every((option) => option.disabled)
+            ? ALL_PROCEDURE_STAGES_USED_MESSAGE
+            : "每种工序只能使用一次，已占用的类型会显示对应节点名称。"}
+        </p>
       </div>
       <div className="grid gap-2">
         <Label htmlFor="workflow-node-instructions">作业要求</Label>

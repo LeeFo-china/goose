@@ -1,5 +1,6 @@
 "use client";
 
+import type { WorkflowProcedureStageAvailability } from "@/components/workflows/workflow-procedure-stages";
 import type {
   WorkflowApprovalNodeConfig,
   WorkflowBaseNodeConfig,
@@ -58,13 +59,13 @@ export function WorkflowNodeConfigFields({
   disabled,
   node,
   rollbackTargetNodes,
-  usedProcedureStageKeys,
+  procedureStageOptions,
   onChangeConfig,
 }: {
   disabled?: boolean;
   node: WorkflowNode;
   rollbackTargetNodes: WorkflowNode[];
-  usedProcedureStageKeys?: string[];
+  procedureStageOptions: WorkflowProcedureStageAvailability[];
   onChangeConfig: NodeConfigChangeHandler;
 }) {
   function updateConfig(patch: Partial<WorkflowNodeConfig>) {
@@ -88,7 +89,7 @@ export function WorkflowNodeConfigFields({
         <ProcedureConfigFields
           config={node.config}
           disabled={disabled}
-          usedStageKeys={usedProcedureStageKeys ?? []}
+          stageOptions={procedureStageOptions}
           onChangeConfig={updateConfig}
         />
       ) : null}

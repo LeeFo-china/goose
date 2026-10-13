@@ -188,7 +188,7 @@ export function validateGraph(graph: WorkflowDesignerGraph): WorkflowValidationR
       } else if (procedureStageKeys.has(stageKey)) {
         issues.push({
           code: "procedure_stage_duplicate",
-          message: `${getWorkflowProcedureStageLabel(stageKey) || stageKey}工序重复`,
+          message: `${getWorkflowProcedureStageLabel(stageKey) || stageKey}工序重复，已用于“${graph.nodes.find((item) => item.node_key === procedureStageKeys.get(stageKey))?.title || procedureStageKeys.get(stageKey)}”，请修改或删除重复节点`,
           nodeKey: node.node_key,
         });
       } else {

@@ -453,18 +453,6 @@ export function WorkflowDesignerShell({
                   usedNodeKeys={graph.nodes
                     .filter((node) => node.id !== selectedNode.id)
                     .map((node) => node.node_key)}
-                  usedProcedureStageKeys={graph.nodes
-                    .flatMap((node) => {
-                      if (
-                        node.id === selectedNode.id ||
-                        node.node_type !== "procedure" ||
-                        !("stage_key" in node.config) ||
-                        typeof node.config.stage_key !== "string"
-                      ) {
-                        return [];
-                      }
-                      return [node.config.stage_key];
-                    })}
                   onDeleteNode={deleteNode}
                   onChangeNode={updateNode}
                   workflowTrack={workflowTrack}

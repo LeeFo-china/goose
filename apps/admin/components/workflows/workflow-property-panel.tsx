@@ -39,6 +39,8 @@ import {
   type WorkflowNodeCapability,
 } from "@/components/workflows/workflow-node-capabilities";
 import {
+  ALL_PROCEDURE_STAGES_USED_MESSAGE,
+  getWorkflowProcedureStageAvailability,
   createWorkflowProcedureNodeKey,
   getWorkflowProcedureStageLabel,
   isWorkflowProcedureStageKey,
@@ -68,7 +70,6 @@ export function WorkflowPropertyPanel({
   node,
   nodes,
   usedNodeKeys,
-  usedProcedureStageKeys,
   workflowTrack = "generic",
   onDeleteNode,
   onChangeNode,
@@ -78,7 +79,6 @@ export function WorkflowPropertyPanel({
   node: WorkflowNode | null;
   nodes: WorkflowNode[];
   usedNodeKeys: string[];
-  usedProcedureStageKeys?: string[];
   workflowTrack?: WorkflowBusinessTrack;
   onDeleteNode: (nodeId: string) => void;
   onChangeNode: (node: WorkflowNode) => void;
@@ -106,6 +106,8 @@ export function WorkflowPropertyPanel({
   const selectedNode = node;
   const isControlNode = isWorkflowControlNode(selectedNode);
   const selectedCapability = getWorkflowNodeCapability(selectedNode);
+  const procedureStageOptions = getWorkflowProcedureStageAvailability(nodes, selectedNode.id);
+  const allProcedureStagesUsed = procedureStageOptions.every((option) => option.disabled);
   const displayLabels = getWorkflowNodeDisplayLabels(selectedNode);
   const selectedBusinessOption = getWorkflowBusinessFlowOption(
     selectedNode.business_kind,
@@ -226,29 +228,38 @@ export function WorkflowPropertyPanel({
               <Select
                 disabled={disabled}
                 value={selectedCapability}
-                onValueChange={(value) =>
+                onValueChange={(value) => {
+                  if (value === "procedure" && allProcedureStagesUsed) return;
                   onChangeNode(
                     applyWorkflowNodeCapability({
                       node: selectedNode,
                       capability: value as WorkflowNodeCapability,
                       usedNodeKeys,
                     }),
-                  )
-                }
+                  );
+                }}
               >
                 <SelectTrigger id="workflow-node-capability">
                   <SelectValue placeholder="选择节点能力" />
                 </SelectTrigger>
                 <SelectContent>
                   {capabilityOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
+                    <SelectItem
+                      key={option.value}
+                      value={option.value}
+                      disabled={option.value === "procedure" && allProcedureStagesUsed && selectedCapability !== "procedure"}
+                      textValue={option.label}
+                    >
+                      {option.label}{option.value === "procedure" && allProcedureStagesUsed ? "（6种工序均已配置）" : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             )}
           </div>
+          {!isControlNode && selectedCapability !== "procedure" && allProcedureStagesUsed && capabilityOptions.some((option) => option.value === "procedure") ? (
+            <p className="text-xs leading-5 text-muted-foreground">{ALL_PROCEDURE_STAGES_USED_MESSAGE}</p>
+          ) : null}
           {!isControlNode && selectedCapability === "business" ? (
             <div className="grid gap-2">
               <Label htmlFor="workflow-node-business-kind">业务类型</Label>
@@ -372,7 +383,7 @@ export function WorkflowPropertyPanel({
             disabled={disabled}
             node={selectedNode}
             rollbackTargetNodes={rollbackTargetNodes}
-            usedProcedureStageKeys={usedProcedureStageKeys}
+            procedureStageOptions={procedureStageOptions}
             onChangeConfig={handleChangeConfig}
           />
         </PropertyPanelSection>
