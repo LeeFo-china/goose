@@ -1,3 +1,6 @@
+import { refreshWorkspaceCameraStatuses } from "../workspace-status";
+import type { ProjectCameraWorkspaceDevicesQueryInput } from "@/schema/project-cameras";
+import type { resolveActor } from "./access";
 import {
   Errors,
   ErrorCodes,
@@ -139,41 +142,38 @@ export async function listCameraProjectGroups(this: any, input: TenantServiceAcc
     authContext,
     "project.read",
   );
-  const result = await projectCameraRepository.listCameraProjectGroups({
+  // RPC summaries cover every filtered project and persisted camera status.
+  // Empty previews must never be used to reconstruct these totals.
+  return projectCameraRepository.listCameraProjectGroups({
     ...input.query,
     tenantId,
     visibleProjectIds,
   });
-  const groups: ProjectCameraProjectGroupRow[] = result.list;
-  const enrichedCameras: ProjectCameraRow[] = await this.enrichTencentCameraStatuses(
-    groups.flatMap((group) => group.cameras),
-  );
-  const cameraMap = new Map<string, ProjectCameraRow>(
-    enrichedCameras.map((camera) => [camera.id, camera]),
-  );
+}
 
-  return {
-    list: groups.map((group) => {
-      const cameras: ProjectCameraRow[] = group.cameras.map((camera) =>
-        cameraMap.get(camera.id) || camera
-      );
-
-      return {
-        project: group.project,
-        cameras: cameras.map(serializeCamera),
-        summary: {
-          camera_count: cameras.length,
-          online_count: cameras.filter((camera) =>
-            normalizeCameraStatus(camera.status) === "online"
-          ).length,
-          hidden_count: cameras.filter((camera) => !camera.can_view).length,
-          tencent_count: cameras.filter((camera) =>
-            camera.vendor === "tencent_iotvideo_industry"
-          ).length,
-        },
-      };
-    }),
-    pagination: result.pagination,
-    summary: result.summary,
-  };
+/** Admin expansion only; the mini-program list keeps its existing contract. */
+export async function listCameraWorkspaceDevices(
+  this: { resolveActor: typeof resolveActor },
+  input: TenantServiceAccessInput & {
+    authUserId?: string | null;
+    projectId: string;
+    query: ProjectCameraWorkspaceDevicesQueryInput;
+  },
+) {
+  const actor = await this.resolveActor({
+    authUserId: input.authUserId,
+    projectId: input.projectId,
+    permissionCode: "project.read",
+    allowCustomer: false,
+    tenantServiceAccess: input.tenantServiceAccess,
+    requiredCapability: input.requiredCapability,
+  });
+  if (!actor.tenantId) throw Errors.forbidden();
+  const result = await projectCameraRepository.listCameraWorkspaceDevices({
+    ...input.query, projectId: input.projectId, tenantId: actor.tenantId,
+  });
+  const refreshed = await refreshWorkspaceCameraStatuses(result.list, {
+    tenantId: actor.tenantId, projectId: input.projectId,
+  });
+  return { ...result, ...refreshed };
 }

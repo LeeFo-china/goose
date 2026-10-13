@@ -1,3 +1,9 @@
+import { saveWorkspaceStatuses, type SaveWorkspaceStatusesInput } from "./workspace-status";
+import {
+  listCameraWorkspaceDevices,
+  type CameraWorkspaceDevicesInput,
+  type CameraWorkspaceProjectsInput,
+} from "./workspace";
 import { SupabaseDB } from "./legacy/shared";
 import { getCustomerOwnedProjectTenant, getProject } from "./legacy/access";
 import {
@@ -32,7 +38,15 @@ class ProjectCameraRepository {
   private findSearchCustomerIds = findSearchCustomerIds;
   private findSearchPropertyIds = findSearchPropertyIds;
   listCameraBindProjectOptions = listCameraBindProjectOptions;
-  listCameraProjectGroups = listCameraProjectGroups;
+  listCameraProjectGroups(input: CameraWorkspaceProjectsInput) {
+    return listCameraProjectGroups.call({ adminClient: this.adminClient }, input);
+  }
+  listCameraWorkspaceDevices(input: CameraWorkspaceDevicesInput) {
+    return listCameraWorkspaceDevices(this.adminClient, input);
+  }
+  saveWorkspaceStatuses(input: SaveWorkspaceStatusesInput) {
+    return saveWorkspaceStatuses(this.adminClient, input);
+  }
   findByProjectCamera = findByProjectCamera;
   findActiveByDeviceChannel = findActiveByDeviceChannel;
   listActiveBindingsByVendor = listActiveBindingsByVendor;

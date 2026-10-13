@@ -93,9 +93,25 @@ export type ProjectCameraBindProjectRow = {
   }> | null;
 };
 
+export type ProjectCameraSummary = {
+  camera_count: number;
+  online_count: number;
+  offline_count: number;
+  unknown_count: number;
+  hidden_count: number;
+  tencent_count: number;
+};
+
+/** Totals across ALL filtered projects, independent of the requested page. */
+export type ProjectCameraWorkspaceSummary = Omit<ProjectCameraSummary, "camera_count"> & {
+  project_count: number;
+  total_camera_count: number;
+};
+
 export type ProjectCameraProjectGroupRow = {
   project: ReturnType<typeof serializeBindProjectOption>;
   cameras: ProjectCameraRow[];
+  summary: ProjectCameraSummary;
 };
 
 export type CustomerOwnedProjectTenantRow = {

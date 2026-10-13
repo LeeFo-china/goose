@@ -1,0 +1,143 @@
+
+typecheck
+bun run typecheck
+$ tsc -p tsconfig.json --noEmit
+
+Exit: 0
+
+API regression
+bun test src/controllers/project-cameras/workspace.test.ts src/schema/project-camera-workspace.test.ts src/repositories/project-cameras/workspace.test.ts src/repositories/project-cameras/workspace-status.test.ts src/gateways/tencent-iot-video/workspace-status.test.ts src/services/project-cameras/workspace.test.ts src/services/project-cameras/workspace-status.test.ts src/services/project-camera-tenant-device-binding.test.ts src/services/tenant-service-capability-map.test.ts
+bun test v1.3.2 (b131639c)
+
+src/schema/project-camera-workspace.test.ts:
+(pass) camera workspace project query > defaults to bound projects and 20 project rows [0.77ms]
+(pass) camera workspace project query > accepts 100 projects, binding filters and domain statuses [1.00ms]
+(pass) camera workspace project query > rejects invalid bounds and filters [2.14ms]
+(pass) camera workspace detail query > caps detail pages at 20 independently of project page size [0.72ms]
+
+src/services/project-camera-tenant-device-binding.test.ts:
+(pass) project camera tenant-device binding > accepts a tenant device id while preserving legacy camera payloads [0.98ms]
+(pass) project camera tenant-device binding > resolves trusted vendor identifiers from the tenant-owned asset [0.40ms]
+
+src/services/tenant-service-capability-map.test.ts:
+(pass) tenant service capability map > maps the six v1 business route families and excludes recovery surfaces [3.01ms]
+(pass) tenant service capability map > keeps platform-only routes excluded from full trial [0.11ms]
+(pass) tenant service capability map > maps supplier procurement route GET /supplier-purchase-batch-project-options to its module [0.03ms]
+(pass) tenant service capability map > maps supplier procurement route GET /supplier-purchase-batch-cost-categories to its module [0.07ms]
+(pass) tenant service capability map > maps supplier procurement route GET /supplier-purchase-batch-catalog to its module [0.02ms]
+(pass) tenant service capability map > maps supplier procurement route GET /supplier-purchase-batch-category-options to its module [0.01ms]
+(pass) tenant service capability map > maps supplier procurement route GET /supplier-purchase-batches to its module [0.02ms]
+(pass) tenant service capability map > maps supplier procurement route GET /supplier-purchase-batches/:id/export.xlsx to its module [0.01ms]
+(pass) tenant service capability map > maps supplier procurement route POST /supplier-purchase-orders/:id/share-link to its module
+(pass) tenant service capability map > maps supplier procurement route GET /supplier-purchase-orders/:id/print-preview to its module [0.01ms]
+(pass) tenant service capability map > maps supplier procurement route GET /supplier-purchase-orders/:id/export.pdf to its module [0.01ms]
+(pass) tenant service capability map > maps supplier procurement route GET /supplier-purchase-orders/:id/export.xlsx to its module
+(pass) tenant service capability map > maps supplier procurement route POST /supplier-purchase-batches/:id/withdraw to its module [0.02ms]
+(pass) tenant service capability map > maps supplier procurement route POST /workflow-tasks/:id/complete to its module [0.01ms]
+(pass) tenant service capability map > maps supplier procurement route POST /supplier-purchasable-products/:id to its module [0.01ms]
+(pass) tenant service capability map > maps tenant material note route GET /tenant/douyin-material-notes to content [0.01ms]
+(pass) tenant service capability map > maps tenant material note route POST /tenant/douyin-material-notes to content [0.05ms]
+(pass) tenant service capability map > maps tenant material note route GET /tenant/douyin-material-note-categories to content [0.01ms]
+(pass) tenant service capability map > maps tenant material note route POST /tenant/douyin-material-note-categories to content [0.01ms]
+(pass) tenant service capability map > maps tenant material note route PATCH /tenant/douyin-material-note-categories/:id to content
+(pass) tenant service capability map > maps tenant material note route GET /tenant/douyin-material-notes/:id to content [0.02ms]
+(pass) tenant service capability map > maps tenant material note route GET /tenant/douyin-material-notes/:id/versions to content [0.01ms]
+(pass) tenant service capability map > maps tenant material note route GET /tenant/douyin-material-notes/:id/versions/:versionId to content [0.02ms]
+(pass) tenant service capability map > maps tenant material note route POST /tenant/douyin-material-notes/:id/versions to content [0.01ms]
+(pass) tenant service capability map > maps tenant material note route POST /tenant/douyin-material-notes/:id/publish to content [0.01ms]
+(pass) tenant service capability map > maps tenant material note route POST /tenant/douyin-material-notes/:id/archive to content [0.01ms]
+(pass) tenant service capability map > maps tenant material note route POST /tenant/douyin-material-notes/:id/withdraw to content [0.01ms]
+(pass) tenant service capability map > maps warehouse route GET /warehouses to inventory [0.01ms]
+(pass) tenant service capability map > maps warehouse route HEAD /warehouses to inventory [0.05ms]
+(pass) tenant service capability map > maps warehouse route GET /warehouses/:id to inventory [0.01ms]
+(pass) tenant service capability map > maps warehouse route HEAD /warehouses/:id to inventory [0.02ms]
+(pass) tenant service capability map > maps warehouse route POST /warehouses to inventory [0.03ms]
+(pass) tenant service capability map > maps warehouse route PATCH /warehouses/:id to inventory
+(pass) tenant service capability map > maps warehouse route GET /warehouse-stocktakes to inventory [0.01ms]
+(pass) tenant service capability map > maps warehouse route POST /warehouse-stocktakes/:id/complete to inventory [0.02ms]
+(pass) tenant service capability map > does not exclude unrelated warehouse-prefixed routes [0.01ms]
+(pass) tenant service capability map > classifies every registered read/write route exactly once [1581.80ms]
+(pass) tenant service capability map > fails closed for unmapped and ambiguous tenant routes [0.16ms]
+
+src/repositories/project-cameras/workspace.test.ts:
+(pass) camera workspace project repository > delegates filtering and project paging to one RPC and masks only output
+(pass) camera workspace project repository > empty visibility never queries and returns zero offline/unknown counts [1.19ms]
+(pass) camera workspace project repository > database failure is wrapped instead of a misleading empty success [0.20ms]
+(pass) camera workspace detail repository > uses tenant/project/deleted filters, stable order and exact bounded range [0.04ms]
+(pass) camera workspace detail repository > missing tenant is rejected before any query [0.34ms]
+
+src/repositories/project-cameras/workspace-status.test.ts:
+(pass) batches by status with tenant/project and active-binding boundaries
+
+src/gateways/tencent-iot-video/workspace-status.test.ts:
+(pass) queries only bound devices, deduplicates, stops when requested channels are found
+(pass) shares a hard 20 request budget, with no device-pool scan [1.23ms]
+(pass) pages a single NVR until the bound channel is found [0.18ms]
+(pass) one failed device does not discard successful device results [0.18ms]
+(pass) caps concurrency at four and forwards a timeout signal to every request [11.54ms]
+(pass) expired refresh deadline starts no new vendor calls [0.14ms]
+
+src/controllers/project-cameras/workspace.test.ts:
+(pass) admin camera workspace routes > new detail URL validates bounded paging and propagates read capability [21.84ms]
+
+src/services/project-cameras/workspace.test.ts:
+(pass) camera workspace service > preserves full persisted summaries and never scans vendor devices [0.09ms]
+(pass) camera workspace service > requires login and rejects customer-only identities before repository access [0.18ms]
+(pass) employee-only expanded camera page > returns bounded persisted records with explicit status semantics [0.68ms]
+(pass) employee-only expanded camera page > denies missing permission, inaccessible project and customer identity [0.38ms]
+(pass) employee-only expanded camera page > unknown project fails before loading cameras
+
+src/services/project-cameras/workspace-status.test.ts:
+(pass) stale offline cameras can become live online and persist within authorized scope [0.58ms]
+(pass) recent status uses existing timestamp without querying vendor or updating database [0.10ms]
+(pass) vendor missing/failed targets preserve persisted status and time, mixed results are explicit [0.01ms]
+(pass) write failure leaves persisted response instead of claiming successful refresh [0.09ms]
+(pass) non-Tencent remains persisted and stale/error timestamps do not block Tencent refresh [0.16ms]
+(pass) successful unchanged status still renews freshness timestamp [0.12ms]
+
+ 68 pass
+ 0 fail
+ 198 expect() calls
+Ran 68 tests across 9 files. [1.78s]
+
+Exit: 0
+
+SQL fixture + EXPLAIN run 1
+bun test src/repositories/project-cameras/workspace-sql.test.ts
+bun test v1.3.2 (b131639c)
+
+src/repositories/project-cameras/workspace-sql.test.ts:
+SQL fixture: 20,005 projects / 101,506 cameras; project query 10.783ms; detail query 0.072ms (20 rows via workspace index).
+(pass) SQL migration enforces scope, complete counts and indexed bounded detail pages [3426.03ms]
+
+ 1 pass
+ 0 fail
+ 7 expect() calls
+Ran 1 test across 1 file. [3.45s]
+
+Exit: 0
+
+SQL fixture + EXPLAIN run 2
+bun test src/repositories/project-cameras/workspace-sql.test.ts
+bun test v1.3.2 (b131639c)
+
+src/repositories/project-cameras/workspace-sql.test.ts:
+SQL fixture: 20,005 projects / 101,506 cameras; project query 12.173ms; detail query 0.059ms (20 rows via workspace index).
+(pass) SQL migration enforces scope, complete counts and indexed bounded detail pages [2939.45ms]
+
+ 1 pass
+ 0 fail
+ 7 expect() calls
+Ran 1 test across 1 file. [2.96s]
+
+Exit: 0
+
+build
+bun run build
+$ bun build src/app.ts --outdir dist --target node
+Bundled 999 modules in 67ms
+
+  app.js  5.18 MB  (entry point)
+
+
+Exit: 0

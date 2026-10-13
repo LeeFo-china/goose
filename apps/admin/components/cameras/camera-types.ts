@@ -28,6 +28,8 @@ export type CameraRecord = {
   name: string;
   position: string | null;
   status: "online" | "offline" | "unknown" | string;
+  status_source?: "live" | "cached" | "persisted";
+  last_status_checked_at?: string | null;
   can_view: boolean;
   can_control: boolean;
   capabilities: string[];
@@ -43,6 +45,8 @@ export type CameraProjectGroup = {
   summary: {
     camera_count: number;
     online_count: number;
+    offline_count: number;
+    unknown_count: number;
     hidden_count: number;
     tencent_count: number;
   };

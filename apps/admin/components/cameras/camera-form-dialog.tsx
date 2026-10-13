@@ -17,23 +17,26 @@ import { CameraProjectDeviceFields } from "@/components/cameras/camera-project-d
 import { CameraSettingsFields } from "@/components/cameras/camera-settings-fields";
 import { buildDefaults, buildDeviceKey, CameraFormSchema, canBindCameraToProject, requestCamera, tenantAssetsToDevices, type CameraFormValues } from "@/components/cameras/camera-mutation-shared";
 
-export function CameraDialog({
-  mode,
-  projectId,
-  camera,
-  devices,
-  advanced = false,
-  open,
-  onOpenChange,
-}: {
+type CameraDialogProps = {
   mode: CameraMode;
   projectId: string;
+  project?: CameraProjectOption;
   camera?: CameraRecord;
   devices: CameraDeviceChannel[];
   advanced?: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}) {
+};
+
+export function CameraDialog(props: CameraDialogProps) {
+  // A new project or open session must never inherit another session's async results.
+  if (!props.open) return null;
+  return <CameraDialogSession key={`${props.mode}:${props.projectId}:${props.camera?.id || ""}`} {...props} />;
+}
+
+function CameraDialogSession({
+  mode, projectId, project, camera, devices, advanced = false, open, onOpenChange,
+}: CameraDialogProps) {
   const router = useRouter();
   const defaults = useMemo(() => buildDefaults(camera), [camera]);
   const [pending, startTransition] = useTransition();
@@ -42,21 +45,21 @@ export function CameraDialog({
   const [projectOptions, setProjectOptions] = useState<CameraProjectOption[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState(projectId);
   const [selectedProject, setSelectedProject] = useState<CameraProjectOption | null>(null);
-  const [projectLoading, setProjectLoading] = useState(false);
+  const [projectLoading, setProjectLoading] = useState(mode === "create" && Boolean(projectId));
   const [projectSelectError, setProjectSelectError] = useState("");
-  const [createDevices, setCreateDevices] = useState<CameraDeviceChannel[]>(
-    projectId ? devices : [],
-  );
+  const [createDevices, setCreateDevices] = useState<CameraDeviceChannel[]>([]);
   const [deviceKeyword, setDeviceKeyword] = useState("");
   const [devicePage, setDevicePage] = useState(1);
   const [deviceTotalPages, setDeviceTotalPages] = useState(0);
   const [deviceLoading, setDeviceLoading] = useState(false);
-  const initializedOpenRef = useRef(false);
+  const [deviceError, setDeviceError] = useState("");
+  const deviceRequestScope = useRef<{ active: boolean; loading: boolean } | null>(null);
   const form = useForm<CameraFormValues>({
     resolver: zodResolver(CameraFormSchema as never) as Resolver<CameraFormValues>,
-    defaultValues: defaults,
+    defaultValues: { ...defaults, device_key: "" },
   });
-  const activeProjectId = mode === "create" ? selectedProjectId : projectId;
+  const activeProjectId = projectId || selectedProjectId;
+  const projectEligible = selectedProject?.id === activeProjectId && canBindCameraToProject(selectedProject);
   const activeDevices = mode === "create" ? createDevices : devices;
   const availableDevices = useMemo(
     () => activeDevices.filter((device) => device.can_bind),
@@ -65,35 +68,14 @@ export function CameraDialog({
   const selectedCapabilities = form.watch("capabilities");
 
   useEffect(() => {
-    if (!open) {
-      initializedOpenRef.current = false;
-      return;
-    }
-    if (initializedOpenRef.current) return;
-
-    initializedOpenRef.current = true;
-    setSelectedProjectId(projectId);
-    setSelectedProject(null);
-    setProjectKeyword("");
-    setProjectOptions([]);
-    setProjectSelectError("");
-    setCreateDevices(projectId ? devices : []);
-    setDeviceKeyword("");
-    setDevicePage(1);
-    setDeviceTotalPages(0);
-    form.reset({
-      ...defaults,
-      device_key: "",
-    });
-    setError("");
-  }, [defaults, devices, form, mode, open, projectId]);
-
-  useEffect(() => {
     if (!open || mode !== "create") return;
 
     let disposed = false;
+    setSelectedProject(null);
+    setProjectLoading(Boolean(activeProjectId || projectKeyword.trim()));
+    setProjectSelectError("");
     const timer = window.setTimeout(() => {
-      if (!projectKeyword.trim() && !selectedProjectId) {
+      if (!projectKeyword.trim() && !activeProjectId) {
         setProjectOptions([]);
         setSelectedProject(null);
         setProjectSelectError("");
@@ -107,23 +89,26 @@ export function CameraDialog({
         page: "1",
         pageSize: "20",
       });
-      if (projectKeyword.trim()) {
+      if (!projectId && projectKeyword.trim()) {
         params.set("keyword", projectKeyword.trim());
       }
-      if (selectedProjectId) {
-        params.set("selected_project_id", selectedProjectId);
+      if (activeProjectId) {
+        params.set("selected_project_id", activeProjectId);
       }
 
-      requestCamera({
+      requestCamera<CameraBindProjectOptionsData>({
         path: `/projects/camera-bind-options?${params.toString()}`,
       })
         .then((data: CameraBindProjectOptionsData) => {
           if (disposed) return;
           const list = data?.list || [];
           setProjectOptions(list);
-          const current = list.find((item) => item.id === selectedProjectId) || null;
-          if (current) {
-            setSelectedProject(current);
+          const current = list.find((item) => item.id === activeProjectId) || null;
+          setSelectedProject(current);
+          if (activeProjectId && !current) {
+            setProjectSelectError("当前项目不存在或无权访问，请关闭后刷新项目列表重试。");
+          } else if (current && !canBindCameraToProject(current)) {
+            setProjectSelectError("无效或竣工验收项目不能新增摄像头。");
           }
         })
         .catch((err) => {
@@ -133,81 +118,68 @@ export function CameraDialog({
         .finally(() => {
           if (!disposed) setProjectLoading(false);
         });
-    }, projectKeyword.trim() ? 300 : 0);
+    }, !projectId && projectKeyword.trim() ? 300 : 0);
 
     return () => {
       disposed = true;
       window.clearTimeout(timer);
     };
-  }, [mode, open, projectKeyword, selectedProjectId]);
+  }, [activeProjectId, mode, open, projectId, projectKeyword]);
 
   useEffect(() => {
-    if (!open || mode !== "create" || !selectedProjectId) {
-      if (mode === "create" && !selectedProjectId) {
-        setCreateDevices([]);
-        setDevicePage(1);
-        setDeviceTotalPages(0);
-        form.setValue("device_key", "", {
-          shouldDirty: false,
-          shouldValidate: true,
-        });
-      }
-      return;
+    const scope = { active: true, loading: false };
+    deviceRequestScope.current = scope;
+    setCreateDevices([]);
+    setDevicePage(1);
+    setDeviceTotalPages(0);
+    setDeviceError("");
+    form.setValue("device_key", "", { shouldDirty: false });
+    if (!open || mode !== "create" || !projectEligible || projectLoading) {
+      setDeviceLoading(false);
+      return () => { scope.active = false; };
     }
 
-    let disposed = false;
+    scope.loading = true;
+    setDeviceLoading(true);
     const timer = window.setTimeout(() => {
-      const params = new URLSearchParams({
-        only_unbound: "true",
-        page: "1",
-        pageSize: "20",
-      });
+      const params = new URLSearchParams({ only_unbound: "true", page: "1", pageSize: "20" });
       if (deviceKeyword.trim()) params.set("keyword", deviceKeyword.trim());
-
-      setDeviceLoading(true);
-      setError("");
-      requestCamera({ path: `/tenant-devices?${params.toString()}` })
-        .then((data: TenantDeviceListData) => {
-          if (disposed) return;
-          const nextDevices = tenantAssetsToDevices(data?.list || []);
-          setCreateDevices(nextDevices);
+      requestCamera<TenantDeviceListData>({ path: `/tenant-devices?${params.toString()}` })
+        .then((data) => {
+          if (!scope.active) return;
+          setCreateDevices(tenantAssetsToDevices(data?.list || []));
           setDevicePage(data.pagination?.page || 1);
           setDeviceTotalPages(data.pagination?.totalPages || 0);
-          form.setValue("device_key", "", {
-            shouldDirty: false,
-            shouldValidate: true,
-          });
         })
         .catch((err) => {
-          if (!disposed) {
-            setCreateDevices([]);
-            setError(err instanceof Error ? err.message : "公司设备资产加载失败");
-          }
+          if (scope.active) setDeviceError(err instanceof Error ? err.message : "公司设备资产加载失败");
         })
         .finally(() => {
-          if (!disposed) setDeviceLoading(false);
+          if (!scope.active) return;
+          scope.loading = false;
+          setDeviceLoading(false);
         });
     }, deviceKeyword.trim() ? 300 : 0);
 
     return () => {
-      disposed = true;
+      scope.active = false;
       window.clearTimeout(timer);
     };
-  }, [deviceKeyword, form, mode, open, selectedProjectId]);
+  }, [activeProjectId, deviceKeyword, form, mode, open, projectEligible, projectLoading]);
 
   function loadMoreDevices() {
-    if (deviceLoading || devicePage >= deviceTotalPages) return;
+    const scope = deviceRequestScope.current;
+    if (!scope?.active || scope.loading || !projectEligible || devicePage >= deviceTotalPages) return;
     const params = new URLSearchParams({
-      only_unbound: "true",
-      page: String(devicePage + 1),
-      pageSize: "20",
+      only_unbound: "true", page: String(devicePage + 1), pageSize: "20",
     });
     if (deviceKeyword.trim()) params.set("keyword", deviceKeyword.trim());
-
+    scope.loading = true;
     setDeviceLoading(true);
-    setError("");
-    requestCamera({ path: `/tenant-devices?${params.toString()}` })
-      .then((data: TenantDeviceListData) => {
+    setDeviceError("");
+    requestCamera<TenantDeviceListData>({ path: `/tenant-devices?${params.toString()}` })
+      .then((data) => {
+        if (!scope.active) return;
         const nextDevices = tenantAssetsToDevices(data?.list || []);
         setCreateDevices((current) => {
           const known = new Set(current.map(buildDeviceKey));
@@ -217,9 +189,30 @@ export function CameraDialog({
         setDeviceTotalPages(data.pagination?.totalPages || deviceTotalPages);
       })
       .catch((err) => {
-        setError(err instanceof Error ? err.message : "公司设备资产加载失败");
+        if (scope.active) setDeviceError(err instanceof Error ? err.message : "公司设备资产加载失败");
       })
-      .finally(() => setDeviceLoading(false));
+      .finally(() => {
+        if (!scope.active) return;
+        scope.loading = false;
+        setDeviceLoading(false);
+      });
+  }
+
+  function changeDeviceKeyword(value: string) {
+    if (deviceRequestScope.current) deviceRequestScope.current.active = false;
+    setCreateDevices([]);
+    setDeviceTotalPages(0);
+    setDeviceLoading(true);
+    setDeviceKeyword(value);
+  }
+
+  function changeProjectId(value: string) {
+    if (projectId) return;
+    if (deviceRequestScope.current) deviceRequestScope.current.active = false;
+    setSelectedProject(null);
+    setCreateDevices([]);
+    setDeviceKeyword("");
+    setSelectedProjectId(value);
   }
 
   function close() {
@@ -245,11 +238,11 @@ export function CameraDialog({
       setError("请选择要绑定的房产项目");
       return;
     }
-    if (mode === "create" && !canBindCameraToProject(selectedProject)) {
-      setError("无效或竣工验收项目不能新增摄像头");
+    if (mode === "create" && (projectLoading || !projectEligible)) {
+      setError(projectSelectError || "请等待项目校验完成后重试");
       return;
     }
-    if (mode === "create" && !values.device_key) {
+    if (mode === "create" && (deviceLoading || !availableDevices.some((device) => buildDeviceKey(device) === values.device_key))) {
       setError("请选择一个未绑定的设备资产");
       return;
     }
@@ -290,6 +283,8 @@ export function CameraDialog({
                 form={form}
                 pending={pending}
                 activeProjectId={activeProjectId}
+                projectLocked={Boolean(projectId)}
+                projectContext={project?.id === projectId ? project : undefined}
                 projectKeyword={projectKeyword}
                 projectOptions={projectOptions}
                 selectedProjectId={selectedProjectId}
@@ -298,13 +293,15 @@ export function CameraDialog({
                 projectSelectError={projectSelectError}
                 deviceKeyword={deviceKeyword}
                 deviceLoading={deviceLoading}
+                deviceError={deviceError}
                 hasMoreDevices={devicePage < deviceTotalPages}
                 availableDevices={availableDevices}
                 setProjectKeyword={setProjectKeyword}
-                setSelectedProjectId={setSelectedProjectId}
+                setSelectedProjectId={changeProjectId}
                 setSelectedProject={setSelectedProject}
-                setDeviceKeyword={setDeviceKeyword}
+                setDeviceKeyword={changeDeviceKeyword}
                 loadMoreDevices={loadMoreDevices}
+                onNavigateToDevices={close}
               />
             ) : null}
             <CameraSettingsFields
@@ -327,7 +324,8 @@ export function CameraDialog({
                 (mode === "create" && (
                   deviceLoading ||
                   !activeProjectId ||
-                  !canBindCameraToProject(selectedProject) ||
+                  projectLoading ||
+                  !projectEligible ||
                   availableDevices.length === 0
                 ))
               }

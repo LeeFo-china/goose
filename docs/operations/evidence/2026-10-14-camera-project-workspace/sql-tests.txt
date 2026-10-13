@@ -1,0 +1,10 @@
+bun test v1.3.2 (b131639c)
+
+src/repositories/project-cameras/workspace-sql.test.ts:
+SQL fixture: 20,005 projects / 101,506 cameras; project query 10.903ms; detail query 0.06ms (20 rows via workspace index).
+(pass) SQL migration enforces scope, complete counts and indexed bounded detail pages [3495.85ms]
+
+ 1 pass
+ 0 fail
+ 7 expect() calls
+Ran 1 test across 1 file. [3.52s]

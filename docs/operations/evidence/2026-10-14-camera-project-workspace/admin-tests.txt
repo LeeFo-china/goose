@@ -1,0 +1,37 @@
+bun test v1.3.2 (b131639c)
+
+components/cameras/camera-name-only.test.ts:
+(pass) camera naming contract > requires a project alias and preserves hardware identity when it changes [2.81ms]
+(pass) camera naming contract > uses a project-local alias as the single editable location label [1.64ms]
+
+components/cameras/camera-asset-binding.test.ts:
+(pass) camera asset binding payload > submits the selected tenant device id with the project alias [0.41ms]
+(pass) camera asset binding payload > shows one IPC channel instead of a duplicate root asset
+(pass) camera asset binding payload > uses the bound project address and otherwise says unbound
+(pass) camera asset binding payload > does not allow binding until the target project has loaded
+(pass) camera asset binding payload > allows previewing both connected Tencent channels and Ezviz assets
+(pass) camera asset binding payload > keeps registration, preview and access information in device management [0.58ms]
+(pass) camera asset binding payload > requires the operator to explicitly select a device asset
+
+components/cameras/camera-project-filters.test.ts:
+(pass) defaults to bound projects and validates page/status [1.14ms]
+(pass) paging retains binding, project status and search [0.17ms]
+
+components/cameras/camera-scoped-binding.test.tsx:
+(pass) scoped camera binding > shows project identity without a project search or switch for scoped entry points [16.03ms]
+(pass) scoped camera binding > retains project search for global create consumers [2.24ms]
+(pass) scoped camera binding > explains the empty asset pool and links to device management with project context [1.05ms]
+(pass) scoped camera binding > does not present a loading or failed request as an empty asset pool [1.63ms]
+(pass) camera action compatibility > accepts project context and custom first/additional labels without device props [0.51ms]
+(pass) camera action compatibility > disables offline live preview and explains why [2.03ms]
+(pass) camera action compatibility > leaves preview and refresh possible for unknown device status [0.84ms]
+(pass) camera action compatibility > allows retrying persisted offline status while live and cached offline remain disabled [1.49ms]
+
+app/(console)/cameras/cameras-page-layout.test.ts:
+(pass) cameras page layout contract > keeps the camera workspace inside the fixed admin viewport [0.27ms]
+(pass) cameras page layout contract > starts the camera workspace with tabs instead of duplicate global actions [0.12ms]
+
+ 21 pass
+ 0 fail
+ 88 expect() calls
+Ran 21 tests across 5 files. [225.00ms]

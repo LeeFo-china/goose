@@ -52,27 +52,5 @@ describe("cameras page layout contract", () => {
     expect(loading).toContain("adminTabsListClassName");
   });
 
-  test("uses the asset-binding flow as the normal camera entry", () => {
-    const { page, tabs } = readCamerasSources();
-
-    expect(page).toContain("CreateCameraButton");
-    expect(page).toContain('<CreateCameraButton projectId="" devices={[]} />');
-    expect(page).toContain("projectId={group.project.id}");
-    expect(page).not.toContain("Gb28181OnboardingButton");
-    expect(page).not.toContain("CreateTencentDeviceButton");
-    expect(page).toContain("选择未绑定设备并设置项目内别名");
-    expect(tabs).toContain("设备管理");
-    expect(tabs).not.toContain("设备接入");
-  });
-
-  test("keeps one contextual entry per project and uses plain readable counts", () => {
-    const { page } = readCamerasSources();
-
-    expect(page).not.toContain('label="接入到此项目"');
-    expect(page).toContain("{group.summary.camera_count} 台摄像头");
-    expect(page).toContain("在线 {group.summary.online_count}");
-    expect(page).toContain("group.summary.hidden_count > 0");
-    expect(page).not.toContain("腾讯云 {group.summary.tencent_count}");
-    expect(page).not.toContain('<Badge variant="outline">共 {group.summary.camera_count}</Badge>');
-  });
+  // Binding context and entry behavior are exercised by cameras-workspace.spec.ts.
 });

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PROJECT_STATUS_VALUES } from "@gooes/domain";
 
 export const PROJECT_CAMERA_VENDOR_VALUES = [
   "ezviz",
@@ -33,14 +34,26 @@ export const ProjectCameraBindOptionsQuerySchema = z.object({
 
 export const ProjectCameraProjectGroupsQuerySchema = z.object({
   keyword: z.string().trim().max(100, "关键词过长").optional(),
-  page: z.coerce.number().int("页码必须是整数").min(1, "页码必须大于 0").default(1),
-  pageSize: z.coerce
-    .number()
-    .int("每页数量必须是整数")
-    .min(1, "每页数量必须大于 0")
-    .max(20, "每页最多 20 条")
-    .default(5),
+  binding: z.enum(["bound", "unbound", "all"], { message: "无效的绑定状态" }).default("bound"),
+  project_status: z.enum(PROJECT_STATUS_VALUES, { message: "无效的项目状态" }).optional(),
+  page: z.coerce.number().int("页码必须是整数").min(1, "页码必须大于 0").max(2147483647).default(1),
+  pageSize: z.coerce.number().int("每页数量必须是整数")
+    .min(1, "每页数量必须大于 0").max(100, "每页最多 100 条").default(20),
 });
+
+export const ProjectCameraWorkspaceDevicesParamsSchema = z.object({
+  projectId: z.uuid("无效的项目 ID"),
+});
+
+export const ProjectCameraWorkspaceDevicesQuerySchema = z.object({
+  page: z.coerce.number().int("页码必须是整数").min(1, "页码必须大于 0").max(2147483647).default(1),
+  pageSize: z.coerce.number().int("每页数量必须是整数")
+    .min(1, "每页数量必须大于 0").max(20, "每页最多 20 条").default(20),
+});
+
+export type ProjectCameraWorkspaceDevicesQueryInput = z.infer<
+  typeof ProjectCameraWorkspaceDevicesQuerySchema
+>;
 
 export const ProjectCameraDetailParamsSchema = z.object({
   project_id: z.uuid("无效的项目 ID"),

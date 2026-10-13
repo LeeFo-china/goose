@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Controller, type UseFormReturn } from "react-hook-form";
 import { Loader2 } from "lucide-react";
 import { FormSelect } from "@/components/admin/form-select";
@@ -15,6 +16,8 @@ export function CameraProjectDeviceFields({
   form,
   pending,
   activeProjectId,
+  projectLocked = false,
+  projectContext,
   projectKeyword,
   projectOptions,
   selectedProjectId,
@@ -23,6 +26,7 @@ export function CameraProjectDeviceFields({
   projectSelectError,
   deviceKeyword,
   deviceLoading,
+  deviceError = "",
   hasMoreDevices,
   availableDevices,
   setProjectKeyword,
@@ -30,10 +34,13 @@ export function CameraProjectDeviceFields({
   setSelectedProject,
   setDeviceKeyword,
   loadMoreDevices,
+  onNavigateToDevices,
 }: {
   form: UseFormReturn<CameraFormValues>;
   pending: boolean;
   activeProjectId: string;
+  projectLocked?: boolean;
+  projectContext?: CameraProjectOption;
   projectKeyword: string;
   projectOptions: CameraProjectOption[];
   selectedProjectId: string;
@@ -42,6 +49,7 @@ export function CameraProjectDeviceFields({
   projectSelectError: string;
   deviceKeyword: string;
   deviceLoading: boolean;
+  deviceError?: string;
   hasMoreDevices: boolean;
   availableDevices: CameraDeviceChannel[];
   setProjectKeyword: (value: string) => void;
@@ -49,74 +57,94 @@ export function CameraProjectDeviceFields({
   setSelectedProject: (value: CameraProjectOption | null) => void;
   setDeviceKeyword: (value: string) => void;
   loadMoreDevices: () => void;
+  onNavigateToDevices?: () => void;
 }) {
+  const projectEligible = selectedProject?.id === activeProjectId && canBindCameraToProject(selectedProject) && !projectLoading && !projectSelectError;
+  const projectIdentity = selectedProject || projectContext;
+  const deviceManagementHref = `/cameras?${new URLSearchParams({ tab: "devices", ...(activeProjectId ? { projectId: activeProjectId } : {}) }).toString()}`;
   return (
     <>
       <Field className="md:col-span-2" data-invalid={Boolean(projectSelectError)}>
-        <FieldLabel htmlFor="camera-project-search">房产 / 项目</FieldLabel>
-        <Input
-          id="camera-project-search"
-          value={projectKeyword}
-          disabled={pending}
-          aria-invalid={Boolean(projectSelectError)}
-          placeholder="搜索客户、手机号、小区、房号或项目名"
-          onChange={(event) => {
-            setProjectKeyword(event.target.value);
-            setSelectedProjectId("");
-            setSelectedProject(null);
-          }}
-        />
-        <div className="rounded-md border bg-background">
-          <div className="max-h-48 overflow-y-auto p-1">
-            {projectOptions.map((project) => {
-              const selected = project.id === selectedProjectId;
-              const description = getProjectOptionDescription(project);
-              const disabled = pending || !canBindCameraToProject(project);
-              return (
-                <Button
-                  key={project.id}
-                  type="button"
-                  variant="ghost"
-                  disabled={disabled}
-                  className={cn(
-                    "h-auto w-full flex-col items-start gap-1 rounded-sm px-3 py-2 text-left font-normal",
-                    selected && "bg-accent text-accent-foreground",
-                  )}
-                  onClick={() => {
-                    setSelectedProjectId(project.id);
-                    setSelectedProject(project);
-                    setProjectKeyword(getProjectOptionLabel(project));
-                    form.setValue("device_key", "", {
-                      shouldDirty: true,
-                      shouldValidate: true,
-                    });
-                  }}
-                >
-                  <span className="font-medium">{getProjectOptionLabel(project)}</span>
-                  {description ? (
-                    <span className="text-xs text-muted-foreground">{description}</span>
-                  ) : null}
-                </Button>
-              );
-            })}
-            {!projectLoading && projectOptions.length === 0 ? (
-              <div className="px-3 py-5 text-center text-sm text-muted-foreground">
-                {projectKeyword.trim() ? "暂无匹配房产项目" : "请输入关键词搜索房产项目"}
+        {projectLocked ? (
+          <>
+            <FieldLabel>房产 / 项目</FieldLabel>
+            <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+              <p className="font-medium">{getProjectOptionLabel(projectIdentity) || `项目 ${activeProjectId}`}</p>
+              {projectIdentity && getProjectOptionDescription(projectIdentity) ? (
+                <p className="text-xs text-muted-foreground">{getProjectOptionDescription(projectIdentity)}</p>
+              ) : null}
+            </div>
+            <FieldDescription>当前项目已固定，摄像头将绑定到此项目。</FieldDescription>
+            {projectLoading ? <FieldDescription>正在校验项目是否可绑定…</FieldDescription> : null}
+          </>
+        ) : (
+          <>
+            <FieldLabel htmlFor="camera-project-search">房产 / 项目</FieldLabel>
+            <Input
+              id="camera-project-search"
+              value={projectKeyword}
+              disabled={pending}
+              aria-invalid={Boolean(projectSelectError)}
+              placeholder="搜索客户、手机号、小区、房号或项目名"
+              onChange={(event) => {
+                setProjectKeyword(event.target.value);
+                setSelectedProjectId("");
+                setSelectedProject(null);
+              }}
+            />
+            <div className="rounded-md border bg-background">
+              <div className="max-h-48 overflow-y-auto p-1">
+                {projectOptions.map((project) => {
+                  const selected = project.id === selectedProjectId;
+                  const description = getProjectOptionDescription(project);
+                  const disabled = pending || !canBindCameraToProject(project);
+                  return (
+                    <Button
+                      key={project.id}
+                      type="button"
+                      variant="ghost"
+                      disabled={disabled}
+                      className={cn(
+                        "h-auto w-full flex-col items-start gap-1 rounded-sm px-3 py-2 text-left font-normal",
+                        selected && "bg-accent text-accent-foreground",
+                      )}
+                      onClick={() => {
+                        setSelectedProjectId(project.id);
+                        setSelectedProject(null);
+                        setProjectKeyword(getProjectOptionLabel(project));
+                        form.setValue("device_key", "", {
+                          shouldDirty: true,
+                          shouldValidate: true,
+                        });
+                      }}
+                    >
+                      <span className="font-medium">{getProjectOptionLabel(project)}</span>
+                      {description ? (
+                        <span className="text-xs text-muted-foreground">{description}</span>
+                      ) : null}
+                    </Button>
+                  );
+                })}
+                {!projectLoading && projectOptions.length === 0 ? (
+                  <div className="px-3 py-5 text-center text-sm text-muted-foreground">
+                    {projectKeyword.trim() ? "暂无匹配房产项目" : "请输入关键词搜索房产项目"}
+                  </div>
+                ) : null}
+                {projectLoading ? (
+                  <div className="flex items-center justify-center gap-2 px-3 py-5 text-sm text-muted-foreground">
+                    <Loader2 className="animate-spin" data-icon="inline-start" />
+                    正在加载
+                  </div>
+                ) : null}
               </div>
-            ) : null}
-            {projectLoading ? (
-              <div className="flex items-center justify-center gap-2 px-3 py-5 text-sm text-muted-foreground">
-                <Loader2 className="animate-spin" data-icon="inline-start" />
-                正在加载
-              </div>
-            ) : null}
-          </div>
-        </div>
-        <FieldDescription>
-          {selectedProject
-            ? `当前绑定到：${getProjectOptionLabel(selectedProject)}`
-            : "请先选择要绑定的房产项目，再选择设备资产。"}
-        </FieldDescription>
+            </div>
+            <FieldDescription>
+              {selectedProject
+                ? `当前绑定到：${getProjectOptionLabel(selectedProject)}`
+                : "请先选择要绑定的房产项目，再选择设备资产。"}
+            </FieldDescription>
+          </>
+        )}
         {projectSelectError ? <StatusAlert>{projectSelectError}</StatusAlert> : null}
       </Field>
       <Field className="md:col-span-2">
@@ -124,7 +152,7 @@ export function CameraProjectDeviceFields({
         <Input
           id="camera-device-search"
           value={deviceKeyword}
-          disabled={pending || !activeProjectId}
+          disabled={pending || !projectEligible}
           placeholder="输入设备 SN、设备 ID 或通道名称"
           onChange={(event) => {
             setDeviceKeyword(event.target.value);
@@ -134,7 +162,7 @@ export function CameraProjectDeviceFields({
             });
           }}
         />
-        <FieldDescription>按关键词分页查询，设备超过 100 个也可继续查找。</FieldDescription>
+        <FieldDescription>可按设备编号或通道名搜索，也可加载更多设备。</FieldDescription>
       </Field>
       <Controller
         name="device_key"
@@ -145,7 +173,7 @@ export function CameraProjectDeviceFields({
             <FormSelect
               id="camera-device"
               value={field.value}
-              disabled={pending || !activeProjectId || deviceLoading || availableDevices.length === 0}
+              disabled={pending || !projectEligible || deviceLoading || availableDevices.length === 0}
               invalid={fieldState.invalid}
               placeholder={
                 !activeProjectId
@@ -176,6 +204,17 @@ export function CameraProjectDeviceFields({
                   : "选择房产项目后才会加载可绑定设备资产。"}
             </FieldDescription>
             <FieldError errors={[fieldState.error]} />
+            {deviceError ? <StatusAlert>{deviceError}</StatusAlert> : null}
+            {projectEligible && !deviceLoading && !deviceError && availableDevices.length === 0 && !hasMoreDevices ? (
+              <StatusAlert tone="warning">
+                <p>{deviceKeyword.trim()
+                  ? "没有匹配的未绑定设备，请尝试其他关键词。"
+                  : "暂无可绑定设备。仅可选择当前公司已完成接入且尚未绑定项目的设备，请先在设备管理中接入设备或解除已有项目绑定。"}</p>
+                <Button asChild variant="link" size="sm">
+                  <Link href={deviceManagementHref} onClick={onNavigateToDevices}>前往设备管理</Link>
+                </Button>
+              </StatusAlert>
+            ) : null}
             {hasMoreDevices ? (
               <Button
                 type="button"

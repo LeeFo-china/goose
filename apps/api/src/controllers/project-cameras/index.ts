@@ -9,6 +9,8 @@ import {
   ProjectCameraBindOptionsQuerySchema,
   ProjectCameraEzvizDevicesQuerySchema,
   ProjectCameraProjectGroupsQuerySchema,
+  ProjectCameraWorkspaceDevicesParamsSchema,
+  ProjectCameraWorkspaceDevicesQuerySchema,
   ProjectCameraTencentDevicesQuerySchema,
   ProjectCameraDetailParamsSchema,
   ProjectCameraParamsSchema,
@@ -58,6 +60,20 @@ class ProjectCameraController extends TenantBaseController {
     });
 
     return ResponseHandler.success(result);
+  }
+
+  @Get("/project-cameras/projects/:projectId/devices")
+  async listCameraWorkspaceDevices(request: FastifyRequest, reply: FastifyReply) {
+    const params = ProjectCameraWorkspaceDevicesParamsSchema.safeParse(request.params);
+    if (!params.success) throw Errors.fromZod(params.error);
+    const query = ProjectCameraWorkspaceDevicesQuerySchema.safeParse(request.query);
+    if (!query.success) throw Errors.fromZod(query.error);
+    return ResponseHandler.success(await projectCameraService.listCameraWorkspaceDevices({
+      authUserId: request.user?.sub,
+      ...getTenantServiceAuthOptions(request),
+      projectId: params.data.projectId,
+      query: query.data,
+    }));
   }
 
   @Get("/projects/:project_id/cameras")

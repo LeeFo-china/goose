@@ -1,3 +1,4 @@
+import type { CameraProjectFilters, CameraProjectSearchParams } from "@/components/cameras/camera-project-filters";
 import type {
   CameraProjectGroup,
   CameraProjectOption,
@@ -30,11 +31,7 @@ type TenantDeviceListData = {
   pagination: Pagination;
 };
 
-export type CamerasPageSearchParams = {
-  project_id?: string;
-  camera_page?: string;
-  camera_keyword?: string;
-};
+export type CamerasPageSearchParams = CameraProjectSearchParams & { project_id?: string };
 
 type CameraProjectGroupsData = {
   list: CameraProjectGroup[];
@@ -104,11 +101,13 @@ export async function getCameraProjectGroups(input: {
   token: string | null;
   page: number;
   keyword: string;
+  binding: CameraProjectFilters["binding"];
+  status: CameraProjectFilters["status"];
 }) {
   if (!input.token) {
     return {
       list: [] as CameraProjectGroup[],
-      pagination: { page: input.page, pageSize: 5, total: 0, totalPages: 0 },
+      pagination: { page: input.page, pageSize: 20, total: 0, totalPages: 0 },
       summary: {
         project_count: 0,
         total_camera_count: 0,
@@ -122,9 +121,11 @@ export async function getCameraProjectGroups(input: {
 
   const params = new URLSearchParams({
     page: String(input.page),
-    pageSize: "5",
+    pageSize: "20",
   });
   if (input.keyword) params.set("keyword", input.keyword);
+  params.set("binding", input.binding);
+  if (input.status) params.set("project_status", input.status);
 
   try {
     const data = await fetchBackendData<CameraProjectGroupsData>(
@@ -133,7 +134,7 @@ export async function getCameraProjectGroups(input: {
     );
     return {
       list: data?.list || [],
-      pagination: data?.pagination || { page: input.page, pageSize: 5, total: 0, totalPages: 0 },
+      pagination: data?.pagination || { page: input.page, pageSize: 20, total: 0, totalPages: 0 },
       summary: data?.summary || {
         project_count: 0,
         total_camera_count: 0,
@@ -146,7 +147,7 @@ export async function getCameraProjectGroups(input: {
   } catch (error) {
     return {
       list: [] as CameraProjectGroup[],
-      pagination: { page: input.page, pageSize: 5, total: 0, totalPages: 0 },
+      pagination: { page: input.page, pageSize: 20, total: 0, totalPages: 0 },
       summary: {
         project_count: 0,
         total_camera_count: 0,

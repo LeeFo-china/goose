@@ -1,0 +1,4 @@
+$ cd apps/api && bun build src/app.ts --outdir dist --target node
+Bundled 999 modules in 102ms
+
+  app.js  5.18 MB  (entry point)

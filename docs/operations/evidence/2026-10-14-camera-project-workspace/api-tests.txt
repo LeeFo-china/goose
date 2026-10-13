@@ -1,0 +1,48 @@
+bun test v1.3.2 (b131639c)
+
+src/schema/project-camera-workspace.test.ts:
+(pass) camera workspace project query > defaults to bound projects and 20 project rows [1.29ms]
+(pass) camera workspace project query > accepts 100 projects, binding filters and domain statuses [2.04ms]
+(pass) camera workspace project query > rejects invalid bounds and filters [0.63ms]
+(pass) camera workspace detail query > caps detail pages at 20 independently of project page size [0.80ms]
+
+src/repositories/project-cameras/workspace.test.ts:
+(pass) camera workspace project repository > delegates filtering and project paging to one RPC and masks only output [0.39ms]
+(pass) camera workspace project repository > empty visibility never queries and returns zero offline/unknown counts
+(pass) camera workspace project repository > database failure is wrapped instead of a misleading empty success [0.33ms]
+(pass) camera workspace detail repository > uses tenant/project/deleted filters, stable order and exact bounded range
+(pass) camera workspace detail repository > missing tenant is rejected before any query
+
+src/repositories/project-cameras/workspace-status.test.ts:
+(pass) batches by status with tenant/project and active-binding boundaries [0.35ms]
+
+src/gateways/tencent-iot-video/workspace-status.test.ts:
+(pass) queries only bound devices, deduplicates, stops when requested channels are found [0.75ms]
+(pass) shares a hard 20 request budget, with no device-pool scan [0.30ms]
+(pass) pages a single NVR until the bound channel is found
+(pass) one failed device does not discard successful device results [0.48ms]
+(pass) caps concurrency at four and forwards a timeout signal to every request [12.18ms]
+(pass) expired refresh deadline starts no new vendor calls [0.06ms]
+
+src/controllers/project-cameras/workspace.test.ts:
+(pass) admin camera workspace routes > new detail URL validates bounded paging and propagates read capability [167.14ms]
+
+src/services/project-cameras/workspace.test.ts:
+(pass) camera workspace service > preserves full persisted summaries and never scans vendor devices
+(pass) camera workspace service > requires login and rejects customer-only identities before repository access [1.63ms]
+(pass) employee-only expanded camera page > returns bounded persisted records with explicit status semantics
+(pass) employee-only expanded camera page > denies missing permission, inaccessible project and customer identity [0.91ms]
+(pass) employee-only expanded camera page > unknown project fails before loading cameras
+
+src/services/project-cameras/workspace-status.test.ts:
+(pass) stale offline cameras can become live online and persist within authorized scope [0.41ms]
+(pass) recent status uses existing timestamp without querying vendor or updating database [0.16ms]
+(pass) vendor missing/failed targets preserve persisted status and time, mixed results are explicit
+(pass) write failure leaves persisted response instead of claiming successful refresh
+(pass) non-Tencent remains persisted and stale/error timestamps do not block Tencent refresh
+(pass) successful unchanged status still renews freshness timestamp [0.49ms]
+
+ 28 pass
+ 0 fail
+ 138 expect() calls
+Ran 28 tests across 7 files. [353.00ms]

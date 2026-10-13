@@ -10,6 +10,7 @@ import {
   listProjectCameras,
   listCameraBindProjectOptions,
   listCameraProjectGroups,
+  listCameraWorkspaceDevices,
 } from "./legacy/lists";
 import {
   listEzvizDeviceChannels,
@@ -37,6 +38,9 @@ class ProjectCameraService {
   listProjectCameras = listProjectCameras;
   listCameraBindProjectOptions = listCameraBindProjectOptions;
   listCameraProjectGroups = listCameraProjectGroups;
+  listCameraWorkspaceDevices(input: Parameters<typeof listCameraWorkspaceDevices>[0]) {
+    return listCameraWorkspaceDevices.call({ resolveActor: this.resolveActor.bind(this) }, input);
+  }
   listEzvizDeviceChannels = listEzvizDeviceChannels;
   listTencentDeviceChannels = listTencentDeviceChannels;
   createTencentDevice = createTencentDevice;

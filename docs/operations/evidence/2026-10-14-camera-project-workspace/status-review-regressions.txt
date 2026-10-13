@@ -1,0 +1,33 @@
+bun test v1.3.2 (b131639c)
+
+src/repositories/project-cameras/workspace-status.test.ts:
+(pass) repository CAS preserves newer camera and asset status when an older observation arrives later [1.27ms]
+(pass) asset CAS independently preserves a newer asset observation [0.12ms]
+(pass) blocked database wait is cancelled; late completion cannot start asset or later-batch writes [18.54ms]
+
+src/gateways/tencent-iot-video/workspace-status.test.ts:
+(pass) queries only bound devices, deduplicates, stops when requested channels are found [0.58ms]
+(pass) shares a hard 20 request budget, with no device-pool scan [0.50ms]
+(pass) pages a single NVR until the bound channel is found [0.16ms]
+(pass) one failed device does not discard successful device results [0.02ms]
+(pass) caps concurrency at four and forwards a timeout signal to every request [14.18ms]
+(pass) expired refresh deadline starts no new vendor calls
+
+src/gateways/tencent-iot-video/request-deadline.test.ts:
+(pass) abort bounds blocked config reads and late config cannot dispatch a vendor request [5.80ms]
+
+src/services/project-cameras/workspace-status.test.ts:
+(pass) stale offline cameras can become live online and persist within authorized scope [0.06ms]
+(pass) recent status uses existing timestamp without querying vendor or updating database
+(pass) vendor missing/failed targets preserve persisted status and time, mixed results are explicit
+(pass) write failure leaves persisted response instead of claiming successful refresh
+(pass) non-Tencent remains persisted and stale/error timestamps do not block Tencent refresh
+(pass) successful unchanged status still renews freshness timestamp
+(pass) one 8s budget includes an uncooperative vendor and prevents late saves [34.11ms]
+(pass) same budget includes database waiting and never accepts its late result [34.82ms]
+(pass) observation time is request start, not late vendor response time; CAS rejection is persisted [32.53ms]
+
+ 19 pass
+ 0 fail
+ 63 expect() calls
+Ran 19 tests across 4 files. [340.00ms]

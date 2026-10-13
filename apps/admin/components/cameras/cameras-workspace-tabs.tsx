@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 import { adminTabsListClassName, adminTabsTriggerClassName } from "@/components/admin/admin-tabs";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -13,10 +13,20 @@ export function CamerasWorkspaceTabs({
   cameras: ReactNode;
   devices: ReactNode;
 }) {
-  const [tab, setTab] = useState("cameras");
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const tab = searchParams.get("tab") === "devices" ? "devices" : "cameras";
+
+  function changeTab(value: string) {
+    const next = value === "devices" ? "devices" : "cameras";
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", next);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }
 
   return (
-    <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col">
+    <Tabs value={tab} onValueChange={changeTab} className="flex min-h-0 flex-1 flex-col">
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
         <CardHeader className="shrink-0 border-b bg-card px-4 py-0">
           <TabsList className={adminTabsListClassName}>

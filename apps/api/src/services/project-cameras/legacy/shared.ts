@@ -1,3 +1,4 @@
+import type { CameraWorkspaceDeviceRow } from "@/repositories/project-cameras/workspace";
 import { randomBytes, randomInt } from "node:crypto";
 import { Errors } from "@/errors/error-factory";
 import { ErrorCodes } from "@/errors/error-codes";
@@ -90,7 +91,7 @@ export function withCameraStatus(
   };
 }
 
-export function serializeCamera(camera: ProjectCameraRow) {
+export function serializeCamera(camera: CameraWorkspaceDeviceRow) {
   return {
     id: camera.id,
     vendor: camera.vendor,

@@ -42,19 +42,11 @@ export default function CamerasLoading() {
           </div>
 
           <div className="min-h-0 flex-1 overflow-hidden">
-            {Array.from({ length: 3 }).map((_, index) => (
-              <div key={index} className="border-b">
-                <div className="flex flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between">
-                  <div className="flex min-w-0 flex-col gap-2">
-                    <Skeleton className="h-4 w-56 max-w-full" />
-                    <Skeleton className="h-3 w-80 max-w-full" />
-                  </div>
-                  <Skeleton className="h-6 w-52" />
-                </div>
-                <div className="flex flex-col gap-2 p-4">
-                  <Skeleton className="h-10" />
-                  <Skeleton className="h-10" />
-                </div>
+            <Skeleton className="h-10 rounded-none" />
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div key={index} className="grid grid-cols-[2fr_1fr_1fr_1fr] items-center gap-4 border-b px-4 py-5">
+                <Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-16" />
+                <Skeleton className="h-5 w-20" /><Skeleton className="ml-auto h-8 w-28" />
               </div>
             ))}
           </div>

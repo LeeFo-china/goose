@@ -1,3 +1,4 @@
+import { getWorkspaceChannelStatuses } from "./tencent-iot-video/workspace-status";
 import {
   createDevice,
   deleteDevice,
@@ -26,6 +27,7 @@ export type {
 } from "./tencent-iot-video/shared";
 
 export class TencentIotVideoService {
+  getWorkspaceChannelStatuses = getWorkspaceChannelStatuses;
   listDevices = listDevices;
   listDeviceSummaries = listDeviceSummaries;
   findDeviceSummary = findDeviceSummary;

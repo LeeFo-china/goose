@@ -28468,6 +28468,18 @@ export type Database = {
         }
         Returns: Json
       }
+      list_camera_workspace_projects: {
+        Args: {
+          p_tenant_id: string
+          p_visible_project_ids: string[] | null
+          p_keyword?: string | null
+          p_binding?: string
+          p_project_status?: string | null
+          p_page?: number
+          p_page_size?: number
+        }
+        Returns: Json
+      }
       list_catalog_unit_suggestions: {
         Args: {
           p_actor_employee_id: string

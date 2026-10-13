@@ -1,3 +1,4 @@
+import { assertNotAborted, waitForSignal } from "@/utils/abortable-wait";
 import { createHash, createHmac } from "node:crypto";
 import { getRequiredSecretConfig, mapTencentApiError } from "./errors";
 import {
@@ -50,8 +51,11 @@ async function getConfig() {
 export async function request<T>(
   action: string,
   payload: Record<string, unknown>,
+  options: { signal?: AbortSignal } = {},
 ): Promise<T & { RequestId?: string }> {
-  const config = await getConfig();
+  assertNotAborted(options.signal);
+  const config = await waitForSignal(getConfig(), options.signal);
+  assertNotAborted(options.signal);
   const timestamp = Math.floor(Date.now() / 1000);
   const date = formatUtcDate(timestamp);
   const body = JSON.stringify(payload);
@@ -85,8 +89,9 @@ export async function request<T>(
 
   let response: Response;
   try {
-    response = await fetch(`https://${config.endpoint}`, {
+    response = await waitForSignal(fetch(`https://${config.endpoint}`, {
       method: "POST",
+      signal: options.signal,
       headers: {
         "Authorization": authorization,
         "Content-Type": "application/json; charset=utf-8",
@@ -97,7 +102,7 @@ export async function request<T>(
         "X-TC-Region": config.region,
       },
       body,
-    });
+    }), options.signal);
   } catch (error) {
     throw Errors.business(
       503,
@@ -107,7 +112,8 @@ export async function request<T>(
     );
   }
 
-  const result = await response.json().catch(() => ({})) as TencentApiResponse<T>;
+  const result = await waitForSignal(response.json().catch(() => ({})), options.signal) as TencentApiResponse<T>;
+  assertNotAborted(options.signal);
   const apiResponse = result.Response;
   if (!response.ok || apiResponse?.Error || !apiResponse) {
     throw mapTencentApiError(
