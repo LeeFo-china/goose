@@ -1,0 +1,8 @@
+{
+  "service": "admin",
+  "image": "useccr.ccs.tencentyun.com/america_goose/goose-admin:run-38363811768-f0a9595a014ba08f960326a7d67d557982fe5cd6",
+  "digest": "sha256:b1bedcbebee21381d0445df99ae13deaef2d5ef62f7c37dffa8390422f74517e",
+  "build_run_id": 38363811768,
+  "commit_sha": "f0a9595a014ba08f960326a7d67d557982fe5cd6",
+  "target_environment": "production"
+}

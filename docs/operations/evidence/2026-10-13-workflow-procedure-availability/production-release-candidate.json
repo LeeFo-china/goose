@@ -1,0 +1,1 @@
+{"schema_version":2,"build_run_id":38363811768,"tag":"v2026.10.13.1","commit_sha":"f0a9595a014ba08f960326a7d67d557982fe5cd6","requested_services":["admin"],"build_services":["admin"],"target_environment":"production","build_plan_artifact":"production-build-plan","deployment_source_artifact":"production-deploy-source"}

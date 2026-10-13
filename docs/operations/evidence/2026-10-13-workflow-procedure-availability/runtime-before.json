@@ -1,0 +1,15 @@
+{
+  "source": "SSH docker inspect before deployment",
+  "admin": {
+    "revision": "8112d16362285c1c36c90f9dd1c6ff1b1e669394",
+    "image": "useccr.ccs.tencentyun.com/america_goose/goose-admin@sha256:2bd65935ea749a8a6771897dcc216a3396935205c1d08fc008b6f90dfd7aae53",
+    "health": "healthy",
+    "restart_count": 0
+  },
+  "api_and_cos_reconcile_worker": {
+    "revision": "f415c5cb83c840203d878cca37858c504b069e05",
+    "image": "useccr.ccs.tencentyun.com/america_goose/goose-api@sha256:266c34146cbead8b84325769a3530bb345e08f41e161960d04b27951d838815c",
+    "health": "healthy",
+    "restart_count_each": 0
+  }
+}

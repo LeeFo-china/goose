@@ -1,0 +1,85 @@
+{
+  "checked_at_utc": "2026-10-13T07:56:09.010466+00:00",
+  "resources": [
+    {
+      "url": "https://admin.goodcms.cn/login",
+      "status": 200,
+      "bytes": 15561
+    },
+    {
+      "url": "https://admin.goodcms.cn/_next/static/css/008a05b0ad6b854a.css",
+      "status": 200,
+      "bytes": 15790
+    },
+    {
+      "url": "https://admin.goodcms.cn/_next/static/css/ea8f7a64689071af.css",
+      "status": 200,
+      "bytes": 103979
+    },
+    {
+      "url": "https://admin.goodcms.cn/_next/static/chunks/webpack-1d5f81e5fb1fd6aa.js",
+      "status": 200,
+      "bytes": 3702
+    },
+    {
+      "url": "https://admin.goodcms.cn/_next/static/chunks/1ecc90e7-be056a46203f691f.js",
+      "status": 200,
+      "bytes": 173025
+    },
+    {
+      "url": "https://admin.goodcms.cn/_next/static/chunks/8035-c6c1e204b44fbb2b.js",
+      "status": 200,
+      "bytes": 172993
+    },
+    {
+      "url": "https://admin.goodcms.cn/_next/static/chunks/main-app-bfd40571c953df01.js",
+      "status": 200,
+      "bytes": 573
+    },
+    {
+      "url": "https://admin.goodcms.cn/_next/static/chunks/4961-a00a66ea01effe16.js",
+      "status": 200,
+      "bytes": 20165
+    },
+    {
+      "url": "https://admin.goodcms.cn/_next/static/chunks/8310-f371b4fe137b48ac.js",
+      "status": 200,
+      "bytes": 9717
+    },
+    {
+      "url": "https://admin.goodcms.cn/_next/static/chunks/5271-ab7f14800bacb0bd.js",
+      "status": 200,
+      "bytes": 27119
+    },
+    {
+      "url": "https://admin.goodcms.cn/_next/static/chunks/2322-d5c22ef5e3f0bf4b.js",
+      "status": 200,
+      "bytes": 33955
+    },
+    {
+      "url": "https://admin.goodcms.cn/_next/static/chunks/1036-a072f52c4fe21035.js",
+      "status": 200,
+      "bytes": 7792
+    },
+    {
+      "url": "https://admin.goodcms.cn/_next/static/chunks/app/layout-4598cf5a43d9cc93.js",
+      "status": 200,
+      "bytes": 4455
+    },
+    {
+      "url": "https://admin.goodcms.cn/_next/static/chunks/7028-0e882bd09cbafc00.js",
+      "status": 200,
+      "bytes": 13731
+    },
+    {
+      "url": "https://admin.goodcms.cn/_next/static/chunks/app/login/page-1df8c5c6d6b91d11.js",
+      "status": 200,
+      "bytes": 14840
+    },
+    {
+      "url": "https://admin.goodcms.cn/_next/static/chunks/polyfills-42372ed130431b0a.js",
+      "status": 200,
+      "bytes": 112594
+    }
+  ]
+}
