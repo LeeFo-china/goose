@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "build_run_id": 38435144166,
+  "deploy_run_id": 38436191873,
+  "tag": "v2026.10.14.2",
+  "commit_sha": "400df2e11aeb3452494ea0464b88d7d9e693330e",
+  "services": [
+    "admin"
+  ],
+  "completed_at": "2026-10-13T17:09:30Z"
+}

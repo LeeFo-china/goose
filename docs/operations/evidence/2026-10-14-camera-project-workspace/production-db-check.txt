@@ -1,0 +1,9 @@
+{"total": 1, "binding": "bound", "summary": {"hidden_count": 0, "online_count": 0, "offline_count": 1, "project_count": 1, "tencent_count": 1, "unknown_count": 0, "total_camera_count": 1}, "returned": 1}
+{"total": 19, "binding": "unbound", "summary": {"hidden_count": 0, "online_count": 0, "offline_count": 0, "project_count": 19, "tencent_count": 0, "unknown_count": 0, "total_camera_count": 0}, "returned": 19}
+{"total": 20, "binding": "all", "summary": {"hidden_count": 0, "online_count": 0, "offline_count": 1, "project_count": 20, "tencent_count": 1, "unknown_count": 0, "total_camera_count": 1}, "returned": 20}
+{"empty_scope_count": 0}
+{"anon_execute": false, "index_present": true, "service_role_execute": true, "authenticated_execute": false}
+Result  (cost=0.00..0.26 rows=1 width=32) (actual time=1.348..1.348 rows=1 loops=1)
+  Buffers: shared hit=10
+Planning Time: 0.009 ms
+Execution Time: 1.356 ms

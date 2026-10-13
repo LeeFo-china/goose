@@ -1,0 +1,3 @@
+/gooes-api|710fd4cd615db2121752288c6cc45194303ac03b|useccr.ccs.tencentyun.com/america_goose/goose-api@sha256:ce26ab240779afa56e7184ccda5751444021fe88106caa02736a922deff91b29|healthy|0
+/gooes-admin|710fd4cd615db2121752288c6cc45194303ac03b|useccr.ccs.tencentyun.com/america_goose/goose-admin@sha256:86254e739ba5aac933f7ae922738bc9f9f9aa6f8ab1f96ee9a30fbf7887e2d37|healthy|0
+/gooes-cos-reconcile-worker|f415c5cb83c840203d878cca37858c504b069e05|useccr.ccs.tencentyun.com/america_goose/goose-api@sha256:266c34146cbead8b84325769a3530bb345e08f41e161960d04b27951d838815c|healthy|0
