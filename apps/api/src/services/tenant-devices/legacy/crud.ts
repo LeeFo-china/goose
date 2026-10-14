@@ -1,3 +1,4 @@
+import { renameTenantTencentDeviceSerial } from "@/repositories/tenant-devices/tencent-registration";
 import { assertTenantDeviceAccess } from "./access";
 import {
   ErrorCodes,
@@ -72,7 +73,10 @@ export async function updateTenantDevice(input: {
 
   const { hardware_serial: hardwareSerial, ...rowPayload } = input.payload;
   let updatedDevice = device;
-  if (hardwareSerial !== undefined) {
+  if (hardwareSerial !== undefined && device.vendor === "tencent_iotvideo_industry") {
+    updatedDevice = await renameTenantTencentDeviceSerial({ tenantId, assetId: input.id,
+      hardwareSerial, employeeId: input.authContext.employeeId });
+  } else if (hardwareSerial !== undefined) {
     const existing = hardwareSerial
       ? await tenantDeviceRepository.findByHardwareSerial({
         tenantId,

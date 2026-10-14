@@ -1,0 +1,159 @@
+bun test v1.3.2 (b131639c)
+
+src/schema/project-camera-workspace.test.ts:
+(pass) camera workspace project query > defaults to bound projects and 20 project rows [2.00ms]
+(pass) camera workspace project query > accepts 100 projects, binding filters and domain statuses [1.70ms]
+(pass) camera workspace project query > rejects invalid bounds and filters [1.03ms]
+(pass) camera workspace detail query > caps detail pages at 20 independently of project page size [0.89ms]
+
+src/services/tenant-device-asset-contract.test.ts:
+(pass) tenant device asset contract > stores a normalized hardware serial with a tenant-scoped unique index [1.74ms]
+(pass) tenant device asset contract > requires a trimmed hardware serial when registering a Tencent device [1.27ms]
+(pass) tenant device asset contract > allows legacy assets to receive a hardware serial later [0.29ms]
+(pass) tenant device asset contract > registers Tencent devices at tenant scope and hydrates binding names
+(pass) tenant device asset contract > updates the physical serial across every channel of the same device
+
+src/services/tenant-device-tencent-access-contract.test.ts:
+(pass) tenant Tencent device access contract > limits resumable GB28181 secrets to the current tenant and device editors [0.07ms]
+
+src/services/project-camera-tenant-device-binding.test.ts:
+(pass) project camera tenant-device binding > accepts a tenant device id while preserving legacy camera payloads
+(pass) project camera tenant-device binding > propagates project write permission and sends the asset payload to one atomic binding call [0.62ms]
+(pass) project camera tenant-device binding > unbind propagates permission and releases occupation through one atomic call [0.42ms]
+(pass) project camera tenant-device binding > denied project access and missing tenant prevent both mutations [0.41ms]
+(pass) project camera tenant-device binding > transaction failures reach the caller without a second asset write [0.10ms]
+
+src/services/tenant-device-playback.test.ts:
+(pass) tenant device playback > previews an unbound Tencent channel within the current tenant [1.91ms]
+(pass) tenant device playback > previews an unbound Ezviz asset from device management [0.54ms]
+(pass) tenant device playback > rejects a root asset that has no playable channel [0.08ms]
+(pass) tenant device playback > rejects an offline channel before requesting a stream
+
+src/repositories/tenant-devices/tencent-registration-sql.test.ts:
+(pass) registration SQL fences parallel claims, persists receipts, rolls back failed assets and resumes [6294.60ms]
+
+src/repositories/tenant-devices/sync-payload.test.ts:
+(pass) legacy sync uses one atomic RPC rather than rewriting a stale asset snapshot [0.21ms]
+(pass) legacy sync ownership conflict stays a business rejection [0.22ms]
+
+src/repositories/tenant-devices/channel-page-sql.test.ts:
+(pass) single-device sync preserves ownership and SN with all-or-nothing page writes [1531.00ms]
+
+src/repositories/project-cameras/workspace.test.ts:
+(pass) camera workspace project repository > delegates filtering and project paging to one RPC and masks only output
+(pass) camera workspace project repository > empty visibility never queries and returns zero offline/unknown counts [0.64ms]
+(pass) camera workspace project repository > database failure is wrapped instead of a misleading empty success [0.12ms]
+(pass) camera workspace detail repository > uses tenant/project/deleted filters, stable order and exact bounded range [0.28ms]
+(pass) camera workspace detail repository > missing tenant is rejected before any query
+
+src/repositories/project-cameras/workspace-status.test.ts:
+(pass) repository CAS preserves newer camera and asset status when an older observation arrives later [1.37ms]
+(pass) asset CAS independently preserves a newer asset observation
+(pass) blocked database wait is cancelled; late completion cannot start asset or later-batch writes [18.68ms]
+
+src/repositories/project-cameras/workspace-sql.test.ts:
+SQL fixture: 20,005 projects / 101,506 cameras; project query 11.713ms; detail query 0.049ms (20 rows via workspace index).
+(pass) SQL migration enforces scope, complete counts and indexed bounded detail pages [2765.87ms]
+
+src/repositories/project-cameras/binding.test.ts:
+(pass) binding sends the complete legacy payload in one RPC [0.32ms]
+(pass) asset ID payload reaches the transaction without stale service resolution [0.10ms]
+(pass) unbind scopes the camera and releases its asset in one RPC
+(pass) transaction PCA01 preserves business error contract
+(pass) transaction PCA02 preserves business error contract
+(pass) transaction PCA03 preserves business error contract
+(pass) transaction PCA04 preserves business error contract
+(pass) transaction PCA05 preserves business error contract
+(pass) transaction PCA06 preserves business error contract
+(pass) transaction PCA07 preserves business error contract
+(pass) uniq_project_cameras_ezviz_device_channel becomes a 409
+(pass) uniq_project_cameras_tencent_device_channel becomes a 409
+(pass) tenant_devices_vendor_device_channel_unique becomes a 409
+(pass) unexpected database error 23503/foreign key failure remains a 500 with details
+(pass) unexpected database error 23505/duplicate key value violates unique constraint "unrelated_index" remains a 500 with details
+(pass) unexpected database error P0001/injected storage failure remains a 500 with details
+
+src/repositories/project-cameras/binding-sql.test.ts:
+(pass) atomic camera binding: real SQL rollback, scope, legacy payloads and concurrent boundaries [3556.65ms]
+
+src/gateways/tencent-iot-video/registration.test.ts:
+(pass) recovery requires one complete page and an exact operation name and device type [0.66ms]
+(pass) recovery cannot adopt prefix results [0.10ms]
+(pass) recovery cannot adopt wrongType results [0.01ms]
+(pass) recovery cannot adopt truncated results
+(pass) recovery cannot adopt missingCount results
+(pass) recovery cannot adopt duplicate results
+(pass) recovery cannot adopt malformed results
+(pass) recovery cannot adopt empty results
+(pass) create sends the operation marker once and has a deadline
+
+src/gateways/tencent-iot-video/workspace-status.test.ts:
+(pass) queries only bound devices, deduplicates, stops when requested channels are found [0.59ms]
+(pass) shares a hard 20 request budget, with no device-pool scan [0.81ms]
+(pass) pages a single NVR until the bound channel is found [0.19ms]
+(pass) one failed device does not discard successful device results
+(pass) caps concurrency at four and forwards a timeout signal to every request [13.04ms]
+(pass) expired refresh deadline starts no new vendor calls
+
+src/gateways/tencent-iot-video/channel-page.test.ts:
+(pass) one device and one bounded vendor page; preserves explicit continuation [0.14ms]
+(pass) cross-device vendor response fails closed before persistence
+(pass) does not treat failed cloud reads as an empty successful sync
+(pass) full vendor page without total asks for another page [0.36ms]
+
+src/gateways/tencent-iot-video/request-deadline.test.ts:
+(pass) abort bounds blocked config reads and late config cannot dispatch a vendor request [7.58ms]
+
+src/controllers/tenant-devices/channel-page.test.ts:
+(pass) tenant channel routes validate pages and register read/write service boundaries [74.13ms]
+
+src/controllers/project-cameras/workspace.test.ts:
+(pass) admin camera workspace routes > new detail URL validates bounded paging and propagates read capability [9.21ms]
+
+src/services/tenant-devices/tencent-registration.test.ts:
+(pass) same normalized SN resumes compatible configuration with current cloud password [1.27ms]
+(pass) concurrent same-SN requests send at most one cloud create [0.70ms]
+(pass) tenant keys are isolated
+(pass) unknown cloud result returns stable reconciliation conflict and never re-creates
+(pass) a later exact marker result recovers unknown cloud success
+(pass) cloud result save failure remains recoverable by marker
+(pass) asset insert failure resumes persisted cloud result without cloud lookup/create
+(pass) repeat does not reinterpret the original device type
+(pass) missing cloud password fails config read but preserves the completed registration
+(pass) first registration preserves the Tencent creation request ID
+(pass) a committed claim whose owner crashed before cloud send cannot be reacquired
+(pass) failed claim prevents all cloud calls
+(pass) lookup errors keep unknown registrations pending without leaking upstream details
+(pass) successful completion with lost local response is safe to repeat
+(pass) a rename between claim and completion never returns B config to an A request [0.41ms]
+(pass) registering the new SN after atomic rename resumes the same cloud without recreate [0.10ms]
+
+src/services/tenant-devices/channel-page.test.ts:
+(pass) sync page checks tenant scope then persists once and reports continuation [0.57ms]
+(pass) zero channels is waiting, cloud failure is an error and never persists [0.12ms]
+(pass) customer and read-only identities cannot sync or trigger vendor calls [0.07ms]
+(pass) foreign or missing asset cannot trigger a vendor request
+(pass) channel list carries exact owned device and page bounds [0.31ms]
+
+src/services/project-cameras/workspace.test.ts:
+(pass) camera workspace service > preserves full persisted summaries and never scans vendor devices
+(pass) camera workspace service > requires login and rejects customer-only identities before repository access [0.39ms]
+(pass) employee-only expanded camera page > returns bounded persisted records with explicit status semantics [1.11ms]
+(pass) employee-only expanded camera page > denies missing permission, inaccessible project and customer identity
+(pass) employee-only expanded camera page > unknown project fails before loading cameras
+
+src/services/project-cameras/workspace-status.test.ts:
+(pass) stale offline cameras can become live online and persist within authorized scope [0.02ms]
+(pass) recent status uses existing timestamp without querying vendor or updating database
+(pass) vendor missing/failed targets preserve persisted status and time, mixed results are explicit
+(pass) write failure leaves persisted response instead of claiming successful refresh
+(pass) non-Tencent remains persisted and stale/error timestamps do not block Tencent refresh [0.84ms]
+(pass) successful unchanged status still renews freshness timestamp [0.34ms]
+(pass) one 8s budget includes an uncooperative vendor and prevents late saves [35.55ms]
+(pass) same budget includes database waiting and never accepts its late result [34.87ms]
+(pass) observation time is request start, not late vendor response time; CAS rejection is persisted [32.71ms]
+
+ 106 pass
+ 0 fail
+ 622 expect() calls
+Ran 106 tests across 23 files. [14.79s]

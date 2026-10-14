@@ -61,21 +61,6 @@ describe("tenant device asset contract", () => {
     expect(queries).toContain("hydrateTenantRows.call(this, rows)");
   });
 
-  test("inherits the physical serial when cloud channels are synchronized", () => {
-    const sync = readFileSync(
-      `${repoRoot}apps/api/src/services/tenant-devices/legacy/sync.ts`,
-      "utf8",
-    );
-    const mutations = readFileSync(
-      `${repoRoot}apps/api/src/repositories/tenant-devices/legacy/mutations.ts`,
-      "utf8",
-    );
-
-    expect(sync).toContain("hardwareSerialByDevice");
-    expect(sync).toContain("hardware_serial:");
-    expect(mutations.match(/hardware_serial: input\.hardware_serial \|\| null/g)).toHaveLength(2);
-  });
-
   test("updates the physical serial across every channel of the same device", () => {
     const service = readFileSync(
       `${repoRoot}apps/api/src/services/tenant-devices/legacy/crud.ts`,

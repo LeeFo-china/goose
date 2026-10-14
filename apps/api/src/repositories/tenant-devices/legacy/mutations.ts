@@ -1,4 +1,3 @@
-import { findByVendorDeviceChannel } from "./queries";
 import {
   ErrorCodes,
   Errors,
@@ -67,72 +66,19 @@ export async function upsertSynced(
     updated_by?: string | null;
   },
 ) {
-  const existing = await findByVendorDeviceChannel.call(this, {
-    vendor: input.vendor,
-    hardware_serial: input.hardware_serial || null,
-    vendor_device_serial: input.vendor_device_serial,
-    vendor_channel_id: input.vendor_channel_id,
+  const { data, error } = await this.adminClient.rpc("upsert_synced_tenant_device", {
+    p_input: input,
   });
-  const payload = {
-    tenant_id: input.tenant_id,
-    vendor: input.vendor,
-    vendor_device_serial: input.vendor_device_serial,
-    vendor_device_code: input.vendor_device_code || null,
-    vendor_device_name: input.vendor_device_name || null,
-    vendor_channel_id: input.vendor_channel_id || null,
-    vendor_channel_code: input.vendor_channel_code || null,
-    vendor_channel_name: input.vendor_channel_name || null,
-    device_type: input.device_type || null,
-    source_project_id: input.source_project_id || null,
-    status: input.status,
-    raw_status: input.raw_status == null ? null : String(input.raw_status),
-    metadata: input.metadata || {},
-    updated_by: input.updated_by || null,
-    last_synced_at: new Date().toISOString(),
-  };
-
-  if (existing) {
-    if (existing.tenant_id !== input.tenant_id) {
-      throw Errors.business(
-        409,
-        "该设备已归属其他租户",
-        ErrorCodes.CAMERA_BOUND_TO_ANOTHER_PROJECT,
-      );
-    }
-
-    const { data, error } = await this.adminClient
-      .from("tenant_devices")
-      .update({
-        ...payload,
-        bound_project_id: existing.bound_project_id,
-        bound_camera_id: existing.bound_camera_id,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", existing.id)
-      .select("*")
-      .single();
-
-    if (error) {
-      throw Errors.dbError("同步设备资产失败", error);
-    }
-
-    return { device: data as TenantDeviceRow, created: false };
-  }
-
-  const { data, error } = await this.adminClient
-    .from("tenant_devices")
-    .insert({
-      ...payload,
-      created_by: input.updated_by || null,
-    })
-    .select("*")
-    .single();
-
   if (error) {
+    if (error.code === "42501") {
+      throw Errors.business(409, "该设备已归属其他租户", ErrorCodes.CAMERA_BOUND_TO_ANOTHER_PROJECT);
+    }
+    if (error.code === "PDS01") {
+      throw Errors.business(409, "设备 SN 记录不一致，请核对后同步", ErrorCodes.CAMERA_ALREADY_BOUND);
+    }
     throw Errors.dbError("同步设备资产失败", error);
   }
-
-  return { device: data as TenantDeviceRow, created: true };
+  return data as { device: TenantDeviceRow; created: boolean };
 }
 
 export async function update(

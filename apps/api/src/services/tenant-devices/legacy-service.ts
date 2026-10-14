@@ -20,8 +20,11 @@ import { syncTenantDevices } from "./legacy/sync";
 import { getTenantTencentDeviceAccessInfo } from "./legacy/tenant-tencent";
 import { createTenantTencentDevice } from "./legacy/tenant-tencent-create";
 import { getTenantDevicePlayParams } from "./legacy/playback";
+import { listTenantDeviceChannels, syncTenantDevicePage } from "./channel-page";
 
 class TenantDeviceService {
+  listTenantDeviceChannels = listTenantDeviceChannels;
+  syncTenantDevicePage = syncTenantDevicePage;
   listTenantDevices = listTenantDevices;
   listPlatformTenantDevices = listPlatformTenantDevices;
   listPlatformTencentDevices = listPlatformTencentDevices;

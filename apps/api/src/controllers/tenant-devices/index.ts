@@ -9,6 +9,8 @@ import {
   PlatformTenantDeviceListQuerySchema,
   TenantDeviceListQuerySchema,
   TenantDeviceParamsSchema,
+  TenantDeviceChannelsQuerySchema,
+  TenantDeviceSyncPageQuerySchema,
   UpdateTenantDeviceSchema,
 } from "@/schema/tenant-devices";
 import { platformAuthorizationService } from "@/services/platform-authorization";
@@ -202,6 +204,30 @@ class TenantDeviceController extends TenantBaseController {
     });
 
     return ResponseHandler.success(result);
+  }
+
+  @Get("/tenant-devices/:id/channels")
+  async listTenantDeviceChannels(request: FastifyRequest) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const params = TenantDeviceParamsSchema.safeParse(request.params);
+    const query = TenantDeviceChannelsQuerySchema.safeParse(request.query);
+    if (!params.success) throw Errors.fromZod(params.error);
+    if (!query.success) throw Errors.fromZod(query.error);
+    return ResponseHandler.success(await tenantDeviceService.listTenantDeviceChannels({
+      authContext, id: params.data.id, query: query.data,
+    }));
+  }
+
+  @Post("/tenant-devices/:id/sync")
+  async syncTenantDevicePage(request: FastifyRequest) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const params = TenantDeviceParamsSchema.safeParse(request.params);
+    const query = TenantDeviceSyncPageQuerySchema.safeParse(request.query);
+    if (!params.success) throw Errors.fromZod(params.error);
+    if (!query.success) throw Errors.fromZod(query.error);
+    return ResponseHandler.success(await tenantDeviceService.syncTenantDevicePage({
+      authContext, id: params.data.id, query: query.data,
+    }));
   }
 
   @Post("/tenant-devices/:id/play-params")

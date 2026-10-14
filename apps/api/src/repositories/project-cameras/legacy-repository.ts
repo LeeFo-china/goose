@@ -1,3 +1,4 @@
+import { bindProjectCamera, unbindProjectCamera } from "./binding";
 import { saveWorkspaceStatuses, type SaveWorkspaceStatusesInput } from "./workspace-status";
 import {
   listCameraWorkspaceDevices,
@@ -51,6 +52,12 @@ class ProjectCameraRepository {
   findActiveByDeviceChannel = findActiveByDeviceChannel;
   listActiveBindingsByVendor = listActiveBindingsByVendor;
   listActiveBindingsByVendorDeviceSerial = listActiveBindingsByVendorDeviceSerial;
+  bindProjectCamera(input: Parameters<typeof bindProjectCamera>[1]) {
+    return bindProjectCamera(this.adminClient, input);
+  }
+  unbindProjectCamera(input: Parameters<typeof unbindProjectCamera>[1]) {
+    return unbindProjectCamera(this.adminClient, input);
+  }
   create = create;
   update = update;
   updateStatus = updateStatus;

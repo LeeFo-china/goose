@@ -59,6 +59,18 @@ export const TenantDeviceParamsSchema = z.object({
   id: z.uuid("无效的设备资产 ID"),
 });
 
+export const TenantDeviceChannelsQuerySchema = z.object({
+  page: z.coerce.number().int("页码必须是整数").min(1, "页码必须大于 0")
+    .max(1_000_000, "页码过大").default(1),
+  pageSize: z.coerce.number().int("每页数量必须是整数").min(1, "每页数量必须大于 0")
+    .max(100, "每页最多 100 条").default(20),
+});
+
+export const TenantDeviceSyncPageQuerySchema = TenantDeviceChannelsQuerySchema.extend({
+  pageSize: z.coerce.number().int("每页数量必须是整数").min(1, "每页数量必须大于 0")
+    .max(50, "同步每页最多 50 个通道").default(20),
+});
+
 const HardwareSerialSchema = z.string()
   .trim()
   .min(1, "设备 SN 不能为空")
