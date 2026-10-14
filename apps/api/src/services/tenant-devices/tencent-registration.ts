@@ -72,7 +72,11 @@ export async function registerTenantTencentDevice(input: {
 
   const passwordResult = initialPassword
     ? { password: initialPassword, request_id: null }
-    : await gateway.getPassword(asset.vendor_device_serial);
+    : await gateway.getPassword(asset.vendor_device_serial).catch(() => {
+      // The asset is already committed. Normalize upstream failures without exposing
+      // credentials; the client must recover its configuration rather than recreate it.
+      return { password: null, request_id: null };
+    });
   if (!passwordResult.password) {
     throw Errors.business(503, "设备已登记，暂未获取接入密码，请重试读取配置",
       ErrorCodes.TENCENT_IOT_VIDEO_API_ERROR, { tenant_device_id: asset.id });

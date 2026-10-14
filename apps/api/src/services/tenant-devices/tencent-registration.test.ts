@@ -228,3 +228,29 @@ test("registering the new SN after atomic rename resumes the same cloud without 
   expect([...f.claims.values()][0]?.id).toBe(operationId);
   expect(f.creates()).toBe(1);
 });
+
+for (const state of ["completed", "cloud_created"] as const) {
+  test(`password read throws after ${state}: returns recoverable asset without recreating`, async () => {
+    const f = fixture();
+    if (state === "cloud_created") {
+      f.failComplete();
+      await expect(registerTenantTencentDevice(input, f.dependencies)).rejects.toMatchObject({ code: "DB_ERROR" });
+    } else {
+      await registerTenantTencentDevice(input, f.dependencies);
+    }
+    const getPassword = f.dependencies.gateway.getPassword;
+    f.dependencies.gateway.getPassword = async () => { throw Errors.dbError("sensitive-upstream-password"); };
+    const error = await registerTenantTencentDevice(input, f.dependencies).catch((value: unknown) => value);
+    const assetId = [...f.assets.keys()][0];
+    expect(error).toMatchObject({ statusCode: 503, code: "TENCENT_IOT_VIDEO_API_ERROR",
+      details: { tenant_device_id: assetId } });
+    expect(JSON.stringify(error)).not.toContain("sensitive-upstream-password");
+    expect([...f.claims.values()][0]).toMatchObject({ state: "completed", asset_id: assetId });
+    f.dependencies.gateway.getPassword = getPassword;
+    const recovered = await registerTenantTencentDevice(input, f.dependencies);
+    expect(assetId).toBe(recovered.asset.id);
+    expect(recovered.device.sip_password).toBe("cloud_secret");
+    expect(f.creates()).toBe(1);
+    expect(f.assets.size).toBe(1);
+  });
+}
