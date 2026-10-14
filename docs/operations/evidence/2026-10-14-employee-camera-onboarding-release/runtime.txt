@@ -1,0 +1,3 @@
+/gooes-api revision=4cfce19922ce5a7493111f8fd79bb7ccf1f6d475 image=useccr.ccs.tencentyun.com/america_goose/goose-api@sha256:c824a033874a74e87b26d04e200fc7c22bd89f5e844bf7e063c5b2e9ebe2e7ca health=healthy restart=0
+/gooes-admin revision=400df2e11aeb3452494ea0464b88d7d9e693330e image=useccr.ccs.tencentyun.com/america_goose/goose-admin@sha256:daf2d0e0119b83bc53b56481c6e19f719f8a9f21ec2090369befd75760338245 health=healthy restart=0
+/gooes-social-video-worker revision=aea829524365ae4862ff6b91601adeee9d6a0f53 image=useccr.ccs.tencentyun.com/america_goose/goose-social-video-worker@sha256:5cce13f183cb3349e52060e1debe2367be4a2c28a60b5604cc4e413396b62f70 health=healthy restart=0

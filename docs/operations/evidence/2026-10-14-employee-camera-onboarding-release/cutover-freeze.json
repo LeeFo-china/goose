@@ -1,0 +1,21 @@
+{
+  "scope": [
+    "api.goodcms.cn/tenant-devices/tencent",
+    "admin.goodcms.cn/api/backend/tenant-devices/tencent"
+  ],
+  "http_during_freeze": [
+    503,
+    503
+  ],
+  "nginx_validation": "passed",
+  "old_nginx_workers": "none after reload",
+  "registration_requests_in_api_logs_previous_10_minutes": 0,
+  "reason": "prevent legacy unfenced creation during migration/API cutover",
+  "restored": true,
+  "http_after_restore": [
+    401,
+    401
+  ],
+  "after_restore_code": "TOKEN_MISSING",
+  "restored_configuration": "removed only the two owned temporary blocks; nginx -t passed"
+}

@@ -1,0 +1,79 @@
+ migration_count |     latest
+-----------------+----------------
+             666 | 20261014092000
+(1 row)
+
+             table_name              | privilege_type |    grantee
+-------------------------------------+----------------+----------------
+ tenant_tencent_registration_serials | DELETE         | postgres
+ tenant_tencent_registration_serials | INSERT         | postgres
+ tenant_tencent_registration_serials | REFERENCES     | postgres
+ tenant_tencent_registration_serials | SELECT         | postgres
+ tenant_tencent_registration_serials | TRIGGER        | postgres
+ tenant_tencent_registration_serials | TRUNCATE       | postgres
+ tenant_tencent_registration_serials | UPDATE         | postgres
+ tenant_tencent_registration_serials | DELETE         | service_role
+ tenant_tencent_registration_serials | INSERT         | service_role
+ tenant_tencent_registration_serials | REFERENCES     | service_role
+ tenant_tencent_registration_serials | SELECT         | service_role
+ tenant_tencent_registration_serials | TRIGGER        | service_role
+ tenant_tencent_registration_serials | TRUNCATE       | service_role
+ tenant_tencent_registration_serials | UPDATE         | service_role
+ tenant_tencent_registration_serials | DELETE         | supabase_admin
+ tenant_tencent_registration_serials | INSERT         | supabase_admin
+ tenant_tencent_registration_serials | REFERENCES     | supabase_admin
+ tenant_tencent_registration_serials | SELECT         | supabase_admin
+ tenant_tencent_registration_serials | TRIGGER        | supabase_admin
+ tenant_tencent_registration_serials | TRUNCATE       | supabase_admin
+ tenant_tencent_registration_serials | UPDATE         | supabase_admin
+ tenant_tencent_registrations        | DELETE         | postgres
+ tenant_tencent_registrations        | INSERT         | postgres
+ tenant_tencent_registrations        | REFERENCES     | postgres
+ tenant_tencent_registrations        | SELECT         | postgres
+ tenant_tencent_registrations        | TRIGGER        | postgres
+ tenant_tencent_registrations        | TRUNCATE       | postgres
+ tenant_tencent_registrations        | UPDATE         | postgres
+ tenant_tencent_registrations        | DELETE         | service_role
+ tenant_tencent_registrations        | INSERT         | service_role
+ tenant_tencent_registrations        | REFERENCES     | service_role
+ tenant_tencent_registrations        | SELECT         | service_role
+ tenant_tencent_registrations        | TRIGGER        | service_role
+ tenant_tencent_registrations        | TRUNCATE       | service_role
+ tenant_tencent_registrations        | UPDATE         | service_role
+ tenant_tencent_registrations        | DELETE         | supabase_admin
+ tenant_tencent_registrations        | INSERT         | supabase_admin
+ tenant_tencent_registrations        | REFERENCES     | supabase_admin
+ tenant_tencent_registrations        | SELECT         | supabase_admin
+ tenant_tencent_registrations        | TRIGGER        | supabase_admin
+ tenant_tencent_registrations        | TRUNCATE       | supabase_admin
+ tenant_tencent_registrations        | UPDATE         | supabase_admin
+(42 rows)
+
+                proname                 | anon_execute | authenticated_execute | service_execute
+----------------------------------------+--------------+-----------------------+-----------------
+ bind_project_camera                    | f            | f                     | t
+ claim_tenant_tencent_registration      | f            | f                     | t
+ complete_tenant_tencent_registration   | f            | f                     | t
+ rename_tenant_tencent_device_serial    | f            | f                     | t
+ save_tenant_tencent_registration_cloud | f            | f                     | t
+ sync_tenant_device_channel_page        | f            | f                     | t
+ unbind_project_camera                  | f            | f                     | t
+ upsert_synced_tenant_device            | f            | f                     | t
+(8 rows)
+
+               indexname
+---------------------------------------
+ tenant_devices_registration_sn_lookup
+ tenant_devices_channel_page_idx
+(2 rows)
+
+               relname               | relrowsecurity
+-------------------------------------+----------------
+ tenant_tencent_registrations        | t
+ tenant_tencent_registration_serials | t
+(2 rows)
+
+ registration_count
+--------------------
+                  0
+(1 row)

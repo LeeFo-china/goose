@@ -2,7 +2,7 @@
 
 日期：2026-10-14。核验基准：gooes `8d5d8486e` 及本机 orange 当前源码。
 
-**状态：后端实现与本地验收已完成，尚未生产部署。下述新接口需在 migration 和 API 完成部署后才能对生产联调；orange 未修改。本文第 3–4 节保留部署前契约与初始审计发现；新增及变更后的契约以第 8 节为准。**
+**状态：已生产发布 v2026.10.14.3，API 提交 4cfce1992；3 项 migration 已应用，666 条 Local/Remote 对齐。第 3–4 节为上线前基线与审计历史，实际契约见第 8 节；生产结果与真机验收边界见[生产回执](./2026-10-14-employee-camera-onboarding-production-receipt.md)。orange 未修改。**
 
 ## 1. 目标与分工
 
@@ -13,7 +13,7 @@
 - 本期沿用腾讯设备链路；不新增萤石接入或通用硬件配网能力。录入 SN 不会自动配置硬件，必须在设备支持的 GB28181 配置入口填写接入参数并联网。
 - 客户和访客不获得设备登记、公司资产池、接入密码或绑定权限。
 
-## 2. 当前实际能力
+## 2. 初始核查时的客户端能力（配套进展见生产回执）
 
 orange 首页 `src/pages/index/homeModel.tsx` 根据 `project.update` 展示“监控配置”；`src/utils/camera-permission.ts` 没有限制必须为 system_admin。
 
@@ -21,7 +21,7 @@ orange 首页 `src/pages/index/homeModel.tsx` 根据 `project.update` 展示“�
 
 `src/services/projects/methods/cameras.ts` 已调用公司资产池 `GET /tenant-devices`，固定腾讯厂商和 `only_unbound=true`。因此 2026-05-12 文档中“小程序不接入 tenant_devices”的笼统结论不再适用于员工端。
 
-## 3. 实施前接口契约（生产尚未更新）
+## 3. 实施前接口契约（历史基线）
 
 以下路径沿用现有 API base URL、Bearer 员工登录凭证和租户上下文，不由前端传入 `tenant_id` 决定归属。成功响应为 `{ data, message }`；错误经 error-factory 和 error-handler 返回 `{ success:false, message, code, details?, requestId }`。
 
@@ -156,7 +156,7 @@ gooes 实施范围：`controllers/tenant-devices/index.ts`、`schema/tenant-devi
 - [x] 补单设备有界同步及精确分页查询；验证不扫描无关设备，超过一页可继续且无遗漏。
 - [x] 补绑定/解绑一致性和唯一冲突契约；验证失败不留下占用错位。
 - [x] 更新本文第 8 节为已实现契约，记录本地验证。
-- [ ] 完成生产 migration/API 部署，提供版本与接口 smoke 回执，小程序再联调新增 API。
+- [x] 完成生产 migration/API 部署，提供版本与接口 smoke 回执，小程序可联调新增 API。
 - [ ] 小程序体验包绑定后在生产指定项目、指定设备联合真机验收；不得批量同步或修改无关项目设备。
 
 真机清单：
@@ -186,7 +186,7 @@ LightRAG 历史查询登录超时；本轮结论以本地当前实现、migratio
 初始审计阶段仅新增本文并给旧交接文档补充适用范围说明；其后的后端实现记录见下一节。
 
 
-## 8. 后端实施回执（尚未部署）
+## 8. 后端实现契约
 
 ### 已实现的行为
 
@@ -195,7 +195,7 @@ LightRAG 历史查询登录超时；本轮结论以本地当前实现、migratio
 - 同 SN 再次 POST 登记返回已有配置，不改写原设备类型或密码。新建云端设备使用 `gooes-reg-<登记UUID>` 唯一名称标记以便核对；公司资产名称仍显示 SN，不能用云端昵称代替物理 SN。
 - 云端结果未知时只按完整、精确的登记标记及类型核对，不再次 CreateDevice。找不到唯一结果返回 409 `CAMERA_ALREADY_BOUND`，`details.registration_state=reconciliation_required`，附 registration_id、hardware_serial。小程序应据 details 区分“待核对”和普通“设备被占用”。
 - 若进程在建立占位后、发出云端请求前退出，也可能需要人工核对；占位不自动过期。不能宣称任意超时都能自动恢复，不得清除占位后直接重建。已删除或归属不一致的资产不自动恢复，返回冲突。
-- 完成登记后读密码失败返回 503，details 包含 tenant_device_id；重新获取配置，不重新创建设备。SIP 服务参数获取失败可返回 sip_server:null。
+- 完成登记后读取密码抛错或返回空密码均返回 503 TENCENT_IOT_VIDEO_API_ERROR，details 包含 tenant_device_id；重新获取配置，不重新创建设备。SIP 服务参数获取失败可返回 sip_server:null。
 - 登记表不存储明文 SIP 密码。每次恢复从云端读取当前密码。
 - 腾讯设备修改 SN 时，资产及登记记录在同一事务中关联更新；历史 SN 保留登记归属，旧 SN 延迟重试不能重新创建设备或返回新 SN 的配置。新 SN 可以恢复同一云设备；清空 SN 不释放历史登记记录。
 - 项目摄像头与资产占用在一个事务中绑定；解绑在一个事务中释放。事务内再次检查租户、项目状态、资产归属与占用，保留现有创建请求格式及成功返回。
@@ -254,7 +254,7 @@ list 为同一厂商、云端设备 ID、租户下的未删除通道资产，排
 
 ### 发布顺序与回滚
 
-待部署 migration 顺序：
+本次已部署 migration 顺序：
 
 1. `20261014090000_tenant_device_registration.sql`：无密码的持久登记占位、回执、历史 SN 归属及原子更名。
 2. `20261014091000_atomic_project_camera_binding.sql`：绑定/解绑原子 RPC 及关联索引。
@@ -271,4 +271,4 @@ list 为同一厂商、云端设备 ID、租户下的未删除通道资产，排
 - SQL 覆盖旧资产没有登记回执时 SN 更名、历史 SN 重试隔离、无根记录的通道 SN 更名/清空；查询计划使用对应索引。
 - [验证记录](../operations/evidence/2026-10-14-employee-camera-onboarding/README.md)与同目录日志保留实际结果。
 
-未执行远端 migration、生产部署、真实腾讯设备创建或真机验收；未修改 orange。生产部署及真实设备联调仍属于后续步骤。
+以上为初始本地验证。2026-10-14 已完成生产 migration 与 API 发布，补充密码异常回归后共 108 项测试通过；完整结果见生产回执。尚未执行真实腾讯设备创建或真机验收，未修改 orange。

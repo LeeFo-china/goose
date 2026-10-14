@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "build_run_id": 38514543907,
+  "deploy_run_id": 38515988385,
+  "tag": "v2026.10.14.3",
+  "commit_sha": "4cfce19922ce5a7493111f8fd79bb7ccf1f6d475",
+  "services": [
+    "api"
+  ],
+  "completed_at": "2026-10-14T05:20:56Z"
+}
